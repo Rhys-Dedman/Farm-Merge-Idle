@@ -19,7 +19,7 @@ export const HexBoard: React.FC<HexBoardProps> = ({ isActive, grid, onMerge, imp
   // Logical size for grid positioning (Reduced from 36 by 5% to 34.2)
   const hexSize = 34.2; 
   // Visual scale to create gaps (Increased from 0.85 to 0.93 to make cells closer)
-  const visualScale = 0.93;
+  const visualScale = 0.90;
   
   const hexWidth = 2 * hexSize * visualScale;
   const hexHeight = Math.sqrt(3) * hexSize * visualScale;
@@ -45,7 +45,7 @@ export const HexBoard: React.FC<HexBoardProps> = ({ isActive, grid, onMerge, imp
     <div className="relative w-full h-full flex items-center justify-center pointer-events-none">
       <div className="relative w-full h-full">
         {/* 
-          PASS 1: OUTER SHADOWS 
+          PASS 1: OUTER SHADOWS  
           We render these first so they sit behind ALL cell bodies.
           This prevents any shadow from being drawn on top of a neighboring cell.
         */}
