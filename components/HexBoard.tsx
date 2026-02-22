@@ -1,12 +1,30 @@
+import React, { useRef, useEffect, useCallback } from 'react';
+import { flushSync } from 'react-dom';
+import { BoardCell, Item, DragState } from '../types';
+import { PLANT_CONTAINER_WIDTH, PLANT_CONTAINER_HEIGHT } from '../constants/boardLayout';
 
-import React, { useState } from 'react';
-import { BoardCell } from '../types';
+const LIFT_MS = 120;
+const SCALE_UP_MS = 60;
+const FLYBACK_SPEED_PX_PER_MS = 1;
+const FLYBACK_MIN_MS = 50;
+const IMPACT_BOUNCE_MS = 400;
+const TRAIL_MAX = 7;
+const TRAIL_DIAMETER_RATIO = 0.5;
 
 interface HexBoardProps {
   isActive?: boolean;
   grid: BoardCell[];
   onMerge: (sourceIdx: number, targetIdx: number) => void;
   impactCellIdx: number | null;
+  returnImpactCellIdx: number | null;
+  onReturnImpact: (cellIdx: number | null) => void;
+  onLandOnNewCell: (targetIdx: number) => void;
+  onReleaseFromCell: (cellIdx: number) => void;
+  sourceCellFadeOutIdx: number | null;
+  newCellImpactIdx: number | null;
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  dragState: DragState | null;
+  setDragState: React.Dispatch<React.SetStateAction<DragState | null>>;
 }
 
 // Increase when you add more plant_N.png. Merge level N uses plant_N (e.g. two plant_1 → plant_2).
@@ -23,9 +41,26 @@ const HEXCELL_GREEN = `/assets/hex/hexcell_green${HEX_SPRITE_EXT}`;
 const HEXCELL_SHADOW = `/assets/hex/hexcell_shadow${HEX_SPRITE_EXT}`;
 const HEXCELL_WHITE = `/assets/hex/hexcell_white${HEX_SPRITE_EXT}`;
 
-export const HexBoard: React.FC<HexBoardProps> = ({ isActive, grid, onMerge, impactCellIdx }) => {
-  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
-  
+export const HexBoard: React.FC<HexBoardProps> = ({
+  isActive,
+  grid,
+  onMerge,
+  impactCellIdx,
+  returnImpactCellIdx,
+  onReturnImpact,
+  onLandOnNewCell,
+  onReleaseFromCell,
+  sourceCellFadeOutIdx,
+  newCellImpactIdx,
+  containerRef,
+  dragState,
+  setDragState,
+}) => {
+  const liftStartRef = useRef<number>(0);
+  const flyStartRef = useRef<number>(0);
+  const trailRef = useRef<{ x: number; y: number }[]>([]);
+  const rafRef = useRef<number>(0);
+
   // Logical size for grid positioning
   const hexSize = 34.2;
   // Visual scale: higher = cells closer together
@@ -42,8 +77,8 @@ export const HexBoard: React.FC<HexBoardProps> = ({ isActive, grid, onMerge, imp
   const gridScale = 1.155;
   const shadowOffsetY = 5;
 
-  const hexWidth = 2 * hexSize * visualScale;
-  const hexHeight = Math.sqrt(3) * hexSize * visualScale * verticalSquash;
+  const hexWidth = PLANT_CONTAINER_WIDTH;
+  const hexHeight = PLANT_CONTAINER_HEIGHT;
   // Hex cells 20% bigger; shadow/green/white all use same size
   const cellScale = 1.2;
   const hexDisplayW = hexWidth * cellScale;
@@ -55,19 +90,232 @@ export const HexBoard: React.FC<HexBoardProps> = ({ isActive, grid, onMerge, imp
     el.style.pointerEvents = 'none';
   };
 
-  const handleCellClick = (index: number) => {
-    const cell = grid[index];
-    if (selectedIdx === null) {
-      if (cell.item) setSelectedIdx(index);
+  const getHexCenterInContainer = useCallback((cellIdx: number) => {
+    const hexEl = document.getElementById(`hex-${cellIdx}`);
+    const container = containerRef.current;
+    if (!hexEl || !container) return { x: 0, y: 0 };
+    const hexRect = hexEl.getBoundingClientRect();
+    const contRect = container.getBoundingClientRect();
+    return {
+      x: hexRect.left + hexRect.width / 2 - contRect.left,
+      y: hexRect.top + hexRect.height / 2 - contRect.top,
+    };
+  }, [containerRef]);
+
+  const getCellIndexUnderPoint = useCallback((clientX: number, clientY: number): number | null => {
+    const el = document.elementFromPoint(clientX, clientY);
+    if (!el) return null;
+    const hex = el.closest('[id^="hex-"]');
+    if (!hex || !hex.id) return null;
+    const match = hex.id.match(/^hex-(\d+)$/);
+    return match ? parseInt(match[1], 10) : null;
+  }, []);
+
+  const startDrag = useCallback((cellIdx: number, clientX: number, clientY: number) => {
+    const cell = grid[cellIdx];
+    if (!cell?.item) return;
+    const container = containerRef.current;
+    if (!container) return;
+    const contRect = container.getBoundingClientRect();
+    const origin = getHexCenterInContainer(cellIdx);
+    setDragState({
+      phase: 'holding',
+      cellIdx,
+      item: cell.item,
+      pointerX: clientX - contRect.left,
+      pointerY: clientY - contRect.top,
+      originX: origin.x,
+      originY: origin.y,
+      liftProgress: 0,
+      scaleProgress: 0,
+    });
+    liftStartRef.current = Date.now();
+    trailRef.current = [];
+  }, [grid, getHexCenterInContainer, containerRef]);
+
+  const startFlyBack = useCallback((state: DragState, targetIdx?: number, isMerge?: boolean) => {
+    const curX = state.pointerX;
+    const curY = state.pointerY;
+    let toX: number;
+    let toY: number;
+    let nextState: DragState;
+    if (targetIdx != null) {
+      const targetCenter = getHexCenterInContainer(targetIdx);
+      toX = targetCenter.x;
+      toY = targetCenter.y;
+      nextState = {
+        ...state,
+        targetCellIdx: targetIdx,
+        hoveredEmptyCellIdx: null,
+        isMerge: isMerge === true,
+      };
     } else {
-      if (selectedIdx === index) {
-        setSelectedIdx(null);
-      } else {
-        onMerge(selectedIdx, index);
-        setSelectedIdx(null);
-      }
+      toX = state.originX;
+      toY = state.originY;
+      nextState = { ...state, hoveredEmptyCellIdx: null };
     }
-  };
+    const distance = Math.hypot(toX - curX, toY - curY);
+    const durationMs = Math.max(FLYBACK_MIN_MS, distance / FLYBACK_SPEED_PX_PER_MS);
+    flyStartRef.current = Date.now();
+    setDragState({
+      ...nextState,
+      phase: 'flyingBack',
+      flyProgress: 0,
+      flyBackDurationMs: durationMs,
+      trail: [{ x: curX, y: curY }],
+    });
+    trailRef.current = [{ x: curX, y: curY }];
+  }, [getHexCenterInContainer]);
+
+  // Pointer down: start pickup immediately if cell has plant (allowed during impact)
+  const handlePointerDown = useCallback((index: number, e: React.PointerEvent) => {
+    e.preventDefault();
+    const cell = grid[index];
+    if (!cell?.item) return;
+    if (dragState && dragState.phase !== 'impact') return;
+    startDrag(index, e.clientX, e.clientY);
+  }, [grid, dragState, startDrag]);
+
+  // Global pointer move/up/cancel (attach in useEffect)
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      if (dragState?.phase === 'holding') {
+        const container = containerRef.current;
+        if (!container) return;
+        const contRect = container.getBoundingClientRect();
+        const pointerX = e.clientX - contRect.left;
+        const pointerY = e.clientY - contRect.top;
+        const underIdx = getCellIndexUnderPoint(e.clientX, e.clientY);
+        const hoveredEmptyCellIdx =
+          underIdx != null && underIdx !== dragState.cellIdx && grid[underIdx]?.item == null ? underIdx : null;
+        setDragState((prev) => prev ? { ...prev, pointerX, pointerY, hoveredEmptyCellIdx } : null);
+      }
+    };
+    const onUp = (e: PointerEvent) => {
+      if (dragState?.phase === 'holding') {
+        const targetIdx = getCellIndexUnderPoint(e.clientX, e.clientY);
+        const container = containerRef.current;
+        if (!container) return;
+        const contRect = container.getBoundingClientRect();
+        const releaseState = { ...dragState, pointerX: e.clientX - contRect.left, pointerY: e.clientY - contRect.top };
+        const inBounds = contRect.left <= e.clientX && e.clientX <= contRect.right && contRect.top <= e.clientY && e.clientY <= contRect.bottom;
+        const targetCell = targetIdx != null ? grid[targetIdx] : null;
+        const isValidMerge = targetIdx != null && targetIdx !== dragState.cellIdx && targetCell?.item && targetCell.item.level === dragState.item.level;
+        const isEmptyCell = targetIdx != null && targetIdx !== dragState.cellIdx && targetCell?.item == null;
+        if (isValidMerge) {
+          onReleaseFromCell(dragState.cellIdx);
+          startFlyBack(releaseState, targetIdx!, true);
+        } else if (inBounds && isEmptyCell) {
+          onReleaseFromCell(dragState.cellIdx);
+          startFlyBack(releaseState, targetIdx!);
+        } else {
+          onReleaseFromCell(dragState.cellIdx);
+          startFlyBack(releaseState);
+        }
+      }
+    };
+    const onCancel = () => {
+      if (dragState?.phase === 'holding') setDragState(null);
+    };
+    window.addEventListener('pointermove', onMove, { passive: true });
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onCancel);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onCancel);
+    };
+  }, [dragState, getCellIndexUnderPoint, grid, startFlyBack, containerRef]);
+
+  // Lift + scale-up: scale 0→1 over SCALE_UP_MS (fast), lift 0→1 over LIFT_MS
+  useEffect(() => {
+    if (!dragState || dragState.phase !== 'holding') return;
+    const tick = () => {
+      const elapsed = Date.now() - liftStartRef.current;
+      const liftProgress = Math.min(elapsed / LIFT_MS, 1);
+      const scaleProgress = Math.min(elapsed / SCALE_UP_MS, 1);
+      setDragState((prev) => prev && prev.phase === 'holding' ? { ...prev, liftProgress, scaleProgress } : null);
+      if (liftProgress < 1 || scaleProgress < 1) rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [dragState?.phase === 'holding' ? dragState.cellIdx : -1]);
+
+  // Fly-back animation: duration from distance, ease-in (slow start → fast slam)
+  useEffect(() => {
+    if (!dragState || dragState.phase !== 'flyingBack') return;
+    const fromX = dragState.pointerX;
+    const fromY = dragState.pointerY;
+    const toX =
+      dragState.targetCellIdx != null
+        ? getHexCenterInContainer(dragState.targetCellIdx).x
+        : dragState.originX;
+    const toY =
+      dragState.targetCellIdx != null
+        ? getHexCenterInContainer(dragState.targetCellIdx).y
+        : dragState.originY;
+    const durationMs = dragState.flyBackDurationMs ?? 300;
+    const CUTOVER = 0.85;
+    const impactStartT = durationMs <= 120 ? 1 : 0.7;
+    const tick = () => {
+      const elapsed = Date.now() - flyStartRef.current;
+      const t = Math.min(elapsed / durationMs, 1);
+      const eased =
+        t < CUTOVER
+          ? CUTOVER * (2.1 * (t / CUTOVER) ** 2 - 1.1 * (t / CUTOVER) ** 3)
+          : CUTOVER + (1 - CUTOVER) * ((t - CUTOVER) / (1 - CUTOVER));
+      const x = fromX + (toX - fromX) * eased;
+      const y = fromY + (toY - fromY) * eased;
+      trailRef.current = [{ x, y }, ...trailRef.current].slice(0, TRAIL_MAX);
+      if (t >= impactStartT) {
+        const targetCellIdx = dragState.targetCellIdx;
+        const isMerge = dragState.isMerge === true;
+        if (targetCellIdx == null) {
+          onReturnImpact(dragState.cellIdx);
+        }
+        flushSync(() => {
+          setDragState((prev) =>
+            prev && prev.phase === 'flyingBack'
+              ? {
+                  ...prev,
+                  phase: 'impact',
+                  impactStartTime: Date.now(),
+                  flyProgress: 1,
+                  pointerX: toX,
+                  pointerY: toY,
+                  trail: [...trailRef.current],
+                  mergeResultLevel: isMerge ? prev.item.level + 1 : undefined,
+                }
+              : prev
+          );
+        });
+        return;
+      }
+      setDragState((prev) =>
+        prev && prev.phase === 'flyingBack'
+          ? { ...prev, flyProgress: t, pointerX: x, pointerY: y, trail: [...trailRef.current] }
+          : prev
+      );
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [dragState?.phase === 'flyingBack' ? dragState.cellIdx : -1, dragState?.targetCellIdx, getHexCenterInContainer, onReturnImpact]);
+
+  // Impact phase: after IMPACT_BOUNCE_MS call onMerge (if any), then clear drag
+  useEffect(() => {
+    if (!dragState || dragState.phase !== 'impact' || dragState.impactStartTime == null) return;
+    const targetCellIdx = dragState.targetCellIdx;
+    const isMerge = dragState.isMerge === true;
+    const t = setTimeout(() => {
+      if (targetCellIdx != null) {
+        onMerge(dragState.cellIdx, targetCellIdx);
+        if (!isMerge) onLandOnNewCell(targetCellIdx);
+      }
+      setDragState(null);
+    }, IMPACT_BOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [dragState?.phase === 'impact' ? dragState.impactStartTime : 0, dragState?.cellIdx, dragState?.targetCellIdx, dragState?.isMerge, onMerge, onLandOnNewCell]);
 
   const centerX = '50%';
   const centerY = '48%'; 
@@ -100,6 +348,39 @@ export const HexBoard: React.FC<HexBoardProps> = ({ isActive, grid, onMerge, imp
         }
         .hexcell-white-flash {
           animation: hexcellWhiteFlash 200ms ease-out forwards;
+        }
+        @keyframes hexcellReturnFlash {
+          0% { opacity: 0; }
+          50% { opacity: 0.5; }
+          100% { opacity: 0; }
+        }
+        .hexcell-return-flash {
+          animation: hexcellReturnFlash 100ms ease-out forwards;
+        }
+        @keyframes hexcellSourceFadeOut {
+          0% { opacity: 0.5; }
+          100% { opacity: 0; }
+        }
+        .hexcell-source-fade-out {
+          animation: hexcellSourceFadeOut 150ms ease-out forwards;
+        }
+        @keyframes hexcellNewLandFlash {
+          0% { opacity: 0.5; }
+          50% { opacity: 0.75; }
+          100% { opacity: 0; }
+        }
+        .hexcell-new-land-flash {
+          animation: hexcellNewLandFlash 300ms ease-out forwards;
+        }
+        @keyframes plantImpactScale {
+          0% { transform: translateY(-5.5px) scale(1); }
+          25% { transform: translateY(-5.5px) scale(1.8); }
+          50% { transform: translateY(-5.5px) scale(1.3); }
+          75% { transform: translateY(-5.5px) scale(1.6); }
+          100% { transform: translateY(-5.5px) scale(1.5); }
+        }
+        .plant-impact-scale {
+          animation: plantImpactScale 400ms ease-out forwards;
         }
         .hex-cell-img {
           display: block;
@@ -143,15 +424,14 @@ export const HexBoard: React.FC<HexBoardProps> = ({ isActive, grid, onMerge, imp
         {grid.map((cell, i) => {
           const x = hexSize * (3 / 2) * cell.q * horizontalSpacing * gridSpacing;
           const y = hexSize * Math.sqrt(3) * (cell.r + cell.q / 2) * verticalSpacing * gridSpacing;
-          const isSelected = selectedIdx === i;
 
           return (
             <div
               key={`cell-${i}`}
               id={`hex-${i}`}
-              onClick={(e) => {
+              onPointerDown={(e) => {
                 e.stopPropagation();
-                handleCellClick(i);
+                handlePointerDown(i, e);
               }}
               className="absolute pointer-events-auto flex items-center justify-center overflow-hidden"
               style={{
@@ -160,26 +440,40 @@ export const HexBoard: React.FC<HexBoardProps> = ({ isActive, grid, onMerge, imp
                 width: `${hexDisplayW}px`,
                 height: `${hexDisplayH}px`,
                 transform: `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`,
-                zIndex: isSelected ? 40 : 10,
+                zIndex: 10,
               }}
             >
               <img
                 src={HEXCELL_GREEN}
                 alt=""
-                className={`hex-cell-img w-full h-full object-contain transition-transform duration-300 ${
-                  isSelected ? 'scale-110' : 'hover:scale-105 active:scale-95'
-                }`}
+                className="hex-cell-img w-full h-full object-contain transition-transform duration-300"
                 onError={hideBrokenHexImg}
               />
             </div>
           );
         })}
 
-        {/* PASS 3: hexcell_white — on top of each green; 0% default, 0→50→0% over 200ms on impact */}
+        {/* PASS 3: hexcell_white — drag source 50%, source fade-out, hover 25%, new land 50%→0, spawn/return flash */}
         {grid.map((cell, i) => {
           const x = hexSize * (3 / 2) * cell.q * horizontalSpacing * gridSpacing;
           const y = hexSize * Math.sqrt(3) * (cell.r + cell.q / 2) * verticalSpacing * gridSpacing;
           const isImpacted = impactCellIdx === i;
+          const isReturnImpact = returnImpactCellIdx === i;
+          const isDragSource = dragState?.phase === 'holding' && dragState.cellIdx === i;
+          const isSourceFadeOut = sourceCellFadeOutIdx === i;
+          const isHoveredEmpty = dragState?.phase === 'holding' && dragState.hoveredEmptyCellIdx === i;
+          const isNewCellImpact = newCellImpactIdx === i;
+          const staticOpacity =
+            isDragSource ? 0.5 : isHoveredEmpty ? 0.5 : undefined;
+          const animClass = isNewCellImpact
+            ? 'hexcell-new-land-flash'
+            : isSourceFadeOut
+              ? 'hexcell-source-fade-out'
+              : isImpacted
+                ? 'hexcell-white-flash'
+                : isReturnImpact
+                  ? 'hexcell-return-flash'
+                  : '';
 
           return (
             <div
@@ -197,31 +491,66 @@ export const HexBoard: React.FC<HexBoardProps> = ({ isActive, grid, onMerge, imp
               <img
                 src={HEXCELL_WHITE}
                 alt=""
-                className={`hex-cell-img w-full h-full object-contain opacity-0 ${
-                  isImpacted ? 'hexcell-white-flash' : ''
-                }`}
+                className={`hex-cell-img w-full h-full object-contain ${animClass}`}
+                style={staticOpacity != null ? { opacity: staticOpacity } : !animClass ? { opacity: 0 } : undefined}
                 onError={hideBrokenHexImg}
               />
             </div>
           );
         })}
 
-        {/* PASS 4: PLANTS (above all hex cells; no masking; lower y = in front) */}
+        {/* PASS 4: PLANTS (hide source while dragging; hide target during impact when moved) */}
         {(() => {
+          const draggedCellIdx = dragState?.cellIdx ?? -1;
+          const hideTargetDuringImpact = dragState?.phase === 'impact' && dragState?.targetCellIdx != null ? dragState.targetCellIdx : -1;
           const cellsWithPlants = grid
             .map((cell, i) => {
               const x = hexSize * (3 / 2) * cell.q * horizontalSpacing * gridSpacing;
               const y = hexSize * Math.sqrt(3) * (cell.r + cell.q / 2) * verticalSpacing * gridSpacing;
               return { i, cell, x, y };
             })
-            .filter(({ cell }) => cell.item != null)
-            .sort((a, b) => a.y - b.y); // ascending y so higher y (lower on screen) renders last = in front
+            .filter(({ cell, i }) => cell.item != null && i !== hideTargetDuringImpact)
+            .sort((a, b) => a.y - b.y);
+
+          const isHolding = dragState?.phase === 'holding';
+          const isFlying = dragState?.phase === 'flyingBack';
+          const isImpact = dragState?.phase === 'impact';
+          const liftProgress = dragState?.liftProgress ?? 0;
+          const scaleProgress = (dragState?.scaleProgress ?? dragState?.liftProgress) ?? 0;
+          const flyProgress = dragState?.flyProgress ?? 0;
+          const scaleHolding = 1.5 + 0.2 * Math.min(1, scaleProgress);
+          const liftPx = 20 * liftProgress;
+          const idleDefaultY = 5.5;
+          const liftDuringFly = idleDefaultY + (20 - idleDefaultY) * (1 - flyProgress);
+          const scaleFlying = 1.7 - 0.7 * flyProgress;
+          const dragScale = isHolding ? scaleHolding : isFlying ? scaleFlying : isImpact ? 1 : 1.5;
+          const dragTranslateY = isHolding ? -liftPx : isFlying ? -liftDuringFly : -5.5;
+          const dragOffsetX = dragState ? (dragState.pointerX - dragState.originX) / gridScale : 0;
+          const dragOffsetY = dragState ? (dragState.pointerY - dragState.originY) / gridScale : 0;
 
           return (
             <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 50 }}>
               {cellsWithPlants.map(({ i, cell, x, y }) => {
                 const isImpacted = impactCellIdx === i;
                 const item = cell.item!;
+                const isDragged = i === draggedCellIdx;
+                const isMergeTargetDuringFly =
+                  dragState?.phase === 'flyingBack' &&
+                  dragState?.targetCellIdx === i &&
+                  dragState?.isMerge === true;
+                const mergeScale = 1.5 - 0.5 * (dragState?.flyProgress ?? 0);
+                const scale = isDragged ? dragScale : isMergeTargetDuringFly ? mergeScale : 1.5;
+                const level = isDragged && dragState?.mergeResultLevel != null ? dragState.mergeResultLevel : item.level;
+                const transform = isDragged
+                  ? `translate(calc(-50% + ${x}px), calc(-50% + ${y}px)) translate(${dragOffsetX}px, ${dragOffsetY}px)`
+                  : `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+                const innerTransform = isDragged && isImpact
+                  ? 'translateY(-5.5px)' // keyframes control scale
+                  : isDragged
+                    ? `translateY(${dragTranslateY}px) scale(${scale})`
+                    : `translateY(-5.5px) scale(${scale})`;
+                const innerClass = isDragged && isImpact ? 'plant-impact-scale' : '';
+
                 return (
                   <div
                     key={`plant-${i}`}
@@ -231,23 +560,26 @@ export const HexBoard: React.FC<HexBoardProps> = ({ isActive, grid, onMerge, imp
                       top: centerY,
                       width: `${hexWidth}px`,
                       height: `${hexHeight}px`,
-                      transform: `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`,
-                      zIndex: 50 + Math.round(y),
+                      transform,
+                      zIndex: 50 + Math.round(y) + (isDragged ? 1000 : 0),
                     }}
                   >
                     <div className="flex flex-col items-center justify-center relative w-full h-full">
-                      <div style={{ transform: `translateY(-${hexHeight * 0.1}px) scale(1.5)` }} className="flex items-center justify-center w-full h-full">
+                      <div
+                        style={{ transform: innerTransform, transformOrigin: '50% 50%' }}
+                        className={`flex items-center justify-center w-full h-full ${innerClass}`}
+                      >
                         <img
-                          src={getPlantSpritePath(item.level)}
-                          alt={`Plant ${item.level}`}
+                          src={getPlantSpritePath(level)}
+                          alt={`Plant ${level}`}
                           className={`w-[70%] h-[70%] object-contain drop-shadow-[0_4px_8px_rgba(0,0,0,0.4)] ${
-                            isImpacted ? 'plant-spawn-bounce' : ''
+                            isImpacted && !isDragged ? 'plant-spawn-bounce' : ''
                           }`}
                         />
                       </div>
-                      {item.level > 1 && (
+                      {level > 1 && (
                         <div className="absolute bottom-[-10px] bg-black/60 px-1.5 py-0.5 rounded-md border border-white/20 scale-75">
-                          <span className="text-[9px] font-black text-[#d7e979]">LV{item.level}</span>
+                          <span className="text-[9px] font-black text-[#d7e979]">LV{level}</span>
                         </div>
                       )}
                     </div>

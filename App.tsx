@@ -8,8 +8,9 @@ import { Navbar } from './components/Navbar';
 import { StoreScreen } from './components/StoreScreen';
 import { SideAction } from './components/SideAction';
 import { Projectile } from './components/Projectile';
-import { TabType, ScreenType, BoardCell, Item } from './types';
-
+import { TabType, ScreenType, BoardCell, Item, DragState } from './types';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { DragOverlay } from './components/DragOverlay';
 const generateInitialGrid = (): BoardCell[] => {
   const cells: BoardCell[] = [];
   for (let q = -2; q <= 2; q++) {
@@ -43,6 +44,10 @@ export default function App() {
   
   const [activeProjectiles, setActiveProjectiles] = useState<ProjectileData[]>([]);
   const [impactCellIdx, setImpactCellIdx] = useState<number | null>(null);
+  const [returnImpactCellIdx, setReturnImpactCellIdx] = useState<number | null>(null);
+  const [dragState, setDragState] = useState<DragState | null>(null);
+  const [sourceCellFadeOutIdx, setSourceCellFadeOutIdx] = useState<number | null>(null);
+  const [newCellImpactIdx, setNewCellImpactIdx] = useState<number | null>(null);
   
   const plantButtonRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -264,6 +269,7 @@ export default function App() {
   const screenTranslateX = `translateX(-${(getScreenIndex() * 100) / 3}%)`;
 
   return (
+    <ErrorBoundary>
     <div className="flex items-center justify-center min-h-screen bg-[#050608] overflow-hidden">
       <div 
         ref={containerRef}
@@ -272,6 +278,11 @@ export default function App() {
       >
         {/* Grass Detail Overlay */}
         <div className="absolute inset-0 pointer-events-none grass-blades opacity-40"></div>
+
+        {/* Drag trail only; plant is moved by HexBoard transform (z below hex area so trail is behind plant) */}
+        <div className="absolute inset-0 pointer-events-none overflow-visible" style={{ zIndex: 5 }}>
+          {dragState != null && <DragOverlay dragState={dragState} />}
+        </div>
 
         <div className="absolute top-0 left-0 w-full z-50">
           <Header money={money} onStoreClick={() => setActiveScreen('STORE')} />
@@ -313,11 +324,16 @@ export default function App() {
 
               <div 
                 ref={hexAreaRef}
-                onClick={() => setIsExpanded(false)}
-                className="relative flex-grow flex flex-col items-center justify-center overflow-hidden cursor-pointer pt-20 z-10"
+                className="relative flex-grow flex flex-col items-center justify-center overflow-hidden pt-20 z-10"
               >
+                {/* Only tapping this backdrop (background) closes the panel; hex cells and plants do not */}
+                <div
+                  className="absolute inset-0 z-0 cursor-pointer"
+                  onClick={() => setIsExpanded(false)}
+                  aria-label="Close upgrade panel"
+                />
                 <div className="absolute bottom-4 w-full px-3 flex justify-between items-end z-20 pointer-events-none transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]">
-                   <div className="pointer-events-auto flex items-center justify-center" ref={plantButtonRef} style={{ transform: 'scale(0.9)', transformOrigin: 'center center' }}>
+                   <div className="pointer-events-auto flex items-center justify-center" ref={plantButtonRef} style={{ transform: 'scale(0.9)', transformOrigin: 'center center' }} onClick={(e) => e.stopPropagation()}>
                      <SideAction 
                         label="Plant" 
                         icon="/assets/plants/plant_1.png" 
@@ -332,7 +348,7 @@ export default function App() {
                         onClick={handlePlantClick}
                       />
                    </div>
-                   <div className="pointer-events-auto flex items-center justify-center" style={{ transform: 'scale(0.9)', transformOrigin: 'center center' }}>
+                   <div className="pointer-events-auto flex items-center justify-center" style={{ transform: 'scale(0.9)', transformOrigin: 'center center' }} onClick={(e) => e.stopPropagation()}>
                      <SideAction 
                         label="Harvest" 
                         icon="🚜" 
@@ -354,6 +370,24 @@ export default function App() {
                     grid={grid}
                     onMerge={handleMerge}
                     impactCellIdx={impactCellIdx}
+                    returnImpactCellIdx={returnImpactCellIdx}
+                    onReturnImpact={(idx) => {
+                      setReturnImpactCellIdx(idx);
+                      if (idx != null) setTimeout(() => setReturnImpactCellIdx(null), 100);
+                    }}
+                    onLandOnNewCell={(targetIdx) => {
+                      setNewCellImpactIdx(targetIdx);
+                      setTimeout(() => setNewCellImpactIdx(null), 300);
+                    }}
+                    onReleaseFromCell={(cellIdx) => {
+                      setSourceCellFadeOutIdx(cellIdx);
+                      setTimeout(() => setSourceCellFadeOutIdx(null), 150);
+                    }}
+                    sourceCellFadeOutIdx={sourceCellFadeOutIdx}
+                    newCellImpactIdx={newCellImpactIdx}
+                    containerRef={containerRef}
+                    dragState={dragState}
+                    setDragState={setDragState}
                   />
                 </div>
               </div>
@@ -409,5 +443,6 @@ export default function App() {
         </div>
       </div>
     </div>
+    </ErrorBoundary>
   );
 }

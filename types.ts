@@ -24,3 +24,25 @@ export interface Upgrade {
 export type TabType = 'SEEDS' | 'CROPS' | 'HARVEST';
 
 export type ScreenType = 'STORE' | 'FARM' | 'BARN';
+
+export type DragPhase = 'holding' | 'flyingBack' | 'impact';
+
+export interface DragState {
+  phase: DragPhase;
+  cellIdx: number;
+  item: Item;
+  pointerX: number;
+  pointerY: number;
+  originX: number;
+  originY: number;
+  liftProgress: number;
+  scaleProgress: number;
+  flyProgress?: number;
+  flyBackDurationMs?: number;
+  trail?: { x: number; y: number }[];
+  impactStartTime?: number;
+  hoveredEmptyCellIdx?: number | null;
+  targetCellIdx?: number;
+  isMerge?: boolean;
+  mergeResultLevel?: number;
+}
