@@ -46,6 +46,47 @@ export default function App() {
   
   const plantButtonRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const farmColumnRef = useRef<HTMLDivElement>(null);
+  const hexAreaRef = useRef<HTMLDivElement>(null);
+
+  const [spriteCenter, setSpriteCenter] = useState({ x: 50, y: 50 }); // % relative to column, for sprite center
+
+  const updateSpriteCenter = useCallback(() => {
+    const col = farmColumnRef.current;
+    const area = hexAreaRef.current;
+    if (!col || !area) return;
+    const colRect = col.getBoundingClientRect();
+    const areaRect = area.getBoundingClientRect();
+    const centerX = (areaRect.left + areaRect.width / 2 - colRect.left) / colRect.width * 100;
+    const centerY = (areaRect.top + areaRect.height / 2 - colRect.top) / colRect.height * 100;
+    setSpriteCenter({ x: centerX, y: centerY });
+  }, []);
+
+  useEffect(() => {
+    updateSpriteCenter();
+    const col = farmColumnRef.current;
+    const area = hexAreaRef.current;
+    if (!col || !area) return;
+    const ro = new ResizeObserver(updateSpriteCenter);
+    ro.observe(col);
+    ro.observe(area);
+    return () => ro.disconnect();
+  }, [updateSpriteCenter]);
+
+  // When panel opens/closes, drive sprite position every frame for 500ms to match upgrade panel transition
+  useEffect(() => {
+    let rafId: number;
+    let endAt = 0;
+    const tick = () => {
+      if (Date.now() < endAt) {
+        updateSpriteCenter();
+        rafId = requestAnimationFrame(tick);
+      }
+    };
+    endAt = Date.now() + 500;
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [isExpanded, updateSpriteCenter]);
 
   const isGridFull = grid.every(cell => cell.item !== null);
 
@@ -128,7 +169,22 @@ export default function App() {
     if (nextProgress >= 100) {
       setSeedProgress(100);
       setIsSeedFlashing(true);
-      // Logic for spawning is now strictly handled by the useEffect above
+      
+      // Fire projectile immediately when reaching 100%
+      if (!isGridFull) {
+        const emptyIndices = grid
+          .map((cell, idx) => (cell.item === null ? idx : null))
+          .filter((idx): idx is number => idx !== null);
+
+        if (emptyIndices.length > 0) {
+          const targetIdx = emptyIndices[Math.floor(Math.random() * emptyIndices.length)];
+          spawnProjectile(targetIdx);
+          setSeedProgress(0);
+          setTimeout(() => {
+            setIsSeedFlashing(false);
+          }, 300);
+        }
+      }
     } else {
       setSeedProgress(nextProgress);
     }
@@ -212,7 +268,7 @@ export default function App() {
       <div 
         ref={containerRef}
         id="game-container"
-        className="relative w-full max-w-md aspect-[9/16] max-h-screen shadow-[0_0_100px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col select-none border-x border-white/5 font-['Inter'] grass-texture"
+        className="relative w-full max-w-md aspect-[9/16] max-h-screen shadow-[0_0_100px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col select-none font-['Inter'] grass-texture"
       >
         {/* Grass Detail Overlay */}
         <div className="absolute inset-0 pointer-events-none grass-blades opacity-40"></div>
@@ -230,16 +286,43 @@ export default function App() {
               <StoreScreen onAddMoney={(amt) => setMoney(prev => prev + amt)} />
             </div>
 
-            <div className="w-1/3 h-full flex flex-col relative overflow-hidden">
+            <div ref={farmColumnRef} className="w-1/3 h-full flex flex-col relative overflow-hidden">
+              {/* 1. Bleed: flat #3d8f38, full column, behind sprite (visible behind upgrade curve) */}
+              <div
+                className="absolute inset-0 pointer-events-none z-0"
+                style={{ background: '#3d8f38' }}
+              />
+              {/* 2. Background sprite: primary, on top of bleed; center pinned to hex grid; transition matches upgrade panel (500ms, cubic-bezier) */}
+              <div className="absolute inset-0 pointer-events-none overflow-hidden z-[5]">
+                <img
+                  src="/assets/background/background_grass.png"
+                  alt=""
+                  className="absolute flex-shrink-0 flex-grow-0"
+                  style={{
+                    left: `${spriteCenter.x}%`,
+                    top: `${spriteCenter.y}%`,
+                    width: 'auto',
+                    height: 'auto',
+                    maxWidth: 'none',
+                    maxHeight: 'none',
+                    objectFit: 'none',
+                    transform: 'translate(-50%, -50%) scale(0.65)',
+                  }}
+                />
+              </div>
+
               <div 
+                ref={hexAreaRef}
                 onClick={() => setIsExpanded(false)}
-                className="relative flex-grow flex flex-col items-center justify-center overflow-hidden cursor-pointer pt-20"
+                className="relative flex-grow flex flex-col items-center justify-center overflow-hidden cursor-pointer pt-20 z-10"
               >
                 <div className="absolute bottom-4 w-full px-3 flex justify-between items-end z-20 pointer-events-none transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]">
-                   <div className="pointer-events-auto" ref={plantButtonRef}>
+                   <div className="pointer-events-auto flex items-center justify-center" ref={plantButtonRef} style={{ transform: 'scale(0.9)', transformOrigin: 'center center' }}>
                      <SideAction 
                         label="Plant" 
-                        icon="🌱" 
+                        icon="/assets/plants/plant_1.png" 
+                        iconScale={1.25}
+                        iconOffsetY={-3}
                         progress={seedProgress / 100} 
                         color="#a7c957"
                         isActive={activeTab === 'SEEDS' && isExpanded}
@@ -249,7 +332,7 @@ export default function App() {
                         onClick={handlePlantClick}
                       />
                    </div>
-                   <div className="pointer-events-auto">
+                   <div className="pointer-events-auto flex items-center justify-center" style={{ transform: 'scale(0.9)', transformOrigin: 'center center' }}>
                      <SideAction 
                         label="Harvest" 
                         icon="🚜" 

@@ -10,6 +10,8 @@ interface SideActionProps {
   isFlashing?: boolean;
   shouldAnimate?: boolean;
   isBoardFull?: boolean;
+  iconScale?: number;
+  iconOffsetY?: number;
   onClick?: (e: React.MouseEvent) => void;
 }
 
@@ -22,6 +24,8 @@ export const SideAction: React.FC<SideActionProps> = ({
   isFlashing, 
   shouldAnimate = true,
   isBoardFull = false,
+  iconScale = 1,
+  iconOffsetY = 0,
   onClick 
 }) => {
   // Base Radius and Expanded Radius
@@ -37,7 +41,7 @@ export const SideAction: React.FC<SideActionProps> = ({
   const displayProgress = (isFlashing || progress >= 1) ? 0 : progress;
   const strokeDashoffset = circumference - (displayProgress * circumference);
 
-  const isUrl = icon.startsWith('http');
+  const isImageIcon = icon.startsWith('http') || icon.startsWith('/');
 
   // We want the 'r' attribute to transition smoothly
   // And the 'stroke-dashoffset' to transition when not flashing/0
@@ -129,11 +133,12 @@ export const SideAction: React.FC<SideActionProps> = ({
         <div className={`relative z-10 w-16 h-16 rounded-full flex items-center justify-center overflow-hidden transition-all duration-300 ${
           isFlashing && shouldAnimate ? 'scale-110 rotate-12' : isActive ? 'scale-105' : 'scale-100'
         }`}>
-          {isUrl ? (
+          {isImageIcon ? (
             <img 
               src={icon} 
               alt={label} 
-              className="w-10 h-10 drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)]" 
+              className="object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)]" 
+              style={{ width: 40 * iconScale, height: 40 * iconScale, transform: iconOffsetY ? `translateY(${iconOffsetY}px)` : undefined }}
             />
           ) : (
             <span className="text-4xl drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] select-none">
