@@ -269,8 +269,13 @@ export const HexBoard: React.FC<HexBoardProps> = ({
       if (t >= impactStartT) {
         const targetCellIdx = dragState.targetCellIdx;
         const isMerge = dragState.isMerge === true;
+        const sourceIdx = dragState.cellIdx;
         if (targetCellIdx == null) {
           onReturnImpact(dragState.cellIdx);
+        }
+        if (targetCellIdx != null) {
+          onMerge(sourceIdx, targetCellIdx);
+          if (!isMerge) onLandOnNewCell(targetCellIdx);
         }
         if (isMerge && targetCellIdx != null) {
           onMergeImpactStart?.(targetCellIdx, toX, toY);
@@ -290,6 +295,13 @@ export const HexBoard: React.FC<HexBoardProps> = ({
               : prev
           );
         });
+        setTimeout(() => {
+          setDragState((prev) =>
+            prev && prev.phase === 'impact' && prev.cellIdx === sourceIdx && prev.targetCellIdx === targetCellIdx
+              ? null
+              : prev
+          );
+        }, IMPACT_BOUNCE_MS);
         return;
       }
       setDragState((prev) =>
@@ -301,22 +313,7 @@ export const HexBoard: React.FC<HexBoardProps> = ({
     };
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [dragState?.phase === 'flyingBack' ? dragState.cellIdx : -1, dragState?.targetCellIdx, getHexCenterInContainer, onReturnImpact, onMergeImpactStart]);
-
-  // Impact phase: after IMPACT_BOUNCE_MS call onMerge (if any), then clear drag
-  useEffect(() => {
-    if (!dragState || dragState.phase !== 'impact' || dragState.impactStartTime == null) return;
-    const targetCellIdx = dragState.targetCellIdx;
-    const isMerge = dragState.isMerge === true;
-    const t = setTimeout(() => {
-      if (targetCellIdx != null) {
-        onMerge(dragState.cellIdx, targetCellIdx);
-        if (!isMerge) onLandOnNewCell(targetCellIdx);
-      }
-      setDragState(null);
-    }, IMPACT_BOUNCE_MS);
-    return () => clearTimeout(t);
-  }, [dragState?.phase === 'impact' ? dragState.impactStartTime : 0, dragState?.cellIdx, dragState?.targetCellIdx, dragState?.isMerge, onMerge, onLandOnNewCell]);
+  }, [dragState?.phase === 'flyingBack' ? dragState.cellIdx : -1, dragState?.targetCellIdx, getHexCenterInContainer, onReturnImpact, onMergeImpactStart, onMerge, onLandOnNewCell]);
 
   const centerX = '50%';
   const centerY = '48%'; 
@@ -505,14 +502,24 @@ export const HexBoard: React.FC<HexBoardProps> = ({
         {(() => {
           const draggedCellIdx = dragState?.cellIdx ?? -1;
           const hideTargetDuringImpact = dragState?.phase === 'impact' && dragState?.targetCellIdx != null ? dragState.targetCellIdx : -1;
-          const cellsWithPlants = grid
-            .map((cell, i) => {
-              const x = hexSize * (3 / 2) * cell.q * horizontalSpacing * gridSpacing;
-              const y = hexSize * Math.sqrt(3) * (cell.r + cell.q / 2) * verticalSpacing * gridSpacing;
-              return { i, cell, x, y };
-            })
+          const baseCells = grid.map((cell, i) => {
+            const x = hexSize * (3 / 2) * cell.q * horizontalSpacing * gridSpacing;
+            const y = hexSize * Math.sqrt(3) * (cell.r + cell.q / 2) * verticalSpacing * gridSpacing;
+            return { i, cell, x, y };
+          });
+          let cellsWithPlants = baseCells
             .filter(({ cell, i }) => cell.item != null && i !== hideTargetDuringImpact)
             .sort((a, b) => a.y - b.y);
+          if (dragState?.phase === 'impact' && dragState.cellIdx != null && !cellsWithPlants.some((c) => c.i === dragState.cellIdx)) {
+            const src = baseCells[dragState.cellIdx];
+            if (src) {
+              const syntheticItem = {
+                ...dragState.item,
+                level: dragState.mergeResultLevel ?? dragState.item.level,
+              };
+              cellsWithPlants = [...cellsWithPlants, { ...src, cell: { ...src.cell, item: syntheticItem } }].sort((a, b) => a.y - b.y);
+            }
+          }
 
           const isHolding = dragState?.phase === 'holding';
           const isFlying = dragState?.phase === 'flyingBack';
