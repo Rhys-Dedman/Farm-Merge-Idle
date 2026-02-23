@@ -39,9 +39,9 @@ export interface DragState {
   scaleProgress: number;
   flyProgress?: number;
   flyBackDurationMs?: number;
-  trail?: { x: number; y: number }[];
   impactStartTime?: number;
   hoveredEmptyCellIdx?: number | null;
+  hoveredMatchCellIdx?: number | null;
   targetCellIdx?: number;
   isMerge?: boolean;
   mergeResultLevel?: number;

@@ -1,5 +1,6 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Header } from './components/Header';
 import { HexBoard } from './components/HexBoard';
 import { UpgradeTabs } from './components/UpgradeTabs';
@@ -8,9 +9,9 @@ import { Navbar } from './components/Navbar';
 import { StoreScreen } from './components/StoreScreen';
 import { SideAction } from './components/SideAction';
 import { Projectile } from './components/Projectile';
+import { LeafBurst, LEAF_BURST_SMALL_COUNT } from './components/LeafBurst';
 import { TabType, ScreenType, BoardCell, Item, DragState } from './types';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { DragOverlay } from './components/DragOverlay';
 const generateInitialGrid = (): BoardCell[] => {
   const cells: BoardCell[] = [];
   for (let q = -2; q <= 2; q++) {
@@ -48,7 +49,8 @@ export default function App() {
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [sourceCellFadeOutIdx, setSourceCellFadeOutIdx] = useState<number | null>(null);
   const [newCellImpactIdx, setNewCellImpactIdx] = useState<number | null>(null);
-  
+  const [leafBursts, setLeafBursts] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
+  const [leafBurstsSmall, setLeafBurstsSmall] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
   const plantButtonRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const farmColumnRef = useRef<HTMLDivElement>(null);
@@ -279,16 +281,11 @@ export default function App() {
         {/* Grass Detail Overlay */}
         <div className="absolute inset-0 pointer-events-none grass-blades opacity-40"></div>
 
-        {/* Drag trail only; plant is moved by HexBoard transform (z below hex area so trail is behind plant) */}
-        <div className="absolute inset-0 pointer-events-none overflow-visible" style={{ zIndex: 5 }}>
-          {dragState != null && <DragOverlay dragState={dragState} />}
-        </div>
-
         <div className="absolute top-0 left-0 w-full z-50">
           <Header money={money} onStoreClick={() => setActiveScreen('STORE')} />
         </div>
 
-        <div className="flex-grow relative overflow-hidden h-full">
+        <div className="flex-grow relative overflow-hidden h-full" style={{ zIndex: 10 }}>
           <div 
             className="absolute inset-0 flex transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]"
             style={{ transform: screenTranslateX, width: '300%' }}
@@ -363,8 +360,8 @@ export default function App() {
                    </div>
                 </div>
 
-                {/* Reduced height from 340px to 323px (5% smaller) */}
-                <div className="relative w-full flex items-center justify-center h-[323px] overflow-visible mb-12">
+                {/* Reduced height from 340px to 323px (5% smaller); pointer-events-none so taps on background close upgrade panel */}
+                <div className="relative w-full flex items-center justify-center h-[323px] overflow-visible mb-12 pointer-events-none">
                   <HexBoard 
                     isActive={activeTab === 'CROPS' && isExpanded} 
                     grid={grid}
@@ -388,6 +385,20 @@ export default function App() {
                     containerRef={containerRef}
                     dragState={dragState}
                     setDragState={setDragState}
+                    onMergeImpactStart={(_, px, py) => {
+                      const container = containerRef.current;
+                      if (!container) return;
+                      const rect = container.getBoundingClientRect();
+                      setLeafBursts((prev) => [
+                        ...prev,
+                        {
+                          id: Math.random().toString(36).slice(2),
+                          x: rect.left + px,
+                          y: rect.top + py,
+                          startTime: Date.now(),
+                        },
+                      ]);
+                    }}
                   />
                 </div>
               </div>
@@ -426,14 +437,53 @@ export default function App() {
         </div>
 
         <Navbar activeScreen={activeScreen} onScreenChange={setActiveScreen} />
-        
+
+        {/* Leaf burst: portal to body so never clipped; viewport coords */}
+        {createPortal(
+          <div className="fixed inset-0 pointer-events-none overflow-visible" style={{ zIndex: 9999 }}>
+            {leafBursts.map((b) => (
+              <LeafBurst
+                key={b.id}
+                x={b.x}
+                y={b.y}
+                startTime={b.startTime}
+                onComplete={() => setLeafBursts((prev) => prev.filter((x) => x.id !== b.id))}
+              />
+            ))}
+            {leafBurstsSmall.map((b) => (
+              <LeafBurst
+                key={b.id}
+                x={b.x}
+                y={b.y}
+                startTime={b.startTime}
+                particleCount={LEAF_BURST_SMALL_COUNT}
+                onComplete={() => setLeafBurstsSmall((prev) => prev.filter((x) => x.id !== b.id))}
+              />
+            ))}
+          </div>,
+          document.body
+        )}
+
         <div className="absolute inset-0 pointer-events-none z-[60] overflow-hidden">
           {activeProjectiles.map(p => (
             <Projectile 
               key={p.id}
               data={p}
-              onImpact={() => {
-                spawnCropAt(p.targetIdx);
+              onImpact={(targetIdx) => {
+                spawnCropAt(targetIdx);
+                const hexEl = document.getElementById(`hex-${targetIdx}`);
+                if (hexEl) {
+                  const r = hexEl.getBoundingClientRect();
+                  setLeafBurstsSmall((prev) => [
+                    ...prev,
+                    {
+                      id: Math.random().toString(36).slice(2),
+                      x: r.left + r.width / 2,
+                      y: r.top + r.height / 2,
+                      startTime: Date.now(),
+                    },
+                  ]);
+                }
               }}
               onComplete={() => {
                 setActiveProjectiles(prev => prev.filter(item => item.id !== p.id));

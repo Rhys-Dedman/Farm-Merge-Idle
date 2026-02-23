@@ -8,8 +8,6 @@ const SCALE_UP_MS = 60;
 const FLYBACK_SPEED_PX_PER_MS = 1;
 const FLYBACK_MIN_MS = 50;
 const IMPACT_BOUNCE_MS = 400;
-const TRAIL_MAX = 7;
-const TRAIL_DIAMETER_RATIO = 0.5;
 
 interface HexBoardProps {
   isActive?: boolean;
@@ -25,6 +23,7 @@ interface HexBoardProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
   dragState: DragState | null;
   setDragState: React.Dispatch<React.SetStateAction<DragState | null>>;
+  onMergeImpactStart?: (cellIdx: number, x: number, y: number) => void;
 }
 
 // Increase when you add more plant_N.png. Merge level N uses plant_N (e.g. two plant_1 → plant_2).
@@ -55,10 +54,10 @@ export const HexBoard: React.FC<HexBoardProps> = ({
   containerRef,
   dragState,
   setDragState,
+  onMergeImpactStart,
 }) => {
   const liftStartRef = useRef<number>(0);
   const flyStartRef = useRef<number>(0);
-  const trailRef = useRef<{ x: number; y: number }[]>([]);
   const rafRef = useRef<number>(0);
 
   // Logical size for grid positioning
@@ -130,7 +129,6 @@ export const HexBoard: React.FC<HexBoardProps> = ({
       scaleProgress: 0,
     });
     liftStartRef.current = Date.now();
-    trailRef.current = [];
   }, [grid, getHexCenterInContainer, containerRef]);
 
   const startFlyBack = useCallback((state: DragState, targetIdx?: number, isMerge?: boolean) => {
@@ -147,12 +145,13 @@ export const HexBoard: React.FC<HexBoardProps> = ({
         ...state,
         targetCellIdx: targetIdx,
         hoveredEmptyCellIdx: null,
+        hoveredMatchCellIdx: null,
         isMerge: isMerge === true,
       };
     } else {
       toX = state.originX;
       toY = state.originY;
-      nextState = { ...state, hoveredEmptyCellIdx: null };
+      nextState = { ...state, hoveredEmptyCellIdx: null, hoveredMatchCellIdx: null };
     }
     const distance = Math.hypot(toX - curX, toY - curY);
     const durationMs = Math.max(FLYBACK_MIN_MS, distance / FLYBACK_SPEED_PX_PER_MS);
@@ -162,9 +161,7 @@ export const HexBoard: React.FC<HexBoardProps> = ({
       phase: 'flyingBack',
       flyProgress: 0,
       flyBackDurationMs: durationMs,
-      trail: [{ x: curX, y: curY }],
     });
-    trailRef.current = [{ x: curX, y: curY }];
   }, [getHexCenterInContainer]);
 
   // Pointer down: start pickup immediately if cell has plant (allowed during impact)
@@ -188,7 +185,10 @@ export const HexBoard: React.FC<HexBoardProps> = ({
         const underIdx = getCellIndexUnderPoint(e.clientX, e.clientY);
         const hoveredEmptyCellIdx =
           underIdx != null && underIdx !== dragState.cellIdx && grid[underIdx]?.item == null ? underIdx : null;
-        setDragState((prev) => prev ? { ...prev, pointerX, pointerY, hoveredEmptyCellIdx } : null);
+        const targetItem = underIdx != null && underIdx !== dragState.cellIdx ? grid[underIdx]?.item : null;
+        const hoveredMatchCellIdx =
+          targetItem != null && underIdx != null && targetItem.level === dragState.item.level && targetItem.type === dragState.item.type ? underIdx : null;
+        setDragState((prev) => prev ? { ...prev, pointerX, pointerY, hoveredEmptyCellIdx, hoveredMatchCellIdx } : null);
       }
     };
     const onUp = (e: PointerEvent) => {
@@ -266,12 +266,14 @@ export const HexBoard: React.FC<HexBoardProps> = ({
           : CUTOVER + (1 - CUTOVER) * ((t - CUTOVER) / (1 - CUTOVER));
       const x = fromX + (toX - fromX) * eased;
       const y = fromY + (toY - fromY) * eased;
-      trailRef.current = [{ x, y }, ...trailRef.current].slice(0, TRAIL_MAX);
       if (t >= impactStartT) {
         const targetCellIdx = dragState.targetCellIdx;
         const isMerge = dragState.isMerge === true;
         if (targetCellIdx == null) {
           onReturnImpact(dragState.cellIdx);
+        }
+        if (isMerge && targetCellIdx != null) {
+          onMergeImpactStart?.(targetCellIdx, toX, toY);
         }
         flushSync(() => {
           setDragState((prev) =>
@@ -283,7 +285,6 @@ export const HexBoard: React.FC<HexBoardProps> = ({
                   flyProgress: 1,
                   pointerX: toX,
                   pointerY: toY,
-                  trail: [...trailRef.current],
                   mergeResultLevel: isMerge ? prev.item.level + 1 : undefined,
                 }
               : prev
@@ -293,14 +294,14 @@ export const HexBoard: React.FC<HexBoardProps> = ({
       }
       setDragState((prev) =>
         prev && prev.phase === 'flyingBack'
-          ? { ...prev, flyProgress: t, pointerX: x, pointerY: y, trail: [...trailRef.current] }
+          ? { ...prev, flyProgress: t, pointerX: x, pointerY: y }
           : prev
       );
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [dragState?.phase === 'flyingBack' ? dragState.cellIdx : -1, dragState?.targetCellIdx, getHexCenterInContainer, onReturnImpact]);
+  }, [dragState?.phase === 'flyingBack' ? dragState.cellIdx : -1, dragState?.targetCellIdx, getHexCenterInContainer, onReturnImpact, onMergeImpactStart]);
 
   // Impact phase: after IMPACT_BOUNCE_MS call onMerge (if any), then clear drag
   useEffect(() => {
@@ -453,7 +454,7 @@ export const HexBoard: React.FC<HexBoardProps> = ({
           );
         })}
 
-        {/* PASS 3: hexcell_white — drag source 50%, source fade-out, hover 25%, new land 50%→0, spawn/return flash */}
+        {/* PASS 3: hexcell_white — drag source 50%, hover empty 25%, hover match 75%, source fade-out, new land 50%→0, spawn/return flash */}
         {grid.map((cell, i) => {
           const x = hexSize * (3 / 2) * cell.q * horizontalSpacing * gridSpacing;
           const y = hexSize * Math.sqrt(3) * (cell.r + cell.q / 2) * verticalSpacing * gridSpacing;
@@ -462,9 +463,10 @@ export const HexBoard: React.FC<HexBoardProps> = ({
           const isDragSource = dragState?.phase === 'holding' && dragState.cellIdx === i;
           const isSourceFadeOut = sourceCellFadeOutIdx === i;
           const isHoveredEmpty = dragState?.phase === 'holding' && dragState.hoveredEmptyCellIdx === i;
+          const isHoveredMatch = dragState?.phase === 'holding' && dragState.hoveredMatchCellIdx === i;
           const isNewCellImpact = newCellImpactIdx === i;
           const staticOpacity =
-            isDragSource ? 0.5 : isHoveredEmpty ? 0.5 : undefined;
+            isDragSource ? 0.5 : isHoveredMatch ? 0.75 : isHoveredEmpty ? 0.25 : undefined;
           const animClass = isNewCellImpact
             ? 'hexcell-new-land-flash'
             : isSourceFadeOut

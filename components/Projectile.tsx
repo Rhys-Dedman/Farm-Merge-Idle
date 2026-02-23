@@ -4,7 +4,7 @@ import { ProjectileData } from '../App';
 
 interface ProjectileProps {
   data: ProjectileData;
-  onImpact: () => void;
+  onImpact: (targetIdx: number) => void;
   onComplete: () => void;
 }
 
@@ -150,7 +150,7 @@ export const Projectile: React.FC<ProjectileProps> = ({ data, onImpact, onComple
         }
       } else if (!isImpacted) {
         setIsImpacted(true);
-        onImpact();
+        onImpact(data.targetIdx);
       }
 
       setSparkles(prev => 
@@ -187,8 +187,8 @@ export const Projectile: React.FC<ProjectileProps> = ({ data, onImpact, onComple
           </filter>
         </defs>
         
-        {/* Shadow Trail Group at 50% Opacity */}
-        <g filter="url(#p-glow)" style={{ opacity: 0.5 }}>
+        {/* Shadow Trail Group: black, 20% opacity */}
+        <g filter="url(#p-glow)" style={{ opacity: 0.2 }}>
           {shadowTrail.map((p, i) => {
             if (i === 0) return null;
             const prev = shadowTrail[i-1];
@@ -202,7 +202,7 @@ export const Projectile: React.FC<ProjectileProps> = ({ data, onImpact, onComple
                 y1={prev.y}
                 x2={p.x}
                 y2={p.y}
-                stroke="#6a994e"
+                stroke="#000000"
                 strokeWidth={particleDiameter * widthScale}
                 strokeLinecap="round"
                 strokeOpacity={fadeScale}
@@ -253,22 +253,22 @@ export const Projectile: React.FC<ProjectileProps> = ({ data, onImpact, onComple
 
       {!isImpacted && (
         <>
-          {/* Shadow Head at 50% Opacity */}
+          {/* Shadow Head: black, 20% opacity */}
           <div 
             className="absolute z-[9]" 
             style={{ 
               left: shadowPos.x, 
               top: shadowPos.y, 
-              opacity: 0.5,
+              opacity: 0.2,
               transform: 'translate(-50%, -50%)' 
             }}
           >
             <div 
-              className="rounded-full shadow-[0_0_15px_rgba(106,153,78,0.4)]"
+              className="rounded-full"
               style={{
                 width: `${particleDiameter}px`,
                 height: `${particleDiameter}px`,
-                background: '#6a994e'
+                background: '#000000'
               }}
             />
           </div>
