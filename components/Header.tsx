@@ -4,6 +4,9 @@ import React from 'react';
 interface HeaderProps {
   money: number;
   onStoreClick?: () => void;
+  walletRef?: React.RefObject<HTMLButtonElement | null>;
+  walletIconRef?: React.RefObject<HTMLElement | null>;
+  walletFlashActive?: boolean;
 }
 
 const formatMoney = (amount: number): string => {
@@ -12,26 +15,41 @@ const formatMoney = (amount: number): string => {
   return amount.toString();
 };
 
-export const Header: React.FC<HeaderProps> = ({ money, onStoreClick }) => {
+export const Header: React.FC<HeaderProps> = ({ money, onStoreClick, walletRef, walletIconRef, walletFlashActive }) => {
   return (
-    <header className="flex justify-between items-center px-5 py-4 pt-6 z-10 shrink-0">
-      <div className="flex space-x-3">
-        {/* Money Pill */}
-        <button 
+    <header className="flex justify-between items-center px-3 py-2 pt-4 z-10 shrink-0">
+      <div className="flex space-x-2">
+        {/* Wallet pill - flash overlay on coin impact */}
+        <button
+          ref={walletRef}
           onClick={onStoreClick}
-          className="flex items-center space-x-3 bg-black/50 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/5 shadow-2xl hover:bg-black/60 active:scale-95 transition-all"
+          className="relative flex items-center gap-1 bg-black/50 backdrop-blur-md px-2 py-1 rounded-full border-0 outline-none shadow-2xl hover:bg-black/60 active:scale-95 transition-all overflow-hidden"
         >
-          <img src="https://cdn-icons-png.flaticon.com/512/2489/2489756.png" alt="Gold" className="w-5 h-5" />
-          <span className="font-black text-sm text-white tracking-tight">{formatMoney(money)}</span>
+          {/* Flash overlay: no outline; text inverts when flash so it stays visible */}
+          <div
+            className="absolute inset-0 rounded-full pointer-events-none transition-opacity duration-75 ease-out border-0 outline-none"
+            style={{
+              background: '#fcf0c6',
+              opacity: walletFlashActive ? 0.95 : 0,
+            }}
+            aria-hidden
+          />
+          <span
+            ref={walletIconRef}
+            className={`relative flex items-center justify-center text-sm leading-none transition-colors duration-75 ${walletFlashActive ? 'text-[#583c1f]' : 'text-white'}`}
+            aria-hidden
+          >
+            🪙
+          </span>
+          <span
+            className={`relative font-black text-xs tracking-tight transition-colors duration-75 ${walletFlashActive ? 'text-[#583c1f]' : 'text-white'}`}
+          >
+            {formatMoney(money)}
+          </span>
         </button>
-        {/* Energy Pill */}
-        <div className="flex items-center space-x-3 bg-black/50 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/5 shadow-2xl">
-          <img src="https://cdn-icons-png.flaticon.com/512/869/869869.png" alt="Energy" className="w-5 h-5" />
-          <span className="font-black text-sm text-white tracking-tight">42</span>
-        </div>
       </div>
 
-      <button className="w-10 h-10 flex items-center justify-center bg-black/50 backdrop-blur-md hover:bg-black/60 rounded-xl transition-all border border-white/5 shadow-2xl">
+      <button className="w-9 h-9 flex items-center justify-center bg-black/50 backdrop-blur-md hover:bg-black/60 rounded-full transition-all border border-white/5 shadow-2xl" style={{ borderRadius: '9999px' }}>
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 text-white/80">
           <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
           <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />

@@ -23,7 +23,8 @@ interface HexBoardProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
   dragState: DragState | null;
   setDragState: React.Dispatch<React.SetStateAction<DragState | null>>;
-  onMergeImpactStart?: (cellIdx: number, x: number, y: number) => void;
+  harvestBounceCellIndices?: number[];
+  onMergeImpactStart?: (cellIdx: number, x: number, y: number, mergeResultLevel?: number) => void;
 }
 
 // Increase when you add more plant_N.png. Merge level N uses plant_N (e.g. two plant_1 → plant_2).
@@ -54,6 +55,7 @@ export const HexBoard: React.FC<HexBoardProps> = ({
   containerRef,
   dragState,
   setDragState,
+  harvestBounceCellIndices = [],
   onMergeImpactStart,
 }) => {
   const liftStartRef = useRef<number>(0);
@@ -278,7 +280,7 @@ export const HexBoard: React.FC<HexBoardProps> = ({
           if (!isMerge) onLandOnNewCell(targetCellIdx);
         }
         if (isMerge && targetCellIdx != null) {
-          onMergeImpactStart?.(targetCellIdx, toX, toY);
+          onMergeImpactStart?.(targetCellIdx, toX, toY, dragState.item.level + 1);
         }
         flushSync(() => {
           setDragState((prev) =>
@@ -379,6 +381,15 @@ export const HexBoard: React.FC<HexBoardProps> = ({
         }
         .plant-impact-scale {
           animation: plantImpactScale 400ms ease-out forwards;
+        }
+        @keyframes plantHarvestBounce {
+          0% { transform: translateY(-5.5px) scale(1.5); }
+          33% { transform: translateY(-5.5px) scale(1.8); }
+          66% { transform: translateY(-5.5px) scale(1.4); }
+          100% { transform: translateY(-5.5px) scale(1.5); }
+        }
+        .plant-harvest-bounce {
+          animation: plantHarvestBounce 200ms ease-out forwards;
         }
         .hex-cell-img {
           display: block;
@@ -558,7 +569,11 @@ export const HexBoard: React.FC<HexBoardProps> = ({
                   : isDragged
                     ? `translateY(${dragTranslateY}px) scale(${scale})`
                     : `translateY(-5.5px) scale(${scale})`;
-                const innerClass = isDragged && isImpact ? 'plant-impact-scale' : '';
+                const isHarvestBounce = harvestBounceCellIndices.includes(i);
+                const innerClass = [
+                  isDragged && isImpact ? 'plant-impact-scale' : '',
+                  isHarvestBounce ? 'plant-harvest-bounce' : '',
+                ].filter(Boolean).join(' ');
 
                 return (
                   <div
@@ -586,11 +601,6 @@ export const HexBoard: React.FC<HexBoardProps> = ({
                           }`}
                         />
                       </div>
-                      {level > 1 && (
-                        <div className="absolute bottom-[-10px] bg-black/60 px-1.5 py-0.5 rounded-md border border-white/20 scale-75">
-                          <span className="text-[9px] font-black text-[#d7e979]">LV{level}</span>
-                        </div>
-                      )}
                     </div>
                   </div>
                 );

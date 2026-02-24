@@ -10,7 +10,14 @@ import { StoreScreen } from './components/StoreScreen';
 import { SideAction } from './components/SideAction';
 import { Projectile } from './components/Projectile';
 import { LeafBurst, LEAF_BURST_SMALL_COUNT } from './components/LeafBurst';
+import { CoinPanel, CoinPanelData } from './components/CoinPanel';
+import { WalletImpactBurst } from './components/WalletImpactBurst';
 import { TabType, ScreenType, BoardCell, Item, DragState } from './types';
+
+/** Coin per plant level: level 1 = 5, level 2 = 10, level 3 = 20, ... */
+export function getCoinValueForLevel(level: number): number {
+  return 5 * Math.pow(2, level - 1);
+}
 import { ErrorBoundary } from './components/ErrorBoundary';
 const generateInitialGrid = (): BoardCell[] => {
   const cells: BoardCell[] = [];
@@ -51,10 +58,18 @@ export default function App() {
   const [newCellImpactIdx, setNewCellImpactIdx] = useState<number | null>(null);
   const [leafBursts, setLeafBursts] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
   const [leafBurstsSmall, setLeafBurstsSmall] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
+  const [activeCoinPanels, setActiveCoinPanels] = useState<CoinPanelData[]>([]);
+  const [harvestBounceCellIndices, setHarvestBounceCellIndices] = useState<number[]>([]);
+  const [walletFlashActive, setWalletFlashActive] = useState(false);
+  const [walletBursts, setWalletBursts] = useState<{ id: number; trigger: number }[]>([]);
+  const nextWalletBurstIdRef = useRef(0);
+  const walletFlashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const plantButtonRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const farmColumnRef = useRef<HTMLDivElement>(null);
   const hexAreaRef = useRef<HTMLDivElement>(null);
+  const walletRef = useRef<HTMLButtonElement>(null);
+  const walletIconRef = useRef<HTMLSpanElement>(null);
 
   const [spriteCenter, setSpriteCenter] = useState({ x: 50, y: 50 }); // % relative to column, for sprite center
 
@@ -168,32 +183,27 @@ export default function App() {
 
   const handlePlantClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    
-    // BLOCKING: If we are already flashing/firing, don't allow another click
     if (isSeedFlashing) return;
 
-    const nextProgress = seedProgress + 20;
-    if (nextProgress >= 100) {
-      setSeedProgress(100);
-      setIsSeedFlashing(true);
-      
-      // Fire projectile immediately when reaching 100%
-      if (!isGridFull) {
-        const emptyIndices = grid
-          .map((cell, idx) => (cell.item === null ? idx : null))
-          .filter((idx): idx is number => idx !== null);
+    // 1 tap = 100% (for now)
+    setSeedProgress(100);
+    setIsSeedFlashing(true);
 
-        if (emptyIndices.length > 0) {
-          const targetIdx = emptyIndices[Math.floor(Math.random() * emptyIndices.length)];
-          spawnProjectile(targetIdx);
-          setSeedProgress(0);
-          setTimeout(() => {
-            setIsSeedFlashing(false);
-          }, 300);
-        }
+    if (!isGridFull) {
+      const emptyIndices = grid
+        .map((cell, idx) => (cell.item === null ? idx : null))
+        .filter((idx): idx is number => idx !== null);
+
+      if (emptyIndices.length > 0) {
+        const targetIdx = emptyIndices[Math.floor(Math.random() * emptyIndices.length)];
+        spawnProjectile(targetIdx);
+        setSeedProgress(0);
+        setTimeout(() => setIsSeedFlashing(false), 300);
+      } else {
+        setTimeout(() => setIsSeedFlashing(false), 300);
       }
     } else {
-      setSeedProgress(nextProgress);
+      setTimeout(() => setIsSeedFlashing(false), 300);
     }
 
     if (activeTab !== 'SEEDS') {
@@ -217,21 +227,92 @@ export default function App() {
     const tapProfit = Math.max(1, Math.floor(farmValue * 0.05));
     setMoney(prev => prev + tapProfit);
 
-    const nextProgress = harvestProgress + 10;
-    if (nextProgress >= 100) {
-      setHarvestProgress(100);
-      setIsHarvestFlashing(true);
-      
-      const bonus = farmValue * 2;
-      setMoney(prev => prev + bonus);
+    // 1 tap = 100% (for now)
+    setHarvestProgress(100);
+    setIsHarvestFlashing(true);
 
-      setTimeout(() => {
-        setIsHarvestFlashing(false);
-        setHarvestProgress(0);
-      }, 300);
-    } else {
-      setHarvestProgress(nextProgress);
+    // Snapshot grid at exact 100%: only plants on the board now produce coins
+    const container = containerRef.current;
+    const wallet = walletRef.current;
+    const walletIcon = walletIconRef.current;
+    const walletEl = walletIcon || wallet;
+    const harvestCellIndices: number[] = [];
+
+    if (container && walletEl) {
+      const containerRect = container.getBoundingClientRect();
+      const walletRect = walletEl.getBoundingClientRect();
+      const walletCenterX = walletRect.left + walletRect.width / 2 - containerRect.left;
+      const walletCenterY = walletRect.top + walletRect.height / 2 - containerRect.top;
+
+      const panelsWithDist: { panel: CoinPanelData; dist: number }[] = [];
+
+      grid.forEach((cell, cellIdx) => {
+        if (!cell.item) return;
+        harvestCellIndices.push(cellIdx);
+        const value = getCoinValueForLevel(cell.item.level);
+        const hexEl = document.getElementById(`hex-${cellIdx}`);
+        if (!hexEl) return;
+        const hexRect = hexEl.getBoundingClientRect();
+        const startX = hexRect.left + hexRect.width / 2 - containerRect.left;
+        const startY = hexRect.top + hexRect.height / 2 - containerRect.top;
+        const hoverX = startX;
+        const hexTopY = hexRect.top - containerRect.top;
+        const panelHeightPx = 14;
+        const offsetUp = (panelHeightPx / 2 + 4) * 0.8;
+        const hoverY = hexTopY - offsetUp;
+        const dist = Math.hypot(hoverX - walletCenterX, hoverY - walletCenterY);
+        panelsWithDist.push({
+          dist,
+          panel: {
+            id: `coin-${cellIdx}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            value,
+            startX,
+            startY,
+            hoverX,
+            hoverY,
+            moveToWalletDelayMs: 0,
+          },
+        });
+      });
+
+      setHarvestBounceCellIndices(harvestCellIndices);
+      setTimeout(() => setHarvestBounceCellIndices([]), 250);
+
+      harvestCellIndices.forEach((cellIdx) => {
+        const hexEl = document.getElementById(`hex-${cellIdx}`);
+        if (hexEl) {
+          const r = hexEl.getBoundingClientRect();
+          setLeafBurstsSmall((prev) => [
+            ...prev,
+            {
+              id: `harvest-${cellIdx}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+              x: r.left + r.width / 2,
+              y: r.top + r.height / 2,
+              startTime: Date.now(),
+            },
+          ]);
+        }
+      });
+
+      if (panelsWithDist.length > 0) {
+        const N = panelsWithDist.length;
+        const minDist = Math.min(...panelsWithDist.map((x) => x.dist));
+        const maxDist = Math.max(...panelsWithDist.map((x) => x.dist));
+        const range = maxDist - minDist || 1;
+        // Scale max stagger by plant count: fewer plants = shorter spread so coins go BAM BAM; more plants = full 0–300ms
+        const maxStaggerMs = N <= 1 ? 0 : Math.min(300, 300 * (N - 1) / 4);
+        const panels: CoinPanelData[] = panelsWithDist.map(({ panel, dist }) => ({
+          ...panel,
+          moveToWalletDelayMs: ((dist - minDist) / range) * maxStaggerMs,
+        }));
+        setActiveCoinPanels(prev => [...prev, ...panels]);
+      }
     }
+
+    setTimeout(() => {
+      setIsHarvestFlashing(false);
+      setHarvestProgress(0);
+    }, 300);
 
     if (activeTab !== 'HARVEST') {
       setActiveTab('HARVEST');
@@ -282,7 +363,13 @@ export default function App() {
         <div className="absolute inset-0 pointer-events-none grass-blades opacity-40"></div>
 
         <div className="absolute top-0 left-0 w-full z-50">
-          <Header money={money} onStoreClick={() => setActiveScreen('STORE')} />
+          <Header
+            money={money}
+            onStoreClick={() => setActiveScreen('STORE')}
+            walletRef={walletRef}
+            walletIconRef={walletIconRef}
+            walletFlashActive={walletFlashActive}
+          />
         </div>
 
         <div className="flex-grow relative overflow-hidden h-full" style={{ zIndex: 10 }}>
@@ -385,7 +472,8 @@ export default function App() {
                     containerRef={containerRef}
                     dragState={dragState}
                     setDragState={setDragState}
-                    onMergeImpactStart={(_, px, py) => {
+                    harvestBounceCellIndices={harvestBounceCellIndices}
+                    onMergeImpactStart={(cellIdx, px, py, mergeResultLevel) => {
                       const container = containerRef.current;
                       if (!container) return;
                       const rect = container.getBoundingClientRect();
@@ -398,6 +486,28 @@ export default function App() {
                           startTime: Date.now(),
                         },
                       ]);
+                      if (mergeResultLevel != null) {
+                        const value = getCoinValueForLevel(mergeResultLevel);
+                        const hexEl = document.getElementById(`hex-${cellIdx}`);
+                        const panelHeightPx = 14;
+                        const offsetUp = (panelHeightPx / 2 + 4) * 0.8;
+                        const hoverX = px;
+                        const hoverY = hexEl
+                          ? (hexEl.getBoundingClientRect().top - rect.top) - offsetUp
+                          : py - offsetUp;
+                        setActiveCoinPanels((prev) => [
+                          ...prev,
+                          {
+                            id: `merge-${cellIdx}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                            value,
+                            startX: px,
+                            startY: py,
+                            hoverX,
+                            hoverY,
+                            moveToWalletDelayMs: 0,
+                          },
+                        ]);
+                      }
                     }}
                   />
                 </div>
@@ -488,6 +598,32 @@ export default function App() {
               onComplete={() => {
                 setActiveProjectiles(prev => prev.filter(item => item.id !== p.id));
               }}
+            />
+          ))}
+          {activeCoinPanels.map((coin) => (
+            <CoinPanel
+              key={coin.id}
+              data={coin}
+              containerRef={containerRef}
+              walletRef={walletRef}
+              walletIconRef={walletIconRef}
+              onImpact={(value) => {
+                setMoney(prev => prev + value);
+                setWalletFlashActive(true);
+                setWalletBursts((prev) => [...prev, { id: nextWalletBurstIdRef.current++, trigger: Date.now() }]);
+                if (walletFlashTimeoutRef.current) clearTimeout(walletFlashTimeoutRef.current);
+                walletFlashTimeoutRef.current = setTimeout(() => setWalletFlashActive(false), 75);
+              }}
+              onComplete={() => setActiveCoinPanels(prev => prev.filter((c) => c.id !== coin.id))}
+            />
+          ))}
+          {walletBursts.map((burst) => (
+            <WalletImpactBurst
+              key={burst.id}
+              trigger={burst.trigger}
+              walletIconRef={walletIconRef}
+              containerRef={containerRef}
+              onComplete={() => setWalletBursts((prev) => prev.filter((b) => b.id !== burst.id))}
             />
           ))}
         </div>
