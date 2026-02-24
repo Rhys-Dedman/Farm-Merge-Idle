@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { Header } from './components/Header';
 import { HexBoard } from './components/HexBoard';
 import { UpgradeTabs } from './components/UpgradeTabs';
-import { UpgradeList } from './components/UpgradeList';
+import { UpgradeList, createInitialSeedsState } from './components/UpgradeList';
 import { Navbar } from './components/Navbar';
 import { StoreScreen } from './components/StoreScreen';
 import { SideAction } from './components/SideAction';
@@ -49,6 +49,13 @@ export default function App() {
   const [harvestProgress, setHarvestProgress] = useState(0);
   const [isSeedFlashing, setIsSeedFlashing] = useState(false);
   const [isHarvestFlashing, setIsHarvestFlashing] = useState(false);
+  const [seedsState, setSeedsState] = useState(createInitialSeedsState);
+  const [seedsInStorage, setSeedsInStorage] = useState(0);
+  const [isSeedFireFlashing, setIsSeedFireFlashing] = useState(false);
+  const [seedBounceTrigger, setSeedBounceTrigger] = useState(0); // increment each 100% so bounce animation re-runs
+
+  const seedStorageLevel = seedsState?.seed_storage?.level ?? 0;
+  const seedStorageMax = 1 + seedStorageLevel; // +1 storage per upgrade
   
   const [activeProjectiles, setActiveProjectiles] = useState<ProjectileData[]>([]);
   const [impactCellIdx, setImpactCellIdx] = useState<number | null>(null);
@@ -129,33 +136,84 @@ export default function App() {
     }
   }, []);
 
+  // Seed Production upgrade: auto-increase progress when level >= 1. Rate = level completions per minute (+1/min per upgrade).
+  const seedProductionLevel = seedsState?.seed_production?.level ?? 0;
+  const lastSeedProgressTimeRef = useRef<number>(0);
+  const seedProgressRef = useRef<number>(0);
+  const tapZoomRef = useRef<{ start: number; end: number; startTime: number; duration: number } | null>(null);
+  const [tapZoomTrigger, setTapZoomTrigger] = useState(0);
+
+  // Tap zoom: animate +20% over a very short duration (fast smooth zoom)
+  useEffect(() => {
+    const zoom = tapZoomRef.current;
+    if (!zoom) return;
+    let rafId: number;
+    const durationMs = 100;
+    const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
+    const tick = () => {
+      const zoom = tapZoomRef.current;
+      if (!zoom) return;
+      const elapsed = Date.now() - zoom.startTime;
+      const t = Math.min(1, elapsed / durationMs);
+      const alpha = easeOutCubic(t);
+      const value = zoom.start + (zoom.end - zoom.start) * alpha;
+      seedProgressRef.current = value;
+      if (t >= 1) {
+        seedProgressRef.current = zoom.end;
+        tapZoomRef.current = null;
+        if (zoom.end >= 100) {
+          setSeedProgress(100);
+          setIsSeedFlashing(true);
+        }
+        return;
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [tapZoomTrigger]);
+
+  // Only update React state when we hit 100% or reset; progress bar is driven at 60fps via progressRef in SideAction
+  useEffect(() => {
+    if (seedProductionLevel < 1) return;
+    lastSeedProgressTimeRef.current = Date.now();
+    let rafId: number;
+    const perMinute = seedProductionLevel; // 1/min per upgrade level
+    const percentPerMs = (perMinute * 100) / (60 * 1000); // % progress per millisecond
+    const tick = () => {
+      if (tapZoomRef.current) {
+        lastSeedProgressTimeRef.current = Date.now();
+        rafId = requestAnimationFrame(tick);
+        return;
+      }
+      const now = Date.now();
+      let deltaMs = now - lastSeedProgressTimeRef.current;
+      lastSeedProgressTimeRef.current = now;
+      deltaMs = Math.min(deltaMs, 50); // cap for tab backgrounding
+      const added = deltaMs * percentPerMs;
+      const next = Math.min(100, seedProgressRef.current + added);
+      seedProgressRef.current = next;
+      if (next >= 100) {
+        setSeedProgress(100);
+        setIsSeedFlashing(true);
+        setSeedBounceTrigger((t) => t + 1); // increment so bounce re-runs every revolution
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [seedProductionLevel]);
+
   /**
-   * CENTRALIZED FIRING LOGIC
-   * Monitors progress and grid state. If we reach 100% and there's space,
-   * fire exactly one projectile and reset progress.
+   * At 100% seed progress: add one seed to storage (if room), reset to 0% immediately.
    */
   useEffect(() => {
-    if (seedProgress === 100 && isSeedFlashing && !isGridFull) {
-      const emptyIndices = grid
-        .map((cell, idx) => (cell.item === null ? idx : null))
-        .filter((idx): idx is number => idx !== null);
-
-      if (emptyIndices.length > 0) {
-        const targetIdx = emptyIndices[Math.floor(Math.random() * emptyIndices.length)];
-        
-        // Fire projectile
-        spawnProjectile(targetIdx);
-        
-        // RESET PROGRESS IMMEDIATELY to break this useEffect condition and prevent double-firing
-        setSeedProgress(0);
-        
-        // Keep the "flashing" visual state active for a short duration
-        setTimeout(() => {
-          setIsSeedFlashing(false);
-        }, 300);
-      }
-    }
-  }, [grid, isGridFull, seedProgress, isSeedFlashing, spawnProjectile]);
+    if (seedProgress !== 100 || !isSeedFlashing) return;
+    seedProgressRef.current = 0;
+    setSeedProgress(0);
+    setTimeout(() => setIsSeedFlashing(false), 300);
+    setSeedsInStorage((prev) => Math.min(seedStorageMax, prev + 1));
+  }, [seedProgress, isSeedFlashing, seedStorageMax]);
 
   const spawnCropAt = useCallback((index: number) => {
     setGrid(prev => {
@@ -183,28 +241,27 @@ export default function App() {
 
   const handlePlantClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isSeedFlashing) return;
 
-    // 1 tap = 100% (for now)
-    setSeedProgress(100);
-    setIsSeedFlashing(true);
-
-    if (!isGridFull) {
+    if (seedsInStorage > 0) {
       const emptyIndices = grid
         .map((cell, idx) => (cell.item === null ? idx : null))
         .filter((idx): idx is number => idx !== null);
-
       if (emptyIndices.length > 0) {
         const targetIdx = emptyIndices[Math.floor(Math.random() * emptyIndices.length)];
         spawnProjectile(targetIdx);
-        setSeedProgress(0);
-        setTimeout(() => setIsSeedFlashing(false), 300);
-      } else {
-        setTimeout(() => setIsSeedFlashing(false), 300);
+        setSeedsInStorage((prev) => Math.max(0, prev - 1));
+        setIsSeedFireFlashing(true);
+        setTimeout(() => setIsSeedFireFlashing(false), 300);
       }
-    } else {
-      setTimeout(() => setIsSeedFlashing(false), 300);
+      return;
     }
+
+    if (isSeedFlashing) return;
+
+    const start = Math.max(0, seedProgressRef.current);
+    const end = Math.min(100, start + 20);
+    tapZoomRef.current = { start, end, startTime: Date.now(), duration: 100 };
+    setTapZoomTrigger((n) => n + 1);
 
     setActiveTab('SEEDS');
   };
@@ -417,12 +474,16 @@ export default function App() {
                         icon="/assets/plants/plant_1.png" 
                         iconScale={1.25}
                         iconOffsetY={-3}
-                        progress={seedProgress / 100} 
+                        progress={Math.max(0, Math.min(1, seedProgress / 100))}
+                        progressRef={seedProgressRef} 
                         color="#a7c957"
                         isActive={activeTab === 'SEEDS' && isExpanded}
-                        isFlashing={isSeedFlashing}
-                        shouldAnimate={!isGridFull} // Only animate bounce/rotate when board has space
+                        isFlashing={isSeedFireFlashing}
+                        shouldAnimate={!isGridFull}
                         isBoardFull={isGridFull}
+                        storageCount={seedsInStorage}
+                        storageMax={seedStorageMax}
+                        bounceTrigger={seedBounceTrigger}
                         onClick={handlePlantClick}
                       />
                    </div>
@@ -524,6 +585,8 @@ export default function App() {
                     onTabChange={handleTabChange} 
                     money={money} 
                     setMoney={setMoney}
+                    seedsState={seedsState}
+                    setSeedsState={setSeedsState}
                   />
                 </div>
               </div>

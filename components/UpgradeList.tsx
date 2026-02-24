@@ -2,19 +2,40 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { TabType } from '../types';
 
-interface UpgradeState {
+export interface UpgradeState {
   level: number;
   progress: number;
 }
+
+export type SeedsState = Record<string, UpgradeState>;
 
 interface UpgradeListProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
   money: number;
   setMoney: React.Dispatch<React.SetStateAction<number>>;
+  /** When provided, SEEDS tab uses this state (enables Seed Production to drive auto progress in App). */
+  seedsState?: SeedsState;
+  setSeedsState?: React.Dispatch<React.SetStateAction<SeedsState>>;
 }
 
-const INITIAL_UPGRADES = [
+interface UpgradeDef {
+  id: string;
+  name: string;
+  cost: string;
+  icon: string;
+  description?: string;
+}
+
+const SEEDS_UPGRADES: UpgradeDef[] = [
+  { id: 'seed_production', name: 'Seed Production', cost: '150', icon: '🌱', description: 'Increase automatic seed production speed' },
+  { id: 'seed_quality', name: 'Seed Quality', cost: '500', icon: '⭐', description: 'Increase chance to produce higher tier plants' },
+  { id: 'seed_storage', name: 'Seed Storage', cost: '2.5K', icon: '📦', description: 'Increase the amount of seeds you can store' },
+  { id: 'bonus_seeds', name: 'Bonus Seeds', cost: '10K', icon: '🎁', description: 'Increase chance to produce a bonus seed' },
+  { id: 'seed_surplus', name: 'Seed Surplus', cost: '50K', icon: '💰', description: 'Extra seeds become coins when storage is full' },
+];
+
+const CROPS_UPGRADES: UpgradeDef[] = [
   { id: 'opt1', name: 'SOIL QUALITY', cost: '150', icon: '🟤' },
   { id: 'opt2', name: 'FERTILIZER', cost: '500', icon: '🧪' },
   { id: 'opt3', name: 'SUN INTENSITY', cost: '2.5K', icon: '☀️' },
@@ -25,6 +46,44 @@ const INITIAL_UPGRADES = [
   { id: 'opt8', name: 'GOLDEN SPROUT', cost: '50M', icon: '🌟' },
 ];
 
+const HARVEST_UPGRADES: UpgradeDef[] = [
+  { id: 'opt1', name: 'SOIL QUALITY', cost: '150', icon: '🟤' },
+  { id: 'opt2', name: 'FERTILIZER', cost: '500', icon: '🧪' },
+  { id: 'opt3', name: 'SUN INTENSITY', cost: '2.5K', icon: '☀️' },
+  { id: 'opt4', name: 'IRRIGATION', cost: '10K', icon: '💧' },
+  { id: 'opt5', name: 'CROP ROTATION', cost: '50K', icon: '♻️' },
+  { id: 'opt6', name: 'AUTO-SOWER', cost: '250K', icon: '🚜' },
+  { id: 'opt7', name: 'YIELD BONUS', cost: '1.2M', icon: '🌾' },
+  { id: 'opt8', name: 'GOLDEN SPROUT', cost: '50M', icon: '🌟' },
+];
+
+const getUpgradesForTab = (tab: TabType): UpgradeDef[] => {
+  if (tab === 'SEEDS') return SEEDS_UPGRADES;
+  if (tab === 'CROPS') return CROPS_UPGRADES;
+  return HARVEST_UPGRADES;
+};
+
+/** Seeds tab green (matches "SEEDS" tab label) */
+const SEEDS_VALUE_GREEN = '#6a994e';
+
+/** Current value display for Seeds upgrades only; null = show LV. */
+const getSeedsUpgradeValue = (upgradeId: string, level: number): string | null => {
+  switch (upgradeId) {
+    case 'seed_production':
+      return `${level}/min`;
+    case 'seed_quality':
+      return `${level * 10}%`;
+    case 'seed_storage':
+      return `${1 + level}`; // +1 storage per upgrade
+    case 'bonus_seeds':
+      return `${level * 5}%`;
+    case 'seed_surplus':
+      return `💰 ${20 * Math.pow(2, level - 1)}c`;
+    default:
+      return null;
+  }
+};
+
 const TABS: TabType[] = ['SEEDS', 'CROPS', 'HARVEST'];
 
 const parseCost = (cost: string): number => {
@@ -34,11 +93,22 @@ const parseCost = (cost: string): number => {
   return num;
 };
 
-export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange, money, setMoney }) => {
-  const createInitialState = () => INITIAL_UPGRADES.reduce((acc, curr) => ({ ...acc, [curr.id]: { level: 1, progress: 0 } }), {});
-  const [seedsState, setSeedsState] = useState<Record<string, UpgradeState>>(createInitialState());
-  const [cropsState, setCropsState] = useState<Record<string, UpgradeState>>(createInitialState());
-  const [harvestState, setHarvestState] = useState<Record<string, UpgradeState>>(createInitialState());
+const createInitialState = (upgrades: UpgradeDef[]) =>
+  upgrades.reduce((acc, curr) => ({ ...acc, [curr.id]: { level: 1, progress: 0 } }), {} as Record<string, UpgradeState>);
+
+/** Initial seeds state: seed_production and seed_storage start at level 0 (1 storage slot until first upgrade). */
+export const createInitialSeedsState = (): SeedsState => ({
+  ...createInitialState(SEEDS_UPGRADES),
+  seed_production: { level: 0, progress: 0 },
+  seed_storage: { level: 0, progress: 0 },
+});
+
+export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange, money, setMoney, seedsState: propsSeedsState, setSeedsState: propsSetSeedsState }) => {
+  const [internalSeedsState, setInternalSeedsState] = useState<Record<string, UpgradeState>>(createInitialSeedsState);
+  const seedsState = propsSeedsState ?? internalSeedsState;
+  const setSeedsState = propsSetSeedsState ?? setInternalSeedsState;
+  const [cropsState, setCropsState] = useState<Record<string, UpgradeState>>(() => createInitialState(CROPS_UPGRADES));
+  const [harvestState, setHarvestState] = useState<Record<string, UpgradeState>>(() => createInitialState(HARVEST_UPGRADES));
   const [flashingIds, setFlashingIds] = useState<Set<string>>(new Set());
   const [pressedId, setPressedId] = useState<string | null>(null);
 
@@ -152,27 +222,24 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
     const setter = category === 'SEEDS' ? setSeedsState : category === 'CROPS' ? setCropsState : setHarvestState;
     setter((prev: any) => {
       const current = prev[id];
-      const nextProgress = current.progress + 1;
-      
-      if (nextProgress >= 10) {
-        setFlashingIds(prevSet => new Set(prevSet).add(id));
-        setTimeout(() => {
-          setFlashingIds(prevSet => {
-            const nextSet = new Set(prevSet);
-            nextSet.delete(id);
-            return nextSet;
-          });
-        }, 350); 
-        
-        return { ...prev, [id]: { level: current.level + 1, progress: 0 } };
-      }
-      return { ...prev, [id]: { ...current, progress: nextProgress } };
+      setFlashingIds(prevSet => new Set(prevSet).add(id));
+      setTimeout(() => {
+        setFlashingIds(prevSet => {
+          const nextSet = new Set(prevSet);
+          nextSet.delete(id);
+          return nextSet;
+        });
+      }, 350);
+      // One purchase = one level up (no 10-step progress)
+      return { ...prev, [id]: { level: current.level + 1, progress: 0 } };
     });
   };
 
-  const renderUpgradeItems = (category: TabType, stateMap: Record<string, UpgradeState>) => (
+  const renderUpgradeItems = (category: TabType, stateMap: Record<string, UpgradeState>) => {
+    const upgrades = getUpgradesForTab(category);
+    return (
     <div ref={(scrollRefs as any)[category]} className="flex-grow overflow-y-auto no-scrollbar px-3 pt-3 pb-28 h-full space-y-2.5 overscroll-contain cursor-grab active:cursor-grabbing select-none">
-      {INITIAL_UPGRADES.map((upgrade) => {
+      {upgrades.map((upgrade) => {
         const state = stateMap[upgrade.id];
         const canAfford = money >= parseCost(upgrade.cost);
         const isFlashing = flashingIds.has(upgrade.id);
@@ -193,6 +260,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
 
         const displayProgress = isFlashing ? 10 : state.progress;
         const progressPercent = displayProgress * 10;
+        const seedsValue = category === 'SEEDS' ? getSeedsUpgradeValue(upgrade.id, state.level) : null;
 
         return (
           <div 
@@ -216,14 +284,20 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
                   <h3 className={`text-[13px] font-black tracking-tight uppercase leading-none ${isFlashing ? 'text-[#386641]' : 'text-[#583c1f]'}`}>
                     {upgrade.name}
                   </h3>
-                  {/* Level indicator size */}
-                  <span className={`text-[9px] font-black uppercase ${isFlashing ? 'text-[#386641]/60' : 'text-[#a6a38a]'}`}>
-                    LV {state.level}
-                  </span>
+                  {/* Current value (Seeds: formatted value in green; others: LV) */}
+                  {seedsValue !== null ? (
+                    <span className="text-[11px] font-bold" style={{ color: SEEDS_VALUE_GREEN }}>
+                      {seedsValue}
+                    </span>
+                  ) : (
+                    <span className={`text-[9px] font-black uppercase ${isFlashing ? 'text-[#386641]/60' : 'text-[#a6a38a]'}`}>
+                      LV {state.level}
+                    </span>
+                  )}
                 </div>
-                {/* Description size */}
-                <div className={`text-[10px] font-black uppercase mt-0.5 tracking-tight ${isFlashing ? 'text-[#386641]/50' : ''}`} style={{ color: isFlashing ? undefined : descTextColor }}>
-                  YIELD: +{(state.level * 30).toFixed(0)}%
+                {/* Description - use upgrade description when present, else generic yield; semi-bold */}
+                <div className={`text-[11px] font-semibold mt-0.5 tracking-tight ${upgrade.description ? '' : 'uppercase'} ${isFlashing ? 'text-[#386641]/50' : ''}`} style={{ color: isFlashing ? undefined : descTextColor }}>
+                  {upgrade.description ?? `YIELD: +${(state.level * 30).toFixed(0)}%`}
                 </div>
               </div>
 
@@ -278,6 +352,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
       })}
     </div>
   );
+  };
 
   const getTabIndex = () => TABS.indexOf(activeTab);
   const translateX = `calc(-${getTabIndex() * (100 / 3)}% + ${dragOffset}px)`;

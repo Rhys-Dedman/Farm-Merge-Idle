@@ -1,5 +1,4 @@
-
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 
 interface SideActionProps {
   label: string;
@@ -12,6 +11,13 @@ interface SideActionProps {
   isBoardFull?: boolean;
   iconScale?: number;
   iconOffsetY?: number;
+  /** When set, progress bar is driven at 60fps from this ref (0–100) for smooth updates without React re-renders. */
+  progressRef?: React.MutableRefObject<number>;
+  /** Seed storage: show "X/Y" badge (e.g. 0/1, 3/10); background width fits content. */
+  storageCount?: number;
+  storageMax?: number;
+  /** Incremented each time we should bounce (e.g. seed progress hits 100%); key forces animation to re-run. */
+  bounceTrigger?: number;
   onClick?: (e: React.MouseEvent) => void;
 }
 
@@ -26,36 +32,78 @@ export const SideAction: React.FC<SideActionProps> = ({
   isBoardFull = false,
   iconScale = 1,
   iconOffsetY = 0,
+  progressRef,
+  storageCount,
+  storageMax,
+  bounceTrigger = 0,
   onClick 
 }) => {
-  // Base Radius and Expanded Radius
+  // Base Radius and Expanded Radius (only for body/decoration when flashing)
   const baseRadius = 38;
   const expandedRadius = baseRadius * 1.1; // 10% increase = 41.8
-  
-  // Current Radius based on state
-  const currentRadius = isFlashing ? expandedRadius : baseRadius;
-  const circumference = 2 * Math.PI * currentRadius;
-  
-  // Immediately hide the "successful progress" part when flashing or at 100%
-  // This ensures the player never sees the 100% ring, just the transition to 0%
-  const displayProgress = (isFlashing || progress >= 1) ? 0 : progress;
+  // Progress ring always uses baseRadius so it doesn't scale/transition during pulse (avoids -10% visual bug)
+  const progressRadius = baseRadius;
+  const circumference = 2 * Math.PI * progressRadius;
+  const progressCircleRef = useRef<SVGCircleElement>(null);
+  const isFlashingRef = useRef(isFlashing);
+  isFlashingRef.current = isFlashing;
+
+  // When progressRef is provided, drive the progress ring at 60fps via direct DOM updates (no React re-renders)
+  useEffect(() => {
+    if (!progressRef || !progressCircleRef.current) return;
+    let rafId: number;
+    const tick = () => {
+      const el = progressCircleRef.current;
+      if (!el) return;
+      const raw = progressRef.current;
+      const pct = Math.max(0, Math.min(100, raw));
+      const show = isFlashingRef.current || pct >= 100 ? 0 : pct / 100;
+      const offset = circumference - (show * circumference);
+      el.style.strokeDashoffset = String(offset);
+      el.style.transition = 'none';
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [progressRef, circumference]);
+
+  // Clamp progress to 0–1 so the ring never shows negative or >100%
+  const clampedProgress = Math.max(0, Math.min(1, progress));
+  const displayProgress = (isFlashing || clampedProgress >= 1) ? 0 : clampedProgress;
   const strokeDashoffset = circumference - (displayProgress * circumference);
 
   const isImageIcon = icon.startsWith('http') || icon.startsWith('/');
 
-  // We want the 'r' attribute to transition smoothly
-  // And the 'stroke-dashoffset' to transition when not flashing/0
-  const transitionStyle = (isFlashing || displayProgress === 0) 
-    ? 'none' 
-    : 'stroke-dashoffset 0.2s cubic-bezier(0.4, 0, 0.2, 1)';
+  const transitionStyle = (isFlashing || displayProgress === 0)
+    ? 'none'
+    : 'stroke-dashoffset 0.08s cubic-bezier(0.25, 0.1, 0.25, 1)';
 
-  // Art Colors
   const progressBgColor = 'rgba(48, 56, 30, 0.5)';
   const completedProgressColor = '#76953e';
+  const useRefDrive = progressRef != null;
+  const refDriveOffset = useRefDrive
+    ? circumference - (Math.max(0, Math.min(1, (progressRef?.current ?? 0) / 100)) * circumference)
+    : undefined;
 
   return (
-    <div className="flex flex-col items-center select-none group" onClick={onClick}>
-      <div className={`relative w-24 h-24 flex items-center justify-center cursor-pointer active:scale-95 transition-all duration-200 ${isFlashing && shouldAnimate ? 'scale-110' : ''}`}>
+    <>
+      <style>{`
+        @keyframes seed-bounce {
+          0% { transform: scale(1); }
+          35% { transform: scale(1.18); }
+          70% { transform: scale(0.96); }
+          100% { transform: scale(1); }
+        }
+        .side-action-bounce {
+          animation: seed-bounce 0.4s ease-out;
+        }
+      `}</style>
+      <div
+        key={bounceTrigger}
+        className={`flex flex-col items-center select-none group ${bounceTrigger > 0 ? 'side-action-bounce' : ''}`}
+        onClick={onClick}
+      >
+        <div className={`relative w-24 h-24 flex items-center justify-center cursor-pointer active:scale-95 transition-all duration-200 ${isFlashing && shouldAnimate ? 'scale-110' : ''}`}>
         
         {/* SVG Circular Progress & Decoration */}
         <svg className="absolute inset-0 w-full h-full drop-shadow-[0_1px_6px_rgba(0,0,0,0.8)]" viewBox="0 0 100 100">
@@ -96,42 +144,47 @@ export const SideAction: React.FC<SideActionProps> = ({
             className="transition-colors duration-300"
           />
 
-          {/* Incomplete Progress Track (Background) */}
+          {/* Incomplete Progress Track (Background) - fixed radius so pulse doesn't affect progress */}
           <circle
             cx="50"
             cy="50"
-            r={currentRadius}
+            r={progressRadius}
             fill="transparent"
             stroke={progressBgColor}
             strokeWidth="2.88"
-            style={{ 
-              transition: 'r 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)' 
-            }}
+            style={{ transition: 'none' }}
           />
 
-          {/* Progress Bar Ring - Hidden immediately when flashing or 100% */}
+          {/* Progress Bar Ring - When progressRef is set, strokeDashoffset is driven at 60fps in useEffect */}
           <circle
+            ref={progressRef ? progressCircleRef : undefined}
             cx="50"
             cy="50"
-            r={currentRadius}
+            r={progressRadius}
             fill="transparent"
             stroke={isFlashing ? progressBgColor : completedProgressColor}
             strokeWidth="2.88"
             strokeLinecap="round"
             strokeDasharray={circumference}
             style={{ 
-              strokeDashoffset, 
-              transition: `${transitionStyle}, r 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), stroke 0.3s ease`,
+              strokeDashoffset: useRefDrive ? refDriveOffset : strokeDashoffset,
+              transition: useRefDrive ? 'stroke 0.3s ease' : `${transitionStyle}, stroke 0.3s ease`,
               transform: 'rotate(-90deg)',
               transformOrigin: '50% 50%',
-              opacity: (progress >= 1 && !isFlashing) ? 0 : 1
+              opacity: (clampedProgress >= 1 && !isFlashing) ? 0 : 1
             }}
           />
         </svg>
 
-        {/* Content Icon */}
+        {/* Content Icon - no rotate when seed storage badge (100% no longer rotates) */}
         <div className={`relative z-10 w-16 h-16 rounded-full flex items-center justify-center overflow-hidden transition-all duration-300 ${
-          isFlashing && shouldAnimate ? 'scale-110 rotate-12' : isActive ? 'scale-105' : 'scale-100'
+          isFlashing && shouldAnimate
+            ? storageCount !== undefined
+              ? 'scale-110'
+              : 'scale-110 rotate-12'
+            : isActive
+              ? 'scale-105'
+              : 'scale-100'
         }`}>
           {isImageIcon ? (
             <img 
@@ -149,14 +202,33 @@ export const SideAction: React.FC<SideActionProps> = ({
           <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent pointer-events-none"></div>
         </div>
 
-        {/* Full Badge - Appearing at the bottom when board is full and action is ready */}
-        {isFlashing && isBoardFull && (
+        {/* Storage badge: X/Y (fits content width) or FULL when board full and ready */}
+        {storageCount !== undefined && storageMax !== undefined ? (
+          <div 
+            className="absolute bottom-[-6px] py-[3px] shadow-md border-2 z-20 flex items-center justify-center transition-all duration-200"
+            style={{ 
+              backgroundImage: 'linear-gradient(to bottom, #fcf0c6, #d0df6f)',
+              borderColor: '#7c8741',
+              borderRadius: '999px',
+              paddingLeft: '8px',
+              paddingRight: '8px',
+              minWidth: '2ch'
+            }}
+          >
+            <span 
+              className="text-[11.25px] font-black tabular-nums leading-none whitespace-nowrap"
+              style={{ color: '#475c3b' }}
+            >
+              {storageCount}/{storageMax}
+            </span>
+          </div>
+        ) : isFlashing && isBoardFull ? (
           <div 
             className="absolute bottom-[-6px] px-[12px] py-[3px] shadow-md border-2 z-20 flex items-center justify-center animate-in fade-in slide-in-from-bottom-2 duration-300"
             style={{ 
               backgroundImage: 'linear-gradient(to bottom, #fcf0c6, #d0df6f)',
               borderColor: '#7c8741',
-              borderRadius: '999px' // Full curve, no flats
+              borderRadius: '999px'
             }}
           >
             <span 
@@ -166,8 +238,9 @@ export const SideAction: React.FC<SideActionProps> = ({
               FULL
             </span>
           </div>
-        )}
+        ) : null}
+        </div>
       </div>
-    </div>
+    </>
   );
 };
