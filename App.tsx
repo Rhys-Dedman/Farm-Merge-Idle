@@ -206,10 +206,7 @@ export default function App() {
       setTimeout(() => setIsSeedFlashing(false), 300);
     }
 
-    if (activeTab !== 'SEEDS') {
-      setActiveTab('SEEDS');
-      setIsExpanded(true);
-    }
+    setActiveTab('SEEDS');
   };
 
   const calculateFarmValue = useCallback(() => {
@@ -314,10 +311,7 @@ export default function App() {
       setHarvestProgress(0);
     }, 300);
 
-    if (activeTab !== 'HARVEST') {
-      setActiveTab('HARVEST');
-      setIsExpanded(true);
-    }
+    setActiveTab('HARVEST');
   };
 
   const handleMerge = (sourceIdx: number, targetIdx: number) => {
