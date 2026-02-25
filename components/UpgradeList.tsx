@@ -76,6 +76,16 @@ export const isMergeHarvestMaxed = (cropsState: Record<string, UpgradeState>): b
   return level >= 10; // Max at level 10 (50%)
 };
 
+/** Check if plot_expansion is maxed (no more locked cells to unlock) */
+export const isPlotExpansionMaxed = (lockedCellCount: number): boolean => {
+  return lockedCellCount <= 0;
+};
+
+/** Check if fertile_soil is maxed (all unlocked cells are already fertile) */
+export const isFertileSoilMaxed = (fertilizableCellCount: number): boolean => {
+  return fertilizableCellCount <= 0;
+};
+
 /** Get the seed surplus coin value (0 if level 0, then 10/20/40/80...) */
 export const getSeedSurplusValue = (seedsState: SeedsState): number => {
   const level = seedsState.seed_surplus?.level ?? 0;
@@ -99,6 +109,14 @@ interface UpgradeListProps {
   /** When provided, CROPS tab uses this state (enables Crop Merging multiplier in App). */
   cropsState?: Record<string, UpgradeState>;
   setCropsState?: React.Dispatch<React.SetStateAction<Record<string, UpgradeState>>>;
+  /** Number of locked cells remaining (for plot_expansion max check) */
+  lockedCellCount?: number;
+  /** Called when plot_expansion is upgraded to unlock a cell */
+  onUnlockCell?: () => void;
+  /** Number of unlocked non-fertile cells remaining (for fertile_soil max check) */
+  fertilizableCellCount?: number;
+  /** Called when fertile_soil is upgraded to make a cell fertile */
+  onFertilizeCell?: () => void;
 }
 
 interface UpgradeDef {
@@ -118,10 +136,10 @@ const SEEDS_UPGRADES: UpgradeDef[] = [
 ];
 
 const CROPS_UPGRADES: UpgradeDef[] = [
-  { id: 'crop_merging', name: 'Crop Merging', cost: '150', icon: '🪙', description: 'Multiply coins earned from merging crops' },
   { id: 'plot_expansion', name: 'Plot Expansion', cost: '500', icon: '🗺️', description: 'Unlock additional plots for planting crops' },
+  { id: 'crop_merging', name: 'Crop Merging', cost: '150', icon: '🪙', description: 'Multiply coins earned from merging crops' },
   { id: 'merge_harvest', name: 'Merge Harvest', cost: '2.5K', icon: '🌿', description: 'Merges have a chance to instantly harvest adjacent crops' },
-  { id: 'fertile_soil', name: 'Fertile Soil', cost: '10K', icon: '🥕', description: 'Fertile plots increase value of crops when harvested' },
+  { id: 'fertile_soil', name: 'Fertile Soil', cost: '10K', icon: '🥕', description: 'Fertile plots double the value of crops when harvested' },
   { id: 'lucky_merge', name: 'Lucky Merge', cost: '50K', icon: '✨', description: 'Increase chance for merges to upgrade crops by +2 levels' },
 ];
 
@@ -172,7 +190,7 @@ const getCropsUpgradeValue = (upgradeId: string, level: number): string | null =
     case 'merge_harvest':
       return `${level * 5}%`;
     case 'fertile_soil':
-      return `1x`;
+      return `+1`;
     case 'lucky_merge':
       return `${level * 5}%`;
     default:
@@ -277,7 +295,7 @@ export const createInitialHarvestState = (): Record<string, UpgradeState> => ({
   lucky_harvest: { level: 0, progress: 0 },
 });
 
-export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange, money, setMoney, seedsState: propsSeedsState, setSeedsState: propsSetSeedsState, harvestState: propsHarvestState, setHarvestState: propsSetHarvestState, cropsState: propsCropsState, setCropsState: propsSetCropsState }) => {
+export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange, money, setMoney, seedsState: propsSeedsState, setSeedsState: propsSetSeedsState, harvestState: propsHarvestState, setHarvestState: propsSetHarvestState, cropsState: propsCropsState, setCropsState: propsSetCropsState, lockedCellCount = 0, onUnlockCell, fertilizableCellCount = 0, onFertilizeCell }) => {
   const [internalSeedsState, setInternalSeedsState] = useState<Record<string, UpgradeState>>(createInitialSeedsState);
   const seedsState = propsSeedsState ?? internalSeedsState;
   const setSeedsState = propsSetSeedsState ?? setInternalSeedsState;
@@ -397,6 +415,16 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
     if (money < cost) return;
     setMoney(prev => prev - cost);
 
+    // Special handling for plot_expansion: trigger cell unlock
+    if (id === 'plot_expansion') {
+      onUnlockCell?.();
+    }
+
+    // Special handling for fertile_soil: trigger cell fertilization
+    if (id === 'fertile_soil') {
+      onFertilizeCell?.();
+    }
+
     const setter = category === 'SEEDS' ? setSeedsState : category === 'CROPS' ? setCropsState : setHarvestState;
     setter((prev: any) => {
       const current = prev[id];
@@ -440,6 +468,8 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
         const isMaxed = 
           (upgrade.id === 'bonus_seeds' && isBonusSeedMaxed(stateMap as SeedsState)) ||
           (upgrade.id === 'crop_merging' && isCropMergingMaxed(stateMap)) ||
+          (upgrade.id === 'plot_expansion' && isPlotExpansionMaxed(lockedCellCount)) ||
+          (upgrade.id === 'fertile_soil' && isFertileSoilMaxed(fertilizableCellCount)) ||
           (upgrade.id === 'lucky_merge' && isLuckyMergeMaxed(stateMap)) ||
           (upgrade.id === 'merge_harvest' && isMergeHarvestMaxed(stateMap)) ||
           (upgrade.id === 'lucky_harvest' && isLuckyHarvestMaxed(stateMap)) ||

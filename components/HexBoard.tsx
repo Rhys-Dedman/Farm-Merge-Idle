@@ -27,6 +27,14 @@ interface HexBoardProps {
   onMergeImpactStart?: (cellIdx: number, x: number, y: number, mergeResultLevel?: number) => void;
   /** Returns the level increase for a merge (1 normally, 2 for lucky merge). Called when merge starts with current plant level. */
   getMergeLevelIncrease?: (currentPlantLevel: number) => number;
+  /** Called when a locked cell is tapped (opens upgrade panel to CROPS) */
+  onLockedCellTap?: () => void;
+  /** Called when an empty unlocked cell is tapped (switches to CROPS but doesn't open panel) */
+  onEmptyCellTap?: () => void;
+  /** Cell indices currently being unlocked (for unlock animation) */
+  unlockingCellIndices?: number[];
+  /** Cell indices currently being fertilized (for fertilize animation) */
+  fertilizingCellIndices?: number[];
 }
 
 // Increase when you add more plant_N.png. Merge level N uses plant_N (e.g. two plant_1 → plant_2).
@@ -42,6 +50,8 @@ const HEX_SPRITE_EXT = '.png';
 const HEXCELL_GREEN = `/assets/hex/hexcell_green${HEX_SPRITE_EXT}`;
 const HEXCELL_SHADOW = `/assets/hex/hexcell_shadow${HEX_SPRITE_EXT}`;
 const HEXCELL_WHITE = `/assets/hex/hexcell_white${HEX_SPRITE_EXT}`;
+const HEXCELL_LOCKED = `/assets/hex/hexcell_locked${HEX_SPRITE_EXT}`;
+const HEXCELL_FERTILE = `/assets/hex/hexcell_fertile${HEX_SPRITE_EXT}`;
 
 export const HexBoard: React.FC<HexBoardProps> = ({
   isActive,
@@ -60,6 +70,10 @@ export const HexBoard: React.FC<HexBoardProps> = ({
   harvestBounceCellIndices = [],
   onMergeImpactStart,
   getMergeLevelIncrease,
+  onLockedCellTap,
+  onEmptyCellTap,
+  unlockingCellIndices = [],
+  fertilizingCellIndices = [],
 }) => {
   const liftStartRef = useRef<number>(0);
   const flyStartRef = useRef<number>(0);
@@ -176,10 +190,19 @@ export const HexBoard: React.FC<HexBoardProps> = ({
   const handlePointerDown = useCallback((index: number, e: React.PointerEvent) => {
     e.preventDefault();
     const cell = grid[index];
-    if (!cell?.item) return;
+    // If cell is locked, trigger the locked cell tap callback (opens upgrade panel)
+    if (cell?.locked) {
+      onLockedCellTap?.();
+      return;
+    }
+    // If cell is empty (unlocked), trigger empty cell tap callback (switches tab but doesn't open panel)
+    if (!cell?.item) {
+      onEmptyCellTap?.();
+      return;
+    }
     if (dragState && dragState.phase !== 'impact') return;
     startDrag(index, e.clientX, e.clientY);
-  }, [grid, dragState, startDrag]);
+  }, [grid, dragState, startDrag, onLockedCellTap, onEmptyCellTap]);
 
   // Global pointer move/up/cancel (attach in useEffect)
   useEffect(() => {
@@ -191,9 +214,12 @@ export const HexBoard: React.FC<HexBoardProps> = ({
         const pointerX = e.clientX - contRect.left;
         const pointerY = e.clientY - contRect.top;
         const underIdx = getCellIndexUnderPoint(e.clientX, e.clientY);
+        const targetCell = underIdx != null ? grid[underIdx] : null;
+        // Locked cells cannot be hovered as drop targets
+        const isLocked = targetCell?.locked === true;
         const hoveredEmptyCellIdx =
-          underIdx != null && underIdx !== dragState.cellIdx && grid[underIdx]?.item == null ? underIdx : null;
-        const targetItem = underIdx != null && underIdx !== dragState.cellIdx ? grid[underIdx]?.item : null;
+          underIdx != null && underIdx !== dragState.cellIdx && !isLocked && grid[underIdx]?.item == null ? underIdx : null;
+        const targetItem = underIdx != null && underIdx !== dragState.cellIdx && !isLocked ? grid[underIdx]?.item : null;
         const hoveredMatchCellIdx =
           targetItem != null && underIdx != null && targetItem.level === dragState.item.level && targetItem.type === dragState.item.type ? underIdx : null;
         setDragState((prev) => prev ? { ...prev, pointerX, pointerY, hoveredEmptyCellIdx, hoveredMatchCellIdx } : null);
@@ -208,8 +234,10 @@ export const HexBoard: React.FC<HexBoardProps> = ({
         const releaseState = { ...dragState, pointerX: e.clientX - contRect.left, pointerY: e.clientY - contRect.top };
         const inBounds = contRect.left <= e.clientX && e.clientX <= contRect.right && contRect.top <= e.clientY && e.clientY <= contRect.bottom;
         const targetCell = targetIdx != null ? grid[targetIdx] : null;
-        const isValidMerge = targetIdx != null && targetIdx !== dragState.cellIdx && targetCell?.item && targetCell.item.level === dragState.item.level;
-        const isEmptyCell = targetIdx != null && targetIdx !== dragState.cellIdx && targetCell?.item == null;
+        // Locked cells cannot be drop targets
+        const isLocked = targetCell?.locked === true;
+        const isValidMerge = targetIdx != null && targetIdx !== dragState.cellIdx && !isLocked && targetCell?.item && targetCell.item.level === dragState.item.level;
+        const isEmptyCell = targetIdx != null && targetIdx !== dragState.cellIdx && !isLocked && targetCell?.item == null;
         if (isValidMerge) {
           onReleaseFromCell(dragState.cellIdx);
           startFlyBack(releaseState, targetIdx!, true);
@@ -398,6 +426,14 @@ export const HexBoard: React.FC<HexBoardProps> = ({
         .plant-harvest-bounce {
           animation: plantHarvestBounce 200ms ease-out forwards;
         }
+        @keyframes hexcellUnlockBounce {
+          0% { transform: scale(1); }
+          50% { transform: scale(1.3); }
+          100% { transform: scale(1); }
+        }
+        .hexcell-unlock-bounce {
+          animation: hexcellUnlockBounce 200ms ease-out forwards;
+        }
         .hex-cell-img {
           display: block;
         }
@@ -436,10 +472,14 @@ export const HexBoard: React.FC<HexBoardProps> = ({
           );
         })}
 
-        {/* PASS 2: hexcell_green — one sprite per cell (idle) */}
+        {/* PASS 2: hexcell_green, hexcell_fertile, or hexcell_locked — one sprite per cell (idle) */}
         {grid.map((cell, i) => {
           const x = hexSize * (3 / 2) * cell.q * horizontalSpacing * gridSpacing;
           const y = hexSize * Math.sqrt(3) * (cell.r + cell.q / 2) * verticalSpacing * gridSpacing;
+          const isLocked = cell.locked === true;
+          const isFertile = cell.fertile === true;
+          const isUnlocking = unlockingCellIndices.includes(i);
+          const isFertilizing = fertilizingCellIndices.includes(i);
 
           return (
             <div
@@ -459,10 +499,28 @@ export const HexBoard: React.FC<HexBoardProps> = ({
                 zIndex: 10,
               }}
             >
+              {/* Locked cell sprite */}
+              <img
+                src={HEXCELL_LOCKED}
+                alt=""
+                className={`hex-cell-img w-full h-full object-contain absolute inset-0 transition-opacity duration-200 ${isUnlocking ? 'opacity-0' : ''}`}
+                style={{ opacity: isLocked && !isUnlocking ? 1 : 0 }}
+                onError={hideBrokenHexImg}
+              />
+              {/* Green cell sprite (shown when not locked/fertile, or fading in during unlock, or fading out during fertilize) */}
               <img
                 src={HEXCELL_GREEN}
                 alt=""
-                className="hex-cell-img w-full h-full object-contain transition-transform duration-300"
+                className={`hex-cell-img w-full h-full object-contain absolute inset-0 transition-all duration-200 ${isUnlocking ? 'hexcell-unlock-bounce' : ''}`}
+                style={{ opacity: isLocked && !isUnlocking ? 0 : isFertile && !isFertilizing ? 0 : 1 }}
+                onError={hideBrokenHexImg}
+              />
+              {/* Fertile cell sprite (shown when fertile, or fading in during fertilize) */}
+              <img
+                src={HEXCELL_FERTILE}
+                alt=""
+                className={`hex-cell-img w-full h-full object-contain absolute inset-0 transition-all duration-200 ${isFertilizing ? 'hexcell-unlock-bounce' : ''}`}
+                style={{ opacity: isFertile || isFertilizing ? 1 : 0 }}
                 onError={hideBrokenHexImg}
               />
             </div>

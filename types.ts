@@ -10,6 +10,8 @@ export interface BoardCell {
   q: number;
   r: number;
   item: Item | null;
+  locked?: boolean;
+  fertile?: boolean;
 }
 
 export interface Upgrade {

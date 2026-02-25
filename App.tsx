@@ -9,6 +9,7 @@ import { StoreScreen } from './components/StoreScreen';
 import { SideAction } from './components/SideAction';
 import { Projectile } from './components/Projectile';
 import { LeafBurst, LEAF_BURST_SMALL_COUNT } from './components/LeafBurst';
+import { UnlockBurst } from './components/UnlockBurst';
 import { CoinPanel, CoinPanelData } from './components/CoinPanel';
 import { WalletImpactBurst } from './components/WalletImpactBurst';
 import { PageHeader } from './components/PageHeader';
@@ -19,13 +20,22 @@ export function getCoinValueForLevel(level: number): number {
   return 5 * Math.pow(2, level - 1);
 }
 import { ErrorBoundary } from './components/ErrorBoundary';
+
+// Helper to calculate hex distance from center (0,0) in axial coordinates
+const getHexDistance = (q: number, r: number): number => {
+  return (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2;
+};
+
 const generateInitialGrid = (): BoardCell[] => {
   const cells: BoardCell[] = [];
   for (let q = -2; q <= 2; q++) {
     const r1 = Math.max(-2, -q - 2);
     const r2 = Math.min(2, -q + 2);
     for (let r = r1; r <= r2; r++) {
-      cells.push({ q, r, item: null });
+      // Outer ring (distance 2 from center) starts locked
+      const distance = getHexDistance(q, r);
+      const locked = distance === 2;
+      cells.push({ q, r, item: null, locked });
     }
   }
   return cells;
@@ -55,6 +65,13 @@ export default function App() {
   const [cropsState, setCropsState] = useState<Record<string, UpgradeState>>(createInitialCropsState);
   const [highestPlantEver, setHighestPlantEver] = useState(1); // Track highest plant level ever created
   const [seedsInStorage, setSeedsInStorage] = useState(0);
+  const [unlockingCellIndices, setUnlockingCellIndices] = useState<number[]>([]); // Cells currently playing unlock animation
+  const [fertilizingCellIndices, setFertilizingCellIndices] = useState<number[]>([]); // Cells currently playing fertilize animation
+
+  // Calculate locked cell count from grid
+  const lockedCellCount = grid.filter(cell => cell.locked).length;
+  // Calculate fertilizable cell count (unlocked and not already fertile)
+  const fertilizableCellCount = grid.filter(cell => !cell.locked && !cell.fertile).length;
   const [seedBounceTrigger, setSeedBounceTrigger] = useState(0); // increment each 100% so bounce animation re-runs
   const [harvestBounceTrigger, setHarvestBounceTrigger] = useState(0); // increment each harvest so bounce animation re-runs
 
@@ -70,6 +87,7 @@ export default function App() {
   const [newCellImpactIdx, setNewCellImpactIdx] = useState<number | null>(null);
   const [leafBursts, setLeafBursts] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
   const [leafBurstsSmall, setLeafBurstsSmall] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
+  const [unlockBursts, setUnlockBursts] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
   const [activeCoinPanels, setActiveCoinPanels] = useState<CoinPanelData[]>([]);
   const [harvestBounceCellIndices, setHarvestBounceCellIndices] = useState<number[]>([]);
   const [walletFlashActive, setWalletFlashActive] = useState(false);
@@ -123,7 +141,8 @@ export default function App() {
     return () => cancelAnimationFrame(rafId);
   }, [isExpanded, updateSpriteCenter]);
 
-  const isGridFull = grid.every(cell => cell.item !== null);
+  // Grid is "full" when all unlocked cells have items
+  const isGridFull = grid.every(cell => cell.locked || cell.item !== null);
 
   const spawnProjectile = useCallback((targetIdx: number, plantLevel: number) => {
     if (plantButtonRef.current && containerRef.current) {
@@ -354,6 +373,106 @@ export default function App() {
     setIsExpanded(true);
   };
 
+  // Handle tap on locked cell: open CROPS tab (opens the upgrade panel)
+  const handleLockedCellTap = useCallback(() => {
+    setActiveTab('CROPS');
+    setIsExpanded(true);
+  }, []);
+
+  // Handle tap on empty unlocked cell: switch to CROPS tab but don't open panel
+  const handleEmptyCellTap = useCallback(() => {
+    setActiveTab('CROPS');
+  }, []);
+
+  // Handle unlocking a cell when plot_expansion is upgraded
+  const handleUnlockCell = useCallback(() => {
+    // Find all locked cell indices
+    const lockedIndices = grid.map((cell, idx) => cell.locked ? idx : -1).filter(idx => idx !== -1);
+    if (lockedIndices.length === 0) return;
+    
+    // Pick a random locked cell
+    const randomIdx = lockedIndices[Math.floor(Math.random() * lockedIndices.length)];
+    
+    // Start unlock animation
+    setUnlockingCellIndices(prev => [...prev, randomIdx]);
+    
+    // Spawn unlock burst at the cell center
+    const hexEl = document.getElementById(`hex-${randomIdx}`);
+    if (hexEl) {
+      const rect = hexEl.getBoundingClientRect();
+      setUnlockBursts(prev => [
+        ...prev,
+        {
+          id: `unlock-${randomIdx}-${Date.now()}`,
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+          startTime: Date.now(),
+        },
+      ]);
+    }
+    
+    // After animation, unlock the cell
+    setTimeout(() => {
+      setGrid(prev => {
+        const newGrid = [...prev];
+        newGrid[randomIdx] = { ...newGrid[randomIdx], locked: false };
+        return newGrid;
+      });
+      setUnlockingCellIndices(prev => prev.filter(idx => idx !== randomIdx));
+    }, 200);
+  }, [grid]);
+
+  // Handle fertilizing a cell when fertile_soil is upgraded
+  const handleFertilizeCell = useCallback(() => {
+    // Find all fertilizable cell indices (unlocked and not already fertile)
+    // Prioritize empty cells
+    const fertilizableEmptyIndices = grid.map((cell, idx) => 
+      !cell.locked && !cell.fertile && !cell.item ? idx : -1
+    ).filter(idx => idx !== -1);
+    
+    const fertilizableWithPlantIndices = grid.map((cell, idx) => 
+      !cell.locked && !cell.fertile && cell.item ? idx : -1
+    ).filter(idx => idx !== -1);
+    
+    // Try empty cells first, then cells with plants
+    let targetIndices = fertilizableEmptyIndices.length > 0 
+      ? fertilizableEmptyIndices 
+      : fertilizableWithPlantIndices;
+    
+    if (targetIndices.length === 0) return;
+    
+    // Pick a random fertilizable cell
+    const randomIdx = targetIndices[Math.floor(Math.random() * targetIndices.length)];
+    
+    // Start fertilize animation
+    setFertilizingCellIndices(prev => [...prev, randomIdx]);
+    
+    // Spawn unlock burst at the cell center (reuse unlock burst VFX)
+    const hexEl = document.getElementById(`hex-${randomIdx}`);
+    if (hexEl) {
+      const rect = hexEl.getBoundingClientRect();
+      setUnlockBursts(prev => [
+        ...prev,
+        {
+          id: `fertilize-${randomIdx}-${Date.now()}`,
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+          startTime: Date.now(),
+        },
+      ]);
+    }
+    
+    // After animation, mark the cell as fertile
+    setTimeout(() => {
+      setGrid(prev => {
+        const newGrid = [...prev];
+        newGrid[randomIdx] = { ...newGrid[randomIdx], fertile: true };
+        return newGrid;
+      });
+      setFertilizingCellIndices(prev => prev.filter(idx => idx !== randomIdx));
+    }, 200);
+  }, [grid]);
+
   /** Calculate the plant level to spawn based on seed quality */
   const calculatePlantLevel = useCallback((): number => {
     const baseTier = getSeedBaseTier(seedsState);
@@ -371,8 +490,9 @@ export default function App() {
 
     // When white (seeds in storage): only fire seed, no progress
     if (seedsInStorage > 0) {
+      // Only target unlocked empty cells
       const emptyIndices = grid
-        .map((cell, idx) => (cell.item === null ? idx : null))
+        .map((cell, idx) => (cell.item === null && !cell.locked ? idx : null))
         .filter((idx): idx is number => idx !== null);
       if (emptyIndices.length > 0) {
         const targetIdx = emptyIndices[Math.floor(Math.random() * emptyIndices.length)];
@@ -384,7 +504,7 @@ export default function App() {
         // Bonus Seed: chance to fire a second seed
         const bonusChance = getBonusSeedChance(seedsState);
         if (bonusChance > 0 && Math.random() * 100 < bonusChance) {
-          // Get remaining empty cells (excluding the first target)
+          // Get remaining empty unlocked cells (excluding the first target)
           const remainingEmptyIndices = emptyIndices.filter(idx => idx !== targetIdx);
           
           // Pick a target for the second seed
@@ -523,6 +643,11 @@ export default function App() {
           value *= cropSynergyMultiplier;
         }
         
+        // Apply 2x multiplier for fertile cells
+        if (cell.fertile) {
+          value *= 2;
+        }
+        
         value = Math.floor(value);
         
         const hexEl = document.getElementById(`hex-${cellIdx}`);
@@ -624,6 +749,11 @@ export default function App() {
       
       if (cropSynergyMultiplier > 1.0 && hasAdjacentSameLevel(cellIdx, grid)) {
         value *= cropSynergyMultiplier;
+      }
+      
+      // Apply 2x multiplier for fertile cells
+      if (cell.fertile) {
+        value *= 2;
       }
       value = Math.floor(value);
 
@@ -929,6 +1059,10 @@ export default function App() {
                     setDragState={setDragState}
                     harvestBounceCellIndices={harvestBounceCellIndices}
                     getMergeLevelIncrease={getMergeLevelIncrease}
+                    onLockedCellTap={handleLockedCellTap}
+                    onEmptyCellTap={handleEmptyCellTap}
+                    unlockingCellIndices={unlockingCellIndices}
+                    fertilizingCellIndices={fertilizingCellIndices}
                     onMergeImpactStart={(cellIdx, px, py, mergeResultLevel) => {
                       const container = containerRef.current;
                       if (!container) return;
@@ -994,6 +1128,10 @@ export default function App() {
                     setHarvestState={setHarvestState}
                     cropsState={cropsState}
                     setCropsState={setCropsState}
+                    lockedCellCount={lockedCellCount}
+                    onUnlockCell={handleUnlockCell}
+                    fertilizableCellCount={fertilizableCellCount}
+                    onFertilizeCell={handleFertilizeCell}
                   />
                 </div>
               </div>
@@ -1035,6 +1173,15 @@ export default function App() {
                 startTime={b.startTime}
                 particleCount={LEAF_BURST_SMALL_COUNT}
                 onComplete={() => setLeafBurstsSmall((prev) => prev.filter((x) => x.id !== b.id))}
+              />
+            ))}
+            {unlockBursts.map((b) => (
+              <UnlockBurst
+                key={b.id}
+                x={b.x}
+                y={b.y}
+                startTime={b.startTime}
+                onComplete={() => setUnlockBursts((prev) => prev.filter((x) => x.id !== b.id))}
               />
             ))}
           </div>,
