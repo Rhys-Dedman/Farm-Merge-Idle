@@ -339,9 +339,9 @@ export default function App() {
 
     if (isSeedFlashing) return;
 
-    // Add +15% progress when button is green (no seeds in storage)
+    // Add +20% progress when button is green (no seeds in storage)
     const start = Math.max(0, seedProgressRef.current);
-    const totalAfterTap = start + 15;
+    const totalAfterTap = start + 20;
     
     if (totalAfterTap > 100) {
       // Tap goes past 100%: add to storage, reset to 0%, then continue with remainder
@@ -589,7 +589,7 @@ export default function App() {
                    <div className="pointer-events-auto flex items-center justify-center" style={{ transform: 'scale(0.9)', transformOrigin: 'center center' }} onClick={(e) => e.stopPropagation()}>
                      <SideAction 
                         label="Harvest" 
-                        icon="🚜" 
+                        icon="🧺" 
                         progress={harvestProgress / 100} 
                         color="#a7c957"
                         isActive={activeTab === 'HARVEST' && isExpanded}

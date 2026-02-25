@@ -40,6 +40,12 @@ export const isBonusSeedMaxed = (seedsState: SeedsState): boolean => {
   return level >= 10; // Max at level 10 (50%)
 };
 
+/** Check if crop_merging upgrade is at max level (2.0x) */
+export const isCropMergingMaxed = (cropsState: Record<string, UpgradeState>): boolean => {
+  const level = cropsState.crop_merging?.level ?? 0;
+  return level >= 5; // Max at level 5 (2.0x)
+};
+
 /** Get the seed surplus coin value (0 if level 0, then 10/20/40/80...) */
 export const getSeedSurplusValue = (seedsState: SeedsState): number => {
   const level = seedsState.seed_surplus?.level ?? 0;
@@ -67,32 +73,26 @@ interface UpgradeDef {
 
 const SEEDS_UPGRADES: UpgradeDef[] = [
   { id: 'seed_production', name: 'Seed Production', cost: '150', icon: '🌱', description: 'Increase automatic seed production speed' },
-  { id: 'seed_quality', name: 'Seed Quality', cost: '500', icon: '⭐' }, // Description is dynamic, rendered inline
+  { id: 'seed_quality', name: 'Seed Quality', cost: '500', icon: '🍎' }, // Description is dynamic, rendered inline
   { id: 'seed_storage', name: 'Seed Storage', cost: '2.5K', icon: '📦', description: 'Increase the amount of seeds you can store' },
-  { id: 'bonus_seeds', name: 'Seed Luck', cost: '10K', icon: '🍀', description: 'Increase the chance to produce a bonus plant' },
   { id: 'seed_surplus', name: 'Seed Surplus', cost: '50K', icon: '🪙', description: 'Extra seeds become coins when storage is full' },
+  { id: 'bonus_seeds', name: 'Seed Luck', cost: '10K', icon: '🍀', description: 'Increase the chance to produce a bonus plant' },
 ];
 
 const CROPS_UPGRADES: UpgradeDef[] = [
-  { id: 'opt1', name: 'SOIL QUALITY', cost: '150', icon: '🟤' },
-  { id: 'opt2', name: 'FERTILIZER', cost: '500', icon: '🧪' },
-  { id: 'opt3', name: 'SUN INTENSITY', cost: '2.5K', icon: '☀️' },
-  { id: 'opt4', name: 'IRRIGATION', cost: '10K', icon: '💧' },
-  { id: 'opt5', name: 'CROP ROTATION', cost: '50K', icon: '♻️' },
-  { id: 'opt6', name: 'AUTO-SOWER', cost: '250K', icon: '🚜' },
-  { id: 'opt7', name: 'YIELD BONUS', cost: '1.2M', icon: '🌾' },
-  { id: 'opt8', name: 'GOLDEN SPROUT', cost: '50M', icon: '🌟' },
+  { id: 'crop_merging', name: 'Crop Merging', cost: '150', icon: '🪙', description: 'Increase coins earned from merging crops' },
+  { id: 'plot_expansion', name: 'Plot Expansion', cost: '500', icon: '🗺️', description: 'Unlock additional plots for planting crops' },
+  { id: 'field_density', name: 'Field Density', cost: '2.5K', icon: '🌿', description: 'Harvest value increases when more plots are planted' },
+  { id: 'fertile_soil', name: 'Fertile Soil', cost: '10K', icon: '🥕', description: 'Fertile plots increase value of crops when harvested' },
+  { id: 'lucky_growth', name: 'Lucky Growth', cost: '50K', icon: '✨', description: 'Automatically upgrade crops to the next level over time' },
 ];
 
 const HARVEST_UPGRADES: UpgradeDef[] = [
-  { id: 'opt1', name: 'SOIL QUALITY', cost: '150', icon: '🟤' },
-  { id: 'opt2', name: 'FERTILIZER', cost: '500', icon: '🧪' },
-  { id: 'opt3', name: 'SUN INTENSITY', cost: '2.5K', icon: '☀️' },
-  { id: 'opt4', name: 'IRRIGATION', cost: '10K', icon: '💧' },
-  { id: 'opt5', name: 'CROP ROTATION', cost: '50K', icon: '♻️' },
-  { id: 'opt6', name: 'AUTO-SOWER', cost: '250K', icon: '🚜' },
-  { id: 'opt7', name: 'YIELD BONUS', cost: '1.2M', icon: '🌾' },
-  { id: 'opt8', name: 'GOLDEN SPROUT', cost: '50M', icon: '🌟' },
+  { id: 'harvest_speed', name: 'Harvest Speed', cost: '150', icon: '🚜', description: 'Increase automatic harvest cycle speed' },
+  { id: 'crop_value', name: 'Crop Value', cost: '500', icon: '💰', description: 'Increase coin value of harvested crops' },
+  { id: 'harvest_boost', name: 'Harvest Boost', cost: '2.5K', icon: '🥬', description: 'Merging crops increases the crop cycle progress' },
+  { id: 'crop_synergy', name: 'Crop Synergy', cost: '10K', icon: '🌾', description: 'Increase coin value from adjacent matching crops' },
+  { id: 'lucky_harvest', name: 'Lucky Harvest', cost: '50K', icon: '🍀', description: 'Increase the chance for a double harvest' },
 ];
 
 const getUpgradesForTab = (tab: TabType): UpgradeDef[] => {
@@ -124,6 +124,54 @@ const getSeedsUpgradeValue = (upgradeId: string, level: number, seedsState?: See
   }
 };
 
+/** Current value display for Crops upgrades; null = show LV. */
+const getCropsUpgradeValue = (upgradeId: string, level: number): string | null => {
+  switch (upgradeId) {
+    case 'crop_merging':
+      return `${(1 + 0.2 * level).toFixed(1)}x`;
+    case 'plot_expansion':
+      return `+1`;
+    case 'field_density':
+      return `${(1 + 0.1 * level).toFixed(1)}x`;
+    case 'fertile_soil':
+      return `1x`;
+    case 'lucky_growth':
+      return `${level}/min`;
+    default:
+      return null;
+  }
+};
+
+/** Current value display for Harvest upgrades; null = show LV. */
+const getHarvestUpgradeValue = (upgradeId: string, level: number): string | null => {
+  switch (upgradeId) {
+    case 'harvest_speed':
+      return `${level}/min`;
+    case 'crop_value':
+      return `${(0.1 * level).toFixed(1)}x`;
+    case 'harvest_boost':
+      return `${level * 2}%`;
+    case 'crop_synergy':
+      return `${(0.1 * level).toFixed(1)}x`;
+    case 'lucky_harvest':
+      return `${level * 5}%`;
+    default:
+      return null;
+  }
+};
+
+/** Check if lucky_harvest upgrade is at max level (50%) */
+export const isLuckyHarvestMaxed = (harvestState: Record<string, UpgradeState>): boolean => {
+  const level = harvestState.lucky_harvest?.level ?? 0;
+  return level >= 10; // Max at level 10 (50%)
+};
+
+/** Check if harvest_boost upgrade is at max level (20%) */
+export const isHarvestBoostMaxed = (harvestState: Record<string, UpgradeState>): boolean => {
+  const level = harvestState.harvest_boost?.level ?? 0;
+  return level >= 10; // Max at level 10 (20%)
+};
+
 const TABS: TabType[] = ['SEEDS', 'CROPS', 'HARVEST'];
 
 const parseCost = (cost: string): number => {
@@ -149,12 +197,30 @@ export const createInitialSeedsState = (): SeedsState => ({
   seed_surplus: { level: 0, progress: 0 },
 });
 
+/** Initial crops state: all upgrades start at level 0 */
+export const createInitialCropsState = (): Record<string, UpgradeState> => ({
+  crop_merging: { level: 0, progress: 0 },
+  plot_expansion: { level: 1, progress: 0 },
+  field_density: { level: 0, progress: 0 },
+  fertile_soil: { level: 0, progress: 0 },
+  lucky_growth: { level: 0, progress: 0 },
+});
+
+/** Initial harvest state: all upgrades start at level 0 */
+export const createInitialHarvestState = (): Record<string, UpgradeState> => ({
+  harvest_speed: { level: 0, progress: 0 },
+  crop_value: { level: 0, progress: 0 },
+  harvest_boost: { level: 0, progress: 0 },
+  crop_synergy: { level: 0, progress: 0 },
+  lucky_harvest: { level: 0, progress: 0 },
+});
+
 export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange, money, setMoney, seedsState: propsSeedsState, setSeedsState: propsSetSeedsState }) => {
   const [internalSeedsState, setInternalSeedsState] = useState<Record<string, UpgradeState>>(createInitialSeedsState);
   const seedsState = propsSeedsState ?? internalSeedsState;
   const setSeedsState = propsSetSeedsState ?? setInternalSeedsState;
-  const [cropsState, setCropsState] = useState<Record<string, UpgradeState>>(() => createInitialState(CROPS_UPGRADES));
-  const [harvestState, setHarvestState] = useState<Record<string, UpgradeState>>(() => createInitialState(HARVEST_UPGRADES));
+  const [cropsState, setCropsState] = useState<Record<string, UpgradeState>>(createInitialCropsState);
+  const [harvestState, setHarvestState] = useState<Record<string, UpgradeState>>(createInitialHarvestState);
   const [flashingIds, setFlashingIds] = useState<Set<string>>(new Set());
   const [pressedId, setPressedId] = useState<string | null>(null);
 
@@ -304,8 +370,12 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
         const isFlashing = flashingIds.has(upgrade.id);
         const isPressed = pressedId === upgrade.id;
         
-        // Check if this upgrade is maxed (currently only bonus_seeds has a max)
-        const isMaxed = upgrade.id === 'bonus_seeds' && isBonusSeedMaxed(stateMap as SeedsState);
+        // Check if this upgrade is maxed
+        const isMaxed = 
+          (upgrade.id === 'bonus_seeds' && isBonusSeedMaxed(stateMap as SeedsState)) ||
+          (upgrade.id === 'crop_merging' && isCropMergingMaxed(stateMap)) ||
+          (upgrade.id === 'lucky_harvest' && isLuckyHarvestMaxed(stateMap)) ||
+          (upgrade.id === 'harvest_boost' && isHarvestBoostMaxed(stateMap));
         
         const descTextColor = '#c2b180';
         const buttonColor = '#cae060';
@@ -323,6 +393,9 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
         const displayProgress = isFlashing ? 10 : state.progress;
         const progressPercent = displayProgress * 10;
         const seedsValue = category === 'SEEDS' ? getSeedsUpgradeValue(upgrade.id, state.level, stateMap as SeedsState) : null;
+        const cropsValue = category === 'CROPS' ? getCropsUpgradeValue(upgrade.id, state.level) : null;
+        const harvestValue = category === 'HARVEST' ? getHarvestUpgradeValue(upgrade.id, state.level) : null;
+        const displayValue = seedsValue ?? cropsValue ?? harvestValue;
         
         // For seed_quality, calculate the target tier (base tier + 1)
         const seedQualityTargetTier = upgrade.id === 'seed_quality' 
@@ -351,10 +424,10 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
                   <h3 className={`text-[13px] font-black tracking-tight uppercase leading-none ${isFlashing ? 'text-[#386641]' : 'text-[#583c1f]'}`}>
                     {upgrade.name}
                   </h3>
-                  {/* Current value (Seeds: formatted value in green; others: LV) */}
-                  {seedsValue !== null ? (
+                  {/* Current value (Seeds/Harvest: formatted value in green; others: LV) */}
+                  {displayValue !== null ? (
                     <span className="text-[11px] font-bold" style={{ color: SEEDS_VALUE_GREEN }}>
-                      {seedsValue}
+                      {displayValue}
                     </span>
                   ) : (
                     <span className={`text-[9px] font-black uppercase ${isFlashing ? 'text-[#386641]/60' : 'text-[#a6a38a]'}`}>

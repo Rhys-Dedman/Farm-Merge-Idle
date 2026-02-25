@@ -10,7 +10,7 @@ interface UpgradeTabsProps {
 const TAB_ICONS: Record<TabType, string> = {
   SEEDS: '🌱',
   CROPS: '🌻',
-  HARVEST: '🚜',
+  HARVEST: '🧺',
 };
 
 export const UpgradeTabs: React.FC<UpgradeTabsProps> = ({ activeTab, onTabChange }) => {
