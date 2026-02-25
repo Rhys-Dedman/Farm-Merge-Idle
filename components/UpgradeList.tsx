@@ -53,6 +53,8 @@ export const getSeedSurplusValue = (seedsState: SeedsState): number => {
   return 10 * Math.pow(2, level - 1);
 };
 
+export type HarvestState = Record<string, UpgradeState>;
+
 interface UpgradeListProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
@@ -61,6 +63,9 @@ interface UpgradeListProps {
   /** When provided, SEEDS tab uses this state (enables Seed Production to drive auto progress in App). */
   seedsState?: SeedsState;
   setSeedsState?: React.Dispatch<React.SetStateAction<SeedsState>>;
+  /** When provided, HARVEST tab uses this state (enables Harvest Speed to drive auto progress in App). */
+  harvestState?: HarvestState;
+  setHarvestState?: React.Dispatch<React.SetStateAction<HarvestState>>;
 }
 
 interface UpgradeDef {
@@ -215,12 +220,14 @@ export const createInitialHarvestState = (): Record<string, UpgradeState> => ({
   lucky_harvest: { level: 0, progress: 0 },
 });
 
-export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange, money, setMoney, seedsState: propsSeedsState, setSeedsState: propsSetSeedsState }) => {
+export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange, money, setMoney, seedsState: propsSeedsState, setSeedsState: propsSetSeedsState, harvestState: propsHarvestState, setHarvestState: propsSetHarvestState }) => {
   const [internalSeedsState, setInternalSeedsState] = useState<Record<string, UpgradeState>>(createInitialSeedsState);
   const seedsState = propsSeedsState ?? internalSeedsState;
   const setSeedsState = propsSetSeedsState ?? setInternalSeedsState;
   const [cropsState, setCropsState] = useState<Record<string, UpgradeState>>(createInitialCropsState);
-  const [harvestState, setHarvestState] = useState<Record<string, UpgradeState>>(createInitialHarvestState);
+  const [internalHarvestState, setInternalHarvestState] = useState<Record<string, UpgradeState>>(createInitialHarvestState);
+  const harvestState = propsHarvestState ?? internalHarvestState;
+  const setHarvestState = propsSetHarvestState ?? setInternalHarvestState;
   const [flashingIds, setFlashingIds] = useState<Set<string>>(new Set());
   const [pressedId, setPressedId] = useState<string | null>(null);
 

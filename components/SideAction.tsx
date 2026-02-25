@@ -18,6 +18,8 @@ interface SideActionProps {
   storageMax?: number;
   /** Incremented each time we should bounce (e.g. seed progress hits 100%); key forces animation to re-run. */
   bounceTrigger?: number;
+  /** If true, disable the rotate animation when flashing (default: false) */
+  noRotateOnFlash?: boolean;
   onClick?: (e: React.MouseEvent) => void;
 }
 
@@ -36,6 +38,7 @@ export const SideAction: React.FC<SideActionProps> = ({
   storageCount,
   storageMax,
   bounceTrigger = 0,
+  noRotateOnFlash = false,
   onClick 
 }) => {
   // Base Radius and Expanded Radius (only for body/decoration when flashing)
@@ -238,11 +241,11 @@ export const SideAction: React.FC<SideActionProps> = ({
           />
         </svg>
 
-        {/* Content Icon - no rotate when seed storage badge (100% no longer rotates) */}
+        {/* Content Icon - no rotate when seed storage badge or noRotateOnFlash is set */}
         <div 
           className={`relative z-10 w-16 h-16 rounded-full flex items-center justify-center overflow-hidden transition-all duration-300 ${
             isFlashing && shouldAnimate
-              ? storageCount !== undefined
+              ? (storageCount !== undefined || noRotateOnFlash)
                 ? 'scale-110'
                 : 'scale-110 rotate-12'
               : isActive

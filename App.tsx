@@ -3,7 +3,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { HexBoard } from './components/HexBoard';
 import { UpgradeTabs } from './components/UpgradeTabs';
-import { UpgradeList, createInitialSeedsState, getSeedQualityPercent, getSeedBaseTier, getBonusSeedChance, getSeedSurplusValue } from './components/UpgradeList';
+import { UpgradeList, createInitialSeedsState, createInitialHarvestState, getSeedQualityPercent, getSeedBaseTier, getBonusSeedChance, getSeedSurplusValue, HarvestState } from './components/UpgradeList';
 import { Navbar } from './components/Navbar';
 import { StoreScreen } from './components/StoreScreen';
 import { SideAction } from './components/SideAction';
@@ -51,6 +51,7 @@ export default function App() {
   const [isSeedFlashing, setIsSeedFlashing] = useState(false);
   const [isHarvestFlashing, setIsHarvestFlashing] = useState(false);
   const [seedsState, setSeedsState] = useState(createInitialSeedsState);
+  const [harvestState, setHarvestState] = useState<HarvestState>(createInitialHarvestState);
   const [seedsInStorage, setSeedsInStorage] = useState(0);
   const [seedBounceTrigger, setSeedBounceTrigger] = useState(0); // increment each 100% so bounce animation re-runs
 
@@ -258,6 +259,73 @@ export default function App() {
     }
   }, [seedProgress, isSeedFlashing, seedStorageMax, seedsInStorage, seedsState]);
 
+  // Harvest Speed upgrade: auto-increase progress when level >= 1. Rate = level completions per minute (+1/min per upgrade).
+  const harvestSpeedLevel = harvestState?.harvest_speed?.level ?? 0;
+  const lastHarvestProgressTimeRef = useRef<number>(0);
+  const harvestProgressRef = useRef<number>(0);
+  const harvestTapZoomRef = useRef<{ start: number; end: number; startTime: number; duration: number } | null>(null);
+  const [harvestTapZoomTrigger, setHarvestTapZoomTrigger] = useState(0);
+
+  // Harvest tap zoom: animate +20% over a very short duration (fast smooth zoom)
+  useEffect(() => {
+    const zoom = harvestTapZoomRef.current;
+    if (!zoom) return;
+    let rafId: number;
+    const durationMs = 100;
+    const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
+    const tick = () => {
+      const zoom = harvestTapZoomRef.current;
+      if (!zoom) return;
+      const elapsed = Date.now() - zoom.startTime;
+      const t = Math.min(1, elapsed / durationMs);
+      const alpha = easeOutCubic(t);
+      const value = zoom.start + (zoom.end - zoom.start) * alpha;
+      harvestProgressRef.current = value;
+      if (t >= 1) {
+        harvestProgressRef.current = zoom.end;
+        harvestTapZoomRef.current = null;
+        if (zoom.end >= 100) {
+          setHarvestProgress(100);
+          setIsHarvestFlashing(true);
+        }
+        return;
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [harvestTapZoomTrigger]);
+
+  // Harvest auto-progress: driven at 60fps via harvestProgressRef for smooth updates
+  useEffect(() => {
+    if (harvestSpeedLevel < 1) return;
+    lastHarvestProgressTimeRef.current = Date.now();
+    let rafId: number;
+    const perMinute = harvestSpeedLevel; // 1/min per upgrade level
+    const percentPerMs = (perMinute * 100) / (60 * 1000); // % progress per millisecond
+    const tick = () => {
+      if (harvestTapZoomRef.current) {
+        lastHarvestProgressTimeRef.current = Date.now();
+        rafId = requestAnimationFrame(tick);
+        return;
+      }
+      const now = Date.now();
+      let deltaMs = now - lastHarvestProgressTimeRef.current;
+      lastHarvestProgressTimeRef.current = now;
+      deltaMs = Math.min(deltaMs, 50); // cap for tab backgrounding
+      const added = deltaMs * percentPerMs;
+      const next = Math.min(100, harvestProgressRef.current + added);
+      harvestProgressRef.current = next;
+      if (next >= 100) {
+        setHarvestProgress(100);
+        setIsHarvestFlashing(true);
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [harvestSpeedLevel]);
+
   const spawnCropAt = useCallback((index: number, plantLevel: number = 1) => {
     setGrid(prev => {
       const newGrid = [...prev];
@@ -373,15 +441,26 @@ export default function App() {
 
   const handleHarvestClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (harvestProgress >= 100 || isHarvestFlashing) return;
+    if (isHarvestFlashing) return;
 
+    // Add +20 progress per tap (animated via harvestTapZoomRef)
+    const current = harvestProgressRef.current;
+    const next = Math.min(100, current + 20);
+    harvestTapZoomRef.current = { start: current, end: next, startTime: Date.now(), duration: 100 };
+    setHarvestTapZoomTrigger((t) => t + 1);
+
+    setActiveTab('HARVEST');
+  };
+
+  /**
+   * At 100% harvest progress: perform harvest (spawn coin panels, leaf bursts), flash white, reset to 0%.
+   */
+  useEffect(() => {
+    if (harvestProgress !== 100 || !isHarvestFlashing) return;
+    
     const farmValue = calculateFarmValue();
     const tapProfit = Math.max(1, Math.floor(farmValue * 0.05));
     setMoney(prev => prev + tapProfit);
-
-    // 1 tap = 100% (for now)
-    setHarvestProgress(100);
-    setIsHarvestFlashing(true);
 
     // Snapshot grid at exact 100%: only plants on the board now produce coins
     const container = containerRef.current;
@@ -451,7 +530,6 @@ export default function App() {
         const minDist = Math.min(...panelsWithDist.map((x) => x.dist));
         const maxDist = Math.max(...panelsWithDist.map((x) => x.dist));
         const range = maxDist - minDist || 1;
-        // Scale max stagger by plant count: fewer plants = shorter spread so coins go BAM BAM; more plants = full 0–300ms
         const maxStaggerMs = N <= 1 ? 0 : Math.min(300, 300 * (N - 1) / 4);
         const panels: CoinPanelData[] = panelsWithDist.map(({ panel, dist }) => ({
           ...panel,
@@ -461,13 +539,11 @@ export default function App() {
       }
     }
 
-    setTimeout(() => {
-      setIsHarvestFlashing(false);
-      setHarvestProgress(0);
-    }, 300);
-
-    setActiveTab('HARVEST');
-  };
+    // Reset to 0% and continue auto-progress
+    harvestProgressRef.current = 0;
+    setHarvestProgress(0);
+    setTimeout(() => setIsHarvestFlashing(false), 300);
+  }, [harvestProgress, isHarvestFlashing, calculateFarmValue, grid]);
 
   const handleMerge = (sourceIdx: number, targetIdx: number) => {
     setGrid(prev => {
@@ -590,12 +666,14 @@ export default function App() {
                      <SideAction 
                         label="Harvest" 
                         icon="🧺" 
-                        progress={harvestProgress / 100} 
+                        progress={harvestProgress / 100}
+                        progressRef={harvestProgressRef}
                         color="#a7c957"
                         isActive={activeTab === 'HARVEST' && isExpanded}
                         isFlashing={isHarvestFlashing}
                         shouldAnimate={true}
                         isBoardFull={false}
+                        noRotateOnFlash={true}
                         onClick={handleHarvestClick}
                       />
                    </div>
@@ -686,6 +764,8 @@ export default function App() {
                     setMoney={setMoney}
                     seedsState={seedsState}
                     setSeedsState={setSeedsState}
+                    harvestState={harvestState}
+                    setHarvestState={setHarvestState}
                   />
                 </div>
               </div>
