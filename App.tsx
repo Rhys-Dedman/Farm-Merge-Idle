@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { Header } from './components/Header';
 import { HexBoard } from './components/HexBoard';
 import { UpgradeTabs } from './components/UpgradeTabs';
-import { UpgradeList, createInitialSeedsState } from './components/UpgradeList';
+import { UpgradeList, createInitialSeedsState, getSeedQualityPercent, getSeedBaseTier } from './components/UpgradeList';
 import { Navbar } from './components/Navbar';
 import { StoreScreen } from './components/StoreScreen';
 import { SideAction } from './components/SideAction';
@@ -36,6 +36,7 @@ export interface ProjectileData {
   startX: number;
   startY: number;
   targetIdx: number;
+  plantLevel: number; // The level of plant to spawn on impact
 }
 
 export default function App() {
@@ -55,6 +56,7 @@ export default function App() {
 
   const seedStorageLevel = seedsState?.seed_storage?.level ?? 0;
   const seedStorageMax = 1 + seedStorageLevel; // +1 storage per upgrade
+  const seedBaseTier = getSeedBaseTier(seedsState); // Current base tier for plant icon
   
   const [activeProjectiles, setActiveProjectiles] = useState<ProjectileData[]>([]);
   const [impactCellIdx, setImpactCellIdx] = useState<number | null>(null);
@@ -118,7 +120,7 @@ export default function App() {
 
   const isGridFull = grid.every(cell => cell.item !== null);
 
-  const spawnProjectile = useCallback((targetIdx: number) => {
+  const spawnProjectile = useCallback((targetIdx: number, plantLevel: number) => {
     if (plantButtonRef.current && containerRef.current) {
       const btnRect = plantButtonRef.current.getBoundingClientRect();
       const containerRect = containerRef.current.getBoundingClientRect();
@@ -129,7 +131,8 @@ export default function App() {
         id: Math.random().toString(36).substr(2, 9),
         startX,
         startY,
-        targetIdx
+        targetIdx,
+        plantLevel
       };
       setActiveProjectiles(prev => [...prev, newProj]);
     }
@@ -214,7 +217,7 @@ export default function App() {
     setSeedsInStorage((prev) => Math.min(seedStorageMax, prev + 1));
   }, [seedProgress, isSeedFlashing, seedStorageMax]);
 
-  const spawnCropAt = useCallback((index: number) => {
+  const spawnCropAt = useCallback((index: number, plantLevel: number = 1) => {
     setGrid(prev => {
       const newGrid = [...prev];
       if (newGrid[index] && newGrid[index].item === null) {
@@ -222,7 +225,7 @@ export default function App() {
           ...newGrid[index],
           item: {
             id: Math.random().toString(36).substr(2, 9),
-            level: 1,
+            level: plantLevel,
             type: 'CROP'
           }
         };
@@ -238,6 +241,18 @@ export default function App() {
     setIsExpanded(true);
   };
 
+  /** Calculate the plant level to spawn based on seed quality */
+  const calculatePlantLevel = useCallback((): number => {
+    const baseTier = getSeedBaseTier(seedsState);
+    const qualityPercent = getSeedQualityPercent(seedsState);
+    
+    // Roll for quality upgrade: qualityPercent% chance to spawn baseTier+1 instead of baseTier
+    if (qualityPercent > 0 && Math.random() * 100 < qualityPercent) {
+      return baseTier + 1;
+    }
+    return baseTier;
+  }, [seedsState]);
+
   const handlePlantClick = (e: React.MouseEvent) => {
     e.stopPropagation();
 
@@ -248,7 +263,9 @@ export default function App() {
         .filter((idx): idx is number => idx !== null);
       if (emptyIndices.length > 0) {
         const targetIdx = emptyIndices[Math.floor(Math.random() * emptyIndices.length)];
-        spawnProjectile(targetIdx);
+        // Calculate plant level at the moment of shooting (quality chance is determined on tap)
+        const plantLevel = calculatePlantLevel();
+        spawnProjectile(targetIdx, plantLevel);
         setSeedsInStorage((prev) => Math.max(0, prev - 1));
       }
       return;
@@ -486,7 +503,7 @@ export default function App() {
                    <div className="pointer-events-auto flex items-center justify-center" ref={plantButtonRef} style={{ transform: 'scale(0.9)', transformOrigin: 'center center' }} onClick={(e) => e.stopPropagation()}>
                      <SideAction 
                         label="Plant" 
-                        icon="/assets/plants/plant_1.png" 
+                        icon={`/assets/plants/plant_${seedBaseTier}.png`}
                         iconScale={1.25}
                         iconOffsetY={-3}
                         progress={Math.max(0, Math.min(1, seedProgress / 100))}
@@ -652,7 +669,8 @@ export default function App() {
               key={p.id}
               data={p}
               onImpact={(targetIdx) => {
-                spawnCropAt(targetIdx);
+                // Use the plantLevel that was determined when the seed was shot
+                spawnCropAt(targetIdx, p.plantLevel);
                 const hexEl = document.getElementById(`hex-${targetIdx}`);
                 if (hexEl) {
                   const r = hexEl.getBoundingClientRect();

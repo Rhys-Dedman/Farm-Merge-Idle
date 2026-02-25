@@ -7,7 +7,26 @@ export interface UpgradeState {
   progress: number;
 }
 
-export type SeedsState = Record<string, UpgradeState>;
+export type SeedsState = Record<string, UpgradeState> & {
+  /** Base plant tier for seed shooting (starts at 1, increases when quality hits 100%) */
+  seedBaseTier?: number;
+};
+
+/** Get the current seed quality percentage (0-100) within the current tier */
+export const getSeedQualityPercent = (seedsState: SeedsState): number => {
+  const qualityLevel = seedsState.seed_quality?.level ?? 0;
+  return (qualityLevel % 10) * 10; // 0-90% in increments of 10
+};
+
+/** Get the base plant tier (what level plant is shot normally) */
+export const getSeedBaseTier = (seedsState: SeedsState): number => {
+  return seedsState.seedBaseTier ?? 1;
+};
+
+/** Get the target tier shown in description (base tier + 1) */
+export const getSeedTargetTier = (seedsState: SeedsState): number => {
+  return getSeedBaseTier(seedsState) + 1;
+};
 
 interface UpgradeListProps {
   activeTab: TabType;
@@ -29,7 +48,7 @@ interface UpgradeDef {
 
 const SEEDS_UPGRADES: UpgradeDef[] = [
   { id: 'seed_production', name: 'Seed Production', cost: '150', icon: '🌱', description: 'Increase automatic seed production speed' },
-  { id: 'seed_quality', name: 'Seed Quality', cost: '500', icon: '⭐', description: 'Increase chance to produce higher tier plants' },
+  { id: 'seed_quality', name: 'Seed Quality', cost: '500', icon: '⭐' }, // Description is dynamic, rendered inline
   { id: 'seed_storage', name: 'Seed Storage', cost: '2.5K', icon: '📦', description: 'Increase the amount of seeds you can store' },
   { id: 'bonus_seeds', name: 'Bonus Seeds', cost: '10K', icon: '🎁', description: 'Increase chance to produce a bonus seed' },
   { id: 'seed_surplus', name: 'Seed Surplus', cost: '50K', icon: '💰', description: 'Extra seeds become coins when storage is full' },
@@ -67,12 +86,14 @@ const getUpgradesForTab = (tab: TabType): UpgradeDef[] => {
 const SEEDS_VALUE_GREEN = '#6a994e';
 
 /** Current value display for Seeds upgrades only; null = show LV. */
-const getSeedsUpgradeValue = (upgradeId: string, level: number): string | null => {
+const getSeedsUpgradeValue = (upgradeId: string, level: number, seedsState?: SeedsState): string | null => {
   switch (upgradeId) {
     case 'seed_production':
       return `${level}/min`;
     case 'seed_quality':
-      return `${level * 10}%`;
+      // Display quality % within current tier (0-90%)
+      const qualityPercent = seedsState ? getSeedQualityPercent(seedsState) : (level % 10) * 10;
+      return `${qualityPercent}%`;
     case 'seed_storage':
       return `${1 + level}`; // +1 storage per upgrade
     case 'bonus_seeds':
@@ -96,11 +117,14 @@ const parseCost = (cost: string): number => {
 const createInitialState = (upgrades: UpgradeDef[]) =>
   upgrades.reduce((acc, curr) => ({ ...acc, [curr.id]: { level: 1, progress: 0 } }), {} as Record<string, UpgradeState>);
 
-/** Initial seeds state: seed_production and seed_storage start at level 0 (1 storage slot until first upgrade). */
+/** Initial seeds state: seed_production and seed_storage start at level 0 (1 storage slot until first upgrade). 
+ * seed_quality starts at level 0 (0% chance) with baseTier 1 (shooting plant_1).
+ */
 export const createInitialSeedsState = (): SeedsState => ({
   ...createInitialState(SEEDS_UPGRADES),
   seed_production: { level: 0, progress: 0 },
   seed_storage: { level: 0, progress: 0 },
+  seed_quality: { level: 0, progress: 0 },
 });
 
 export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange, money, setMoney, seedsState: propsSeedsState, setSeedsState: propsSetSeedsState }) => {
@@ -230,8 +254,21 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
           return nextSet;
         });
       }, 350);
+      
       // One purchase = one level up (no 10-step progress)
-      return { ...prev, [id]: { level: current.level + 1, progress: 0 } };
+      const newLevel = current.level + 1;
+      
+      // Special handling for seed_quality: when reaching 100% (level multiple of 10), increase base tier
+      if (id === 'seed_quality' && newLevel > 0 && newLevel % 10 === 0) {
+        const currentBaseTier = prev.seedBaseTier ?? 1;
+        return { 
+          ...prev, 
+          [id]: { level: newLevel, progress: 0 },
+          seedBaseTier: currentBaseTier + 1
+        };
+      }
+      
+      return { ...prev, [id]: { level: newLevel, progress: 0 } };
     });
   };
 
@@ -260,7 +297,12 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
 
         const displayProgress = isFlashing ? 10 : state.progress;
         const progressPercent = displayProgress * 10;
-        const seedsValue = category === 'SEEDS' ? getSeedsUpgradeValue(upgrade.id, state.level) : null;
+        const seedsValue = category === 'SEEDS' ? getSeedsUpgradeValue(upgrade.id, state.level, stateMap as SeedsState) : null;
+        
+        // For seed_quality, calculate the target tier (base tier + 1)
+        const seedQualityTargetTier = upgrade.id === 'seed_quality' 
+          ? getSeedTargetTier(stateMap as SeedsState) 
+          : null;
 
         return (
           <div 
@@ -295,9 +337,15 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
                     </span>
                   )}
                 </div>
-                {/* Description - use upgrade description when present, else generic yield; semi-bold */}
-                <div className={`text-[11px] font-semibold mt-0.5 tracking-tight ${upgrade.description ? '' : 'uppercase'} ${isFlashing ? 'text-[#386641]/50' : ''}`} style={{ color: isFlashing ? undefined : descTextColor }}>
-                  {upgrade.description ?? `YIELD: +${(state.level * 30).toFixed(0)}%`}
+                {/* Description - seed_quality has dynamic description, others use static or generic yield */}
+                <div className={`text-[11px] font-semibold mt-0.5 tracking-tight ${(upgrade.description || upgrade.id === 'seed_quality') ? '' : 'uppercase'} ${isFlashing ? 'text-[#386641]/50' : ''}`} style={{ color: isFlashing ? undefined : descTextColor }}>
+                  {upgrade.id === 'seed_quality' ? (
+                    <>
+                      Increase the chance to produce level <span style={{ color: SEEDS_VALUE_GREEN, fontWeight: 700 }}>{seedQualityTargetTier}</span> plants
+                    </>
+                  ) : (
+                    upgrade.description ?? `YIELD: +${(state.level * 30).toFixed(0)}%`
+                  )}
                 </div>
               </div>
 
