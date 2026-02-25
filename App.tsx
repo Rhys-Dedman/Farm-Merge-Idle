@@ -10,6 +10,7 @@ import { SideAction } from './components/SideAction';
 import { Projectile } from './components/Projectile';
 import { LeafBurst, LEAF_BURST_SMALL_COUNT } from './components/LeafBurst';
 import { UnlockBurst } from './components/UnlockBurst';
+import { CellHighlightBeam } from './components/CellHighlightBeam';
 import { CoinPanel, CoinPanelData } from './components/CoinPanel';
 import { WalletImpactBurst } from './components/WalletImpactBurst';
 import { PageHeader } from './components/PageHeader';
@@ -53,7 +54,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('SEEDS');
   const [activeScreen, setActiveScreen] = useState<ScreenType>('FARM');
   const [isExpanded, setIsExpanded] = useState(true);
-  const [money, setMoney] = useState(100000);
+  const [money, setMoney] = useState(1000000);
 
   const [grid, setGrid] = useState<BoardCell[]>(generateInitialGrid());
   const [seedProgress, setSeedProgress] = useState(0);
@@ -88,6 +89,7 @@ export default function App() {
   const [leafBursts, setLeafBursts] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
   const [leafBurstsSmall, setLeafBurstsSmall] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
   const [unlockBursts, setUnlockBursts] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
+  const [cellHighlightBeams, setCellHighlightBeams] = useState<{ id: string; x: number; y: number; cellWidth: number; cellHeight: number; startTime: number }[]>([]);
   const [activeCoinPanels, setActiveCoinPanels] = useState<CoinPanelData[]>([]);
   const [harvestBounceCellIndices, setHarvestBounceCellIndices] = useState<number[]>([]);
   const [walletFlashActive, setWalletFlashActive] = useState(false);
@@ -396,7 +398,7 @@ export default function App() {
     // Start unlock animation
     setUnlockingCellIndices(prev => [...prev, randomIdx]);
     
-    // Spawn unlock burst at the cell center
+    // Spawn unlock burst (50% particles) and green highlight beam at the cell center
     const hexEl = document.getElementById(`hex-${randomIdx}`);
     if (hexEl) {
       const rect = hexEl.getBoundingClientRect();
@@ -406,6 +408,18 @@ export default function App() {
           id: `unlock-${randomIdx}-${Date.now()}`,
           x: rect.left + rect.width / 2,
           y: rect.top + rect.height / 2,
+          startTime: Date.now(),
+        },
+      ]);
+      // Yellow highlight beam for unlock
+      setCellHighlightBeams(prev => [
+        ...prev,
+        {
+          id: `unlock-beam-${randomIdx}-${Date.now()}`,
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+          cellWidth: rect.width,
+          cellHeight: rect.height,
           startTime: Date.now(),
         },
       ]);
@@ -447,22 +461,24 @@ export default function App() {
     // Start fertilize animation
     setFertilizingCellIndices(prev => [...prev, randomIdx]);
     
-    // Spawn unlock burst at the cell center (reuse unlock burst VFX)
+    // Spawn yellow highlight beam VFX at the cell
     const hexEl = document.getElementById(`hex-${randomIdx}`);
     if (hexEl) {
       const rect = hexEl.getBoundingClientRect();
-      setUnlockBursts(prev => [
+      setCellHighlightBeams(prev => [
         ...prev,
         {
           id: `fertilize-${randomIdx}-${Date.now()}`,
           x: rect.left + rect.width / 2,
           y: rect.top + rect.height / 2,
+          cellWidth: rect.width,
+          cellHeight: rect.height,
           startTime: Date.now(),
         },
       ]);
     }
     
-    // After animation, mark the cell as fertile
+    // After animation, mark the cell as fertile (sync with beam animation ~200ms for the sprite swap)
     setTimeout(() => {
       setGrid(prev => {
         const newGrid = [...prev];
@@ -1182,6 +1198,17 @@ export default function App() {
                 y={b.y}
                 startTime={b.startTime}
                 onComplete={() => setUnlockBursts((prev) => prev.filter((x) => x.id !== b.id))}
+              />
+            ))}
+            {cellHighlightBeams.map((b) => (
+              <CellHighlightBeam
+                key={b.id}
+                x={b.x}
+                y={b.y}
+                cellWidth={b.cellWidth}
+                cellHeight={b.cellHeight}
+                startTime={b.startTime}
+                onComplete={() => setCellHighlightBeams((prev) => prev.filter((x) => x.id !== b.id))}
               />
             ))}
           </div>,

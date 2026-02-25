@@ -19,7 +19,7 @@ const GRAVITY_PX_PER_S = 95;
 const LEAF_LIFETIME_MS_MIN = 300;
 const LEAF_LIFETIME_MS_MAX = 700;
 /** Particle count for unlock burst: 3x the baseline leaf burst (18 * 3 = 54) */
-export const UNLOCK_BURST_COUNT = 54;
+export const UNLOCK_BURST_COUNT = 27;
 
 interface LeafParticle {
   id: number;
