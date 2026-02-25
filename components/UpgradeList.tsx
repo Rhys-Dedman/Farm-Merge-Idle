@@ -62,7 +62,7 @@ const SEEDS_UPGRADES: UpgradeDef[] = [
   { id: 'seed_production', name: 'Seed Production', cost: '150', icon: '🌱', description: 'Increase automatic seed production speed' },
   { id: 'seed_quality', name: 'Seed Quality', cost: '500', icon: '⭐' }, // Description is dynamic, rendered inline
   { id: 'seed_storage', name: 'Seed Storage', cost: '2.5K', icon: '📦', description: 'Increase the amount of seeds you can store' },
-  { id: 'bonus_seeds', name: 'Bonus Seeds', cost: '10K', icon: '🍀', description: 'Increase chance to produce a bonus seed' },
+  { id: 'bonus_seeds', name: 'Seed Luck', cost: '10K', icon: '🍀', description: 'Increase the chance to produce a bonus plant' },
   { id: 'seed_surplus', name: 'Seed Surplus', cost: '50K', icon: '💰', description: 'Extra seeds become coins when storage is full' },
 ];
 
