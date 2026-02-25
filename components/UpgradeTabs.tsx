@@ -48,7 +48,16 @@ export const UpgradeTabs: React.FC<UpgradeTabsProps> = ({ activeTab, onTabChange
           left: activeTab === 'SEEDS' ? '4%' : activeTab === 'CROPS' ? '36%' : '68%'
         }}
       >
-        <div className="absolute top-[-3px] left-1/2 -translate-x-1/2 w-1.5 h-1.5 rotate-45 bg-[#a7c957] rounded-[1px]"></div>
+        <div 
+          className="absolute top-[-4px] left-1/2 -translate-x-1/2"
+          style={{
+            width: 0,
+            height: 0,
+            borderLeft: '4px solid transparent',
+            borderRight: '4px solid transparent',
+            borderBottom: '4px solid #a7c957',
+          }}
+        ></div>
       </div>
     </div>
   );

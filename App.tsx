@@ -1,10 +1,9 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Header } from './components/Header';
 import { HexBoard } from './components/HexBoard';
 import { UpgradeTabs } from './components/UpgradeTabs';
-import { UpgradeList, createInitialSeedsState, getSeedQualityPercent, getSeedBaseTier, getBonusSeedChance } from './components/UpgradeList';
+import { UpgradeList, createInitialSeedsState, getSeedQualityPercent, getSeedBaseTier, getBonusSeedChance, getSeedSurplusValue } from './components/UpgradeList';
 import { Navbar } from './components/Navbar';
 import { StoreScreen } from './components/StoreScreen';
 import { SideAction } from './components/SideAction';
@@ -12,6 +11,7 @@ import { Projectile } from './components/Projectile';
 import { LeafBurst, LEAF_BURST_SMALL_COUNT } from './components/LeafBurst';
 import { CoinPanel, CoinPanelData } from './components/CoinPanel';
 import { WalletImpactBurst } from './components/WalletImpactBurst';
+import { PageHeader } from './components/PageHeader';
 import { TabType, ScreenType, BoardCell, Item, DragState } from './types';
 
 /** Coin per plant level: level 1 = 5, level 2 = 10, level 3 = 20, ... */
@@ -208,14 +208,55 @@ export default function App() {
 
   /**
    * At 100% seed progress: add one seed to storage (if room), reset to 0% immediately.
+   * If storage is full and seed_surplus is upgraded, spawn a coin panel instead.
    */
   useEffect(() => {
     if (seedProgress !== 100 || !isSeedFlashing) return;
     seedProgressRef.current = 0;
     setSeedProgress(0);
     setTimeout(() => setIsSeedFlashing(false), 300);
-    setSeedsInStorage((prev) => Math.min(seedStorageMax, prev + 1));
-  }, [seedProgress, isSeedFlashing, seedStorageMax]);
+    
+    // Check if storage is full BEFORE we would add
+    const isStorageFull = seedsInStorage >= seedStorageMax;
+    const surplusValue = getSeedSurplusValue(seedsState);
+    
+    if (isStorageFull && surplusValue > 0) {
+      // Storage full with seed surplus upgrade: spawn coin panel
+      const container = containerRef.current;
+      const plantBtn = plantButtonRef.current;
+      const walletIcon = walletIconRef.current;
+      const wallet = walletRef.current;
+      const walletEl = walletIcon || wallet;
+      
+      if (container && plantBtn && walletEl) {
+        const containerRect = container.getBoundingClientRect();
+        const btnRect = plantBtn.getBoundingClientRect();
+        
+        const startX = btnRect.left + btnRect.width / 2 - containerRect.left;
+        const startY = btnRect.top + btnRect.height / 2 - containerRect.top;
+        const hoverX = startX;
+        const panelHeightPx = 14;
+        const offsetUp = (panelHeightPx / 2 + 4) * 1.2;
+        const hoverY = btnRect.top - containerRect.top - offsetUp;
+        
+        setActiveCoinPanels((prev) => [
+          ...prev,
+          {
+            id: `seed-surplus-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            value: surplusValue,
+            startX,
+            startY,
+            hoverX,
+            hoverY,
+            moveToWalletDelayMs: 0,
+          },
+        ]);
+      }
+    } else {
+      // Normal case: add seed to storage
+      setSeedsInStorage((prev) => Math.min(seedStorageMax, prev + 1));
+    }
+  }, [seedProgress, isSeedFlashing, seedStorageMax, seedsInStorage, seedsState]);
 
   const spawnCropAt = useCallback((index: number, plantLevel: number = 1) => {
     setGrid(prev => {
@@ -470,23 +511,13 @@ export default function App() {
         {/* Grass Detail Overlay */}
         <div className="absolute inset-0 pointer-events-none grass-blades opacity-40"></div>
 
-        <div className="absolute top-0 left-0 w-full z-50">
-          <Header
-            money={money}
-            onStoreClick={() => setActiveScreen('STORE')}
-            walletRef={walletRef}
-            walletIconRef={walletIconRef}
-            walletFlashActive={walletFlashActive}
-          />
-        </div>
-
         <div className="flex-grow relative overflow-hidden h-full" style={{ zIndex: 10 }}>
           <div 
             className="absolute inset-0 flex transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]"
             style={{ transform: screenTranslateX, width: '300%' }}
           >
             <div className="w-1/3 h-full bg-[#0c0d12]/90 backdrop-blur-sm">
-              <StoreScreen onAddMoney={(amt) => setMoney(prev => prev + amt)} />
+              <StoreScreen money={money} walletFlashActive={walletFlashActive} onAddMoney={(amt) => setMoney(prev => prev + amt)} />
             </div>
 
             <div ref={farmColumnRef} className="w-1/3 h-full flex flex-col relative overflow-hidden">
@@ -514,9 +545,20 @@ export default function App() {
                 />
               </div>
 
+              {/* Farm Header - pinned to this screen */}
+              <div className="relative z-50">
+                <PageHeader 
+                  money={money}
+                  walletRef={walletRef}
+                  walletIconRef={walletIconRef}
+                  walletFlashActive={walletFlashActive}
+                  onWalletClick={() => setActiveScreen('STORE')}
+                />
+              </div>
+
               <div 
                 ref={hexAreaRef}
-                className="relative flex-grow flex flex-col items-center justify-center overflow-hidden pt-20 z-10"
+                className="relative flex-grow flex flex-col items-center justify-center overflow-hidden z-10"
               >
                 {/* Only tapping this backdrop (background) closes the panel; hex cells and plants do not */}
                 <div
@@ -649,13 +691,16 @@ export default function App() {
               </div>
             </div>
 
-            <div className="w-1/3 h-full bg-[#0a0b0f]/90 backdrop-blur-sm flex flex-col items-center justify-center space-y-4 pt-20">
-               <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center border border-white/10">
-                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 text-white/20">
-                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c1.097 0 2.16.195 3.14.552c.98-.357 2.043-.552 3.14-.552c1.097 0 2.16.195 3.14-.552c.98-.357 2.043-.552 3.14-.552c1.097 0 2.16.195 3.14-.552c.98-.357 2.043-.552 3.14-.552c.917 0 1.8.155 2.625.441v-14.25a9.047 9.047 0 00-3-.512a8.947 8.947 0 00-6 2.292z" />
-                 </svg>
-               </div>
-               <div className="text-white/20 font-black tracking-widest uppercase text-xs">Barn Inventory Soon</div>
+            <div className="w-1/3 h-full bg-[#0a0b0f]/90 backdrop-blur-sm flex flex-col">
+              <PageHeader money={money} walletFlashActive={walletFlashActive} />
+              <div className="flex-grow flex flex-col items-center justify-center space-y-4">
+                <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center border border-white/10">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 text-white/20">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c1.097 0 2.16.195 3.14.552c.98-.357 2.043-.552 3.14-.552c1.097 0 2.16.195 3.14-.552c.98-.357 2.043-.552 3.14-.552c1.097 0 2.16.195 3.14-.552c.98-.357 2.043-.552 3.14-.552c.917 0 1.8.155 2.625.441v-14.25a9.047 9.047 0 00-3-.512a8.947 8.947 0 00-6 2.292z" />
+                  </svg>
+                </div>
+                <div className="text-white/20 font-black tracking-widest uppercase text-xs">Barn Inventory Soon</div>
+              </div>
             </div>
           </div>
         </div>

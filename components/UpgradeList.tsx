@@ -40,6 +40,13 @@ export const isBonusSeedMaxed = (seedsState: SeedsState): boolean => {
   return level >= 10; // Max at level 10 (50%)
 };
 
+/** Get the seed surplus coin value (0 if level 0, then 10/20/40/80...) */
+export const getSeedSurplusValue = (seedsState: SeedsState): number => {
+  const level = seedsState.seed_surplus?.level ?? 0;
+  if (level === 0) return 0;
+  return 10 * Math.pow(2, level - 1);
+};
+
 interface UpgradeListProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
@@ -63,7 +70,7 @@ const SEEDS_UPGRADES: UpgradeDef[] = [
   { id: 'seed_quality', name: 'Seed Quality', cost: '500', icon: '⭐' }, // Description is dynamic, rendered inline
   { id: 'seed_storage', name: 'Seed Storage', cost: '2.5K', icon: '📦', description: 'Increase the amount of seeds you can store' },
   { id: 'bonus_seeds', name: 'Seed Luck', cost: '10K', icon: '🍀', description: 'Increase the chance to produce a bonus plant' },
-  { id: 'seed_surplus', name: 'Seed Surplus', cost: '50K', icon: '💰', description: 'Extra seeds become coins when storage is full' },
+  { id: 'seed_surplus', name: 'Seed Surplus', cost: '50K', icon: '🪙', description: 'Extra seeds become coins when storage is full' },
 ];
 
 const CROPS_UPGRADES: UpgradeDef[] = [
@@ -111,7 +118,7 @@ const getSeedsUpgradeValue = (upgradeId: string, level: number, seedsState?: See
     case 'bonus_seeds':
       return `${level * 5}%`;
     case 'seed_surplus':
-      return `💰 ${20 * Math.pow(2, level - 1)}c`;
+      return level === 0 ? '0' : `${10 * Math.pow(2, level - 1)}`;
     default:
       return null;
   }
@@ -139,6 +146,7 @@ export const createInitialSeedsState = (): SeedsState => ({
   seed_storage: { level: 0, progress: 0 },
   seed_quality: { level: 0, progress: 0 },
   bonus_seeds: { level: 0, progress: 0 },
+  seed_surplus: { level: 0, progress: 0 },
 });
 
 export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange, money, setMoney, seedsState: propsSeedsState, setSeedsState: propsSetSeedsState }) => {
@@ -289,7 +297,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
   const renderUpgradeItems = (category: TabType, stateMap: Record<string, UpgradeState>) => {
     const upgrades = getUpgradesForTab(category);
     return (
-    <div ref={(scrollRefs as any)[category]} className="flex-grow overflow-y-auto no-scrollbar px-3 pt-3 pb-28 h-full space-y-2.5 overscroll-contain cursor-grab active:cursor-grabbing select-none">
+    <div ref={(scrollRefs as any)[category]} className="flex-grow overflow-y-auto no-scrollbar px-3 pt-3 pb-3 h-full space-y-2.5 overscroll-contain cursor-grab active:cursor-grabbing select-none">
       {upgrades.map((upgrade) => {
         const state = stateMap[upgrade.id];
         const canAfford = money >= parseCost(upgrade.cost);

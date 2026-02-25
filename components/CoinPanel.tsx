@@ -27,7 +27,7 @@ function lerpHex(hex1: string, hex2: string, t: number): string {
 
 const TRAIL_FADE_AFTER_HIT_MS = 280;
 const ARC_HEIGHT_PX = 18; // upward arc when moving to wallet
-const SIZE_SCALE = 0.5; // coin panel 50% smaller (affects panel + circle + trail)
+const SIZE_SCALE = 0.6; // coin panel size scale (affects panel + circle + trail)
 
 interface Point {
   x: number;

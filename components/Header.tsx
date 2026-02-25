@@ -7,6 +7,7 @@ interface HeaderProps {
   walletRef?: React.RefObject<HTMLButtonElement | null>;
   walletIconRef?: React.RefObject<HTMLElement | null>;
   walletFlashActive?: boolean;
+  hideWallet?: boolean;
 }
 
 const formatMoney = (amount: number): string => {
@@ -15,7 +16,7 @@ const formatMoney = (amount: number): string => {
   return amount.toString();
 };
 
-export const Header: React.FC<HeaderProps> = ({ money, onStoreClick, walletRef, walletIconRef, walletFlashActive }) => {
+export const Header: React.FC<HeaderProps> = ({ money, onStoreClick, walletRef, walletIconRef, walletFlashActive, hideWallet }) => {
   return (
     <header className="flex justify-between items-center px-3 py-2 pt-4 z-10 shrink-0">
       <div className="flex space-x-2">
@@ -24,6 +25,7 @@ export const Header: React.FC<HeaderProps> = ({ money, onStoreClick, walletRef, 
           ref={walletRef}
           onClick={onStoreClick}
           className="relative flex items-center gap-1 bg-black/50 backdrop-blur-md px-2 py-1 rounded-full border-0 outline-none shadow-2xl hover:bg-black/60 active:scale-95 transition-all overflow-hidden"
+          style={{ opacity: hideWallet ? 0 : 1, pointerEvents: hideWallet ? 'none' : 'auto' }}
         >
           {/* Flash overlay: no outline; text inverts when flash so it stays visible */}
           <div
