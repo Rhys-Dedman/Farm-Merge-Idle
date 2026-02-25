@@ -42,7 +42,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('SEEDS');
   const [activeScreen, setActiveScreen] = useState<ScreenType>('FARM');
   const [isExpanded, setIsExpanded] = useState(true);
-  const [money, setMoney] = useState(1000);
+  const [money, setMoney] = useState(100000);
 
   const [grid, setGrid] = useState<BoardCell[]>(generateInitialGrid());
   const [seedProgress, setSeedProgress] = useState(0);
@@ -51,7 +51,6 @@ export default function App() {
   const [isHarvestFlashing, setIsHarvestFlashing] = useState(false);
   const [seedsState, setSeedsState] = useState(createInitialSeedsState);
   const [seedsInStorage, setSeedsInStorage] = useState(0);
-  const [isSeedFireFlashing, setIsSeedFireFlashing] = useState(false);
   const [seedBounceTrigger, setSeedBounceTrigger] = useState(0); // increment each 100% so bounce animation re-runs
 
   const seedStorageLevel = seedsState?.seed_storage?.level ?? 0;
@@ -242,6 +241,7 @@ export default function App() {
   const handlePlantClick = (e: React.MouseEvent) => {
     e.stopPropagation();
 
+    // When white (seeds in storage): only fire seed, no progress
     if (seedsInStorage > 0) {
       const emptyIndices = grid
         .map((cell, idx) => (cell.item === null ? idx : null))
@@ -250,18 +250,33 @@ export default function App() {
         const targetIdx = emptyIndices[Math.floor(Math.random() * emptyIndices.length)];
         spawnProjectile(targetIdx);
         setSeedsInStorage((prev) => Math.max(0, prev - 1));
-        setIsSeedFireFlashing(true);
-        setTimeout(() => setIsSeedFireFlashing(false), 300);
       }
       return;
     }
 
     if (isSeedFlashing) return;
 
+    // Add +15% progress when button is green (no seeds in storage)
     const start = Math.max(0, seedProgressRef.current);
-    const end = Math.min(100, start + 20);
-    tapZoomRef.current = { start, end, startTime: Date.now(), duration: 100 };
-    setTapZoomTrigger((n) => n + 1);
+    const totalAfterTap = start + 15;
+    
+    if (totalAfterTap > 100) {
+      // Tap goes past 100%: add to storage, reset to 0%, then continue with remainder
+      const remainder = totalAfterTap - 100;
+      setSeedsInStorage((prev) => Math.min(seedStorageMax, prev + 1));
+      seedProgressRef.current = 0;
+      setSeedProgress(0);
+      setIsSeedFlashing(false);
+      setSeedBounceTrigger((t) => t + 1);
+      // Zoom from 0% to remainder (e.g. 5%)
+      tapZoomRef.current = { start: 0, end: remainder, startTime: Date.now(), duration: 100 };
+      setTapZoomTrigger((n) => n + 1);
+    } else {
+      // Normal tap: zoom from start to end (capped at 100%)
+      const end = Math.min(100, totalAfterTap);
+      tapZoomRef.current = { start, end, startTime: Date.now(), duration: 100 };
+      setTapZoomTrigger((n) => n + 1);
+    }
 
     setActiveTab('SEEDS');
   };
@@ -478,7 +493,7 @@ export default function App() {
                         progressRef={seedProgressRef} 
                         color="#a7c957"
                         isActive={activeTab === 'SEEDS' && isExpanded}
-                        isFlashing={isSeedFireFlashing}
+                        isFlashing={seedsInStorage > 0}
                         shouldAnimate={!isGridFull}
                         isBoardFull={isGridFull}
                         storageCount={seedsInStorage}
@@ -545,7 +560,7 @@ export default function App() {
                         const value = getCoinValueForLevel(mergeResultLevel);
                         const hexEl = document.getElementById(`hex-${cellIdx}`);
                         const panelHeightPx = 14;
-                        const offsetUp = (panelHeightPx / 2 + 4) * 0.8;
+                        const offsetUp = (panelHeightPx / 2 + 4) * 0.4;
                         const hoverX = px;
                         const hoverY = hexEl
                           ? (hexEl.getBoundingClientRect().top - rect.top) - offsetUp
@@ -607,7 +622,7 @@ export default function App() {
 
         {/* Leaf burst: portal to body so never clipped; viewport coords */}
         {createPortal(
-          <div className="fixed inset-0 pointer-events-none overflow-visible" style={{ zIndex: 9999 }}>
+          <div className="fixed inset-0 pointer-events-none overflow-visible" style={{ zIndex: 55 }}>
             {leafBursts.map((b) => (
               <LeafBurst
                 key={b.id}

@@ -45,32 +45,50 @@ export const SideAction: React.FC<SideActionProps> = ({
   const progressRadius = baseRadius;
   const circumference = 2 * Math.PI * progressRadius;
   const progressCircleRef = useRef<SVGCircleElement>(null);
+  // White progress bar radius: on the inner edge of the white body circle (r=43)
+  const whiteProgressRadius = 38;
+  const whiteCircumference = 2 * Math.PI * whiteProgressRadius;
+  const whiteProgressCircleRef = useRef<SVGCircleElement>(null);
   const isFlashingRef = useRef(isFlashing);
   isFlashingRef.current = isFlashing;
 
-  // When progressRef is provided, drive the progress ring at 60fps via direct DOM updates (no React re-renders)
+  // When progressRef is provided, drive both progress rings at 60fps via direct DOM updates (no React re-renders)
   useEffect(() => {
-    if (!progressRef || !progressCircleRef.current) return;
+    if (!progressRef) return;
     let rafId: number;
     const tick = () => {
-      const el = progressCircleRef.current;
-      if (!el) return;
       const raw = progressRef.current;
       const pct = Math.max(0, Math.min(100, raw));
-      const show = isFlashingRef.current || pct >= 100 ? 0 : pct / 100;
-      const offset = circumference - (show * circumference);
-      el.style.strokeDashoffset = String(offset);
-      el.style.transition = 'none';
+      // Green progress bar hides when flashing or at 100%
+      const greenShow = isFlashingRef.current || pct >= 100 ? 0 : pct / 100;
+      // White progress bar always tracks actual progress (visibility controlled by opacity)
+      const whiteShow = pct / 100;
+      
+      // Main progress ring (green version)
+      if (progressCircleRef.current) {
+        const offset = circumference - (greenShow * circumference);
+        progressCircleRef.current.style.strokeDashoffset = String(offset);
+        progressCircleRef.current.style.transition = 'none';
+      }
+      
+      // White version progress ring (always update, visibility via opacity)
+      if (whiteProgressCircleRef.current) {
+        const whiteOffset = whiteCircumference - (whiteShow * whiteCircumference);
+        whiteProgressCircleRef.current.style.strokeDashoffset = String(whiteOffset);
+        whiteProgressCircleRef.current.style.transition = 'none';
+      }
+      
       rafId = requestAnimationFrame(tick);
     };
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [progressRef, circumference]);
+  }, [progressRef, circumference, whiteCircumference]);
 
   // Clamp progress to 0–1 so the ring never shows negative or >100%
   const clampedProgress = Math.max(0, Math.min(1, progress));
   const displayProgress = (isFlashing || clampedProgress >= 1) ? 0 : clampedProgress;
   const strokeDashoffset = circumference - (displayProgress * circumference);
+  const whiteStrokeDashoffset = whiteCircumference - (displayProgress * whiteCircumference);
 
   const isImageIcon = icon.startsWith('http') || icon.startsWith('/');
 
@@ -80,9 +98,18 @@ export const SideAction: React.FC<SideActionProps> = ({
 
   const progressBgColor = 'rgba(48, 56, 30, 0.5)';
   const completedProgressColor = '#76953e';
+  // White version progress bar colors: upgrade button green for completed, storage text dark green for incomplete
+  const whiteProgressCompletedColor = '#9db546'; // light green for completed progress
+  const whiteProgressIncompleteColor = '#475c3b'; // storage text dark green
   const useRefDrive = progressRef != null;
+  // Green bar: hides progress when flashing
+  const greenPct = useRefDrive ? Math.max(0, Math.min(1, (progressRef?.current ?? 0) / 100)) : 0;
   const refDriveOffset = useRefDrive
-    ? circumference - (Math.max(0, Math.min(1, (progressRef?.current ?? 0) / 100)) * circumference)
+    ? circumference - ((isFlashing ? 0 : greenPct) * circumference)
+    : undefined;
+  // White bar: always shows actual progress
+  const whiteRefDriveOffset = useRefDrive
+    ? whiteCircumference - (greenPct * whiteCircumference)
     : undefined;
 
   return (
@@ -122,11 +149,13 @@ export const SideAction: React.FC<SideActionProps> = ({
           </defs>
 
           {/* Light Outer Border Ring - Now uses the vertical gradient */}
+          {/* Green version: r=48, White version: r=46 */}
           <circle
             cx="50"
             cy="50"
-            r="48"
+            r={isFlashing ? 44 : 48}
             fill={`url(#light-grad-${label})`}
+            className="transition-all duration-300"
             style={{
               filter: 'none'
             }}
@@ -174,18 +203,53 @@ export const SideAction: React.FC<SideActionProps> = ({
               opacity: (clampedProgress >= 1 && !isFlashing) ? 0 : 1
             }}
           />
+
+          {/* White Version Progress Bar - Only visible when flashing (white state), fades in/out with white */}
+          {/* Track (dark green background - incomplete portion) */}
+          <circle
+            cx="50"
+            cy="50"
+            r={whiteProgressRadius}
+            fill="transparent"
+            stroke={whiteProgressIncompleteColor}
+            strokeWidth="2"
+            style={{ 
+              transition: 'opacity 0.3s ease',
+              opacity: isFlashing ? 1 : 0
+            }}
+          />
+          {/* Progress Fill (light green - completed portion) */}
+          <circle
+            ref={progressRef ? whiteProgressCircleRef : undefined}
+            cx="50"
+            cy="50"
+            r={whiteProgressRadius}
+            fill="transparent"
+            stroke={whiteProgressCompletedColor}
+            strokeWidth="3"
+            strokeDasharray={whiteCircumference}
+            style={{ 
+              strokeDashoffset: useRefDrive ? whiteRefDriveOffset : (isFlashing ? whiteStrokeDashoffset : whiteCircumference),
+              transition: useRefDrive ? 'opacity 0.3s ease' : `opacity 0.3s ease, stroke-dashoffset 0.08s cubic-bezier(0.25, 0.1, 0.25, 1)`,
+              transform: 'rotate(-90deg)',
+              transformOrigin: '50% 50%',
+              opacity: isFlashing ? 1 : 0
+            }}
+          />
         </svg>
 
         {/* Content Icon - no rotate when seed storage badge (100% no longer rotates) */}
-        <div className={`relative z-10 w-16 h-16 rounded-full flex items-center justify-center overflow-hidden transition-all duration-300 ${
-          isFlashing && shouldAnimate
-            ? storageCount !== undefined
-              ? 'scale-110'
-              : 'scale-110 rotate-12'
-            : isActive
-              ? 'scale-105'
-              : 'scale-100'
-        }`}>
+        <div 
+          className={`relative z-10 w-16 h-16 rounded-full flex items-center justify-center overflow-hidden transition-all duration-300 ${
+            isFlashing && shouldAnimate
+              ? storageCount !== undefined
+                ? 'scale-110'
+                : 'scale-110 rotate-12'
+              : isActive
+                ? 'scale-105'
+                : 'scale-100'
+          }`}
+        >
           {isImageIcon ? (
             <img 
               src={icon} 

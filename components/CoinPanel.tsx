@@ -214,7 +214,7 @@ export const CoinPanel: React.FC<CoinPanelProps> = ({
   const circleDiameter = panelHeight;
 
   return (
-    <div className="absolute inset-0 pointer-events-none overflow-visible" style={{ zIndex: 65 }}>
+    <div className="absolute inset-0 pointer-events-none overflow-visible" style={{ zIndex: 75 }}>
       {/* Trail (like seed particle trail) */}
       {trail.length > 1 && (
         <svg className="absolute inset-0 w-full h-full overflow-visible" style={{ pointerEvents: 'none' }}>
