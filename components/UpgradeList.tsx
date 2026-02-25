@@ -43,7 +43,37 @@ export const isBonusSeedMaxed = (seedsState: SeedsState): boolean => {
 /** Check if crop_merging upgrade is at max level (2.0x) */
 export const isCropMergingMaxed = (cropsState: Record<string, UpgradeState>): boolean => {
   const level = cropsState.crop_merging?.level ?? 0;
-  return level >= 5; // Max at level 5 (2.0x)
+  return level >= 10; // Max at level 10 (2.0x)
+};
+
+/** Get the crop merging multiplier (1.0x base + 0.1x per level) */
+export const getCropMergingMultiplier = (cropsState: Record<string, UpgradeState>): number => {
+  const level = cropsState.crop_merging?.level ?? 0;
+  return 1.0 + 0.1 * level;
+};
+
+/** Get the lucky merge chance percentage (5% per level, chance for +2 level upgrade on merge) */
+export const getLuckyMergeChance = (cropsState: Record<string, UpgradeState>): number => {
+  const level = cropsState.lucky_merge?.level ?? 0;
+  return level * 5;
+};
+
+/** Check if lucky_merge upgrade is at max level (50%) */
+export const isLuckyMergeMaxed = (cropsState: Record<string, UpgradeState>): boolean => {
+  const level = cropsState.lucky_merge?.level ?? 0;
+  return level >= 10; // Max at level 10 (50%)
+};
+
+/** Get the merge harvest chance percentage (5% per level, chance to harvest adjacent crops on merge) */
+export const getMergeHarvestChance = (cropsState: Record<string, UpgradeState>): number => {
+  const level = cropsState.merge_harvest?.level ?? 0;
+  return level * 5;
+};
+
+/** Check if merge_harvest upgrade is at max level (50%) */
+export const isMergeHarvestMaxed = (cropsState: Record<string, UpgradeState>): boolean => {
+  const level = cropsState.merge_harvest?.level ?? 0;
+  return level >= 10; // Max at level 10 (50%)
 };
 
 /** Get the seed surplus coin value (0 if level 0, then 10/20/40/80...) */
@@ -66,6 +96,9 @@ interface UpgradeListProps {
   /** When provided, HARVEST tab uses this state (enables Harvest Speed to drive auto progress in App). */
   harvestState?: HarvestState;
   setHarvestState?: React.Dispatch<React.SetStateAction<HarvestState>>;
+  /** When provided, CROPS tab uses this state (enables Crop Merging multiplier in App). */
+  cropsState?: Record<string, UpgradeState>;
+  setCropsState?: React.Dispatch<React.SetStateAction<Record<string, UpgradeState>>>;
 }
 
 interface UpgradeDef {
@@ -85,11 +118,11 @@ const SEEDS_UPGRADES: UpgradeDef[] = [
 ];
 
 const CROPS_UPGRADES: UpgradeDef[] = [
-  { id: 'crop_merging', name: 'Crop Merging', cost: '150', icon: '🪙', description: 'Increase coins earned from merging crops' },
+  { id: 'crop_merging', name: 'Crop Merging', cost: '150', icon: '🪙', description: 'Multiply coins earned from merging crops' },
   { id: 'plot_expansion', name: 'Plot Expansion', cost: '500', icon: '🗺️', description: 'Unlock additional plots for planting crops' },
-  { id: 'field_density', name: 'Field Density', cost: '2.5K', icon: '🌿', description: 'Harvest value increases when more plots are planted' },
+  { id: 'merge_harvest', name: 'Merge Harvest', cost: '2.5K', icon: '🌿', description: 'Merges have a chance to instantly harvest adjacent crops' },
   { id: 'fertile_soil', name: 'Fertile Soil', cost: '10K', icon: '🥕', description: 'Fertile plots increase value of crops when harvested' },
-  { id: 'lucky_growth', name: 'Lucky Growth', cost: '50K', icon: '✨', description: 'Automatically upgrade crops to the next level over time' },
+  { id: 'lucky_merge', name: 'Lucky Merge', cost: '50K', icon: '✨', description: 'Increase chance for merges to upgrade crops by +2 levels' },
 ];
 
 const HARVEST_UPGRADES: UpgradeDef[] = [
@@ -133,15 +166,15 @@ const getSeedsUpgradeValue = (upgradeId: string, level: number, seedsState?: See
 const getCropsUpgradeValue = (upgradeId: string, level: number): string | null => {
   switch (upgradeId) {
     case 'crop_merging':
-      return `${(1 + 0.2 * level).toFixed(1)}x`;
+      return `${(1.0 + 0.1 * level).toFixed(1)}x`;
     case 'plot_expansion':
       return `+1`;
-    case 'field_density':
-      return `${(1 + 0.1 * level).toFixed(1)}x`;
+    case 'merge_harvest':
+      return `${level * 5}%`;
     case 'fertile_soil':
       return `1x`;
-    case 'lucky_growth':
-      return `${level}/min`;
+    case 'lucky_merge':
+      return `${level * 5}%`;
     default:
       return null;
   }
@@ -230,9 +263,9 @@ export const createInitialSeedsState = (): SeedsState => ({
 export const createInitialCropsState = (): Record<string, UpgradeState> => ({
   crop_merging: { level: 0, progress: 0 },
   plot_expansion: { level: 1, progress: 0 },
-  field_density: { level: 0, progress: 0 },
+  merge_harvest: { level: 0, progress: 0 },
   fertile_soil: { level: 0, progress: 0 },
-  lucky_growth: { level: 0, progress: 0 },
+  lucky_merge: { level: 0, progress: 0 },
 });
 
 /** Initial harvest state: all upgrades start at level 0 */
@@ -244,11 +277,13 @@ export const createInitialHarvestState = (): Record<string, UpgradeState> => ({
   lucky_harvest: { level: 0, progress: 0 },
 });
 
-export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange, money, setMoney, seedsState: propsSeedsState, setSeedsState: propsSetSeedsState, harvestState: propsHarvestState, setHarvestState: propsSetHarvestState }) => {
+export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange, money, setMoney, seedsState: propsSeedsState, setSeedsState: propsSetSeedsState, harvestState: propsHarvestState, setHarvestState: propsSetHarvestState, cropsState: propsCropsState, setCropsState: propsSetCropsState }) => {
   const [internalSeedsState, setInternalSeedsState] = useState<Record<string, UpgradeState>>(createInitialSeedsState);
   const seedsState = propsSeedsState ?? internalSeedsState;
   const setSeedsState = propsSetSeedsState ?? setInternalSeedsState;
-  const [cropsState, setCropsState] = useState<Record<string, UpgradeState>>(createInitialCropsState);
+  const [internalCropsState, setInternalCropsState] = useState<Record<string, UpgradeState>>(createInitialCropsState);
+  const cropsState = propsCropsState ?? internalCropsState;
+  const setCropsState = propsSetCropsState ?? setInternalCropsState;
   const [internalHarvestState, setInternalHarvestState] = useState<Record<string, UpgradeState>>(createInitialHarvestState);
   const harvestState = propsHarvestState ?? internalHarvestState;
   const setHarvestState = propsSetHarvestState ?? setInternalHarvestState;
@@ -405,6 +440,8 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
         const isMaxed = 
           (upgrade.id === 'bonus_seeds' && isBonusSeedMaxed(stateMap as SeedsState)) ||
           (upgrade.id === 'crop_merging' && isCropMergingMaxed(stateMap)) ||
+          (upgrade.id === 'lucky_merge' && isLuckyMergeMaxed(stateMap)) ||
+          (upgrade.id === 'merge_harvest' && isMergeHarvestMaxed(stateMap)) ||
           (upgrade.id === 'lucky_harvest' && isLuckyHarvestMaxed(stateMap)) ||
           (upgrade.id === 'harvest_boost' && isHarvestBoostMaxed(stateMap));
         

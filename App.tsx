@@ -3,7 +3,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { HexBoard } from './components/HexBoard';
 import { UpgradeTabs } from './components/UpgradeTabs';
-import { UpgradeList, createInitialSeedsState, createInitialHarvestState, getSeedQualityPercent, getSeedBaseTier, getBonusSeedChance, getSeedSurplusValue, getCropValueMultiplier, getHarvestBoostPercent, getCropSynergyMultiplier, getLuckyHarvestChance, HarvestState } from './components/UpgradeList';
+import { UpgradeList, createInitialSeedsState, createInitialHarvestState, createInitialCropsState, getSeedQualityPercent, getSeedBaseTier, getBonusSeedChance, getSeedSurplusValue, getCropValueMultiplier, getHarvestBoostPercent, getCropSynergyMultiplier, getLuckyHarvestChance, getCropMergingMultiplier, getLuckyMergeChance, getMergeHarvestChance, HarvestState, UpgradeState } from './components/UpgradeList';
 import { Navbar } from './components/Navbar';
 import { StoreScreen } from './components/StoreScreen';
 import { SideAction } from './components/SideAction';
@@ -52,6 +52,8 @@ export default function App() {
   const [isHarvestFlashing, setIsHarvestFlashing] = useState(false);
   const [seedsState, setSeedsState] = useState(createInitialSeedsState);
   const [harvestState, setHarvestState] = useState<HarvestState>(createInitialHarvestState);
+  const [cropsState, setCropsState] = useState<Record<string, UpgradeState>>(createInitialCropsState);
+  const [highestPlantEver, setHighestPlantEver] = useState(1); // Track highest plant level ever created
   const [seedsInStorage, setSeedsInStorage] = useState(0);
   const [seedBounceTrigger, setSeedBounceTrigger] = useState(0); // increment each 100% so bounce animation re-runs
   const [harvestBounceTrigger, setHarvestBounceTrigger] = useState(0); // increment each harvest so bounce animation re-runs
@@ -74,6 +76,7 @@ export default function App() {
   const [walletBursts, setWalletBursts] = useState<{ id: number; trigger: number }[]>([]);
   const nextWalletBurstIdRef = useRef(0);
   const walletFlashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingMergeLevelIncreaseRef = useRef<number>(1);
   const plantButtonRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const farmColumnRef = useRef<HTMLDivElement>(null);
@@ -473,6 +476,21 @@ export default function App() {
     });
   };
 
+  // Helper: get adjacent cell indices for a given cell
+  const getAdjacentCellIndices = (cellIdx: number, gridSnapshot: BoardCell[]): number[] => {
+    const cell = gridSnapshot[cellIdx];
+    if (!cell) return [];
+    const neighbors = getHexNeighborCoords(cell.q, cell.r);
+    const adjacentIndices: number[] = [];
+    gridSnapshot.forEach((other, otherIdx) => {
+      if (otherIdx === cellIdx) return;
+      if (neighbors.some(([nq, nr]) => other.q === nq && other.r === nr)) {
+        adjacentIndices.push(otherIdx);
+      }
+    });
+    return adjacentIndices;
+  };
+
   // Perform a single harvest (used for both normal and lucky double harvest)
   const performHarvest = useCallback((delayMs: number = 0, idSuffix: string = '') => {
     const container = containerRef.current;
@@ -568,6 +586,104 @@ export default function App() {
     }
   }, [grid, harvestState]);
 
+  // Perform merge harvest: roll chance per adjacent cell to harvest (spawn coin) without removing plant
+  const performMergeHarvest = useCallback((centerCellIdx: number, chancePercent: number, excludeCellIdx?: number) => {
+    const container = containerRef.current;
+    const wallet = walletRef.current;
+    const walletIcon = walletIconRef.current;
+    const walletEl = walletIcon || wallet;
+
+    if (!container || !walletEl) return;
+
+    const adjacentIndices = getAdjacentCellIndices(centerCellIdx, grid);
+    // Exclude the source cell (now empty after merge) from adjacent cells
+    const adjacentWithCrops = adjacentIndices.filter(idx => idx !== excludeCellIdx && grid[idx]?.item != null);
+    
+    if (adjacentWithCrops.length === 0) return;
+
+    // Roll chance independently for each adjacent cell
+    const triggeredCells = adjacentWithCrops.filter(() => Math.random() * 100 < chancePercent);
+    
+    if (triggeredCells.length === 0) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const walletRect = walletEl.getBoundingClientRect();
+    const walletCenterX = walletRect.left + walletRect.width / 2 - containerRect.left;
+    const walletCenterY = walletRect.top + walletRect.height / 2 - containerRect.top;
+
+    const panelsWithDist: { panel: CoinPanelData; dist: number }[] = [];
+    const cropValueMultiplier = getCropValueMultiplier(harvestState);
+    const cropSynergyMultiplier = getCropSynergyMultiplier(harvestState);
+
+    triggeredCells.forEach((cellIdx) => {
+      const cell = grid[cellIdx];
+      if (!cell.item) return;
+      
+      const baseValue = getCoinValueForLevel(cell.item.level);
+      let value = baseValue * cropValueMultiplier;
+      
+      if (cropSynergyMultiplier > 1.0 && hasAdjacentSameLevel(cellIdx, grid)) {
+        value *= cropSynergyMultiplier;
+      }
+      value = Math.floor(value);
+
+      const hexEl = document.getElementById(`hex-${cellIdx}`);
+      if (!hexEl) return;
+      
+      const hexRect = hexEl.getBoundingClientRect();
+      const startX = hexRect.left + hexRect.width / 2 - containerRect.left;
+      const startY = hexRect.top + hexRect.height / 2 - containerRect.top;
+      const hoverX = startX;
+      const hexTopY = hexRect.top - containerRect.top;
+      const panelHeightPx = 14;
+      const offsetUp = (panelHeightPx / 2 + 4) * 0.8;
+      const hoverY = hexTopY - offsetUp;
+      const dist = Math.hypot(hoverX - walletCenterX, hoverY - walletCenterY);
+      
+      panelsWithDist.push({
+        dist,
+        panel: {
+          id: `merge-harvest-${cellIdx}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          value,
+          startX,
+          startY,
+          hoverX,
+          hoverY,
+          moveToWalletDelayMs: 0,
+        },
+      });
+
+      // Spawn leaf burst for harvested cell
+      setLeafBurstsSmall((prev) => [
+        ...prev,
+        {
+          id: `merge-harvest-burst-${cellIdx}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          x: hexRect.left + hexRect.width / 2,
+          y: hexRect.top + hexRect.height / 2,
+          startTime: Date.now(),
+        },
+      ]);
+    });
+
+    // Spawn coin panels with staggered animation (plants are NOT removed)
+    if (panelsWithDist.length > 0) {
+      const N = panelsWithDist.length;
+      const minDist = Math.min(...panelsWithDist.map((x) => x.dist));
+      const maxDist = Math.max(...panelsWithDist.map((x) => x.dist));
+      const range = maxDist - minDist || 1;
+      const maxStaggerMs = N <= 1 ? 0 : Math.min(200, 200 * (N - 1) / 4);
+      const panels: CoinPanelData[] = panelsWithDist.map(({ panel, dist }) => ({
+        ...panel,
+        moveToWalletDelayMs: ((dist - minDist) / range) * maxStaggerMs,
+      }));
+      setActiveCoinPanels(prev => [...prev, ...panels]);
+    }
+
+    // Trigger bounce animation on harvested cells
+    setHarvestBounceCellIndices(triggeredCells);
+    setTimeout(() => setHarvestBounceCellIndices([]), 250);
+  }, [grid, harvestState]);
+
   /**
    * At 100% harvest progress: perform harvest (spawn coin panels, leaf bursts), flash white, reset to 0%.
    * Lucky Harvest: chance to trigger a second harvest with 200ms delay.
@@ -603,11 +719,31 @@ export default function App() {
     setTimeout(() => setIsHarvestFlashing(false), isLucky ? 600 : 300);
   }, [harvestProgress, isHarvestFlashing, performHarvest, harvestState]);
 
+  // Called by HexBoard when starting a merge to calculate level increase (includes lucky merge roll)
+  // Stores result in ref so handleMerge can use the same value
+  // Lucky Merge is blocked if it would skip discovering a new plant level
+  const getMergeLevelIncrease = useCallback((currentPlantLevel: number) => {
+    const luckyMergeChance = getLuckyMergeChance(cropsState);
+    // Block lucky merge if merging at highest level ever (would skip level highestPlantEver+1)
+    const wouldSkipNewLevel = currentPlantLevel >= highestPlantEver;
+    const canLuckyMerge = luckyMergeChance > 0 && !wouldSkipNewLevel;
+    const isLuckyMerge = canLuckyMerge && Math.random() * 100 < luckyMergeChance;
+    const levelIncrease = isLuckyMerge ? 2 : 1;
+    pendingMergeLevelIncreaseRef.current = levelIncrease;
+    return levelIncrease;
+  }, [cropsState, highestPlantEver]);
+
   const handleMerge = (sourceIdx: number, targetIdx: number) => {
     // Check if this will be a merge before updating state
     const source = grid[sourceIdx];
     const target = grid[targetIdx];
     const willMerge = source.item && target.item && target.item.level === source.item.level;
+    
+    // Use the level increase that was calculated when the merge started (by HexBoard calling getMergeLevelIncrease)
+    const levelIncrease = pendingMergeLevelIncreaseRef.current;
+    
+    // Calculate the new level for tracking highest plant ever
+    const newLevel = willMerge && target.item ? target.item.level + levelIncrease : null;
     
     setGrid(prev => {
       const newGrid = [...prev];
@@ -617,7 +753,7 @@ export default function App() {
       if (target.item && target.item.level === source.item.level) {
         newGrid[targetIdx] = {
           ...target,
-          item: { ...target.item, level: target.item.level + 1 }
+          item: { ...target.item, level: target.item.level + levelIncrease }
         };
         newGrid[sourceIdx] = { ...source, item: null };
       } else if (!target.item) {
@@ -627,6 +763,11 @@ export default function App() {
       return newGrid;
     });
     
+    // Update highest plant ever if we created a new record
+    if (newLevel != null && newLevel > highestPlantEver) {
+      setHighestPlantEver(newLevel);
+    }
+    
     // Harvest Boost: increase harvest progress when merging
     if (willMerge) {
       const boostPercent = getHarvestBoostPercent(harvestState);
@@ -635,6 +776,13 @@ export default function App() {
         const next = Math.min(100, current + boostPercent);
         harvestTapZoomRef.current = { start: current, end: next, startTime: Date.now(), duration: 100 };
         setHarvestTapZoomTrigger((t) => t + 1);
+      }
+      
+      // Merge Harvest: per-cell chance to instantly harvest adjacent crops (without removing them)
+      // Exclude sourceIdx since that cell is now empty after the merge
+      const mergeHarvestChance = getMergeHarvestChance(cropsState);
+      if (mergeHarvestChance > 0) {
+        performMergeHarvest(targetIdx, mergeHarvestChance, sourceIdx);
       }
     }
   };
@@ -780,6 +928,7 @@ export default function App() {
                     dragState={dragState}
                     setDragState={setDragState}
                     harvestBounceCellIndices={harvestBounceCellIndices}
+                    getMergeLevelIncrease={getMergeLevelIncrease}
                     onMergeImpactStart={(cellIdx, px, py, mergeResultLevel) => {
                       const container = containerRef.current;
                       if (!container) return;
@@ -794,7 +943,9 @@ export default function App() {
                         },
                       ]);
                       if (mergeResultLevel != null) {
-                        const value = getCoinValueForLevel(mergeResultLevel);
+                        const baseValue = getCoinValueForLevel(mergeResultLevel);
+                        const cropMergingMultiplier = getCropMergingMultiplier(cropsState);
+                        const value = Math.floor(baseValue * cropMergingMultiplier);
                         const hexEl = document.getElementById(`hex-${cellIdx}`);
                         const panelHeightPx = 14;
                         const offsetUp = (panelHeightPx / 2 + 4) * 0.4;
@@ -841,6 +992,8 @@ export default function App() {
                     setSeedsState={setSeedsState}
                     harvestState={harvestState}
                     setHarvestState={setHarvestState}
+                    cropsState={cropsState}
+                    setCropsState={setCropsState}
                   />
                 </div>
               </div>

@@ -25,6 +25,8 @@ interface HexBoardProps {
   setDragState: React.Dispatch<React.SetStateAction<DragState | null>>;
   harvestBounceCellIndices?: number[];
   onMergeImpactStart?: (cellIdx: number, x: number, y: number, mergeResultLevel?: number) => void;
+  /** Returns the level increase for a merge (1 normally, 2 for lucky merge). Called when merge starts with current plant level. */
+  getMergeLevelIncrease?: (currentPlantLevel: number) => number;
 }
 
 // Increase when you add more plant_N.png. Merge level N uses plant_N (e.g. two plant_1 → plant_2).
@@ -57,6 +59,7 @@ export const HexBoard: React.FC<HexBoardProps> = ({
   setDragState,
   harvestBounceCellIndices = [],
   onMergeImpactStart,
+  getMergeLevelIncrease,
 }) => {
   const liftStartRef = useRef<number>(0);
   const flyStartRef = useRef<number>(0);
@@ -143,12 +146,15 @@ export const HexBoard: React.FC<HexBoardProps> = ({
       const targetCenter = getHexCenterInContainer(targetIdx);
       toX = targetCenter.x;
       toY = targetCenter.y;
+      // Calculate merge result level now (includes lucky merge chance) so animation shows correct level
+      const levelIncrease = isMerge ? (getMergeLevelIncrease?.(state.item.level) ?? 1) : 0;
       nextState = {
         ...state,
         targetCellIdx: targetIdx,
         hoveredEmptyCellIdx: null,
         hoveredMatchCellIdx: null,
         isMerge: isMerge === true,
+        mergeResultLevel: isMerge ? state.item.level + levelIncrease : undefined,
       };
     } else {
       toX = state.originX;
@@ -164,7 +170,7 @@ export const HexBoard: React.FC<HexBoardProps> = ({
       flyProgress: 0,
       flyBackDurationMs: durationMs,
     });
-  }, [getHexCenterInContainer]);
+  }, [getHexCenterInContainer, getMergeLevelIncrease]);
 
   // Pointer down: start pickup immediately if cell has plant (allowed during impact)
   const handlePointerDown = useCallback((index: number, e: React.PointerEvent) => {
@@ -280,7 +286,8 @@ export const HexBoard: React.FC<HexBoardProps> = ({
           if (!isMerge) onLandOnNewCell(targetCellIdx);
         }
         if (isMerge && targetCellIdx != null) {
-          onMergeImpactStart?.(targetCellIdx, toX, toY, dragState.item.level + 1);
+          // Use the pre-calculated mergeResultLevel (includes lucky merge)
+          onMergeImpactStart?.(targetCellIdx, toX, toY, dragState.mergeResultLevel);
         }
         flushSync(() => {
           setDragState((prev) =>
@@ -292,7 +299,7 @@ export const HexBoard: React.FC<HexBoardProps> = ({
                   flyProgress: 1,
                   pointerX: toX,
                   pointerY: toY,
-                  mergeResultLevel: isMerge ? prev.item.level + 1 : undefined,
+                  // Keep the pre-calculated mergeResultLevel from flyingBack phase
                 }
               : prev
           );
