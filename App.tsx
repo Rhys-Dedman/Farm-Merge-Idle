@@ -646,6 +646,8 @@ export default function App() {
       const cropValueMultiplier = getCropValueMultiplier(harvestState);
       const cropSynergyMultiplier = getCropSynergyMultiplier(harvestState);
       
+      const synergyCellIndices: number[] = [];
+      
       grid.forEach((cell, cellIdx) => {
         if (!cell.item) return;
         harvestCellIndices.push(cellIdx);
@@ -655,8 +657,10 @@ export default function App() {
         let value = baseValue * cropValueMultiplier;
         
         // Apply crop synergy multiplier if this cell has adjacent same-level plants
-        if (cropSynergyMultiplier > 1.0 && hasAdjacentSameLevel(cellIdx, grid)) {
+        const hasSynergy = cropSynergyMultiplier > 1.0 && hasAdjacentSameLevel(cellIdx, grid);
+        if (hasSynergy) {
           value *= cropSynergyMultiplier;
+          synergyCellIndices.push(cellIdx);
         }
         
         // Apply 2x multiplier for fertile cells
@@ -705,6 +709,25 @@ export default function App() {
                 id: `harvest-${cellIdx}-${Date.now()}-${Math.random().toString(36).slice(2)}${idSuffix}`,
                 x: r.left + r.width / 2,
                 y: r.top + r.height / 2,
+                startTime: Date.now(),
+              },
+            ]);
+          }
+        });
+        
+        // Spawn highlight VFX for cells with crop synergy bonus
+        synergyCellIndices.forEach((cellIdx) => {
+          const hexEl = document.getElementById(`hex-${cellIdx}`);
+          if (hexEl) {
+            const r = hexEl.getBoundingClientRect();
+            setCellHighlightBeams((prev) => [
+              ...prev,
+              {
+                id: `synergy-highlight-${cellIdx}-${Date.now()}-${Math.random().toString(36).slice(2)}${idSuffix}`,
+                x: r.left + r.width / 2,
+                y: r.top + r.height / 2,
+                cellWidth: r.width,
+                cellHeight: r.height,
                 startTime: Date.now(),
               },
             ]);
@@ -806,6 +829,19 @@ export default function App() {
           id: `merge-harvest-burst-${cellIdx}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
           x: hexRect.left + hexRect.width / 2,
           y: hexRect.top + hexRect.height / 2,
+          startTime: Date.now(),
+        },
+      ]);
+      
+      // Spawn highlight VFX for merge harvest bonus
+      setCellHighlightBeams((prev) => [
+        ...prev,
+        {
+          id: `merge-harvest-highlight-${cellIdx}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          x: hexRect.left + hexRect.width / 2,
+          y: hexRect.top + hexRect.height / 2,
+          cellWidth: hexRect.width,
+          cellHeight: hexRect.height,
           startTime: Date.now(),
         },
       ]);
@@ -922,6 +958,25 @@ export default function App() {
         const next = Math.min(100, current + boostPercent);
         harvestTapZoomRef.current = { start: current, end: next, startTime: Date.now(), duration: 100 };
         setHarvestTapZoomTrigger((t) => t + 1);
+      }
+      
+      // Lucky Merge highlight: play VFX when +2 level upgrade triggers
+      if (levelIncrease === 2) {
+        const hexEl = document.getElementById(`hex-${targetIdx}`);
+        if (hexEl) {
+          const rect = hexEl.getBoundingClientRect();
+          setCellHighlightBeams((prev) => [
+            ...prev,
+            {
+              id: `lucky-merge-highlight-${targetIdx}-${Date.now()}`,
+              x: rect.left + rect.width / 2,
+              y: rect.top + rect.height / 2,
+              cellWidth: rect.width,
+              cellHeight: rect.height,
+              startTime: Date.now(),
+            },
+          ]);
+        }
       }
       
       // Merge Harvest: per-cell chance to instantly harvest adjacent crops (without removing them)
@@ -1235,6 +1290,21 @@ export default function App() {
                       startTime: Date.now(),
                     },
                   ]);
+                  
+                  // Seed Quality bonus: play highlight VFX if plant spawned at higher level than base tier
+                  if (p.plantLevel > seedBaseTier) {
+                    setCellHighlightBeams((prev) => [
+                      ...prev,
+                      {
+                        id: `seed-quality-highlight-${targetIdx}-${Date.now()}`,
+                        x: r.left + r.width / 2,
+                        y: r.top + r.height / 2,
+                        cellWidth: r.width,
+                        cellHeight: r.height,
+                        startTime: Date.now(),
+                      },
+                    ]);
+                  }
                 }
               }}
               onComplete={() => {
