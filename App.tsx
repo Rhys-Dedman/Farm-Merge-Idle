@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { Header } from './components/Header';
 import { HexBoard } from './components/HexBoard';
 import { UpgradeTabs } from './components/UpgradeTabs';
-import { UpgradeList, createInitialSeedsState, getSeedQualityPercent, getSeedBaseTier } from './components/UpgradeList';
+import { UpgradeList, createInitialSeedsState, getSeedQualityPercent, getSeedBaseTier, getBonusSeedChance } from './components/UpgradeList';
 import { Navbar } from './components/Navbar';
 import { StoreScreen } from './components/StoreScreen';
 import { SideAction } from './components/SideAction';
@@ -267,6 +267,31 @@ export default function App() {
         const plantLevel = calculatePlantLevel();
         spawnProjectile(targetIdx, plantLevel);
         setSeedsInStorage((prev) => Math.max(0, prev - 1));
+        
+        // Bonus Seed: chance to fire a second seed
+        const bonusChance = getBonusSeedChance(seedsState);
+        if (bonusChance > 0 && Math.random() * 100 < bonusChance) {
+          // Get remaining empty cells (excluding the first target)
+          const remainingEmptyIndices = emptyIndices.filter(idx => idx !== targetIdx);
+          
+          // Pick a target for the second seed
+          let secondTargetIdx: number;
+          if (remainingEmptyIndices.length > 0) {
+            // Fire to a different empty cell
+            secondTargetIdx = remainingEmptyIndices[Math.floor(Math.random() * remainingEmptyIndices.length)];
+          } else {
+            // No other empty cell - fire to the same cell (seed will be "wasted")
+            // We still spawn the projectile for visual effect, but spawnCropAt won't place anything
+            // since the cell will already have an item
+            secondTargetIdx = targetIdx;
+          }
+          
+          const secondPlantLevel = calculatePlantLevel();
+          // Slight delay so the two seeds don't overlap visually
+          setTimeout(() => {
+            spawnProjectile(secondTargetIdx, secondPlantLevel);
+          }, 50);
+        }
       }
       return;
     }

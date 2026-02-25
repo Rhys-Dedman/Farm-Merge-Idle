@@ -28,6 +28,18 @@ export const getSeedTargetTier = (seedsState: SeedsState): number => {
   return getSeedBaseTier(seedsState) + 1;
 };
 
+/** Get the bonus seed chance percentage (0-50%, 5% per level, max level 10) */
+export const getBonusSeedChance = (seedsState: SeedsState): number => {
+  const level = seedsState.bonus_seeds?.level ?? 0;
+  return Math.min(level * 5, 50); // Cap at 50%
+};
+
+/** Check if bonus_seeds upgrade is at max level */
+export const isBonusSeedMaxed = (seedsState: SeedsState): boolean => {
+  const level = seedsState.bonus_seeds?.level ?? 0;
+  return level >= 10; // Max at level 10 (50%)
+};
+
 interface UpgradeListProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
@@ -50,7 +62,7 @@ const SEEDS_UPGRADES: UpgradeDef[] = [
   { id: 'seed_production', name: 'Seed Production', cost: '150', icon: '🌱', description: 'Increase automatic seed production speed' },
   { id: 'seed_quality', name: 'Seed Quality', cost: '500', icon: '⭐' }, // Description is dynamic, rendered inline
   { id: 'seed_storage', name: 'Seed Storage', cost: '2.5K', icon: '📦', description: 'Increase the amount of seeds you can store' },
-  { id: 'bonus_seeds', name: 'Bonus Seeds', cost: '10K', icon: '🎁', description: 'Increase chance to produce a bonus seed' },
+  { id: 'bonus_seeds', name: 'Bonus Seeds', cost: '10K', icon: '🍀', description: 'Increase chance to produce a bonus seed' },
   { id: 'seed_surplus', name: 'Seed Surplus', cost: '50K', icon: '💰', description: 'Extra seeds become coins when storage is full' },
 ];
 
@@ -117,14 +129,16 @@ const parseCost = (cost: string): number => {
 const createInitialState = (upgrades: UpgradeDef[]) =>
   upgrades.reduce((acc, curr) => ({ ...acc, [curr.id]: { level: 1, progress: 0 } }), {} as Record<string, UpgradeState>);
 
-/** Initial seeds state: seed_production and seed_storage start at level 0 (1 storage slot until first upgrade). 
- * seed_quality starts at level 0 (0% chance) with baseTier 1 (shooting plant_1).
+/** Initial seeds state: seed_production, seed_storage, seed_quality, and bonus_seeds start at level 0.
+ * seed_quality starts at 0% chance with baseTier 1 (shooting plant_1).
+ * bonus_seeds starts at 0% chance (max 50% at level 10).
  */
 export const createInitialSeedsState = (): SeedsState => ({
   ...createInitialState(SEEDS_UPGRADES),
   seed_production: { level: 0, progress: 0 },
   seed_storage: { level: 0, progress: 0 },
   seed_quality: { level: 0, progress: 0 },
+  bonus_seeds: { level: 0, progress: 0 },
 });
 
 export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange, money, setMoney, seedsState: propsSeedsState, setSeedsState: propsSetSeedsState }) => {
@@ -282,6 +296,9 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
         const isFlashing = flashingIds.has(upgrade.id);
         const isPressed = pressedId === upgrade.id;
         
+        // Check if this upgrade is maxed (currently only bonus_seeds has a max)
+        const isMaxed = upgrade.id === 'bonus_seeds' && isBonusSeedMaxed(stateMap as SeedsState);
+        
         const descTextColor = '#c2b180';
         const buttonColor = '#cae060';
         const buttonActiveColor = '#61882b';
@@ -351,30 +368,31 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
 
               {/* Price Button */}
               <button 
-                onMouseDown={() => canAfford && setPressedId(upgrade.id)}
+                onMouseDown={() => !isMaxed && canAfford && setPressedId(upgrade.id)}
                 onMouseUp={() => setPressedId(null)}
                 onMouseLeave={() => setPressedId(null)}
-                onClick={() => handleUpgrade(upgrade.id, category, upgrade.cost)} 
+                onClick={() => !isMaxed && handleUpgrade(upgrade.id, category, upgrade.cost)} 
                 className={`relative flex items-center justify-center min-w-[70px] h-8 transition-all border outline outline-1 ${
-                  canAfford 
+                  !isMaxed && canAfford 
                     ? 'active:translate-y-[2px] active:border-b-0 active:mb-[4px]' 
                     : ''
                 } rounded-[8px] shadow-[inset_0_1px_1px_rgba(255,255,255,0.4)]`}
                 style={{
-                  backgroundColor: isPressed ? buttonActiveColor : (canAfford ? buttonColor : buttonDisabledColor),
-                  borderColor: isPressed ? buttonActiveDepthColor : (canAfford ? buttonDepthColor : buttonDisabledDepthColor),
+                  backgroundColor: isPressed ? buttonActiveColor : (isMaxed || !canAfford ? buttonDisabledColor : buttonColor),
+                  borderColor: isPressed ? buttonActiveDepthColor : (isMaxed || !canAfford ? buttonDisabledDepthColor : buttonDepthColor),
                   borderBottomWidth: isPressed ? '0px' : '4px',
                   marginBottom: isPressed ? '4px' : '0px',
-                  outlineColor: isPressed ? buttonActiveDepthColor : (canAfford ? buttonDepthColor : buttonDisabledDepthColor),
+                  outlineColor: isPressed ? buttonActiveDepthColor : (isMaxed || !canAfford ? buttonDisabledDepthColor : buttonDepthColor),
+                  cursor: isMaxed ? 'default' : undefined,
                 }}
               >
                 <span 
                   className="text-[13px] font-black tracking-tighter transition-colors"
                   style={{ 
-                    color: isPressed ? buttonActiveFontColor : (canAfford ? buttonFontColor : buttonDisabledFontColor)
+                    color: isPressed ? buttonActiveFontColor : (isMaxed || !canAfford ? buttonDisabledFontColor : buttonFontColor)
                   }}
                 >
-                  {upgrade.cost}
+                  {isMaxed ? 'MAX' : upgrade.cost}
                 </span>
               </button>
             </div>
