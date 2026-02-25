@@ -3,7 +3,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { HexBoard } from './components/HexBoard';
 import { UpgradeTabs } from './components/UpgradeTabs';
-import { UpgradeList, createInitialSeedsState, createInitialHarvestState, getSeedQualityPercent, getSeedBaseTier, getBonusSeedChance, getSeedSurplusValue, HarvestState } from './components/UpgradeList';
+import { UpgradeList, createInitialSeedsState, createInitialHarvestState, getSeedQualityPercent, getSeedBaseTier, getBonusSeedChance, getSeedSurplusValue, getCropValueMultiplier, getHarvestBoostPercent, getCropSynergyMultiplier, getLuckyHarvestChance, HarvestState } from './components/UpgradeList';
 import { Navbar } from './components/Navbar';
 import { StoreScreen } from './components/StoreScreen';
 import { SideAction } from './components/SideAction';
@@ -54,6 +54,7 @@ export default function App() {
   const [harvestState, setHarvestState] = useState<HarvestState>(createInitialHarvestState);
   const [seedsInStorage, setSeedsInStorage] = useState(0);
   const [seedBounceTrigger, setSeedBounceTrigger] = useState(0); // increment each 100% so bounce animation re-runs
+  const [harvestBounceTrigger, setHarvestBounceTrigger] = useState(0); // increment each harvest so bounce animation re-runs
 
   const seedStorageLevel = seedsState?.seed_storage?.level ?? 0;
   const seedStorageMax = 1 + seedStorageLevel; // +1 storage per upgrade
@@ -452,17 +453,28 @@ export default function App() {
     setActiveTab('HARVEST');
   };
 
-  /**
-   * At 100% harvest progress: perform harvest (spawn coin panels, leaf bursts), flash white, reset to 0%.
-   */
-  useEffect(() => {
-    if (harvestProgress !== 100 || !isHarvestFlashing) return;
-    
-    const farmValue = calculateFarmValue();
-    const tapProfit = Math.max(1, Math.floor(farmValue * 0.05));
-    setMoney(prev => prev + tapProfit);
+  // Helper: get hex neighbors in axial coordinates
+  const getHexNeighborCoords = (q: number, r: number): [number, number][] => {
+    return [
+      [q + 1, r], [q - 1, r],
+      [q, r + 1], [q, r - 1],
+      [q + 1, r - 1], [q - 1, r + 1]
+    ];
+  };
 
-    // Snapshot grid at exact 100%: only plants on the board now produce coins
+  // Helper: check if a cell has an adjacent cell with the same level plant
+  const hasAdjacentSameLevel = (cellIdx: number, gridSnapshot: BoardCell[]): boolean => {
+    const cell = gridSnapshot[cellIdx];
+    if (!cell.item) return false;
+    const neighbors = getHexNeighborCoords(cell.q, cell.r);
+    return gridSnapshot.some((other, otherIdx) => {
+      if (otherIdx === cellIdx || !other.item) return false;
+      return neighbors.some(([nq, nr]) => other.q === nq && other.r === nr && other.item!.level === cell.item!.level);
+    });
+  };
+
+  // Perform a single harvest (used for both normal and lucky double harvest)
+  const performHarvest = useCallback((delayMs: number = 0, idSuffix: string = '') => {
     const container = containerRef.current;
     const wallet = walletRef.current;
     const walletIcon = walletIconRef.current;
@@ -477,10 +489,24 @@ export default function App() {
 
       const panelsWithDist: { panel: CoinPanelData; dist: number }[] = [];
 
+      const cropValueMultiplier = getCropValueMultiplier(harvestState);
+      const cropSynergyMultiplier = getCropSynergyMultiplier(harvestState);
+      
       grid.forEach((cell, cellIdx) => {
         if (!cell.item) return;
         harvestCellIndices.push(cellIdx);
-        const value = getCoinValueForLevel(cell.item.level);
+        const baseValue = getCoinValueForLevel(cell.item.level);
+        
+        // Apply crop value multiplier
+        let value = baseValue * cropValueMultiplier;
+        
+        // Apply crop synergy multiplier if this cell has adjacent same-level plants
+        if (cropSynergyMultiplier > 1.0 && hasAdjacentSameLevel(cellIdx, grid)) {
+          value *= cropSynergyMultiplier;
+        }
+        
+        value = Math.floor(value);
+        
         const hexEl = document.getElementById(`hex-${cellIdx}`);
         if (!hexEl) return;
         const hexRect = hexEl.getBoundingClientRect();
@@ -495,57 +521,94 @@ export default function App() {
         panelsWithDist.push({
           dist,
           panel: {
-            id: `coin-${cellIdx}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            id: `coin-${cellIdx}-${Date.now()}-${Math.random().toString(36).slice(2)}${idSuffix}`,
             value,
             startX,
             startY,
             hoverX,
             hoverY,
-            moveToWalletDelayMs: 0,
+            moveToWalletDelayMs: delayMs,
           },
         });
       });
 
-      setHarvestBounceCellIndices(harvestCellIndices);
-      setTimeout(() => setHarvestBounceCellIndices([]), 250);
+      setTimeout(() => {
+        setHarvestBounceCellIndices(harvestCellIndices);
+        setTimeout(() => setHarvestBounceCellIndices([]), 250);
 
-      harvestCellIndices.forEach((cellIdx) => {
-        const hexEl = document.getElementById(`hex-${cellIdx}`);
-        if (hexEl) {
-          const r = hexEl.getBoundingClientRect();
-          setLeafBurstsSmall((prev) => [
-            ...prev,
-            {
-              id: `harvest-${cellIdx}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-              x: r.left + r.width / 2,
-              y: r.top + r.height / 2,
-              startTime: Date.now(),
-            },
-          ]);
+        harvestCellIndices.forEach((cellIdx) => {
+          const hexEl = document.getElementById(`hex-${cellIdx}`);
+          if (hexEl) {
+            const r = hexEl.getBoundingClientRect();
+            setLeafBurstsSmall((prev) => [
+              ...prev,
+              {
+                id: `harvest-${cellIdx}-${Date.now()}-${Math.random().toString(36).slice(2)}${idSuffix}`,
+                x: r.left + r.width / 2,
+                y: r.top + r.height / 2,
+                startTime: Date.now(),
+              },
+            ]);
+          }
+        });
+
+        if (panelsWithDist.length > 0) {
+          const N = panelsWithDist.length;
+          const minDist = Math.min(...panelsWithDist.map((x) => x.dist));
+          const maxDist = Math.max(...panelsWithDist.map((x) => x.dist));
+          const range = maxDist - minDist || 1;
+          const maxStaggerMs = N <= 1 ? 0 : Math.min(300, 300 * (N - 1) / 4);
+          const panels: CoinPanelData[] = panelsWithDist.map(({ panel, dist }) => ({
+            ...panel,
+            moveToWalletDelayMs: panel.moveToWalletDelayMs + ((dist - minDist) / range) * maxStaggerMs,
+          }));
+          setActiveCoinPanels(prev => [...prev, ...panels]);
         }
-      });
+      }, delayMs);
+    }
+  }, [grid, harvestState]);
 
-      if (panelsWithDist.length > 0) {
-        const N = panelsWithDist.length;
-        const minDist = Math.min(...panelsWithDist.map((x) => x.dist));
-        const maxDist = Math.max(...panelsWithDist.map((x) => x.dist));
-        const range = maxDist - minDist || 1;
-        const maxStaggerMs = N <= 1 ? 0 : Math.min(300, 300 * (N - 1) / 4);
-        const panels: CoinPanelData[] = panelsWithDist.map(({ panel, dist }) => ({
-          ...panel,
-          moveToWalletDelayMs: ((dist - minDist) / range) * maxStaggerMs,
-        }));
-        setActiveCoinPanels(prev => [...prev, ...panels]);
-      }
+  /**
+   * At 100% harvest progress: perform harvest (spawn coin panels, leaf bursts), flash white, reset to 0%.
+   * Lucky Harvest: chance to trigger a second harvest with 200ms delay.
+   */
+  useEffect(() => {
+    if (harvestProgress !== 100 || !isHarvestFlashing) return;
+    
+    // Perform the first harvest immediately and trigger bounce
+    performHarvest(0, '');
+    setHarvestBounceTrigger((t) => t + 1);
+    
+    // Lucky Harvest: check for double harvest
+    const luckyChance = getLuckyHarvestChance(harvestState);
+    const isLucky = luckyChance > 0 && Math.random() * 100 < luckyChance;
+    
+    if (isLucky) {
+      // Blink back to green briefly before second harvest
+      setTimeout(() => {
+        setIsHarvestFlashing(false); // Quick blink to green
+      }, 150);
+      
+      // Trigger second harvest after longer delay so green is visible
+      setTimeout(() => {
+        setIsHarvestFlashing(true); // Re-flash white for the second harvest
+        setHarvestBounceTrigger((t) => t + 1); // Re-bounce for the second harvest
+        performHarvest(0, '-lucky');
+      }, 300);
     }
 
     // Reset to 0% and continue auto-progress
     harvestProgressRef.current = 0;
     setHarvestProgress(0);
-    setTimeout(() => setIsHarvestFlashing(false), 300);
-  }, [harvestProgress, isHarvestFlashing, calculateFarmValue, grid]);
+    setTimeout(() => setIsHarvestFlashing(false), isLucky ? 600 : 300);
+  }, [harvestProgress, isHarvestFlashing, performHarvest, harvestState]);
 
   const handleMerge = (sourceIdx: number, targetIdx: number) => {
+    // Check if this will be a merge before updating state
+    const source = grid[sourceIdx];
+    const target = grid[targetIdx];
+    const willMerge = source.item && target.item && target.item.level === source.item.level;
+    
     setGrid(prev => {
       const newGrid = [...prev];
       const source = newGrid[sourceIdx];
@@ -563,6 +626,17 @@ export default function App() {
       }
       return newGrid;
     });
+    
+    // Harvest Boost: increase harvest progress when merging
+    if (willMerge) {
+      const boostPercent = getHarvestBoostPercent(harvestState);
+      if (boostPercent > 0 && !isHarvestFlashing) {
+        const current = harvestProgressRef.current;
+        const next = Math.min(100, current + boostPercent);
+        harvestTapZoomRef.current = { start: current, end: next, startTime: Date.now(), duration: 100 };
+        setHarvestTapZoomTrigger((t) => t + 1);
+      }
+    }
   };
 
   const getScreenIndex = () => {
@@ -634,7 +708,7 @@ export default function App() {
 
               <div 
                 ref={hexAreaRef}
-                className="relative flex-grow flex flex-col items-center justify-center overflow-hidden z-10"
+                className="relative flex-grow flex flex-col items-center justify-center overflow-visible z-10"
               >
                 {/* Only tapping this backdrop (background) closes the panel; hex cells and plants do not */}
                 <div
@@ -674,6 +748,7 @@ export default function App() {
                         shouldAnimate={true}
                         isBoardFull={false}
                         noRotateOnFlash={true}
+                        bounceTrigger={harvestBounceTrigger}
                         onClick={handleHarvestClick}
                       />
                    </div>

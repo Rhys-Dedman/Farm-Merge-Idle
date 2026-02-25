@@ -153,16 +153,40 @@ const getHarvestUpgradeValue = (upgradeId: string, level: number): string | null
     case 'harvest_speed':
       return `${level}/min`;
     case 'crop_value':
-      return `${(0.1 * level).toFixed(1)}x`;
+      return `${(1.0 + 0.1 * level).toFixed(1)}x`;
     case 'harvest_boost':
       return `${level * 2}%`;
     case 'crop_synergy':
-      return `${(0.1 * level).toFixed(1)}x`;
+      return `${(1.0 + 0.1 * level).toFixed(1)}x`;
     case 'lucky_harvest':
       return `${level * 5}%`;
     default:
       return null;
   }
+};
+
+/** Get the crop value multiplier (1.0x base + 0.1x per level) */
+export const getCropValueMultiplier = (harvestState: HarvestState): number => {
+  const level = harvestState?.crop_value?.level ?? 0;
+  return 1.0 + 0.1 * level;
+};
+
+/** Get the harvest boost percentage (2% per level) */
+export const getHarvestBoostPercent = (harvestState: HarvestState): number => {
+  const level = harvestState?.harvest_boost?.level ?? 0;
+  return level * 2;
+};
+
+/** Get the crop synergy multiplier (1.0x base + 0.1x per level) */
+export const getCropSynergyMultiplier = (harvestState: HarvestState): number => {
+  const level = harvestState?.crop_synergy?.level ?? 0;
+  return 1.0 + 0.1 * level;
+};
+
+/** Get the lucky harvest chance percentage (5% per level) */
+export const getLuckyHarvestChance = (harvestState: HarvestState): number => {
+  const level = harvestState?.lucky_harvest?.level ?? 0;
+  return level * 5;
 };
 
 /** Check if lucky_harvest upgrade is at max level (50%) */
