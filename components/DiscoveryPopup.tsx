@@ -451,14 +451,17 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
             {title}
           </h2>
 
-          {/* Subtitle - Plant Name */}
+          {/* Subtitle - Plant Name - auto-scales to fit on one line */}
           <h3 
             className="font-black tracking-tight text-center"
             style={{ 
               color: subtitleColor,
               fontFamily: 'Inter, sans-serif',
-              fontSize: '4.2rem',
               marginTop: '-8px',
+              whiteSpace: 'nowrap',
+              width: 'fit-content',
+              maxWidth: '580px',
+              fontSize: `min(4.375rem, ${580 / (subtitle.length * 0.6)}px)`,
             }}
           >
             {subtitle}
@@ -482,8 +485,8 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
             style={{ 
               color: '#c2b280',
               fontFamily: 'Inter, sans-serif',
-              paddingLeft: '8px',
-              paddingRight: '8px',
+              paddingLeft: '24px',
+              paddingRight: '24px',
               fontSize: '2rem',
             }}
           >

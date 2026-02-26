@@ -3,9 +3,9 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 
-const MOVE_DURATION_MS = 315;
-const MAX_TRAIL_POINTS = 14;
-const TRAIL_FADE_AFTER_HIT_MS = 150;
+const MOVE_DURATION_MS = 475;
+const MAX_TRAIL_POINTS = 9;
+const TRAIL_FADE_AFTER_HIT_MS = 200;
 const PARTICLE_SIZE = 16;
 const PARTICLE_COLOR = '#b8d458';
 const TRAIL_COLOR = '#8fb33a';
@@ -73,13 +73,15 @@ export const BarnParticle: React.FC<BarnParticleProps> = ({
 
       if (phase === 'moving') {
         const t = Math.min(elapsed / MOVE_DURATION_MS, 1);
-        // Same easing as seed projectile: Fast Start, Medium Airtime, Fast Impact (Power curve 0.7)
-        const p = 0.7;
+        // Slow start, fast end - more juice on impact
+        // Using ease-in-quad for first half (slow), ease-out-quint for second half (fast impact)
         let eased: number;
         if (t < 0.5) {
-          eased = 0.5 * Math.pow(t * 2, p);
+          // Slow start: ease-in (quadratic)
+          eased = 0.25 * Math.pow(t * 2, 2);
         } else {
-          eased = 1 - 0.5 * Math.pow((1 - t) * 2, p);
+          // Fast end: ease-out (quintic) - very fast impact
+          eased = 0.25 + 0.75 * (1 - Math.pow(1 - (t - 0.5) * 2, 5));
         }
         
         const target = getTargetPos();

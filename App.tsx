@@ -26,16 +26,10 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 
 /** Plant names and descriptions for discovery popups */
 const PLANT_DATA: Record<number, { name: string; description: string }> = {
-  1: { name: 'Seedling', description: 'A tiny sprout just beginning its journey.' },
-  2: { name: 'Fern Plant', description: 'These lush leafy plants are a great early crop.' },
-  3: { name: 'Bush Plant', description: 'A hardy bush that produces reliable harvests.' },
-  4: { name: 'Flower Plant', description: 'Beautiful blooms that fetch a good price.' },
-  5: { name: 'Fruit Tree', description: 'A young tree bearing delicious fruits.' },
-  6: { name: 'Oak Tree', description: 'A mighty oak with deep roots and strong branches.' },
-  7: { name: 'Magic Vine', description: 'Enchanted vines that shimmer with mystical energy.' },
-  8: { name: 'Crystal Bloom', description: 'Rare crystalline flowers of immense value.' },
-  9: { name: 'Golden Tree', description: 'A legendary tree with leaves of pure gold.' },
-  10: { name: 'World Tree', description: 'The mythical World Tree, source of all life.' },
+  1: { name: 'Tiny Sprout', description: 'A tiny green shoot just starting out, doing its best to look important.' },
+  2: { name: 'Young Sapling', description: 'A small tree in the making that already seems quite proud of itself.' },
+  3: { name: 'Wild Fern', description: 'A cheerful tangle of leaves growing in whatever direction feels right today.' },
+  4: { name: 'Rosette Succulent', description: 'A neat spiral of sturdy leaves best admired from a respectful distance.' },
 };
 
 function getPlantData(level: number): { name: string; description: string } {
