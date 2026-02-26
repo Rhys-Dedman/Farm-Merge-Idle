@@ -40,6 +40,12 @@ export const isBonusSeedMaxed = (seedsState: SeedsState): boolean => {
   return level >= 10; // Max at level 10 (50%)
 };
 
+/** Check if seed_quality upgrade is maxed (target tier would exceed highest plant ever) */
+export const isSeedQualityMaxed = (seedsState: SeedsState, highestPlantEver: number): boolean => {
+  const targetTier = getSeedTargetTier(seedsState);
+  return targetTier > highestPlantEver;
+};
+
 /** Check if crop_merging upgrade is at max level (2.0x) */
 export const isCropMergingMaxed = (cropsState: Record<string, UpgradeState>): boolean => {
   const level = cropsState.crop_merging?.level ?? 0;
@@ -117,6 +123,8 @@ interface UpgradeListProps {
   fertilizableCellCount?: number;
   /** Called when fertile_soil is upgraded to make a cell fertile */
   onFertilizeCell?: () => void;
+  /** Highest plant level ever achieved by the player (for seed_quality max check) */
+  highestPlantEver?: number;
 }
 
 interface UpgradeDef {
@@ -295,7 +303,7 @@ export const createInitialHarvestState = (): Record<string, UpgradeState> => ({
   lucky_harvest: { level: 0, progress: 0 },
 });
 
-export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange, money, setMoney, seedsState: propsSeedsState, setSeedsState: propsSetSeedsState, harvestState: propsHarvestState, setHarvestState: propsSetHarvestState, cropsState: propsCropsState, setCropsState: propsSetCropsState, lockedCellCount = 0, onUnlockCell, fertilizableCellCount = 0, onFertilizeCell }) => {
+export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange, money, setMoney, seedsState: propsSeedsState, setSeedsState: propsSetSeedsState, harvestState: propsHarvestState, setHarvestState: propsSetHarvestState, cropsState: propsCropsState, setCropsState: propsSetCropsState, lockedCellCount = 0, onUnlockCell, fertilizableCellCount = 0, onFertilizeCell, highestPlantEver = 1 }) => {
   const [internalSeedsState, setInternalSeedsState] = useState<Record<string, UpgradeState>>(createInitialSeedsState);
   const seedsState = propsSeedsState ?? internalSeedsState;
   const setSeedsState = propsSetSeedsState ?? setInternalSeedsState;
@@ -466,6 +474,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
         
         // Check if this upgrade is maxed
         const isMaxed = 
+          (upgrade.id === 'seed_quality' && isSeedQualityMaxed(stateMap as SeedsState, highestPlantEver)) ||
           (upgrade.id === 'bonus_seeds' && isBonusSeedMaxed(stateMap as SeedsState)) ||
           (upgrade.id === 'crop_merging' && isCropMergingMaxed(stateMap)) ||
           (upgrade.id === 'plot_expansion' && isPlotExpansionMaxed(lockedCellCount)) ||
