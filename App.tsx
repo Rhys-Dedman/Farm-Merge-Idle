@@ -30,6 +30,16 @@ const PLANT_DATA: Record<number, { name: string; description: string }> = {
   2: { name: 'Young Sapling', description: 'A small tree in the making that already seems quite proud of itself.' },
   3: { name: 'Wild Fern', description: 'A cheerful tangle of leaves growing in whatever direction feels right today.' },
   4: { name: 'Rosette Succulent', description: 'A neat spiral of sturdy leaves best admired from a respectful distance.' },
+  5: { name: 'Blooming Flower', description: 'A colorful bloom that brightens any garden.' },
+  6: { name: 'Tropical Palm', description: 'A small palm with dreams of sandy beaches.' },
+  7: { name: 'Berry Bush', description: 'A bushy plant loaded with delicious berries.' },
+  8: { name: 'Fruit Tree', description: 'A young tree bearing fresh, juicy fruits.' },
+  9: { name: 'Ancient Oak', description: 'A mighty oak with deep roots and wisdom.' },
+  10: { name: 'Magic Vine', description: 'Enchanted vines that shimmer with mystical energy.' },
+  11: { name: 'Crystal Bloom', description: 'Rare crystalline flowers of immense beauty.' },
+  12: { name: 'Golden Tree', description: 'A legendary tree with leaves of pure gold.' },
+  13: { name: 'Celestial Plant', description: 'A plant touched by starlight and cosmic energy.' },
+  14: { name: 'World Tree', description: 'The mythical World Tree, source of all life.' },
 };
 
 function getPlantData(level: number): { name: string; description: string } {
@@ -1370,7 +1380,7 @@ export default function App() {
               isVisible={discoveryPopup.isVisible}
               onClose={() => setDiscoveryPopup(null)}
               title="New Discovery"
-              imageSrc={`/assets/plants/plant_${Math.min(discoveryPopup.level, 4)}.png`}
+              imageSrc={`/assets/plants/plant_${Math.min(discoveryPopup.level, 14)}.png`}
               imageLevel={discoveryPopup.level}
               subtitle={getPlantData(discoveryPopup.level).name}
               description={getPlantData(discoveryPopup.level).description}

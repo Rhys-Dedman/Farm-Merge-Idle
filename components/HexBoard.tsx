@@ -38,7 +38,7 @@ interface HexBoardProps {
 }
 
 // Increase when you add more plant_N.png. Merge level N uses plant_N (e.g. two plant_1 → plant_2).
-const MAX_AVAILABLE_PLANT_LEVEL = 4;
+const MAX_AVAILABLE_PLANT_LEVEL = 14;
 const PLANT_SPRITE_EXT = '.png';
 
 function getPlantSpritePath(level: number): string {
