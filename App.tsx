@@ -14,6 +14,8 @@ import { CellHighlightBeam } from './components/CellHighlightBeam';
 import { CoinPanel, CoinPanelData } from './components/CoinPanel';
 import { WalletImpactBurst } from './components/WalletImpactBurst';
 import { PageHeader } from './components/PageHeader';
+import { DiscoveryPopup } from './components/DiscoveryPopup';
+import { BarnParticle, BarnParticleData } from './components/BarnParticle';
 import { TabType, ScreenType, BoardCell, Item, DragState } from './types';
 
 /** Coin per plant level: level 1 = 5, level 2 = 10, level 3 = 20, ... */
@@ -21,6 +23,27 @@ export function getCoinValueForLevel(level: number): number {
   return 5 * Math.pow(2, level - 1);
 }
 import { ErrorBoundary } from './components/ErrorBoundary';
+
+/** Plant names and descriptions for discovery popups */
+const PLANT_DATA: Record<number, { name: string; description: string }> = {
+  1: { name: 'Seedling', description: 'A tiny sprout just beginning its journey.' },
+  2: { name: 'Fern Plant', description: 'These lush leafy plants are a great early crop.' },
+  3: { name: 'Bush Plant', description: 'A hardy bush that produces reliable harvests.' },
+  4: { name: 'Flower Plant', description: 'Beautiful blooms that fetch a good price.' },
+  5: { name: 'Fruit Tree', description: 'A young tree bearing delicious fruits.' },
+  6: { name: 'Oak Tree', description: 'A mighty oak with deep roots and strong branches.' },
+  7: { name: 'Magic Vine', description: 'Enchanted vines that shimmer with mystical energy.' },
+  8: { name: 'Crystal Bloom', description: 'Rare crystalline flowers of immense value.' },
+  9: { name: 'Golden Tree', description: 'A legendary tree with leaves of pure gold.' },
+  10: { name: 'World Tree', description: 'The mythical World Tree, source of all life.' },
+};
+
+function getPlantData(level: number): { name: string; description: string } {
+  return PLANT_DATA[level] ?? { 
+    name: `Plant Lv.${level}`, 
+    description: 'A mysterious new plant species.' 
+  };
+}
 
 // Helper to calculate hex distance from center (0,0) in axial coordinates
 const getHexDistance = (q: number, r: number): number => {
@@ -66,6 +89,11 @@ export default function App() {
   const [cropsState, setCropsState] = useState<Record<string, UpgradeState>>(createInitialCropsState);
   const [highestPlantEver, setHighestPlantEver] = useState(1); // Track highest plant level ever created
   const [seedsInStorage, setSeedsInStorage] = useState(0);
+  
+  // Discovery popup state
+  const [discoveryPopup, setDiscoveryPopup] = useState<{ isVisible: boolean; level: number } | null>(null);
+  // Barn particles for "Add to Barn" button
+  const [barnParticles, setBarnParticles] = useState<BarnParticleData[]>([]);
   const [unlockingCellIndices, setUnlockingCellIndices] = useState<number[]>([]); // Cells currently playing unlock animation
   const [fertilizingCellIndices, setFertilizingCellIndices] = useState<number[]>([]); // Cells currently playing fertilize animation
 
@@ -103,6 +131,7 @@ export default function App() {
   const hexAreaRef = useRef<HTMLDivElement>(null);
   const walletRef = useRef<HTMLButtonElement>(null);
   const walletIconRef = useRef<HTMLSpanElement>(null);
+  const barnButtonRef = useRef<HTMLButtonElement>(null);
 
   const [spriteCenter, setSpriteCenter] = useState({ x: 50, y: 50 }); // % relative to column, for sprite center
 
@@ -945,9 +974,11 @@ export default function App() {
       return newGrid;
     });
     
-    // Update highest plant ever if we created a new record
+    // Update highest plant ever if we created a new record and show discovery popup
     if (newLevel != null && newLevel > highestPlantEver) {
       setHighestPlantEver(newLevel);
+      // Show discovery popup immediately when merge starts (feels more responsive)
+      setDiscoveryPopup({ isVisible: true, level: newLevel });
     }
     
     // Harvest Boost: increase harvest progress when merging
@@ -1222,7 +1253,7 @@ export default function App() {
           </div>
         </div>
 
-        <Navbar activeScreen={activeScreen} onScreenChange={setActiveScreen} />
+        <Navbar activeScreen={activeScreen} onScreenChange={setActiveScreen} barnButtonRef={barnButtonRef} />
 
         {/* Leaf burst: portal to body so never clipped; viewport coords */}
         {createPortal(
@@ -1336,6 +1367,43 @@ export default function App() {
               walletIconRef={walletIconRef}
               containerRef={containerRef}
               onComplete={() => setWalletBursts((prev) => prev.filter((b) => b.id !== burst.id))}
+            />
+          ))}
+          
+          {/* Discovery Popup */}
+          {discoveryPopup && (
+            <DiscoveryPopup
+              isVisible={discoveryPopup.isVisible}
+              onClose={() => setDiscoveryPopup(null)}
+              title="New Discovery"
+              imageSrc={`/assets/plants/plant_${Math.min(discoveryPopup.level, 4)}.png`}
+              imageLevel={discoveryPopup.level}
+              subtitle={getPlantData(discoveryPopup.level).name}
+              description={getPlantData(discoveryPopup.level).description}
+              buttonText="Add to Barn"
+              showCloseButton={false}
+              closeOnBackdropClick={false}
+              onButtonClick={(buttonRect) => {
+                const container = containerRef.current;
+                if (!container) return;
+                const containerRect = container.getBoundingClientRect();
+                setBarnParticles(prev => [...prev, {
+                  id: `barn-${Date.now()}`,
+                  startX: buttonRect.left + buttonRect.width / 2 - containerRect.left,
+                  startY: buttonRect.top + buttonRect.height / 2 - containerRect.top,
+                }]);
+              }}
+            />
+          )}
+          
+          {/* Barn Particles */}
+          {barnParticles.map((particle) => (
+            <BarnParticle
+              key={particle.id}
+              data={particle}
+              containerRef={containerRef}
+              barnButtonRef={barnButtonRef}
+              onComplete={() => setBarnParticles(prev => prev.filter(p => p.id !== particle.id))}
             />
           ))}
         </div>
