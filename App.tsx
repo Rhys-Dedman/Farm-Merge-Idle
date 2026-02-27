@@ -17,6 +17,7 @@ import { PageHeader } from './components/PageHeader';
 import { DiscoveryPopup } from './components/DiscoveryPopup';
 import { PlantInfoPopup } from './components/PlantInfoPopup';
 import { BarnParticle, BarnParticleData } from './components/BarnParticle';
+import { ButtonLeafBurst } from './components/ButtonLeafBurst';
 import { TabType, ScreenType, BoardCell, Item, DragState } from './types';
 
 /** Coin per plant level: level 1 = 5, level 2 = 10, level 3 = 20, ... */
@@ -150,6 +151,7 @@ export default function App() {
   const [leafBursts, setLeafBursts] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
   const [leafBurstsSmall, setLeafBurstsSmall] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
   const [unlockBursts, setUnlockBursts] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
+  const [buttonLeafBursts, setButtonLeafBursts] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
   const [cellHighlightBeams, setCellHighlightBeams] = useState<{ id: string; x: number; y: number; cellWidth: number; cellHeight: number; startTime: number }[]>([]);
   const [activeCoinPanels, setActiveCoinPanels] = useState<CoinPanelData[]>([]);
   const [harvestBounceCellIndices, setHarvestBounceCellIndices] = useState<number[]>([]);
@@ -159,6 +161,7 @@ export default function App() {
   const walletFlashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingMergeLevelIncreaseRef = useRef<number>(1);
   const plantButtonRef = useRef<HTMLDivElement>(null);
+  const harvestButtonRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const farmColumnRef = useRef<HTMLDivElement>(null);
   const hexAreaRef = useRef<HTMLDivElement>(null);
@@ -534,6 +537,43 @@ export default function App() {
     return () => cancelAnimationFrame(rafId);
   }, [harvestSpeedLevel]);
 
+  // Track previous value to detect when harvest button turns white
+  const prevIsHarvestFlashingRef = useRef(isHarvestFlashing);
+
+  // Trigger leaf burst when harvest button turns white (isHarvestFlashing becomes true)
+  useEffect(() => {
+    const wasNotFlashing = !prevIsHarvestFlashingRef.current;
+    const nowFlashing = isHarvestFlashing;
+    prevIsHarvestFlashingRef.current = isHarvestFlashing;
+    
+    if (wasNotFlashing && nowFlashing && harvestButtonRef.current) {
+      const rect = harvestButtonRef.current.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      setButtonLeafBursts(prev => [...prev, {
+        id: `harvest-${Date.now()}`,
+        x: centerX,
+        y: centerY,
+        startTime: Date.now()
+      }]);
+    }
+  }, [isHarvestFlashing]);
+
+  // Helper function to trigger seed button leaf burst (called when shooting a seed)
+  const triggerSeedButtonLeafBurst = useCallback(() => {
+    if (plantButtonRef.current) {
+      const rect = plantButtonRef.current.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      setButtonLeafBursts(prev => [...prev, {
+        id: `seed-${Date.now()}`,
+        x: centerX,
+        y: centerY,
+        startTime: Date.now()
+      }]);
+    }
+  }, []);
+
   const spawnCropAt = useCallback((index: number, plantLevel: number = 1) => {
     setGrid(prev => {
       const newGrid = [...prev];
@@ -699,6 +739,7 @@ export default function App() {
         const plantLevel = calculatePlantLevel();
         spawnProjectile(targetIdx, plantLevel);
         setSeedsInStorage((prev) => Math.max(0, prev - 1));
+        triggerSeedButtonLeafBurst();
         
         // Bonus Seed: chance to fire a second seed
         const bonusChance = getBonusSeedChance(seedsState);
@@ -1270,7 +1311,7 @@ export default function App() {
                         onClick={handlePlantClick}
                       />
                    </div>
-                   <div className="pointer-events-auto flex items-center justify-center" style={{ transform: 'scale(0.9)', transformOrigin: 'center center' }} onClick={(e) => e.stopPropagation()}>
+                   <div className="pointer-events-auto flex items-center justify-center" ref={harvestButtonRef} style={{ transform: 'scale(0.9)', transformOrigin: 'center center' }} onClick={(e) => e.stopPropagation()}>
                      <SideAction 
                         label="Harvest" 
                         icon="🧺" 
@@ -1577,6 +1618,15 @@ export default function App() {
                 y={b.y}
                 startTime={b.startTime}
                 onComplete={() => setUnlockBursts((prev) => prev.filter((x) => x.id !== b.id))}
+              />
+            ))}
+            {buttonLeafBursts.map((b) => (
+              <ButtonLeafBurst
+                key={b.id}
+                x={b.x}
+                y={b.y}
+                startTime={b.startTime}
+                onComplete={() => setButtonLeafBursts((prev) => prev.filter((x) => x.id !== b.id))}
               />
             ))}
             {cellHighlightBeams.map((b) => (
