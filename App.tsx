@@ -1590,7 +1590,8 @@ export default function App() {
         />
 
         {/* Leaf burst: portal to body so never clipped; viewport coords */}
-        {createPortal(
+        {/* Only render when on FARM screen to prevent VFX showing on other screens */}
+        {activeScreen === 'FARM' && createPortal(
           <div className="fixed inset-0 pointer-events-none overflow-visible" style={{ zIndex: 55 }}>
             {leafBursts.map((b) => (
               <LeafBurst

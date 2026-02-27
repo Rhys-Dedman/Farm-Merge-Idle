@@ -634,7 +634,8 @@ export const HexBoard: React.FC<HexBoardProps> = ({
                   : isDragged
                     ? `translateY(${dragTranslateY}px) scale(${scale})`
                     : `translateY(-5.5px) scale(${scale})`;
-                const isHarvestBounce = harvestBounceCellIndices.includes(i);
+                // Don't apply harvest bounce to plants being dragged (would glitch mid-air)
+                const isHarvestBounce = !isDragged && harvestBounceCellIndices.includes(i);
                 const innerClass = [
                   isDragged && isImpact ? 'plant-impact-scale' : '',
                   isHarvestBounce ? 'plant-harvest-bounce' : '',
