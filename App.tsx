@@ -15,6 +15,7 @@ import { CoinPanel, CoinPanelData } from './components/CoinPanel';
 import { WalletImpactBurst } from './components/WalletImpactBurst';
 import { PageHeader } from './components/PageHeader';
 import { DiscoveryPopup } from './components/DiscoveryPopup';
+import { PlantInfoPopup } from './components/PlantInfoPopup';
 import { BarnParticle, BarnParticleData } from './components/BarnParticle';
 import { TabType, ScreenType, BoardCell, Item, DragState } from './types';
 
@@ -106,6 +107,8 @@ export default function App() {
   
   // Discovery popup state
   const [discoveryPopup, setDiscoveryPopup] = useState<{ isVisible: boolean; level: number } | null>(null);
+  // Plant info popup state (for barn)
+  const [plantInfoPopup, setPlantInfoPopup] = useState<{ isVisible: boolean; level: number } | null>(null);
   // Barn particles for "Add to Barn" button
   const [barnParticles, setBarnParticles] = useState<BarnParticleData[]>([]);
   const [unlockingCellIndices, setUnlockingCellIndices] = useState<number[]>([]); // Cells currently playing unlock animation
@@ -146,6 +149,8 @@ export default function App() {
   const walletRef = useRef<HTMLButtonElement>(null);
   const walletIconRef = useRef<HTMLSpanElement>(null);
   const barnButtonRef = useRef<HTMLButtonElement>(null);
+  const barnScrollRef = useRef<HTMLDivElement>(null);
+  const barnScrollYRef = useRef(0);
 
   const [spriteCenter, setSpriteCenter] = useState({ x: 50, y: 50 }); // % relative to column, for sprite center
 
@@ -185,6 +190,125 @@ export default function App() {
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
   }, [isExpanded, updateSpriteCenter]);
+
+  // Barn scroll: drag with momentum, moves background + shelves together
+  const [barnScrollY, setBarnScrollY] = useState(0);
+  
+  useEffect(() => {
+    const el = barnScrollRef.current;
+    if (!el) return;
+    
+    let isDown = false;
+    let startY = 0;
+    let startScrollY = 0;
+    let velocityY = 0;
+    let lastY = 0;
+    let lastTime = 0;
+    let rafId: number;
+    
+    const getMaxScroll = () => {
+      const shelves = el.querySelector('[data-barn-shelves]') as HTMLElement;
+      if (!shelves) return 0;
+      const shelvesBottom = shelves.offsetTop + shelves.offsetHeight;
+      const viewportHeight = el.clientHeight;
+      return Math.max(0, shelvesBottom - viewportHeight + 20);
+    };
+    
+    const updateScroll = (newValue: number) => {
+      barnScrollYRef.current = newValue;
+      setBarnScrollY(newValue);
+    };
+    
+    const momentumLoop = () => {
+      if (!isDown && Math.abs(velocityY) > 0.1) {
+        const maxScroll = getMaxScroll();
+        const newScroll = Math.max(0, Math.min(barnScrollYRef.current - velocityY, maxScroll));
+        updateScroll(newScroll);
+        velocityY *= 0.94;
+        rafId = requestAnimationFrame(momentumLoop);
+      }
+    };
+    
+    const handleMouseDown = (e: MouseEvent) => {
+      isDown = true;
+      velocityY = 0;
+      cancelAnimationFrame(rafId);
+      startY = e.pageY;
+      startScrollY = barnScrollYRef.current;
+      lastY = e.pageY;
+      lastTime = Date.now();
+      window.addEventListener('mousemove', handleMouseMoveGlobal);
+      window.addEventListener('mouseup', handleMouseUpGlobal);
+    };
+    
+    const handleMouseMoveGlobal = (e: MouseEvent) => {
+      if (!isDown) return;
+      const dy = e.pageY - startY;
+      const now = Date.now();
+      if (now - lastTime > 0) velocityY = velocityY * 0.2 + (e.pageY - lastY) * 0.8;
+      const maxScroll = getMaxScroll();
+      const newScroll = Math.max(0, Math.min(startScrollY - dy, maxScroll));
+      updateScroll(newScroll);
+      lastY = e.pageY;
+      lastTime = now;
+    };
+    
+    const handleMouseUpGlobal = () => {
+      if (!isDown) return;
+      isDown = false;
+      window.removeEventListener('mousemove', handleMouseMoveGlobal);
+      window.removeEventListener('mouseup', handleMouseUpGlobal);
+      if (Math.abs(velocityY) > 1) {
+        rafId = requestAnimationFrame(momentumLoop);
+      }
+    };
+    
+    // Touch support
+    const handleTouchStart = (e: TouchEvent) => {
+      isDown = true;
+      velocityY = 0;
+      cancelAnimationFrame(rafId);
+      startY = e.touches[0].pageY;
+      startScrollY = barnScrollYRef.current;
+      lastY = e.touches[0].pageY;
+      lastTime = Date.now();
+    };
+    
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isDown) return;
+      const dy = e.touches[0].pageY - startY;
+      const now = Date.now();
+      if (now - lastTime > 0) velocityY = velocityY * 0.2 + (e.touches[0].pageY - lastY) * 0.8;
+      const maxScroll = getMaxScroll();
+      const newScroll = Math.max(0, Math.min(startScrollY - dy, maxScroll));
+      updateScroll(newScroll);
+      lastY = e.touches[0].pageY;
+      lastTime = now;
+    };
+    
+    const handleTouchEnd = () => {
+      if (!isDown) return;
+      isDown = false;
+      if (Math.abs(velocityY) > 1) {
+        rafId = requestAnimationFrame(momentumLoop);
+      }
+    };
+    
+    el.addEventListener('mousedown', handleMouseDown);
+    el.addEventListener('touchstart', handleTouchStart, { passive: true });
+    el.addEventListener('touchmove', handleTouchMove, { passive: true });
+    el.addEventListener('touchend', handleTouchEnd);
+    
+    return () => {
+      el.removeEventListener('mousedown', handleMouseDown);
+      el.removeEventListener('touchstart', handleTouchStart);
+      el.removeEventListener('touchmove', handleTouchMove);
+      el.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('mousemove', handleMouseMoveGlobal);
+      window.removeEventListener('mouseup', handleMouseUpGlobal);
+      cancelAnimationFrame(rafId);
+    };
+  }, []);
 
   // Grid is "full" when all unlocked cells have items
   const isGridFull = grid.every(cell => cell.locked || cell.item !== null);
@@ -1254,15 +1378,141 @@ export default function App() {
               </div>
             </div>
 
-            <div className="w-1/3 h-full bg-[#0a0b0f]/90 backdrop-blur-sm flex flex-col">
-              <PageHeader money={money} walletFlashActive={walletFlashActive} />
-              <div className="flex-grow flex flex-col items-center justify-center space-y-4">
-                <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center border border-white/10">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 text-white/20">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c1.097 0 2.16.195 3.14.552c.98-.357 2.043-.552 3.14-.552c1.097 0 2.16.195 3.14-.552c.98-.357 2.043-.552 3.14-.552c1.097 0 2.16.195 3.14-.552c.98-.357 2.043-.552 3.14-.552c.917 0 1.8.155 2.625.441v-14.25a9.047 9.047 0 00-3-.512a8.947 8.947 0 00-6 2.292z" />
-                  </svg>
+            <div className="w-1/3 h-full flex flex-col relative overflow-hidden">
+              {/* 1. Bleed: flat barn color, full column, behind sprite */}
+              <div
+                className="absolute inset-0 pointer-events-none z-0"
+                style={{ background: '#5c3d2e' }}
+              />
+
+              {/* Barn scrollable area - background and shelves move together */}
+              <div 
+                ref={barnScrollRef}
+                className="absolute inset-0 overflow-hidden cursor-grab active:cursor-grabbing select-none z-10"
+              >
+                {/* Content container that moves with scroll */}
+                <div 
+                  data-barn-content
+                  className="absolute inset-x-0"
+                  style={{ 
+                    transform: `translateY(${-barnScrollY}px)`,
+                    minHeight: '150%',
+                  }}
+                >
+                  {/* Background sprite: moves with content */}
+                  <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 0 }}>
+                    <img
+                      src="/assets/background/background_barn.png"
+                      alt=""
+                      className="absolute flex-shrink-0 flex-grow-0"
+                      style={{
+                        left: '50%',
+                        top: '50%',
+                        width: 'auto',
+                        height: 'auto',
+                        maxWidth: 'none',
+                        maxHeight: 'none',
+                        objectFit: 'none',
+                        transform: 'translate(-50%, -50%) scale(0.78)',
+                      }}
+                    />
+                  </div>
+
+                  {/* Barn roof at the top */}
+                  <div className="relative flex justify-center pointer-events-none" style={{ zIndex: 1 }}>
+                    <img
+                      src="/assets/barn/barn_roof.png"
+                      alt="Barn Roof"
+                      style={{
+                        transform: 'scale(1.8)',
+                        transformOrigin: 'center top',
+                      }}
+                    />
+                  </div>
+
+                  {/* Shelves and plants wrapper */}
+                  <div className="relative pt-16" data-barn-shelves>
+                    {/* Shelves layer */}
+                    <div className="flex flex-col items-center">
+                      {[0, 1, 2, 3, 4, 5].map((shelfIndex) => (
+                        <div
+                          key={shelfIndex}
+                          className="flex-shrink-0"
+                          style={{
+                            marginTop: shelfIndex === 0 ? 0 : -65,
+                            transform: 'scale(1.1)',
+                            transformOrigin: 'center top',
+                          }}
+                        >
+                          <img
+                            src="/assets/barn/barn_shelf.png"
+                            alt={`Shelf ${shelfIndex + 1}`}
+                            className="pointer-events-none"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    {/* Plants overlay layer - positioned absolutely over shelves */}
+                    <div className="absolute inset-0 pt-8 flex flex-col items-center pointer-events-none" style={{ zIndex: 10 }}>
+                      {[0, 1, 2, 3, 4, 5].map((shelfIndex) => {
+                        const startPlant = shelfIndex * 4 + 1;
+                        return (
+                          <div
+                            key={shelfIndex}
+                            className="flex-shrink-0 relative"
+                            style={{
+                              marginTop: shelfIndex === 0 ? 0 : -65,
+                              transform: 'scale(1.1)',
+                              transformOrigin: 'center top',
+                            }}
+                          >
+                            {/* Invisible shelf for sizing */}
+                            <img
+                              src="/assets/barn/barn_shelf.png"
+                              alt=""
+                              className="invisible"
+                            />
+                            {/* Plants positioned on shelf */}
+                            <div 
+                              className="absolute flex justify-center gap-2"
+                              style={{
+                                left: '50%',
+                                transform: 'translateX(-50%)',
+                                bottom: '40%',
+                                paddingLeft: '20px',
+                                paddingRight: '20px',
+                              }}
+                            >
+                              {[0, 1, 2, 3].map((plantOffset) => {
+                                const plantLevel = startPlant + plantOffset;
+                                const isUnlocked = plantLevel <= highestPlantEver;
+                                return (
+                                  <img
+                                    key={plantOffset}
+                                    src={`/assets/plants/plant_${isUnlocked ? plantLevel : 0}.png`}
+                                    alt={`Plant ${plantLevel}`}
+                                    className={`w-20 h-20 object-contain ${isUnlocked ? 'cursor-pointer pointer-events-auto active:scale-95' : 'pointer-events-none'}`}
+                                    onClick={isUnlocked ? (e) => {
+                                      e.stopPropagation();
+                                      setPlantInfoPopup({ isVisible: true, level: plantLevel });
+                                    } : undefined}
+                                  />
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
-                <div className="text-white/20 font-black tracking-widest uppercase text-xs">Barn Inventory Soon</div>
+              </div>
+
+              {/* Barn Header - overlay on top */}
+              <div className="absolute top-0 left-0 right-0 z-50 pointer-events-none">
+                <div className="pointer-events-auto">
+                  <PageHeader money={money} walletFlashActive={walletFlashActive} />
+                </div>
               </div>
             </div>
           </div>
@@ -1421,6 +1671,18 @@ export default function App() {
               onComplete={() => setBarnParticles(prev => prev.filter(p => p.id !== particle.id))}
             />
           ))}
+
+          {/* Plant Info Popup (Barn) */}
+          {plantInfoPopup && (
+            <PlantInfoPopup
+              isVisible={plantInfoPopup.isVisible}
+              onClose={() => setPlantInfoPopup(null)}
+              plantLevel={plantInfoPopup.level}
+              plantName={getPlantData(plantInfoPopup.level).name}
+              plantDescription={getPlantData(plantInfoPopup.level).description}
+              isUnlocked={plantInfoPopup.level <= highestPlantEver}
+            />
+          )}
         </div>
       </div>
     </div>
