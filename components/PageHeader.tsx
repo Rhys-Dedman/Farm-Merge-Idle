@@ -6,6 +6,11 @@ interface PageHeaderProps {
   walletIconRef?: React.RefObject<HTMLElement | null>;
   walletFlashActive?: boolean;
   onWalletClick?: () => void;
+  /** If set, shows plant wallet instead of coin wallet */
+  plantWallet?: {
+    unlockedCount: number;
+    totalCount: number;
+  };
 }
 
 const formatMoney = (amount: number): string => {
@@ -19,7 +24,8 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   walletRef, 
   walletIconRef, 
   walletFlashActive = false,
-  onWalletClick 
+  onWalletClick,
+  plantWallet
 }) => {
   const isInteractive = !!walletRef;
 
@@ -53,6 +59,18 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
               {formatMoney(money)}
             </span>
           </button>
+        ) : plantWallet ? (
+          <div className="relative flex items-center gap-1 bg-black/50 backdrop-blur-md px-2 py-1 rounded-full border-0 shadow-2xl overflow-hidden">
+            <span 
+              className="relative flex items-center justify-center text-sm leading-none text-white"
+              aria-hidden
+            >
+              🌱
+            </span>
+            <span className="relative font-black text-xs tracking-tight text-white">
+              {plantWallet.unlockedCount} / {plantWallet.totalCount}
+            </span>
+          </div>
         ) : (
           <div className="relative flex items-center gap-1 bg-black/50 backdrop-blur-md px-2 py-1 rounded-full border-0 shadow-2xl overflow-hidden">
             <div

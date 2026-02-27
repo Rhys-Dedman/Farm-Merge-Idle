@@ -386,10 +386,10 @@ export default function App() {
 
   // Only update React state when we hit 100% or reset; progress bar is driven at 60fps via progressRef in SideAction
   useEffect(() => {
-    if (seedProductionLevel < 1) return;
+    // Auto-progress starts at 3/min even at level 0
     lastSeedProgressTimeRef.current = Date.now();
     let rafId: number;
-    const perMinute = seedProductionLevel; // 1/min per upgrade level
+    const perMinute = 3 + seedProductionLevel; // starts at 3/min (level 0), +1 per upgrade
     const percentPerMs = (perMinute * 100) / (60 * 1000); // % progress per millisecond
     const tick = () => {
       if (tapZoomRef.current) {
@@ -506,10 +506,10 @@ export default function App() {
 
   // Harvest auto-progress: driven at 60fps via harvestProgressRef for smooth updates
   useEffect(() => {
-    if (harvestSpeedLevel < 1) return;
+    // Auto-progress starts at 3/min even at level 0
     lastHarvestProgressTimeRef.current = Date.now();
     let rafId: number;
-    const perMinute = harvestSpeedLevel; // 1/min per upgrade level
+    const perMinute = 3 + harvestSpeedLevel; // starts at 3/min (level 0), +1 per upgrade
     const percentPerMs = (perMinute * 100) / (60 * 1000); // % progress per millisecond
     const tick = () => {
       if (harvestTapZoomRef.current) {
@@ -730,9 +730,9 @@ export default function App() {
 
     if (isSeedFlashing) return;
 
-    // Add +20% progress when button is green (no seeds in storage)
+    // Add +15% progress when button is green (no seeds in storage)
     const start = Math.max(0, seedProgressRef.current);
-    const totalAfterTap = start + 20;
+    const totalAfterTap = start + 15;
     
     if (totalAfterTap > 100) {
       // Tap goes past 100%: add to storage, reset to 0%, then continue with remainder
@@ -766,9 +766,9 @@ export default function App() {
     e.stopPropagation();
     if (isHarvestFlashing) return;
 
-    // Add +20 progress per tap (animated via harvestTapZoomRef)
+    // Add +15 progress per tap (animated via harvestTapZoomRef)
     const current = harvestProgressRef.current;
-    const next = Math.min(100, current + 20);
+    const next = Math.min(100, current + 15);
     harvestTapZoomRef.current = { start: current, end: next, startTime: Date.now(), duration: 100 };
     setHarvestTapZoomTrigger((t) => t + 1);
 
@@ -1524,10 +1524,10 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Barn Header - overlay on top */}
+              {/* Shed Header - overlay on top */}
               <div className="absolute top-0 left-0 right-0 z-50 pointer-events-none">
                 <div className="pointer-events-auto">
-                  <PageHeader money={money} walletFlashActive={walletFlashActive} />
+                  <PageHeader money={money} walletFlashActive={walletFlashActive} plantWallet={{ unlockedCount: highestPlantEver, totalCount: 24 }} />
                 </div>
               </div>
             </div>
@@ -1673,7 +1673,7 @@ export default function App() {
               imageLevel={discoveryPopup.level}
               subtitle={getPlantData(discoveryPopup.level).name}
               description={getPlantData(discoveryPopup.level).description}
-              buttonText="Add to Barn"
+              buttonText="Add to Shed"
               showCloseButton={false}
               closeOnBackdropClick={false}
               onButtonClick={(buttonRect) => {

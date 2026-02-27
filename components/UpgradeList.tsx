@@ -172,7 +172,7 @@ const SEEDS_VALUE_GREEN = '#6a994e';
 const getSeedsUpgradeValue = (upgradeId: string, level: number, seedsState?: SeedsState): string | null => {
   switch (upgradeId) {
     case 'seed_production':
-      return `${level}/min`;
+      return `${3 + level}/min`;
     case 'seed_quality':
       // Display quality % within current tier (0-90%)
       const qualityPercent = seedsState ? getSeedQualityPercent(seedsState) : (level % 10) * 10;
@@ -210,7 +210,7 @@ const getCropsUpgradeValue = (upgradeId: string, level: number): string | null =
 const getHarvestUpgradeValue = (upgradeId: string, level: number): string | null => {
   switch (upgradeId) {
     case 'harvest_speed':
-      return `${level}/min`;
+      return `${3 + level}/min`;
     case 'crop_value':
       return `${(1.0 + 0.1 * level).toFixed(1)}x`;
     case 'harvest_boost':

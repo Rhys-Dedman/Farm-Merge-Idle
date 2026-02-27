@@ -16,7 +16,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, ba
   const items: { id: ScreenType; label: string; icon: string }[] = [
     { id: 'STORE', label: 'MARKET', icon: '/assets/icons/icon_market.png' },
     { id: 'FARM', label: 'FARM', icon: '/assets/icons/icon_farm.png' },
-    { id: 'BARN', label: 'BARN', icon: '/assets/icons/icon_barn.png' },
+    { id: 'BARN', label: 'SHED', icon: '/assets/icons/icon_barn.png' },
   ];
 
   return (
@@ -170,8 +170,8 @@ export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, ba
                   alt={item.label}
                   className="transition-all duration-200 ease-out"
                   style={{
-                    width: isActive ? '36px' : '32px',
-                    height: isActive ? '36px' : '32px',
+width: isActive ? '34px' : '32px',
+                                    height: isActive ? '34px' : '32px',
                     filter: isActive 
                       ? 'brightness(0) saturate(100%) invert(50%) sepia(6%) saturate(500%) hue-rotate(350deg) brightness(92%) contrast(88%)'
                       : 'brightness(0) saturate(100%) invert(22%) sepia(8%) saturate(500%) hue-rotate(340deg) brightness(97%) contrast(90%)',
