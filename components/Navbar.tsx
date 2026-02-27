@@ -1,4 +1,4 @@
-import React, { forwardRef } from 'react';
+import React from 'react';
 import { ScreenType } from '../types';
 
 interface NavbarProps {
@@ -8,27 +8,163 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, barnButtonRef }) => {
-  const items: { id: ScreenType; label: string; path: string }[] = [
-    { id: 'STORE', label: 'STORE', path: "M13.5 21v-7.5a.75.75 0 01.75-.75h3a.75.75 0 01.75.75V21m-15 0V10.33a1.5 1.5 0 01.44-1.06L7.5 4.71a1.5 1.5 0 012.12 0L14.12 9.27a1.5 1.5 0 01.44 1.06V21M3.75 21h16.5" },
-    { id: 'FARM', label: 'FARM', path: "M8.25 21v-4.875c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125V21m0 0h4.5V3.545M12.75 21h7.5V10.75M2.25 21h1.5m18 0h-18M2.25 9l4.5-4.5L11.25 9M2.25 9v12M6.75 21V13.5" },
-    { id: 'BARN', label: 'BARN', path: "M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c1.097 0 2.16.195 3.14.552c.98-.357 2.043-.552 3.14-.552c1.097 0 2.16.195 3.14.552c.98-.357 2.043-.552 3.14-.552c1.097 0 2.16.195 3.14-.552c.917 0 1.8.155 2.625.441v-14.25a9.047 9.047 0 00-3-.512a8.947 8.947 0 00-6 2.292z" },
+  const items: { id: ScreenType; label: string; icon: string }[] = [
+    { id: 'STORE', label: 'MARKET', icon: '/assets/icons/icon_market.png' },
+    { id: 'FARM', label: 'FARM', icon: '/assets/icons/icon_farm.png' },
+    { id: 'BARN', label: 'BARN', icon: '/assets/icons/icon_barn.png' },
   ];
+
   return (
-    <nav className="h-16 bg-[#0c0d12] border-t border-white/5 flex items-center justify-around px-8 z-50 shrink-0">
+    <nav 
+      className="relative h-[61px] flex items-start justify-center z-50 shrink-0 overflow-visible"
+      style={{ backgroundColor: '#282020' }}
+    >
+      {/* Top stroke layers */}
+      <div 
+        className="absolute left-0 right-0 pointer-events-none"
+        style={{
+          top: '-4px',
+          height: '2px',
+          backgroundColor: '#171515',
+        }}
+      />
+      <div 
+        className="absolute left-0 right-0 pointer-events-none"
+        style={{
+          top: '-2px',
+          height: '2px',
+          backgroundColor: '#443936',
+        }}
+      />
+      
       {items.map((item) => {
         const isActive = activeScreen === item.id;
         return (
-          <button 
-            key={item.id} 
-            ref={item.id === 'BARN' ? barnButtonRef : undefined}
-            onClick={() => onScreenChange(item.id)} 
-            className={`flex flex-col items-center justify-center space-y-0.5 w-20 transition-all ${isActive ? 'opacity-100' : 'opacity-25'}`}
+          <div 
+            key={item.id}
+            className="relative flex items-start justify-center"
+            style={{ width: '135px', height: '100%' }}
           >
-            <div className={`p-1.5 rounded-xl transition-colors duration-300 ${isActive ? 'bg-[#1a1c25] text-[#a7c957]' : 'text-white'}`}>
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d={item.path} /></svg>
+            {/* Shadow on left side of tab */}
+            <div
+              className="absolute pointer-events-none transition-opacity duration-200 ease-out"
+              style={{
+                top: '0px',
+                right: '50%',
+                marginRight: '67.5px',
+                width: '40px',
+                height: '100%',
+                background: 'linear-gradient(to left, rgba(0,0,0,0.2) 0%, transparent 100%)',
+                opacity: isActive ? 1 : 0,
+              }}
+            />
+            {/* Shadow on right side of tab */}
+            <div
+              className="absolute pointer-events-none transition-opacity duration-200 ease-out"
+              style={{
+                top: '0px',
+                left: '50%',
+                marginLeft: '67.5px',
+                width: '40px',
+                height: '100%',
+                background: 'linear-gradient(to right, rgba(0,0,0,0.2) 0%, transparent 100%)',
+                opacity: isActive ? 1 : 0,
+              }}
+            />
+            
+            {/* Active tab background - slides up/down */}
+            <div
+              className="absolute"
+              style={{
+                top: isActive ? '-20px' : '0px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                width: '135px',
+                height: '110px',
+                backgroundColor: '#302626',
+                borderRadius: '14px 14px 0 0',
+                opacity: isActive ? 1 : 0,
+                transition: isActive 
+                  ? 'top 0.25s cubic-bezier(0.34, 1.4, 0.64, 1), opacity 0.1s ease-out'
+                  : 'top 0.1s ease-in, opacity 0.1s ease-in',
+              }}
+            >
+              {/* Stroke 1 (inner) - #443936 */}
+              <div 
+                className="absolute pointer-events-none"
+                style={{
+                  top: '0px',
+                  left: '0px',
+                  right: '0px',
+                  bottom: '0px',
+                  borderRadius: '14px 14px 0 0',
+                  border: '2px solid #443936',
+                  borderBottom: 'none',
+                }}
+              />
+              {/* Stroke 2 (outer) - #171515 */}
+              <div 
+                className="absolute pointer-events-none"
+                style={{
+                  top: '-2px',
+                  left: '-2px',
+                  right: '-2px',
+                  bottom: '0px',
+                  borderRadius: '16px 16px 0 0',
+                  border: '2px solid #171515',
+                  borderBottom: 'none',
+                }}
+              />
             </div>
-            <span className="text-[9px] font-black tracking-widest text-white uppercase">{item.label}</span>
-          </button>
+            
+            <button 
+              ref={item.id === 'BARN' ? barnButtonRef : undefined}
+              onClick={() => onScreenChange(item.id)} 
+              className="relative flex flex-col items-center z-10"
+              style={{
+                width: '135px',
+                height: '100%',
+                backgroundColor: 'transparent',
+                justifyContent: 'flex-start',
+              }}
+            >
+              <div 
+                className="flex flex-col items-center justify-center"
+                style={{
+                  marginTop: isActive ? '-8px' : '12px',
+                  transition: isActive 
+                    ? 'margin-top 0.25s cubic-bezier(0.0, 1.2, 0.3, 1.3)'
+                    : 'margin-top 0.1s ease-in',
+                }}
+              >
+                <img 
+                  src={item.icon} 
+                  alt={item.label}
+                  className="transition-all duration-200 ease-out"
+                  style={{
+                    width: isActive ? '36px' : '32px',
+                    height: isActive ? '36px' : '32px',
+                    filter: isActive 
+                      ? 'brightness(0) saturate(100%) invert(50%) sepia(6%) saturate(500%) hue-rotate(350deg) brightness(92%) contrast(88%)'
+                      : 'brightness(0) saturate(100%) invert(22%) sepia(8%) saturate(500%) hue-rotate(340deg) brightness(97%) contrast(90%)',
+                  }}
+                />
+                {isActive && (
+                  <span 
+                    className="font-bold tracking-wider uppercase transition-opacity duration-300"
+                    style={{
+                      fontSize: '12px',
+                      color: '#7f7265',
+                      marginTop: '4px',
+                      letterSpacing: '0.1em',
+                    }}
+                  >
+                    {item.label}
+                  </span>
+                )}
+              </div>
+            </button>
+          </div>
         );
       })}
     </nav>

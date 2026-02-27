@@ -25,6 +25,20 @@ export function getCoinValueForLevel(level: number): number {
 }
 import { ErrorBoundary } from './components/ErrorBoundary';
 
+// Preload popup assets on module load to prevent flash of unstyled content
+const POPUP_ASSETS_TO_PRELOAD = [
+  '/assets/popups/popup_background.png?v=2',
+  '/assets/popups/popup_header.png',
+  '/assets/popups/popup_divider.png',
+  '/assets/vfx/particle_leaf_1.png',
+  '/assets/vfx/particle_leaf_2.png',
+];
+
+POPUP_ASSETS_TO_PRELOAD.forEach((src) => {
+  const img = new Image();
+  img.src = src;
+});
+
 /** Plant names and descriptions for discovery popups */
 const PLANT_DATA: Record<number, { name: string; description: string }> = {
   1: { name: 'Tiny Sprout', description: 'A tiny green shoot just starting out, doing its best to look important.' },

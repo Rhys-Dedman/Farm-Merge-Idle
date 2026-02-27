@@ -149,6 +149,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
   closeOnBackdropClick = true,
 }) => {
   const [animState, setAnimState] = useState<'hidden' | 'entering' | 'visible' | 'leaving'>('hidden');
+  const [assetsReady, setAssetsReady] = useState(false);
   const [leaves, setLeaves] = useState<LeafParticle[]>([]);
   const [leafPositions, setLeafPositions] = useState<{ x: number; y: number; opacity: number; rotation: number; scale: number }[]>([]);
   const [imgFailed, setImgFailed] = useState<Record<number, boolean>>({});
@@ -156,6 +157,22 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
   const leafRafRef = useRef<number>(0);
   const leafStartTimeRef = useRef<number>(0);
   const leafPosRef = useRef<{ x: number; y: number; vx: number; vy: number; opacity: number; rotation: number; scale: number; started: boolean }[]>([]);
+
+  // Preload critical assets before showing popup
+  useEffect(() => {
+    if (!isVisible) {
+      setAssetsReady(false);
+      return;
+    }
+    const bgImg = new Image();
+    bgImg.src = '/assets/popups/popup_background.png?v=2';
+    if (bgImg.complete) {
+      setAssetsReady(true);
+    } else {
+      bgImg.onload = () => setAssetsReady(true);
+      bgImg.onerror = () => setAssetsReady(true);
+    }
+  }, [isVisible]);
 
   // Separate effect for leaf animation - runs independently of popup state
   useEffect(() => {
@@ -217,9 +234,9 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
     return () => cancelAnimationFrame(leafRafRef.current);
   }, [leaves]);
 
-  // Popup visibility effect
+  // Popup visibility effect - waits for assets to be ready
   useEffect(() => {
-    if (isVisible && animState === 'hidden') {
+    if (isVisible && assetsReady && animState === 'hidden') {
       const newLeaves = createPopupLeaves();
       setLeaves(newLeaves);
       leafStartTimeRef.current = Date.now();
@@ -244,7 +261,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
         onClose();
       }, 150);
     }
-  }, [isVisible, animState, onClose]);
+  }, [isVisible, assetsReady, animState, onClose]);
 
   const [isClosing, setIsClosing] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);

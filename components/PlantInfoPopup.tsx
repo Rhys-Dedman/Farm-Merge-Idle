@@ -33,7 +33,7 @@ const POPUP_LEAF_COUNT = 40;
 const POPUP_LEAF_MIN_LIFETIME_MS = 250;
 const POPUP_LEAF_MAX_LIFETIME_MS = 1000;
 const POPUP_WIDTH = 260;
-const POPUP_HEIGHT = 320;
+const POPUP_HEIGHT = 260;
 
 function createPopupLeaves(): LeafParticle[] {
   return Array.from({ length: POPUP_LEAF_COUNT }, (_, i) => {
@@ -87,12 +87,29 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
   isUnlocked,
 }) => {
   const [animState, setAnimState] = useState<'hidden' | 'entering' | 'visible' | 'leaving'>('hidden');
+  const [assetsReady, setAssetsReady] = useState(false);
   const [leaves, setLeaves] = useState<LeafParticle[]>([]);
   const [leafPositions, setLeafPositions] = useState<{ x: number; y: number; opacity: number; rotation: number; scale: number }[]>([]);
   const [imgFailed, setImgFailed] = useState<Record<number, boolean>>({});
   const leafRafRef = useRef<number>(0);
   const leafStartTimeRef = useRef<number>(0);
   const leafPosRef = useRef<{ x: number; y: number; vx: number; vy: number; opacity: number; rotation: number; scale: number; started: boolean }[]>([]);
+
+  // Preload critical assets before showing popup
+  useEffect(() => {
+    if (!isVisible) {
+      setAssetsReady(false);
+      return;
+    }
+    const bgImg = new Image();
+    bgImg.src = '/assets/popups/popup_background.png?v=2';
+    if (bgImg.complete) {
+      setAssetsReady(true);
+    } else {
+      bgImg.onload = () => setAssetsReady(true);
+      bgImg.onerror = () => setAssetsReady(true);
+    }
+  }, [isVisible]);
 
   // Leaf animation effect
   useEffect(() => {
@@ -153,9 +170,9 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
     return () => cancelAnimationFrame(leafRafRef.current);
   }, [leaves]);
 
-  // Popup visibility effect
+  // Popup visibility effect - waits for assets to be ready
   useEffect(() => {
-    if (isVisible && animState === 'hidden') {
+    if (isVisible && assetsReady && animState === 'hidden') {
       const newLeaves = createPopupLeaves();
       setLeaves(newLeaves);
       leafStartTimeRef.current = Date.now();
@@ -180,7 +197,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
         onClose();
       }, 100);
     }
-  }, [isVisible, animState, onClose]);
+  }, [isVisible, assetsReady, animState, onClose]);
 
   const handleClose = () => {
     setAnimState('leaving');
