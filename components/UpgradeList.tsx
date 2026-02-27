@@ -520,7 +520,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
           >
             <div className="flex items-center p-1.5 px-3">
               {/* Square Icon Box */}
-              <div className="w-[38px] h-[38px] shrink-0 flex items-center justify-center bg-[#583c1f] rounded-[8px] shadow-sm">
+              <div className="w-[38px] h-[38px] shrink-0 flex items-center justify-center bg-[#473a38] rounded-[8px] shadow-sm">
                 <span className="text-[22px] leading-none select-none">{upgrade.icon}</span>
               </div>
               

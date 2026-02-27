@@ -16,7 +16,7 @@ const TAB_ICONS: Record<TabType, string> = {
 export const UpgradeTabs: React.FC<UpgradeTabsProps> = ({ activeTab, onTabChange }) => {
   const tabs: TabType[] = ['SEEDS', 'CROPS', 'HARVEST'];
   return (
-    <div className="flex w-full bg-[#fcf0c6] relative h-[38px] shrink-0 items-center px-4">
+    <div className="flex w-full bg-[#fcf0c6] relative h-[43px] shrink-0 items-center px-4">
       {/* Background Underline - Spans full width, matches thickness of the active indicator */}
       <div className="absolute bottom-0 left-0 w-full h-[2px] bg-black/5 pointer-events-none"></div>
 
@@ -31,7 +31,7 @@ export const UpgradeTabs: React.FC<UpgradeTabsProps> = ({ activeTab, onTabChange
             <span className={`text-[9px] filter saturate-[0.8] ${isActive ? 'opacity-100' : 'opacity-40 grayscale'}`}>
               {TAB_ICONS[tab]}
             </span>
-            <span className={`text-[10px] font-black tracking-[0.1em] transition-colors duration-300 ${
+            <span className={`text-[11px] font-black tracking-[0.1em] transition-colors duration-300 ${
               isActive ? 'text-[#6a994e]' : 'text-[#c2b280]'
             }`}>
               {tab}

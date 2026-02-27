@@ -5,9 +5,14 @@ interface NavbarProps {
   activeScreen: ScreenType;
   onScreenChange: (screen: ScreenType) => void;
   barnButtonRef?: React.RefObject<HTMLButtonElement | null>;
+  notifications?: {
+    STORE?: boolean;
+    FARM?: boolean;
+    BARN?: boolean;
+  };
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, barnButtonRef }) => {
+export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, barnButtonRef, notifications = {} }) => {
   const items: { id: ScreenType; label: string; icon: string }[] = [
     { id: 'STORE', label: 'MARKET', icon: '/assets/icons/icon_market.png' },
     { id: 'FARM', label: 'FARM', icon: '/assets/icons/icon_farm.png' },
@@ -39,12 +44,35 @@ export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, ba
       
       {items.map((item) => {
         const isActive = activeScreen === item.id;
+        const hasNotification = notifications[item.id] && !isActive;
         return (
           <div 
             key={item.id}
             className="relative flex items-start justify-center"
             style={{ width: '135px', height: '100%' }}
           >
+            {/* Notification triangle - shows when tab has notification and is not active */}
+            {hasNotification && (
+              <div
+                className="absolute z-20 pointer-events-none"
+                style={{
+                  top: '-2px',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                }}
+              >
+                {/* Using SVG for curved tip */}
+                <svg width="21" height="12" viewBox="0 0 21 12" style={{ display: 'block' }}>
+                  {/* Green fill with stroke 1 outline */}
+                  <path
+                    d="M2,1 L19,1 L11.5,9.5 Q10.5,11 9.5,9.5 L2,1 Z"
+                    fill="#cae060"
+                    stroke="#443936"
+                    strokeWidth="2"
+                  />
+                </svg>
+              </div>
+            )}
             {/* Shadow on left side of tab */}
             <div
               className="absolute pointer-events-none transition-opacity duration-200 ease-out"
@@ -76,7 +104,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, ba
             <div
               className="absolute"
               style={{
-                top: isActive ? '-20px' : '0px',
+                top: isActive ? '-10px' : '0px',
                 left: '50%',
                 transform: 'translateX(-50%)',
                 width: '135px',
@@ -131,7 +159,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, ba
               <div 
                 className="flex flex-col items-center justify-center"
                 style={{
-                  marginTop: isActive ? '-8px' : '12px',
+                  marginTop: isActive ? '-2px' : '12px',
                   transition: isActive 
                     ? 'margin-top 0.25s cubic-bezier(0.0, 1.2, 0.3, 1.3)'
                     : 'margin-top 0.1s ease-in',
@@ -153,7 +181,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, ba
                   <span 
                     className="font-bold tracking-wider uppercase transition-opacity duration-300"
                     style={{
-                      fontSize: '12px',
+                      fontSize: '10px',
                       color: '#7f7265',
                       marginTop: '4px',
                       letterSpacing: '0.1em',

@@ -125,6 +125,8 @@ export default function App() {
   const [plantInfoPopup, setPlantInfoPopup] = useState<{ isVisible: boolean; level: number } | null>(null);
   // Barn particles for "Add to Barn" button
   const [barnParticles, setBarnParticles] = useState<BarnParticleData[]>([]);
+  // Barn notification state - shows when a new plant is added to barn
+  const [barnNotification, setBarnNotification] = useState(false);
   const [unlockingCellIndices, setUnlockingCellIndices] = useState<number[]>([]); // Cells currently playing unlock animation
   const [fertilizingCellIndices, setFertilizingCellIndices] = useState<number[]>([]); // Cells currently playing fertilize animation
 
@@ -1362,7 +1364,7 @@ export default function App() {
               <div 
                 onClick={(e) => e.stopPropagation()}
                 className={`flex flex-col overflow-hidden relative z-30 shadow-[0_-15px_50px_rgba(0,0,0,0.15)] rounded-t-[32px] transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-                  isExpanded ? 'h-[42%]' : 'h-[40px]'
+                  isExpanded ? 'h-[42%]' : 'h-[50px]'
                 }`}
                 style={{
                   background: '#fcf0c6',
@@ -1532,7 +1534,19 @@ export default function App() {
           </div>
         </div>
 
-        <Navbar activeScreen={activeScreen} onScreenChange={setActiveScreen} barnButtonRef={barnButtonRef} />
+        <Navbar 
+          activeScreen={activeScreen} 
+          onScreenChange={(screen) => {
+            setActiveScreen(screen);
+            if (screen === 'BARN') {
+              setBarnNotification(false);
+            }
+          }} 
+          barnButtonRef={barnButtonRef}
+          notifications={{
+            BARN: barnNotification,
+          }}
+        />
 
         {/* Leaf burst: portal to body so never clipped; viewport coords */}
         {createPortal(
@@ -1682,6 +1696,7 @@ export default function App() {
               data={particle}
               containerRef={containerRef}
               barnButtonRef={barnButtonRef}
+              onImpact={() => setBarnNotification(true)}
               onComplete={() => setBarnParticles(prev => prev.filter(p => p.id !== particle.id))}
             />
           ))}
