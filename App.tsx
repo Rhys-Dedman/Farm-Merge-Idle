@@ -185,7 +185,7 @@ export default function App() {
   
   // Calculate barn scale: shelves are 530px wide (the main visual content width)
   // Scale down on narrower screens so content fits with some padding
-  const barnDesignWidth = 490;
+  const barnDesignWidth = 360;
   const barnPadding = 20; // 10px padding on each side
   const barnScale = Math.min(1, (viewportWidth - barnPadding) / barnDesignWidth);
 
