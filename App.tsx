@@ -174,14 +174,27 @@ export default function App() {
 
   const [spriteCenter, setSpriteCenter] = useState({ x: 50, y: 50 }); // % relative to column, for sprite center
 
-  // Track viewport width for responsive barn scaling (mobile only)
+  // Track viewport dimensions for responsive scaling
   const [viewportWidth, setViewportWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 420);
+  const [viewportHeight, setViewportHeight] = useState(typeof window !== 'undefined' ? window.innerHeight : 800);
   
   useEffect(() => {
-    const handleResize = () => setViewportWidth(window.innerWidth);
+    const handleResize = () => {
+      setViewportWidth(window.innerWidth);
+      setViewportHeight(window.innerHeight);
+    };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+  
+  // Calculate scale to fit 9:16 app into viewport
+  // Base dimensions match the original max-w-md (448px) with 9:16 aspect
+  const baseWidth = 448;
+  const baseHeight = 796; // 448 * 16/9
+  const scaleX = viewportWidth / baseWidth;
+  const scaleY = viewportHeight / baseHeight;
+  // Multiply by 0.88 to add padding and ensure it fits
+  const appScale = Math.min(scaleX, scaleY) * 0.88;
   
   // Calculate barn scale: only apply on narrow mobile screens (below 500px)
   // On wider screens, use scale 1 (no scaling)
@@ -1247,11 +1260,17 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-    <div className="flex items-center justify-center bg-[#050608] overflow-hidden h-screen-safe">
-      <div 
+<div className="flex items-center justify-center bg-[#050608] overflow-hidden h-screen-safe">
+      <div
         ref={containerRef}
         id="game-container"
-        className="relative w-full max-w-md aspect-[9/16] max-h-screen shadow-[0_0_100px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col select-none font-['Inter'] grass-texture"
+        className="relative shadow-[0_0_100px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col select-none font-['Inter'] grass-texture"
+        style={{
+          width: '448px',
+          height: '796px',
+          transform: `scale(${appScale})`,
+          transformOrigin: 'center center',
+        }}
       >
         {/* Grass Detail Overlay */}
         <div className="absolute inset-0 pointer-events-none grass-blades opacity-40"></div>
