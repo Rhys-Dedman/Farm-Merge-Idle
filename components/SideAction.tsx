@@ -1,4 +1,9 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
+
+interface TapRipple {
+  id: number;
+  startTime: number;
+}
 
 interface SideActionProps {
   label: string;
@@ -95,6 +100,29 @@ export const SideAction: React.FC<SideActionProps> = ({
 
   const isImageIcon = icon.startsWith('http') || icon.startsWith('/');
 
+  // Tap ripple state - stores active ripples that expand outward on each tap
+  const [tapRipples, setTapRipples] = useState<TapRipple[]>([]);
+  const rippleIdRef = useRef(0);
+
+  // Clean up finished ripples after 300ms
+  useEffect(() => {
+    if (tapRipples.length === 0) return;
+    const timer = setTimeout(() => {
+      const now = Date.now();
+      setTapRipples(prev => prev.filter(r => now - r.startTime < 300));
+    }, 310);
+    return () => clearTimeout(timer);
+  }, [tapRipples]);
+
+  // Handler to spawn a new ripple on click
+  const handleClick = (e: React.MouseEvent) => {
+    // Spawn new ripple
+    rippleIdRef.current += 1;
+    setTapRipples(prev => [...prev, { id: rippleIdRef.current, startTime: Date.now() }]);
+    // Call original onClick
+    onClick?.(e);
+  };
+
   const transitionStyle = (isFlashing || displayProgress === 0)
     ? 'none'
     : 'stroke-dashoffset 0.08s cubic-bezier(0.25, 0.1, 0.25, 1)';
@@ -116,7 +144,7 @@ export const SideAction: React.FC<SideActionProps> = ({
     : undefined;
 
   return (
-    <>
+    <div className="relative overflow-visible">
       <style>{`
         @keyframes seed-bounce {
           0% { transform: scale(1); }
@@ -127,11 +155,44 @@ export const SideAction: React.FC<SideActionProps> = ({
         .side-action-bounce {
           animation: seed-bounce 0.4s ease-out;
         }
+        @keyframes tap-ripple {
+          0% {
+            transform: scale(1);
+            opacity: 1;
+            stroke-width: 5;
+          }
+          100% {
+            transform: scale(1.4);
+            opacity: 0;
+            stroke-width: 2;
+          }
+        }
+        .tap-ripple-ring {
+          animation: tap-ripple 1000ms cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
+        }
       `}</style>
+      {/* Tap Ripple Rings - positioned outside bounce container so they're not affected by bounce animation */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-visible" style={{ zIndex: 0 }}>
+        <svg className="w-24 h-24 overflow-visible" viewBox="0 0 100 100" style={{ overflow: 'visible' }}>
+          {tapRipples.map((ripple) => (
+            <circle
+              key={ripple.id}
+              cx="50"
+              cy="50"
+              r="50"
+              fill="none"
+              stroke="#588c30"
+              strokeWidth="5"
+              className="tap-ripple-ring"
+              style={{ transformOrigin: '50% 50%' }}
+            />
+          ))}
+        </svg>
+      </div>
       <div
         key={bounceTrigger}
         className={`flex flex-col items-center select-none group ${bounceTrigger > 0 ? 'side-action-bounce' : ''}`}
-        onClick={onClick}
+        onClick={handleClick}
       >
         <div className={`relative w-24 h-24 flex items-center justify-center cursor-pointer active:scale-95 transition-all duration-200 ${isFlashing && shouldAnimate ? 'scale-110' : ''}`}>
         
@@ -308,6 +369,6 @@ export const SideAction: React.FC<SideActionProps> = ({
         ) : null}
         </div>
       </div>
-    </>
+    </div>
   );
 };
