@@ -1259,7 +1259,7 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-<div className="flex items-center justify-center bg-[#050608] overflow-hidden h-screen-safe">
+<div className="flex items-center justify-center bg-[#050608] w-screen h-screen">
       <div
         ref={containerRef}
         id="game-container"
