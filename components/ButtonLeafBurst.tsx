@@ -3,8 +3,9 @@
  * Perfect circle burst for seed/harvest button activation.
  */
 import React, { useEffect, useRef, useState } from 'react';
+import { assetPath } from '../utils/assetPath';
 
-const LEAF_SPRITES = ['/assets/vfx/particle_leaf_1.png', '/assets/vfx/particle_leaf_2.png'];
+const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_1.png'), assetPath('/assets/vfx/particle_leaf_2.png')];
 const PARTICLE_COUNT = 20;
 const SPAWN_RADIUS = 45; // particles spawn on this ring
 const BURST_RADIUS = 80; // particles travel out to this radius

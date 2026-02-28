@@ -3,8 +3,9 @@
  * Simplified version of DiscoveryPopup without title or button.
  */
 import React, { useEffect, useState, useRef } from 'react';
+import { assetPath } from '../utils/assetPath';
 
-const LEAF_SPRITES = ['/assets/vfx/particle_leaf_1.png', '/assets/vfx/particle_leaf_2.png'];
+const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_1.png'), assetPath('/assets/vfx/particle_leaf_2.png')];
 
 interface LeafParticle {
   id: number;
@@ -102,7 +103,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
       return;
     }
     const bgImg = new Image();
-    bgImg.src = '/assets/popups/popup_background.png?v=2';
+    bgImg.src = assetPath('/assets/popups/popup_background.png?v=2');
     if (bgImg.complete) {
       setAssetsReady(true);
     } else {
@@ -334,14 +335,14 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
         >
           {/* Header background sprite */}
           <img 
-            src="/assets/popups/popup_header.png" 
+            src={assetPath('/assets/popups/popup_header.png')} 
             alt="" 
             className="absolute inset-0 w-full h-full object-contain"
             style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.25))' }}
           />
           {/* Plant image inside header */}
           <img 
-            src={`/assets/plants/plant_${isUnlocked ? plantLevel : 0}.png`}
+            src={assetPath(`/assets/plants/plant_${isUnlocked ? plantLevel : 0}.png`)}
             alt="" 
             className="relative object-contain"
             style={{ 
@@ -366,7 +367,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
         >
           <div
             style={{
-              backgroundImage: 'url(/assets/popups/popup_background.png?v=2)',
+              backgroundImage: `url(${assetPath('/assets/popups/popup_background.png?v=2')})`,
               backgroundSize: '100% 100%',
               backgroundPosition: 'center',
               backgroundRepeat: 'no-repeat',
@@ -395,7 +396,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
               {/* Divider */}
               <div className="w-full flex items-center justify-center" style={{ marginTop: '8px', marginBottom: '24px' }}>
                 <img 
-                  src="/assets/popups/popup_divider.png" 
+                  src={assetPath('/assets/popups/popup_divider.png')} 
                   alt="" 
                   className="h-auto object-contain"
                   style={{ width: '520px' }}

@@ -7,8 +7,9 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { PLANT_CONTAINER_WIDTH } from '../constants/boardLayout';
+import { assetPath } from '../utils/assetPath';
 
-const LEAF_SPRITES = ['/assets/vfx/particle_leaf_1.png', '/assets/vfx/particle_leaf_2.png'];
+const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_1.png'), assetPath('/assets/vfx/particle_leaf_2.png')];
 const CELL_SCALE = 1.2;
 const HEX_RADIUS_PX = 0.6 * PLANT_CONTAINER_WIDTH * CELL_SCALE;
 const MAX_RADIUS_HEX = 1;

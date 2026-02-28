@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useCallback } from 'react';
 import { flushSync } from 'react-dom';
 import { BoardCell, Item, DragState } from '../types';
 import { PLANT_CONTAINER_WIDTH, PLANT_CONTAINER_HEIGHT } from '../constants/boardLayout';
+import { assetPath } from '../utils/assetPath';
 
 const LIFT_MS = 120;
 const SCALE_UP_MS = 60;
@@ -43,15 +44,15 @@ const PLANT_SPRITE_EXT = '.png';
 
 function getPlantSpritePath(level: number): string {
   const spriteLevel = Math.min(level, MAX_AVAILABLE_PLANT_LEVEL);
-  return `/assets/plants/plant_${spriteLevel}${PLANT_SPRITE_EXT}`;
+  return assetPath(`/assets/plants/plant_${spriteLevel}${PLANT_SPRITE_EXT}`);
 }
 
 const HEX_SPRITE_EXT = '.png';
-const HEXCELL_GREEN = `/assets/hex/hexcell_green${HEX_SPRITE_EXT}`;
-const HEXCELL_SHADOW = `/assets/hex/hexcell_shadow${HEX_SPRITE_EXT}`;
-const HEXCELL_WHITE = `/assets/hex/hexcell_white${HEX_SPRITE_EXT}`;
-const HEXCELL_LOCKED = `/assets/hex/hexcell_locked${HEX_SPRITE_EXT}`;
-const HEXCELL_FERTILE = `/assets/hex/hexcell_fertile${HEX_SPRITE_EXT}`;
+const HEXCELL_GREEN = assetPath(`/assets/hex/hexcell_green${HEX_SPRITE_EXT}`);
+const HEXCELL_SHADOW = assetPath(`/assets/hex/hexcell_shadow${HEX_SPRITE_EXT}`);
+const HEXCELL_WHITE = assetPath(`/assets/hex/hexcell_white${HEX_SPRITE_EXT}`);
+const HEXCELL_LOCKED = assetPath(`/assets/hex/hexcell_locked${HEX_SPRITE_EXT}`);
+const HEXCELL_FERTILE = assetPath(`/assets/hex/hexcell_fertile${HEX_SPRITE_EXT}`);
 
 export const HexBoard: React.FC<HexBoardProps> = ({
   isActive,

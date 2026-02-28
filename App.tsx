@@ -19,6 +19,7 @@ import { PlantInfoPopup } from './components/PlantInfoPopup';
 import { BarnParticle, BarnParticleData } from './components/BarnParticle';
 import { ButtonLeafBurst } from './components/ButtonLeafBurst';
 import { TabType, ScreenType, BoardCell, Item, DragState } from './types';
+import { assetPath } from './utils/assetPath';
 
 /** Coin per plant level: level 1 = 5, level 2 = 10, level 3 = 20, ... */
 export function getCoinValueForLevel(level: number): number {
@@ -28,11 +29,11 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Preload popup assets on module load to prevent flash of unstyled content
 const POPUP_ASSETS_TO_PRELOAD = [
-  '/assets/popups/popup_background.png?v=2',
-  '/assets/popups/popup_header.png',
-  '/assets/popups/popup_divider.png',
-  '/assets/vfx/particle_leaf_1.png',
-  '/assets/vfx/particle_leaf_2.png',
+  assetPath('/assets/popups/popup_background.png?v=2'),
+  assetPath('/assets/popups/popup_header.png'),
+  assetPath('/assets/popups/popup_divider.png'),
+  assetPath('/assets/vfx/particle_leaf_1.png'),
+  assetPath('/assets/vfx/particle_leaf_2.png'),
 ];
 
 POPUP_ASSETS_TO_PRELOAD.forEach((src) => {
@@ -1254,7 +1255,7 @@ export default function App() {
               {/* 2. Background sprite: primary, on top of bleed; center pinned to hex grid; transition matches upgrade panel (500ms, cubic-bezier) */}
               <div className="absolute inset-0 pointer-events-none overflow-hidden z-[5]">
                 <img
-                  src="/assets/background/background_grass.png"
+                  src={assetPath('/assets/background/background_grass.png')}
                   alt=""
                   className="absolute flex-shrink-0 flex-grow-0"
                   style={{
@@ -1295,7 +1296,7 @@ export default function App() {
                    <div className="pointer-events-auto flex items-center justify-center" ref={plantButtonRef} style={{ transform: 'scale(0.9)', transformOrigin: 'center center' }} onClick={(e) => e.stopPropagation()}>
                      <SideAction 
                         label="Plant" 
-                        icon={`/assets/plants/plant_${seedBaseTier}.png`}
+                        icon={assetPath(`/assets/plants/plant_${seedBaseTier}.png`)}
                         iconScale={1.25}
                         iconOffsetY={-3}
                         progress={Math.max(0, Math.min(1, seedProgress / 100))}
@@ -1459,7 +1460,7 @@ export default function App() {
                   {/* Background sprite: moves with content */}
                   <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 0 }}>
                     <img
-                      src="/assets/background/background_barn.png"
+                      src={assetPath('/assets/background/background_barn.png')}
                       alt=""
                       className="absolute flex-shrink-0 flex-grow-0"
                       style={{
@@ -1478,7 +1479,7 @@ export default function App() {
                   {/* Barn roof at the top */}
                   <div className="relative flex justify-center pointer-events-none" style={{ zIndex: 1 }}>
                     <img
-                      src="/assets/barn/barn_roof.png"
+                      src={assetPath('/assets/barn/barn_roof.png')}
                       alt="Barn Roof"
                       style={{
                         transform: 'scale(1.8)',
@@ -1490,7 +1491,7 @@ export default function App() {
                   {/* Barn tools - below roof, above shelves */}
                   <div className="relative flex justify-center pointer-events-none" style={{ zIndex: 1, marginTop: 60 }}>
                     <img
-                      src="/assets/barn/barn_tools.png"
+                      src={assetPath('/assets/barn/barn_tools.png')}
                       alt="Barn Tools"
                       style={{
                         transform: 'scale(0.95)',
@@ -1514,7 +1515,7 @@ export default function App() {
                           }}
                         >
                           <img
-                            src="/assets/barn/barn_shelf.png"
+                            src={assetPath('/assets/barn/barn_shelf.png')}
                             alt={`Shelf ${shelfIndex + 1}`}
                             className="pointer-events-none"
                           />
@@ -1537,7 +1538,7 @@ export default function App() {
                           >
                             {/* Invisible shelf for sizing */}
                             <img
-                              src="/assets/barn/barn_shelf.png"
+                              src={assetPath('/assets/barn/barn_shelf.png')}
                               alt=""
                               className="invisible"
                             />
@@ -1558,7 +1559,7 @@ export default function App() {
                                 return (
                                   <img
                                     key={plantOffset}
-                                    src={`/assets/plants/plant_${isUnlocked ? plantLevel : 0}.png`}
+                                    src={assetPath(`/assets/plants/plant_${isUnlocked ? plantLevel : 0}.png`)}
                                     alt={`Plant ${plantLevel}`}
                                     className={`w-20 h-20 object-contain ${isUnlocked ? 'cursor-pointer pointer-events-auto active:scale-95' : 'pointer-events-none'}`}
                                     onClick={isUnlocked ? (e) => {
@@ -1732,7 +1733,7 @@ export default function App() {
               isVisible={discoveryPopup.isVisible}
               onClose={() => setDiscoveryPopup(null)}
               title="New Discovery"
-              imageSrc={`/assets/plants/plant_${Math.min(discoveryPopup.level, 14)}.png`}
+              imageSrc={assetPath(`/assets/plants/plant_${Math.min(discoveryPopup.level, 14)}.png`)}
               imageLevel={discoveryPopup.level}
               subtitle={getPlantData(discoveryPopup.level).name}
               description={getPlantData(discoveryPopup.level).description}

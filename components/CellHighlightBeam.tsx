@@ -8,6 +8,7 @@
  * - Sparkles rise in a spiral pattern with eased velocity (fast then slow)
  */
 import React, { useEffect, useState, useMemo } from 'react';
+import { assetPath } from '../utils/assetPath';
 
 interface CellHighlightBeamProps {
   x: number;
@@ -27,7 +28,7 @@ const SPARKLE_HEIGHT_MULTIPLIER = 1.2;
 const SPARKLE_COLOR = '#fff0b3';
 const SPARKLE_SHADOW = 'rgba(255, 240, 179, 0.5)';
 
-const HEXCELL_HIGHLIGHT = '/assets/hex/hexcell_highlight.png';
+const HEXCELL_HIGHLIGHT = assetPath('/assets/hex/hexcell_highlight.png');
 
 interface Sparkle {
   id: number;

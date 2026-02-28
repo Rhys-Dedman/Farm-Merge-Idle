@@ -1,5 +1,6 @@
 import React from 'react';
 import { ScreenType } from '../types';
+import { assetPath } from '../utils/assetPath';
 
 interface NavbarProps {
   activeScreen: ScreenType;
@@ -14,9 +15,9 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, barnButtonRef, notifications = {} }) => {
   const items: { id: ScreenType; label: string; icon: string }[] = [
-    { id: 'STORE', label: 'MARKET', icon: '/assets/icons/icon_market.png' },
-    { id: 'FARM', label: 'FARM', icon: '/assets/icons/icon_farm.png' },
-    { id: 'BARN', label: 'SHED', icon: '/assets/icons/icon_barn.png' },
+    { id: 'STORE', label: 'MARKET', icon: assetPath('/assets/icons/icon_market.png') },
+    { id: 'FARM', label: 'FARM', icon: assetPath('/assets/icons/icon_farm.png') },
+    { id: 'BARN', label: 'SHED', icon: assetPath('/assets/icons/icon_barn.png') },
   ];
 
   return (
