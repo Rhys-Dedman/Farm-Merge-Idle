@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Farm Merge Idle</title>
-    <meta name="version" content="1.0.2">
+    <meta name="version" content="1.0.3">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -19,6 +19,20 @@
             padding: 0;
             overflow: hidden;
             -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        /* Prevent mobile image long-press context menu */
+        img {
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+            pointer-events: none;
+        }
+        /* Re-enable pointer events for interactive images where needed */
+        .interactive-img {
+            pointer-events: auto;
         }
         .no-scrollbar::-webkit-scrollbar {
             display: none;

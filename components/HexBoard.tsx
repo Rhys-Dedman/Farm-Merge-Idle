@@ -444,10 +444,13 @@ export const HexBoard: React.FC<HexBoardProps> = ({
           pointer-events: none;
         }
       `}</style>
-      <div className="relative w-full h-full flex items-center justify-center pointer-events-none">
+      <div 
+        className="relative w-full h-full flex items-center justify-center pointer-events-none"
+        style={{ touchAction: 'none' }}
+      >
         <div
           className="relative w-full h-full"
-          style={{ transform: `scale(${gridScale})`, transformOrigin: 'center center' }}
+          style={{ transform: `scale(${gridScale})`, transformOrigin: 'center center', touchAction: 'none' }}
         >
         {/* PASS 1: hexcell_shadow — one per cell, always below all green/white (z-0) */}
         {grid.map((cell, i) => {
@@ -490,6 +493,9 @@ export const HexBoard: React.FC<HexBoardProps> = ({
                 e.stopPropagation();
                 handlePointerDown(i, e);
               }}
+              onContextMenu={(e) => e.preventDefault()}
+              onTouchStart={(e) => e.preventDefault()}
+              onTouchMove={(e) => e.preventDefault()}
               className="absolute pointer-events-auto flex items-center justify-center overflow-hidden"
               style={{
                 left: centerX,
@@ -498,6 +504,10 @@ export const HexBoard: React.FC<HexBoardProps> = ({
                 height: `${hexDisplayH}px`,
                 transform: `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`,
                 zIndex: 10,
+                touchAction: 'none',
+                WebkitTouchCallout: 'none',
+                WebkitUserSelect: 'none',
+                userSelect: 'none',
               }}
             >
               {/* Locked cell sprite */}
@@ -663,9 +673,17 @@ export const HexBoard: React.FC<HexBoardProps> = ({
                         <img
                           src={getPlantSpritePath(level)}
                           alt={`Plant ${level}`}
+                          draggable={false}
+                          onContextMenu={(e) => e.preventDefault()}
                           className={`w-[70%] h-[70%] object-contain drop-shadow-[0_4px_8px_rgba(0,0,0,0.4)] ${
                             isImpacted && !isDragged ? 'plant-spawn-bounce' : ''
                           }`}
+                          style={{
+                            WebkitTouchCallout: 'none',
+                            WebkitUserSelect: 'none',
+                            userSelect: 'none',
+                            pointerEvents: 'none',
+                          }}
                         />
                       </div>
                     </div>

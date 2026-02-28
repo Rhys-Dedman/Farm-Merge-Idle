@@ -30,11 +30,12 @@ interface PlantInfoPopupProps {
   isUnlocked: boolean;
 }
 
-const POPUP_LEAF_COUNT = 40;
+const POPUP_LEAF_COUNT = 30;
 const POPUP_LEAF_MIN_LIFETIME_MS = 250;
 const POPUP_LEAF_MAX_LIFETIME_MS = 1000;
-const POPUP_WIDTH = 260;
+const POPUP_WIDTH = 280;
 const POPUP_HEIGHT = 260;
+const POPUP_LEAF_Y_OFFSET = 20;
 
 function createPopupLeaves(): LeafParticle[] {
   return Array.from({ length: POPUP_LEAF_COUNT }, (_, i) => {
@@ -47,19 +48,19 @@ function createPopupLeaves(): LeafParticle[] {
     
     if (pos < POPUP_WIDTH) {
       spawnX = pos - POPUP_WIDTH / 2;
-      spawnY = -POPUP_HEIGHT / 2;
+      spawnY = -POPUP_HEIGHT / 2 + POPUP_LEAF_Y_OFFSET;
       outwardAngle = -Math.PI / 2 + (Math.random() - 0.5) * 0.8;
     } else if (pos < POPUP_WIDTH + POPUP_HEIGHT) {
       spawnX = POPUP_WIDTH / 2;
-      spawnY = (pos - POPUP_WIDTH) - POPUP_HEIGHT / 2;
+      spawnY = (pos - POPUP_WIDTH) - POPUP_HEIGHT / 2 + POPUP_LEAF_Y_OFFSET;
       outwardAngle = 0 + (Math.random() - 0.5) * 0.8;
     } else if (pos < 2 * POPUP_WIDTH + POPUP_HEIGHT) {
       spawnX = POPUP_WIDTH / 2 - (pos - POPUP_WIDTH - POPUP_HEIGHT);
-      spawnY = POPUP_HEIGHT / 2;
+      spawnY = POPUP_HEIGHT / 2 + POPUP_LEAF_Y_OFFSET;
       outwardAngle = Math.PI / 2 + (Math.random() - 0.5) * 0.8;
     } else {
       spawnX = -POPUP_WIDTH / 2;
-      spawnY = POPUP_HEIGHT / 2 - (pos - 2 * POPUP_WIDTH - POPUP_HEIGHT);
+      spawnY = POPUP_HEIGHT / 2 - (pos - 2 * POPUP_WIDTH - POPUP_HEIGHT) + POPUP_LEAF_Y_OFFSET;
       outwardAngle = Math.PI + (Math.random() - 0.5) * 0.8;
     }
     
@@ -67,10 +68,10 @@ function createPopupLeaves(): LeafParticle[] {
       id: i,
       sprite: LEAF_SPRITES[i % LEAF_SPRITES.length],
       angle: outwardAngle,
-      speed: Math.random() * 600,
+      speed: Math.random() * 400,
       rotationSpeed: (Math.random() - 0.5) * 540,
       initialRotation: Math.random() * 360,
-      size: 20 + Math.random() * 20,
+      size: 20 + Math.random() * 10,
       lifetime: POPUP_LEAF_MIN_LIFETIME_MS + Math.random() * (POPUP_LEAF_MAX_LIFETIME_MS - POPUP_LEAF_MIN_LIFETIME_MS),
       delay: 0,
       spawnX,
@@ -148,7 +149,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
 
         const dtSec = 1 / 60;
         const gravity = 60;
-        const drag = 0.92;
+        const drag = 0.9;
 
         p.vy += gravity * dtSec;
         p.vx *= drag;
