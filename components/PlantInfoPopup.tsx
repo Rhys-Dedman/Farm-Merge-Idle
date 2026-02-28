@@ -35,7 +35,7 @@ const POPUP_LEAF_MIN_LIFETIME_MS = 250;
 const POPUP_LEAF_MAX_LIFETIME_MS = 1000;
 const POPUP_WIDTH = 280;
 const POPUP_HEIGHT = 260;
-const POPUP_LEAF_Y_OFFSET = 20;
+const POPUP_LEAF_Y_OFFSET = -15;
 
 function createPopupLeaves(): LeafParticle[] {
   return Array.from({ length: POPUP_LEAF_COUNT }, (_, i) => {
