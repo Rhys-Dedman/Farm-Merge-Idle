@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { ScreenType } from '../types';
 import { assetPath } from '../utils/assetPath';
 
@@ -14,6 +14,18 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, barnButtonRef, notifications = {} }) => {
+  // Track viewport width for responsive scaling
+  const [viewportWidth, setViewportWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 420);
+  
+  useEffect(() => {
+    const handleResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  
+  // Navbar design width: 3 buttons at 135px each = 405px
+  const navDesignWidth = 405;
+  const navScale = Math.min(1, viewportWidth / navDesignWidth);
   const items: { id: ScreenType; label: string; icon: string }[] = [
     { id: 'STORE', label: 'MARKET', icon: assetPath('/assets/icons/icon_market.png') },
     { id: 'FARM', label: 'FARM', icon: assetPath('/assets/icons/icon_farm.png') },
@@ -43,6 +55,14 @@ export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, ba
         }}
       />
       
+      {/* Scalable button container */}
+      <div
+        className="flex items-start justify-center"
+        style={{
+          transform: `scale(${navScale})`,
+          transformOrigin: 'top center',
+        }}
+      >
       {items.map((item) => {
         const isActive = activeScreen === item.id;
         const hasNotification = notifications[item.id] && !isActive;
@@ -196,6 +216,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, ba
           </div>
         );
       })}
+      </div>
     </nav>
   );
 };
