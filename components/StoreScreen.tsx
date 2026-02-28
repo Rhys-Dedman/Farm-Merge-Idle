@@ -8,10 +8,15 @@ interface StoreScreenProps {
   onAddMoney: (amount: number) => void;
 }
 
+const BUILD_VERSION = 'V-20260228-001';
+
 export const StoreScreen: React.FC<StoreScreenProps> = ({ money, walletFlashActive, onAddMoney }) => {
   return (
     <div className="h-full w-full flex flex-col overflow-y-auto no-scrollbar">
       <PageHeader money={money} walletFlashActive={walletFlashActive} />
+      
+      {/* Build version indicator */}
+      <div className="text-center text-white/40 text-[10px] font-mono mt-1">{BUILD_VERSION}</div>
       
       <div className="flex-grow flex flex-col items-center px-6 space-y-8">
         <div className="w-full text-center mt-4">
