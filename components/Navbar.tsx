@@ -160,7 +160,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, ba
               <div 
                 className="flex flex-col items-center justify-center"
                 style={{
-                  marginTop: isActive ? '-4px' : '10px',
+                  marginTop: isActive ? '-2px' : '10px',
                   transition: isActive 
                     ? 'margin-top 0.25s cubic-bezier(0.0, 1.2, 0.3, 1.3)'
                     : 'margin-top 0.1s ease-in',
@@ -171,8 +171,8 @@ export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, ba
                   alt={item.label}
                   className="transition-all duration-200 ease-out"
                   style={{
-                    width: isActive ? '32px' : '28px',
-                    height: isActive ? '32px' : '28px',
+                    width: isActive ? '30px' : '28px',
+                    height: isActive ? '30px' : '28px',
                     filter: isActive 
                       ? 'brightness(0) saturate(100%) invert(50%) sepia(6%) saturate(500%) hue-rotate(350deg) brightness(92%) contrast(88%)'
                       : 'brightness(0) saturate(100%) invert(22%) sepia(8%) saturate(500%) hue-rotate(340deg) brightness(97%) contrast(90%)',
