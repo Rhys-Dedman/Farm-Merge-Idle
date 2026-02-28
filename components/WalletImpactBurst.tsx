@@ -20,6 +20,7 @@ interface WalletImpactBurstProps {
   walletIconRef: React.RefObject<HTMLElement | null>;
   containerRef: React.RefObject<HTMLDivElement | null>;
   onComplete?: () => void;
+  appScale?: number;
 }
 
 export const WalletImpactBurst: React.FC<WalletImpactBurstProps> = ({
@@ -27,6 +28,7 @@ export const WalletImpactBurst: React.FC<WalletImpactBurstProps> = ({
   walletIconRef,
   containerRef,
   onComplete,
+  appScale = 1,
 }) => {
   const [particles, setParticles] = useState<Array<Particle & { x: number; y: number; opacity: number; scale: number }>>([]);
   const [isDone, setIsDone] = useState(false);
@@ -48,8 +50,8 @@ export const WalletImpactBurst: React.FC<WalletImpactBurstProps> = ({
 
     const rect = icon.getBoundingClientRect();
     const contRect = container.getBoundingClientRect();
-    const ox = rect.left + rect.width / 2 - contRect.left;
-    const oy = rect.top + rect.height / 2 - contRect.top;
+    const ox = (rect.left + rect.width / 2 - contRect.left) / appScale;
+    const oy = (rect.top + rect.height / 2 - contRect.top) / appScale;
     originRef.current = { x: ox, y: oy };
 
     const newParticles: Array<Particle & { x: number; y: number; opacity: number; scale: number }> = Array.from(

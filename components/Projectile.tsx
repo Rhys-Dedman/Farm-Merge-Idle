@@ -6,6 +6,7 @@ interface ProjectileProps {
   data: ProjectileData;
   onImpact: (targetIdx: number) => void;
   onComplete: () => void;
+  appScale?: number;
 }
 
 interface Point {
@@ -23,7 +24,7 @@ interface Sparkle {
   vy: number;
 }
 
-export const Projectile: React.FC<ProjectileProps> = ({ data, onImpact, onComplete }) => {
+export const Projectile: React.FC<ProjectileProps> = ({ data, onImpact, onComplete, appScale = 1 }) => {
   const [airPos, setAirPos] = useState<Point>({ x: data.startX, y: data.startY });
   const [shadowPos, setShadowPos] = useState<Point>({ x: data.startX, y: data.startY });
   
@@ -49,13 +50,13 @@ export const Projectile: React.FC<ProjectileProps> = ({ data, onImpact, onComple
     if (el && container) {
       const rect = el.getBoundingClientRect();
       const containerRect = container.getBoundingClientRect();
-      setContainerHeight(containerRect.height);
+      setContainerHeight(containerRect.height / appScale);
       setTargetCoords({
-        x: (rect.left + rect.width / 2) - containerRect.left,
-        y: (rect.top + rect.height / 2) - containerRect.top
+        x: ((rect.left + rect.width / 2) - containerRect.left) / appScale,
+        y: ((rect.top + rect.height / 2) - containerRect.top) / appScale
       });
     }
-  }, [data.targetIdx]);
+  }, [data.targetIdx, appScale]);
 
   useEffect(() => {
     if (!targetCoords) return;

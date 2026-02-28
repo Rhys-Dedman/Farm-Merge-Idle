@@ -36,6 +36,8 @@ interface HexBoardProps {
   unlockingCellIndices?: number[];
   /** Cell indices currently being fertilized (for fertilize animation) */
   fertilizingCellIndices?: number[];
+  /** App scale factor for coordinate calculations */
+  appScale?: number;
 }
 
 // Increase when you add more plant_N.png. Merge level N uses plant_N (e.g. two plant_1 → plant_2).
@@ -75,6 +77,7 @@ export const HexBoard: React.FC<HexBoardProps> = ({
   onEmptyCellTap,
   unlockingCellIndices = [],
   fertilizingCellIndices = [],
+  appScale = 1,
 }) => {
   const liftStartRef = useRef<number>(0);
   const flyStartRef = useRef<number>(0);
@@ -116,10 +119,10 @@ export const HexBoard: React.FC<HexBoardProps> = ({
     const hexRect = hexEl.getBoundingClientRect();
     const contRect = container.getBoundingClientRect();
     return {
-      x: hexRect.left + hexRect.width / 2 - contRect.left,
-      y: hexRect.top + hexRect.height / 2 - contRect.top,
+      x: (hexRect.left + hexRect.width / 2 - contRect.left) / appScale,
+      y: (hexRect.top + hexRect.height / 2 - contRect.top) / appScale,
     };
-  }, [containerRef]);
+  }, [containerRef, appScale]);
 
   const getCellIndexUnderPoint = useCallback((clientX: number, clientY: number): number | null => {
     const el = document.elementFromPoint(clientX, clientY);
@@ -137,19 +140,21 @@ export const HexBoard: React.FC<HexBoardProps> = ({
     if (!container) return;
     const contRect = container.getBoundingClientRect();
     const origin = getHexCenterInContainer(cellIdx);
+    const pointerX = (clientX - contRect.left) / appScale;
+    const pointerY = (clientY - contRect.top) / appScale;
     setDragState({
       phase: 'holding',
       cellIdx,
       item: cell.item,
-      pointerX: clientX - contRect.left,
-      pointerY: clientY - contRect.top,
+      pointerX,
+      pointerY,
       originX: origin.x,
       originY: origin.y,
       liftProgress: 0,
       scaleProgress: 0,
     });
     liftStartRef.current = Date.now();
-  }, [grid, getHexCenterInContainer, containerRef]);
+  }, [grid, getHexCenterInContainer, containerRef, appScale]);
 
   const startFlyBack = useCallback((state: DragState, targetIdx?: number, isMerge?: boolean) => {
     const curX = state.pointerX;
@@ -212,8 +217,8 @@ export const HexBoard: React.FC<HexBoardProps> = ({
         const container = containerRef.current;
         if (!container) return;
         const contRect = container.getBoundingClientRect();
-        const pointerX = e.clientX - contRect.left;
-        const pointerY = e.clientY - contRect.top;
+        const pointerX = (e.clientX - contRect.left) / appScale;
+        const pointerY = (e.clientY - contRect.top) / appScale;
         const underIdx = getCellIndexUnderPoint(e.clientX, e.clientY);
         const targetCell = underIdx != null ? grid[underIdx] : null;
         // Locked cells cannot be hovered as drop targets
@@ -232,7 +237,7 @@ export const HexBoard: React.FC<HexBoardProps> = ({
         const container = containerRef.current;
         if (!container) return;
         const contRect = container.getBoundingClientRect();
-        const releaseState = { ...dragState, pointerX: e.clientX - contRect.left, pointerY: e.clientY - contRect.top };
+        const releaseState = { ...dragState, pointerX: (e.clientX - contRect.left) / appScale, pointerY: (e.clientY - contRect.top) / appScale };
         const inBounds = contRect.left <= e.clientX && e.clientX <= contRect.right && contRect.top <= e.clientY && e.clientY <= contRect.bottom;
         const targetCell = targetIdx != null ? grid[targetIdx] : null;
         // Locked cells cannot be drop targets

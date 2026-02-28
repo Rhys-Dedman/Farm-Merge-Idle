@@ -27,6 +27,7 @@ interface BarnParticleProps {
   barnButtonRef: React.RefObject<HTMLElement | null>;
   onImpact?: () => void;
   onComplete: () => void;
+  appScale?: number;
 }
 
 export const BarnParticle: React.FC<BarnParticleProps> = ({
@@ -35,6 +36,7 @@ export const BarnParticle: React.FC<BarnParticleProps> = ({
   barnButtonRef,
   onImpact,
   onComplete,
+  appScale = 1,
 }) => {
   const [phase, setPhase] = useState<'moving' | 'trailOnly'>('moving');
   const [pos, setPos] = useState<Point>({ x: data.startX, y: data.startY });
@@ -62,8 +64,8 @@ export const BarnParticle: React.FC<BarnParticleProps> = ({
       const br = barnButton.getBoundingClientRect();
       const cr = container.getBoundingClientRect();
       return {
-        x: br.left + br.width / 2 - cr.left,
-        y: br.top + br.height / 2 - cr.top,
+        x: (br.left + br.width / 2 - cr.left) / appScale,
+        y: (br.top + br.height / 2 - cr.top) / appScale,
       };
     };
 

@@ -51,6 +51,7 @@ interface CoinPanelProps {
   walletIconRef?: React.RefObject<HTMLElement | null>;
   onImpact: (value: number) => void;
   onComplete: () => void;
+  appScale?: number;
 }
 
 export const CoinPanel: React.FC<CoinPanelProps> = ({
@@ -58,6 +59,7 @@ export const CoinPanel: React.FC<CoinPanelProps> = ({
   containerRef,
   walletRef,
   walletIconRef,
+  appScale = 1,
   onImpact,
   onComplete,
 }) => {
@@ -101,8 +103,8 @@ export const CoinPanel: React.FC<CoinPanelProps> = ({
       const wr = el.getBoundingClientRect();
       const cr = container.getBoundingClientRect();
       return {
-        x: wr.left + wr.width / 2 - cr.left,
-        y: wr.top + wr.height / 2 - cr.top,
+        x: (wr.left + wr.width / 2 - cr.left) / appScale,
+        y: (wr.top + wr.height / 2 - cr.top) / appScale,
       };
     };
 

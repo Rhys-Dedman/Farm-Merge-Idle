@@ -194,6 +194,8 @@ export default function App() {
   const scaleX = viewportWidth / baseWidth;
   const scaleY = viewportHeight / baseHeight;
   const appScale = Math.min(scaleX, scaleY);
+  const appScaleRef = useRef(appScale);
+  appScaleRef.current = appScale;
   
   // Calculate barn scale: only apply on narrow mobile screens (below 500px)
   // On wider screens, use scale 1 (no scaling)
@@ -366,10 +368,11 @@ export default function App() {
 
   const spawnProjectile = useCallback((targetIdx: number, plantLevel: number) => {
     if (plantButtonRef.current && containerRef.current) {
+      const scale = appScaleRef.current;
       const btnRect = plantButtonRef.current.getBoundingClientRect();
       const containerRect = containerRef.current.getBoundingClientRect();
-      const startX = (btnRect.left + btnRect.width / 2) - containerRect.left;
-      const startY = (btnRect.top + btnRect.height / 2) - containerRect.top;
+      const startX = ((btnRect.left + btnRect.width / 2) - containerRect.left) / scale;
+      const startY = ((btnRect.top + btnRect.height / 2) - containerRect.top) / scale;
       
       const newProj: ProjectileData = {
         id: Math.random().toString(36).substr(2, 9),
@@ -473,15 +476,16 @@ export default function App() {
       const walletEl = walletIcon || wallet;
       
       if (container && plantBtn && walletEl) {
+        const scale = appScaleRef.current;
         const containerRect = container.getBoundingClientRect();
         const btnRect = plantBtn.getBoundingClientRect();
         
-        const startX = btnRect.left + btnRect.width / 2 - containerRect.left;
-        const startY = btnRect.top + btnRect.height / 2 - containerRect.top;
+        const startX = (btnRect.left + btnRect.width / 2 - containerRect.left) / scale;
+        const startY = (btnRect.top + btnRect.height / 2 - containerRect.top) / scale;
         const hoverX = startX;
         const panelHeightPx = 14;
         const offsetUp = (panelHeightPx / 2 + 4) * 1.2;
-        const hoverY = btnRect.top - containerRect.top - offsetUp;
+        const hoverY = (btnRect.top - containerRect.top) / scale - offsetUp;
         
         setActiveCoinPanels((prev) => [
           ...prev,
@@ -892,10 +896,11 @@ export default function App() {
     const harvestCellIndices: number[] = [];
 
     if (container && walletEl) {
+      const scale = appScaleRef.current;
       const containerRect = container.getBoundingClientRect();
       const walletRect = walletEl.getBoundingClientRect();
-      const walletCenterX = walletRect.left + walletRect.width / 2 - containerRect.left;
-      const walletCenterY = walletRect.top + walletRect.height / 2 - containerRect.top;
+      const walletCenterX = (walletRect.left + walletRect.width / 2 - containerRect.left) / scale;
+      const walletCenterY = (walletRect.top + walletRect.height / 2 - containerRect.top) / scale;
 
       const panelsWithDist: { panel: CoinPanelData; dist: number }[] = [];
 
@@ -929,10 +934,10 @@ export default function App() {
         const hexEl = document.getElementById(`hex-${cellIdx}`);
         if (!hexEl) return;
         const hexRect = hexEl.getBoundingClientRect();
-        const startX = hexRect.left + hexRect.width / 2 - containerRect.left;
-        const startY = hexRect.top + hexRect.height / 2 - containerRect.top;
+        const startX = (hexRect.left + hexRect.width / 2 - containerRect.left) / scale;
+        const startY = (hexRect.top + hexRect.height / 2 - containerRect.top) / scale;
         const hoverX = startX;
-        const hexTopY = hexRect.top - containerRect.top;
+        const hexTopY = (hexRect.top - containerRect.top) / scale;
         const panelHeightPx = 14;
         const offsetUp = (panelHeightPx / 2 + 4) * 0.8;
         const hoverY = hexTopY - offsetUp;
@@ -1026,10 +1031,11 @@ export default function App() {
     
     if (triggeredCells.length === 0) return;
 
+    const scale = appScaleRef.current;
     const containerRect = container.getBoundingClientRect();
     const walletRect = walletEl.getBoundingClientRect();
-    const walletCenterX = walletRect.left + walletRect.width / 2 - containerRect.left;
-    const walletCenterY = walletRect.top + walletRect.height / 2 - containerRect.top;
+    const walletCenterX = (walletRect.left + walletRect.width / 2 - containerRect.left) / scale;
+    const walletCenterY = (walletRect.top + walletRect.height / 2 - containerRect.top) / scale;
 
     const panelsWithDist: { panel: CoinPanelData; dist: number }[] = [];
     const cropValueMultiplier = getCropValueMultiplier(harvestState);
@@ -1056,10 +1062,10 @@ export default function App() {
       if (!hexEl) return;
       
       const hexRect = hexEl.getBoundingClientRect();
-      const startX = hexRect.left + hexRect.width / 2 - containerRect.left;
-      const startY = hexRect.top + hexRect.height / 2 - containerRect.top;
+      const startX = (hexRect.left + hexRect.width / 2 - containerRect.left) / scale;
+      const startY = (hexRect.top + hexRect.height / 2 - containerRect.top) / scale;
       const hoverX = startX;
-      const hexTopY = hexRect.top - containerRect.top;
+      const hexTopY = (hexRect.top - containerRect.top) / scale;
       const panelHeightPx = 14;
       const offsetUp = (panelHeightPx / 2 + 4) * 0.8;
       const hoverY = hexTopY - offsetUp;
@@ -1398,16 +1404,18 @@ export default function App() {
                     onEmptyCellTap={handleEmptyCellTap}
                     unlockingCellIndices={unlockingCellIndices}
                     fertilizingCellIndices={fertilizingCellIndices}
+                    appScale={appScale}
                     onMergeImpactStart={(cellIdx, px, py, mergeResultLevel) => {
                       const container = containerRef.current;
                       if (!container) return;
+                      const scale = appScaleRef.current;
                       const rect = container.getBoundingClientRect();
                       setLeafBursts((prev) => [
                         ...prev,
                         {
                           id: Math.random().toString(36).slice(2),
-                          x: rect.left + px,
-                          y: rect.top + py,
+                          x: rect.left + px * scale,
+                          y: rect.top + py * scale,
                           startTime: Date.now(),
                         },
                       ]);
@@ -1420,7 +1428,7 @@ export default function App() {
                         const offsetUp = (panelHeightPx / 2 + 4) * 0.4;
                         const hoverX = px;
                         const hoverY = hexEl
-                          ? (hexEl.getBoundingClientRect().top - rect.top) - offsetUp
+                          ? ((hexEl.getBoundingClientRect().top - rect.top) / scale) - offsetUp
                           : py - offsetUp;
                         setActiveCoinPanels((prev) => [
                           ...prev,
@@ -1686,6 +1694,7 @@ export default function App() {
             <Projectile 
               key={p.id}
               data={p}
+              appScale={appScale}
               onImpact={(targetIdx) => {
                 // Use the plantLevel that was determined when the seed was shot
                 spawnCropAt(targetIdx, p.plantLevel);
@@ -1730,6 +1739,7 @@ export default function App() {
               containerRef={containerRef}
               walletRef={walletRef}
               walletIconRef={walletIconRef}
+              appScale={appScale}
               onImpact={(value) => {
                 setMoney(prev => prev + value);
                 setWalletFlashActive(true);
@@ -1746,6 +1756,7 @@ export default function App() {
               trigger={burst.trigger}
               walletIconRef={walletIconRef}
               containerRef={containerRef}
+              appScale={appScale}
               onComplete={() => setWalletBursts((prev) => prev.filter((b) => b.id !== burst.id))}
             />
           ))}
@@ -1766,11 +1777,12 @@ export default function App() {
               onButtonClick={(buttonRect) => {
                 const container = containerRef.current;
                 if (!container) return;
+                const scale = appScaleRef.current;
                 const containerRect = container.getBoundingClientRect();
                 setBarnParticles(prev => [...prev, {
                   id: `barn-${Date.now()}`,
-                  startX: buttonRect.left + buttonRect.width / 2 - containerRect.left,
-                  startY: buttonRect.top + buttonRect.height / 2 - containerRect.top,
+                  startX: (buttonRect.left + buttonRect.width / 2 - containerRect.left) / scale,
+                  startY: (buttonRect.top + buttonRect.height / 2 - containerRect.top) / scale,
                 }]);
               }}
             />
@@ -1783,6 +1795,7 @@ export default function App() {
               data={particle}
               containerRef={containerRef}
               barnButtonRef={barnButtonRef}
+              appScale={appScale}
               onImpact={() => setBarnNotification(true)}
               onComplete={() => setBarnParticles(prev => prev.filter(p => p.id !== particle.id))}
             />
