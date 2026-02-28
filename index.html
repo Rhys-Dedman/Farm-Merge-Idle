@@ -24,9 +24,15 @@
         :root {
             --vh: 1vh;
         }
-        html, body, #root {
+        html, body {
             height: 100%;
             height: calc(var(--vh, 1vh) * 100);
+        }
+        #root {
+            height: 100%;
+            max-width: calc(100vh * 9 / 16);
+            margin: 0 auto;
+            position: relative;
         }
         body {
             font-family: 'Inter', sans-serif;
