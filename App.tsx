@@ -193,8 +193,7 @@ export default function App() {
   const baseHeight = 796; // 448 * 16/9
   const scaleX = viewportWidth / baseWidth;
   const scaleY = viewportHeight / baseHeight;
-  // Multiply by 0.88 to add padding and ensure it fits
-  const appScale = Math.min(scaleX, scaleY) * 0.88;
+  const appScale = Math.min(scaleX, scaleY);
   
   // Calculate barn scale: only apply on narrow mobile screens (below 500px)
   // On wider screens, use scale 1 (no scaling)
