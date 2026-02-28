@@ -107,7 +107,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('SEEDS');
   const [activeScreen, setActiveScreen] = useState<ScreenType>('FARM');
   const [isExpanded, setIsExpanded] = useState(true);
-  const [money, setMoney] = useState(1000000);
+  const [money, setMoney] = useState(0);
 
   const [grid, setGrid] = useState<BoardCell[]>(generateInitialGrid());
   const [seedProgress, setSeedProgress] = useState(0);

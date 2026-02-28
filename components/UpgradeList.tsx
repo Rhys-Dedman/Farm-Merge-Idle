@@ -130,33 +130,93 @@ interface UpgradeListProps {
 interface UpgradeDef {
   id: string;
   name: string;
-  cost: string;
   icon: string;
   description?: string;
 }
 
+/** Upgrade cost configuration: base cost and growth rate per level */
+interface UpgradeCostConfig {
+  baseCost: number;
+  growth: number;
+  /** For stage-based pricing (seed_quality), costs per stage */
+  stageCosts?: number[];
+}
+
+const UPGRADE_COSTS: Record<string, UpgradeCostConfig> = {
+  // SEEDS
+  seed_production: { baseCost: 75, growth: 1.18 },
+  seed_storage: { baseCost: 40, growth: 1.16 },
+  seed_surplus: { baseCost: 120, growth: 1.22 },
+  bonus_seeds: { baseCost: 300, growth: 1.28 }, // Seed Luck
+  seed_quality: { baseCost: 250, growth: 1, stageCosts: [250, 900, 3000, 10000] }, // Stage-based pricing
+  
+  // CROPS (Plots)
+  plot_expansion: { baseCost: 150, growth: 1.35 },
+  crop_merging: { baseCost: 200, growth: 1.20 },
+  merge_harvest: { baseCost: 350, growth: 1.27 },
+  lucky_merge: { baseCost: 600, growth: 1.30 },
+  fertile_soil: { baseCost: 500, growth: 1.33 },
+  
+  // HARVEST
+  harvest_speed: { baseCost: 90, growth: 1.18 },
+  crop_value: { baseCost: 250, growth: 1.23 },
+  crop_synergy: { baseCost: 300, growth: 1.24 },
+  harvest_boost: { baseCost: 180, growth: 1.22 },
+  lucky_harvest: { baseCost: 450, growth: 1.27 },
+};
+
+/** Calculate upgrade cost for a given level, rounded to nearest 5 */
+const calculateUpgradeCost = (upgradeId: string, currentLevel: number): number => {
+  const config = UPGRADE_COSTS[upgradeId];
+  if (!config) return 0;
+  
+  // Special handling for seed_quality: stage-based pricing
+  if (upgradeId === 'seed_quality' && config.stageCosts) {
+    const stage = Math.floor(currentLevel / 10); // 0-9 = stage 0, 10-19 = stage 1, etc.
+    const stageCost = config.stageCosts[Math.min(stage, config.stageCosts.length - 1)];
+    return Math.round(stageCost / 5) * 5;
+  }
+  
+  // Normal exponential scaling: cost = base * (growth^level)
+  const rawCost = config.baseCost * Math.pow(config.growth, currentLevel);
+  return Math.round(rawCost / 5) * 5;
+};
+
+/** Format cost for display (e.g., 1500 -> "1.5K", 2500000 -> "2.5M") */
+const formatCost = (cost: number): string => {
+  if (cost >= 1000000) {
+    const millions = cost / 1000000;
+    return millions % 1 === 0 ? `${millions}M` : `${millions.toFixed(1)}M`;
+  }
+  if (cost >= 1000) {
+    const thousands = cost / 1000;
+    return thousands % 1 === 0 ? `${thousands}K` : `${thousands.toFixed(1)}K`;
+  }
+  return cost.toString();
+};
+
 const SEEDS_UPGRADES: UpgradeDef[] = [
-  { id: 'seed_production', name: 'Seed Production', cost: '150', icon: '🌱', description: 'Increase automatic seed production speed' },
-  { id: 'seed_quality', name: 'Seed Quality', cost: '500', icon: '🍎' }, // Description is dynamic, rendered inline
-  { id: 'seed_storage', name: 'Seed Storage', cost: '2.5K', icon: '📦', description: 'Increase the amount of seeds you can store' },
-  { id: 'seed_surplus', name: 'Seed Surplus', cost: '50K', icon: '🪙', description: 'Extra seeds become coins when storage is full' },
-  { id: 'bonus_seeds', name: 'Seed Luck', cost: '10K', icon: '🍀', description: 'Increase the chance to produce a bonus plant' },
+  { id: 'seed_production', name: 'Seed Production', icon: '🌱', description: 'Increase automatic seed production speed' },
+  { id: 'seed_quality', name: 'Seed Quality', icon: '🍎' }, // Description is dynamic, rendered inline
+  { id: 'seed_storage', name: 'Seed Storage', icon: '📦', description: 'Increase the amount of seeds you can store' },
+  { id: 'seed_surplus', name: 'Seed Surplus', icon: '🪙', description: 'Extra seeds become coins when storage is full' },
+  { id: 'bonus_seeds', name: 'Seed Luck', icon: '🍀', description: 'Increase the chance to produce a bonus plant' },
 ];
 
 const CROPS_UPGRADES: UpgradeDef[] = [
-  { id: 'plot_expansion', name: 'Plot Expansion', cost: '500', icon: '🗺️', description: 'Unlock additional plots for planting crops' },
-  { id: 'crop_merging', name: 'Crop Merging', cost: '150', icon: '🪙', description: 'Multiply coins earned from merging crops' },
-  { id: 'merge_harvest', name: 'Merge Harvest', cost: '2.5K', icon: '🌿', description: 'Merges have a chance to instantly harvest adjacent crops' },
-  { id: 'fertile_soil', name: 'Fertile Soil', cost: '10K', icon: '🥕', description: 'Fertile plots double the value of crops when harvested' },
-  { id: 'lucky_merge', name: 'Lucky Merge', cost: '50K', icon: '✨', description: 'Increase chance for merges to upgrade crops by +2 levels' },
+  { id: 'plot_expansion', name: 'Plot Expansion', icon: '🗺️', description: 'Unlock additional plots for planting crops' },
+  { id: 'crop_merging', name: 'Crop Merging', icon: '🪙', description: 'Multiply coins earned from merging crops' },
+  { id: 'merge_harvest', name: 'Merge Harvest', icon: '🌿', description: 'Merges have a chance to instantly harvest adjacent crops' },
+  { id: 'fertile_soil', name: 'Fertile Soil', icon: '🥕', description: 'Fertile plots double the value of crops when harvested' },
+  { id: 'lucky_merge', name: 'Lucky Merge', icon: '✨', description: 'Increase chance for merges to upgrade crops by +2 levels' },
 ];
 
 const HARVEST_UPGRADES: UpgradeDef[] = [
-  { id: 'harvest_speed', name: 'Harvest Speed', cost: '150', icon: '🚜', description: 'Increase automatic harvest cycle speed' },
-  { id: 'crop_value', name: 'Crop Value', cost: '500', icon: '💰', description: 'Increase coin value of harvested crops' },
-  { id: 'harvest_boost', name: 'Harvest Boost', cost: '2.5K', icon: '🥬', description: 'Merging crops increases the crop cycle progress' },
-  { id: 'crop_synergy', name: 'Crop Synergy', cost: '10K', icon: '🌾', description: 'Increase coin value from adjacent matching crops' },
-  { id: 'lucky_harvest', name: 'Lucky Harvest', cost: '50K', icon: '🍀', description: 'Increase the chance for a double harvest' },
+  { id: 'harvest_speed', name: 'Harvest Speed', icon: '🚜', description: 'Increase automatic harvest cycle speed' },
+  { id: 'crop_value', name: 'Crop Value', icon: '💰', description: 'Increase coin value of harvested crops' },
+  { id: 'harvest_boost', name: 'Harvest Boost', icon: '🥬', description: 'Merging crops increases the crop cycle progress' },
+  { id: 'crop_synergy', name: 'Crop Synergy', icon: '🌾', description: 'Increase coin value from adjacent matching crops' },
+  { id: 'lucky_harvest', name: 'Lucky Harvest', icon: '🍀', description: 'Increase the chance for a double harvest' },
 ];
 
 const getUpgradesForTab = (tab: TabType): UpgradeDef[] => {
@@ -267,6 +327,17 @@ const parseCost = (cost: string): number => {
   if (cost.includes('K')) return num * 1000;
   if (cost.includes('M')) return num * 1000000;
   return num;
+};
+
+/** Get the display cost string for an upgrade based on its current level */
+const getUpgradeCost = (upgradeId: string, currentLevel: number): string => {
+  const cost = calculateUpgradeCost(upgradeId, currentLevel);
+  return formatCost(cost);
+};
+
+/** Get the numeric cost for an upgrade based on its current level */
+const getUpgradeCostValue = (upgradeId: string, currentLevel: number): number => {
+  return calculateUpgradeCost(upgradeId, currentLevel);
 };
 
 const createInitialState = (upgrades: UpgradeDef[]) =>
@@ -407,19 +478,81 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
         }
       };
 
+      // Touch event handlers (mirror mouse handlers for mobile support)
+      const handleTouchStart = (e: TouchEvent) => {
+        if (e.touches.length !== 1) return;
+        isDown = true;
+        directionLocked = 'none';
+        velocityV = 0;
+        cancelAnimationFrame(rafId);
+        startX = e.touches[0].pageX;
+        startY = e.touches[0].pageY;
+        scrollTop = el.scrollTop;
+        lastY = e.touches[0].pageY;
+        lastTime = Date.now();
+      };
+
+      const handleTouchMove = (e: TouchEvent) => {
+        if (!isDown || e.touches.length !== 1) return;
+        const dx = e.touches[0].pageX - startX;
+        const dy = e.touches[0].pageY - startY;
+        if (directionLocked === 'none') {
+          if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+            directionLocked = Math.abs(dx) > Math.abs(dy) ? 'horizontal' : 'vertical';
+            if (directionLocked === 'horizontal') setIsHorizontalDragging(true);
+          }
+          return;
+        }
+        if (directionLocked === 'horizontal') {
+          e.preventDefault();
+          setDragOffset(dx);
+        } else if (directionLocked === 'vertical') {
+          const now = Date.now();
+          if (now - lastTime > 0) velocityV = velocityV * 0.2 + (e.touches[0].pageY - lastY) * 0.8;
+          el.scrollTop = Math.max(0, Math.min(scrollTop - dy, el.scrollHeight - el.clientHeight));
+          lastY = e.touches[0].pageY;
+          lastTime = now;
+        }
+      };
+
+      const handleTouchEnd = (e: TouchEvent) => {
+        if (!isDown) return;
+        isDown = false;
+        const touch = e.changedTouches[0];
+        const finalDx = touch.pageX - startX;
+        if (directionLocked === 'horizontal') {
+          setIsHorizontalDragging(false);
+          setDragOffset(0);
+          const currentIndex = TABS.indexOf(activeTab);
+          if (finalDx > 100 && currentIndex > 0) onTabChange(TABS[currentIndex - 1]);
+          else if (finalDx < -100 && currentIndex < TABS.length - 1) onTabChange(TABS[currentIndex + 1]);
+        } else if (directionLocked === 'vertical' && Math.abs(velocityV) > 1) {
+          rafId = requestAnimationFrame(momentumLoop);
+        }
+      };
+
       el.addEventListener('mousedown', handleMouseDown);
+      el.addEventListener('touchstart', handleTouchStart, { passive: true });
+      el.addEventListener('touchmove', handleTouchMove, { passive: false });
+      el.addEventListener('touchend', handleTouchEnd);
+      el.addEventListener('touchcancel', handleTouchEnd);
+      
       cleanups.push(() => {
         el.removeEventListener('mousedown', handleMouseDown);
         window.removeEventListener('mousemove', handleMouseMoveGlobal);
         window.removeEventListener('mouseup', handleMouseUpGlobal);
+        el.removeEventListener('touchstart', handleTouchStart);
+        el.removeEventListener('touchmove', handleTouchMove);
+        el.removeEventListener('touchend', handleTouchEnd);
+        el.removeEventListener('touchcancel', handleTouchEnd);
         cancelAnimationFrame(rafId);
       });
     });
     return () => cleanups.forEach(c => c());
   }, [activeTab, onTabChange]);
 
-  const handleUpgrade = (id: string, category: TabType, costStr: string) => {
-    const cost = parseCost(costStr);
+  const handleUpgrade = (id: string, category: TabType, currentLevel: number) => {
+    const cost = getUpgradeCostValue(id, currentLevel);
     if (money < cost) return;
     setMoney(prev => prev - cost);
 
@@ -468,7 +601,9 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
     <div ref={(scrollRefs as any)[category]} className="flex-grow overflow-y-auto no-scrollbar px-3 pt-3 pb-3 h-full space-y-2.5 overscroll-contain cursor-grab active:cursor-grabbing select-none">
       {upgrades.map((upgrade) => {
         const state = stateMap[upgrade.id];
-        const canAfford = money >= parseCost(upgrade.cost);
+        const currentCost = getUpgradeCostValue(upgrade.id, state.level);
+        const currentCostDisplay = getUpgradeCost(upgrade.id, state.level);
+        const canAfford = money >= currentCost;
         const isFlashing = flashingIds.has(upgrade.id);
         const isPressed = pressedId === upgrade.id;
         
@@ -559,7 +694,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
                 onMouseDown={() => !isMaxed && canAfford && setPressedId(upgrade.id)}
                 onMouseUp={() => setPressedId(null)}
                 onMouseLeave={() => setPressedId(null)}
-                onClick={() => !isMaxed && handleUpgrade(upgrade.id, category, upgrade.cost)} 
+                onClick={() => !isMaxed && handleUpgrade(upgrade.id, category, state.level)} 
                 className={`relative flex items-center justify-center min-w-[70px] h-8 transition-all border outline outline-1 ${
                   !isMaxed && canAfford 
                     ? 'active:translate-y-[2px] active:border-b-0 active:mb-[4px]' 
@@ -580,7 +715,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
                     color: isPressed ? buttonActiveFontColor : (isMaxed || !canAfford ? buttonDisabledFontColor : buttonFontColor)
                   }}
                 >
-                  {isMaxed ? 'MAX' : upgrade.cost}
+                  {isMaxed ? 'MAX' : currentCostDisplay}
                 </span>
               </button>
             </div>
