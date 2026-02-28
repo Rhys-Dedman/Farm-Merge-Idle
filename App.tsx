@@ -183,9 +183,11 @@ export default function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
   
-  // Calculate barn scale: base design is 420px wide, scale down for narrower screens
-  const barnBaseWidth = 420;
-  const barnScale = Math.min(1, viewportWidth / barnBaseWidth);
+  // Calculate barn scale: shelves are 530px wide (the main visual content width)
+  // Scale down on narrower screens so content fits with some padding
+  const barnDesignWidth = 530;
+  const barnPadding = 20; // 10px padding on each side
+  const barnScale = Math.min(1, (viewportWidth - barnPadding) / barnDesignWidth);
 
   const updateSpriteCenter = useCallback(() => {
     const col = farmColumnRef.current;
