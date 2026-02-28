@@ -174,6 +174,19 @@ export default function App() {
 
   const [spriteCenter, setSpriteCenter] = useState({ x: 50, y: 50 }); // % relative to column, for sprite center
 
+  // Track viewport width for responsive barn scaling
+  const [viewportWidth, setViewportWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 420);
+  
+  useEffect(() => {
+    const handleResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  
+  // Calculate barn scale: base design is 420px wide, scale down for narrower screens
+  const barnBaseWidth = 420;
+  const barnScale = Math.min(1, viewportWidth / barnBaseWidth);
+
   const updateSpriteCenter = useCallback(() => {
     const col = farmColumnRef.current;
     const area = hexAreaRef.current;
@@ -1453,7 +1466,8 @@ export default function App() {
                   className="absolute"
                   style={{ 
                     left: '50%',
-                    transform: `translateX(-50%) translateY(${-barnScrollY}px)`,
+                    transform: `translateX(-50%) translateY(${-barnScrollY}px) scale(${barnScale})`,
+                    transformOrigin: 'top center',
                     width: '420px',
                     minHeight: '150%',
                     overflow: 'visible',
