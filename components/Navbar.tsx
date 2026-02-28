@@ -24,8 +24,12 @@ export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, ba
   }, []);
   
   // Navbar design width: 3 buttons at 135px each = 405px
+  // Only apply scaling on narrow mobile screens
+  const mobileBreakpoint = 500;
   const navDesignWidth = 405;
-  const navScale = Math.min(1, viewportWidth / navDesignWidth);
+  const navScale = viewportWidth >= mobileBreakpoint 
+    ? 1 
+    : Math.min(1, viewportWidth / navDesignWidth);
   const items: { id: ScreenType; label: string; icon: string }[] = [
     { id: 'STORE', label: 'MARKET', icon: assetPath('/assets/icons/icon_market.png') },
     { id: 'FARM', label: 'FARM', icon: assetPath('/assets/icons/icon_farm.png') },

@@ -183,11 +183,14 @@ export default function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
   
-  // Calculate barn scale: shelves are 530px wide (the main visual content width)
-  // Scale down on narrower screens so content fits with some padding
+  // Calculate barn scale: only apply scaling on narrow mobile screens
+  // On wider screens (PC), use full scale since app is capped to 9:16 aspect ratio
+  const mobileBreakpoint = 500; // Below this width, apply mobile scaling
   const barnDesignWidth = 470;
-  const barnPadding = 20; // 10px padding on each side
-  const barnScale = Math.min(1, (viewportWidth - barnPadding) / barnDesignWidth);
+  const barnPadding = 20;
+  const barnScale = viewportWidth >= mobileBreakpoint 
+    ? 1 
+    : Math.min(1, (viewportWidth - barnPadding) / barnDesignWidth);
 
   const updateSpriteCenter = useCallback(() => {
     const col = farmColumnRef.current;
