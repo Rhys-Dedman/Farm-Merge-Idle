@@ -106,7 +106,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, ba
                 right: '50%',
                 marginRight: '67.5px',
                 width: '40px',
-                height: '100%',
+                height: '120%',
                 background: 'linear-gradient(to left, rgba(0,0,0,0.2) 0%, transparent 100%)',
                 opacity: isActive ? 1 : 0,
               }}
@@ -119,7 +119,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, ba
                 left: '50%',
                 marginLeft: '67.5px',
                 width: '40px',
-                height: '100%',
+                height: '120%',
                 background: 'linear-gradient(to right, rgba(0,0,0,0.2) 0%, transparent 100%)',
                 opacity: isActive ? 1 : 0,
               }}

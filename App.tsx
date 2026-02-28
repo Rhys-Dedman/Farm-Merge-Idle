@@ -174,7 +174,7 @@ export default function App() {
 
   const [spriteCenter, setSpriteCenter] = useState({ x: 50, y: 50 }); // % relative to column, for sprite center
 
-  // Track viewport width for responsive barn scaling
+  // Track viewport width for responsive barn scaling (mobile only)
   const [viewportWidth, setViewportWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 420);
   
   useEffect(() => {
@@ -183,9 +183,9 @@ export default function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
   
-  // Calculate barn scale: only apply scaling on narrow mobile screens
-  // On wider screens (PC), use full scale since app is capped to 9:16 aspect ratio
-  const mobileBreakpoint = 500; // Below this width, apply mobile scaling
+  // Calculate barn scale: only apply on narrow mobile screens (below 500px)
+  // On wider screens, use scale 1 (no scaling)
+  const mobileBreakpoint = 500;
   const barnDesignWidth = 470;
   const barnPadding = 20;
   const barnScale = viewportWidth >= mobileBreakpoint 
@@ -1251,7 +1251,7 @@ export default function App() {
       <div 
         ref={containerRef}
         id="game-container"
-        className="relative w-full h-full shadow-[0_0_100px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col select-none font-['Inter'] grass-texture"
+        className="relative w-full max-w-md aspect-[9/16] max-h-screen shadow-[0_0_100px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col select-none font-['Inter'] grass-texture"
       >
         {/* Grass Detail Overlay */}
         <div className="absolute inset-0 pointer-events-none grass-blades opacity-40"></div>
@@ -1498,7 +1498,7 @@ export default function App() {
                       src={assetPath('/assets/barn/barn_roof.png')}
                       alt="Barn Roof"
                       style={{
-                        width: '880px',
+                        width: '800px',
                         height: 'auto',
                         maxWidth: 'none',
                         position: 'relative',
@@ -1514,7 +1514,7 @@ export default function App() {
                       src={assetPath('/assets/barn/barn_tools.png')}
                       alt="Barn Tools"
                       style={{
-                        width: '450px',
+                        width: '400px',
                         height: 'auto',
                         maxWidth: 'none',
                         position: 'relative',
@@ -1534,7 +1534,7 @@ export default function App() {
                           className="flex-shrink-0 relative"
                           style={{
                             marginTop: shelfIndex === 0 ? 0 : -80,
-                            width: '530px',
+                            width: '490px',
                           }}
                         >
                           {/* Shelf image */}
@@ -1550,8 +1550,8 @@ export default function App() {
                             style={{
                               left: '50%',
                               transform: 'translateX(-50%)',
-                              bottom: '135px',
-                              gap: '-2px',
+                              bottom: '125px',
+                              gap: '-10px',
                               zIndex: 10,
                             }}
                           >
@@ -1565,8 +1565,8 @@ export default function App() {
                                   alt={`Plant ${plantLevel}`}
                                   className={`object-contain ${isUnlocked ? 'cursor-pointer pointer-events-auto active:scale-95' : 'pointer-events-none'}`}
                                   style={{
-                                    width: '105px',
-                                    height: '105px',
+                                    width: '95px',
+                                    height: '95px',
                                   }}
                                   onClick={isUnlocked ? (e) => {
                                     e.stopPropagation();
@@ -1783,21 +1783,6 @@ export default function App() {
           )}
         </div>
 
-        {/* Debug Guide: 9:16 aspect ratio (1080x1920) dotted outline */}
-        <div 
-          className="fixed inset-0 pointer-events-none flex items-center justify-center"
-          style={{ zIndex: 9999 }}
-        >
-          <div
-            style={{
-              aspectRatio: '9 / 16',
-              height: '100%',
-              maxWidth: '100%',
-              border: '3px dashed #ff00ff',
-              boxSizing: 'border-box',
-            }}
-          />
-        </div>
       </div>
     </div>
     </ErrorBoundary>
