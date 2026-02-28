@@ -244,7 +244,8 @@ export default function App() {
     const getMaxScroll = () => {
       const shelves = el.querySelector('[data-barn-shelves]') as HTMLElement;
       if (!shelves) return 0;
-      const shelvesBottom = shelves.offsetTop + shelves.offsetHeight;
+      // Account for barn scale - content is scaled so actual visual height is smaller
+      const shelvesBottom = (shelves.offsetTop + shelves.offsetHeight) * barnScale;
       const viewportHeight = el.clientHeight;
       return Math.max(0, shelvesBottom - viewportHeight + 20);
     };
@@ -343,7 +344,7 @@ export default function App() {
       window.removeEventListener('mouseup', handleMouseUpGlobal);
       cancelAnimationFrame(rafId);
     };
-  }, []);
+  }, [barnScale]);
 
   // Grid is "full" when all unlocked cells have items
   const isGridFull = grid.every(cell => cell.locked || cell.item !== null);
