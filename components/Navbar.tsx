@@ -22,7 +22,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, ba
 
   return (
     <nav 
-      className="relative h-[61px] flex items-start justify-center z-50 shrink-0 overflow-visible"
+      className="relative h-[50px] flex items-start justify-center z-50 shrink-0 overflow-visible"
       style={{ backgroundColor: '#282020' }}
     >
       {/* Top stroke layers */}
@@ -160,7 +160,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, ba
               <div 
                 className="flex flex-col items-center justify-center"
                 style={{
-                  marginTop: isActive ? '-2px' : '12px',
+                  marginTop: isActive ? '-4px' : '10px',
                   transition: isActive 
                     ? 'margin-top 0.25s cubic-bezier(0.0, 1.2, 0.3, 1.3)'
                     : 'margin-top 0.1s ease-in',
@@ -171,8 +171,8 @@ export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, ba
                   alt={item.label}
                   className="transition-all duration-200 ease-out"
                   style={{
-width: isActive ? '34px' : '32px',
-                                    height: isActive ? '34px' : '32px',
+                    width: isActive ? '32px' : '28px',
+                    height: isActive ? '32px' : '28px',
                     filter: isActive 
                       ? 'brightness(0) saturate(100%) invert(50%) sepia(6%) saturate(500%) hue-rotate(350deg) brightness(92%) contrast(88%)'
                       : 'brightness(0) saturate(100%) invert(22%) sepia(8%) saturate(500%) hue-rotate(340deg) brightness(97%) contrast(90%)',
@@ -182,7 +182,7 @@ width: isActive ? '34px' : '32px',
                   <span 
                     className="font-bold tracking-wider uppercase transition-opacity duration-300"
                     style={{
-                      fontSize: '10px',
+                      fontSize: '9px',
                       color: '#7f7265',
                       marginTop: '4px',
                       letterSpacing: '0.1em',
