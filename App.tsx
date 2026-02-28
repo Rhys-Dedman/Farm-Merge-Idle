@@ -1500,8 +1500,8 @@ export default function App() {
                     />
                   </div>
 
-                  {/* Shelves and plants wrapper */}
-                  <div className="relative" style={{ marginTop: -60 }} data-barn-shelves>
+                  {/* Shelves and plants wrapper - uses fixed pixel positioning to match background */}
+                  <div className="relative" style={{ marginTop: -40 }} data-barn-shelves>
                     {/* Shelves layer */}
                     <div className="flex flex-col items-center">
                       {[0, 1, 2, 3, 4, 5].map((shelfIndex) => (
@@ -1522,7 +1522,7 @@ export default function App() {
                         </div>
                       ))}
                     </div>
-                    {/* Plants overlay layer - positioned absolutely over shelves */}
+                    {/* Plants overlay layer - positioned absolutely over shelves with fixed pixel sizes */}
                     <div className="absolute inset-0 flex flex-col items-center pointer-events-none" style={{ zIndex: 10, marginTop: -30 }}>
                       {[0, 1, 2, 3, 4, 5].map((shelfIndex) => {
                         const startPlant = shelfIndex * 4 + 1;
@@ -1542,15 +1542,14 @@ export default function App() {
                               alt=""
                               className="invisible"
                             />
-                            {/* Plants positioned on shelf */}
+                            {/* Plants positioned on shelf - fixed 60px size to match shelf scale */}
                             <div 
-                              className="absolute flex justify-center gap-2"
+                              className="absolute flex justify-center"
                               style={{
                                 left: '50%',
                                 transform: 'translateX(-50%)',
                                 bottom: '40%',
-                                paddingLeft: '20px',
-                                paddingRight: '20px',
+                                gap: '8px',
                               }}
                             >
                               {[0, 1, 2, 3].map((plantOffset) => {
@@ -1561,7 +1560,11 @@ export default function App() {
                                     key={plantOffset}
                                     src={assetPath(`/assets/plants/plant_${isUnlocked ? plantLevel : 0}.png`)}
                                     alt={`Plant ${plantLevel}`}
-                                    className={`w-20 h-20 object-contain ${isUnlocked ? 'cursor-pointer pointer-events-auto active:scale-95' : 'pointer-events-none'}`}
+                                    className={`object-contain ${isUnlocked ? 'cursor-pointer pointer-events-auto active:scale-95' : 'pointer-events-none'}`}
+                                    style={{
+                                      width: '60px',
+                                      height: '60px',
+                                    }}
                                     onClick={isUnlocked ? (e) => {
                                       e.stopPropagation();
                                       setPlantInfoPopup({ isVisible: true, level: plantLevel });

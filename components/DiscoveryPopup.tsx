@@ -358,12 +358,11 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
         </div>
       )}
 
-      {/* Popup Container */}
+      {/* Popup Container - centered on screen with fixed dimensions */}
       <div 
         className="relative flex flex-col items-center"
         style={{ 
           width: '320px',
-          marginTop: '100px',
           zIndex: 102,
           animation: isEntering 
             ? 'popupEnter 250ms ease-out forwards'
