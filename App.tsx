@@ -1487,8 +1487,20 @@ export default function App() {
                     />
                   </div>
 
+                  {/* Barn tools - below roof, above shelves */}
+                  <div className="relative flex justify-center pointer-events-none" style={{ zIndex: 1, marginTop: 60 }}>
+                    <img
+                      src="/assets/barn/barn_tools.png"
+                      alt="Barn Tools"
+                      style={{
+                        transform: 'scale(0.95)',
+                        transformOrigin: 'center top',
+                      }}
+                    />
+                  </div>
+
                   {/* Shelves and plants wrapper */}
-                  <div className="relative pt-16" data-barn-shelves>
+                  <div className="relative" style={{ marginTop: -60 }} data-barn-shelves>
                     {/* Shelves layer */}
                     <div className="flex flex-col items-center">
                       {[0, 1, 2, 3, 4, 5].map((shelfIndex) => (
@@ -1510,7 +1522,7 @@ export default function App() {
                       ))}
                     </div>
                     {/* Plants overlay layer - positioned absolutely over shelves */}
-                    <div className="absolute inset-0 pt-8 flex flex-col items-center pointer-events-none" style={{ zIndex: 10 }}>
+                    <div className="absolute inset-0 flex flex-col items-center pointer-events-none" style={{ zIndex: 10, marginTop: -30 }}>
                       {[0, 1, 2, 3, 4, 5].map((shelfIndex) => {
                         const startPlant = shelfIndex * 4 + 1;
                         return (
