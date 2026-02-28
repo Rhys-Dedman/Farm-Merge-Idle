@@ -362,7 +362,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
             width: '640px',
             transform: 'scale(0.5)',
             transformOrigin: 'top center',
-            marginBottom: '-180px',
+            marginBottom: '-220px',
           }}
         >
           <div

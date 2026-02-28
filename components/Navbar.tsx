@@ -22,7 +22,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, ba
 
   return (
     <nav 
-      className="relative h-[50px] flex items-start justify-center z-50 shrink-0 overflow-visible"
+      className="relative h-[55px] flex items-start justify-center z-50 shrink-0 overflow-visible"
       style={{ backgroundColor: '#282020' }}
     >
       {/* Top stroke layers */}

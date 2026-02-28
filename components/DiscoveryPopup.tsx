@@ -438,7 +438,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
             width: '640px',
             transform: 'scale(0.5)',
             transformOrigin: 'top center',
-            marginBottom: '-160px',
+            marginBottom: '-290px',
           }}
         >
           <div

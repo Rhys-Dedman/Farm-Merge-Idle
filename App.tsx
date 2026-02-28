@@ -1405,10 +1405,9 @@ export default function App() {
 
               <div 
                 onClick={(e) => e.stopPropagation()}
-                className={`flex flex-col overflow-hidden relative z-30 shadow-[0_-15px_50px_rgba(0,0,0,0.15)] rounded-t-[32px] transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-                  isExpanded ? 'h-[42%]' : 'h-[50px]'
-                }`}
+                className="flex flex-col overflow-hidden relative z-30 shadow-[0_-15px_50px_rgba(0,0,0,0.15)] rounded-t-[32px] transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
                 style={{
+                  height: isExpanded ? 'calc(45vh - 55px)' : '50px',
                   background: '#fcf0c6',
                   borderTop: '1px solid #ebdbaf'
                 }}
@@ -1448,135 +1447,118 @@ export default function App() {
                 ref={barnScrollRef}
                 className="absolute inset-0 overflow-hidden cursor-grab active:cursor-grabbing select-none z-10"
               >
-                {/* Content container that moves with scroll */}
+                {/* Content container that moves with scroll - fixed width centered, overflow visible for large elements */}
                 <div 
                   data-barn-content
-                  className="absolute inset-x-0"
+                  className="absolute"
                   style={{ 
-                    transform: `translateY(${-barnScrollY}px)`,
+                    left: '50%',
+                    transform: `translateX(-50%) translateY(${-barnScrollY}px)`,
+                    width: '420px',
                     minHeight: '150%',
+                    overflow: 'visible',
                   }}
                 >
-                  {/* Background sprite: moves with content */}
-                  <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 0 }}>
+                  {/* Background sprite: fixed size, centered behind content */}
+                  <div className="absolute pointer-events-none" style={{ zIndex: 0, left: '50%', top: 0, transform: 'translateX(-50%)', overflow: 'visible' }}>
                     <img
                       src={assetPath('/assets/background/background_barn.png')}
                       alt=""
-                      className="absolute flex-shrink-0 flex-grow-0"
                       style={{
-                        left: '50%',
-                        top: '50%',
-                        width: 'auto',
+                        width: '2000px',
                         height: 'auto',
                         maxWidth: 'none',
-                        maxHeight: 'none',
-                        objectFit: 'none',
-                        transform: 'translate(-50%, -50%) scale(0.78)',
                       }}
                     />
                   </div>
 
-                  {/* Barn roof at the top */}
-                  <div className="relative flex justify-center pointer-events-none" style={{ zIndex: 1 }}>
+                  {/* Barn roof at the top - fixed pixel size, centered */}
+                  <div className="relative pointer-events-none" style={{ zIndex: 1, overflow: 'visible' }}>
                     <img
                       src={assetPath('/assets/barn/barn_roof.png')}
                       alt="Barn Roof"
                       style={{
-                        transform: 'scale(1.8)',
-                        transformOrigin: 'center top',
+                        width: '880px',
+                        height: 'auto',
+                        maxWidth: 'none',
+                        position: 'relative',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
                       }}
                     />
                   </div>
 
-                  {/* Barn tools - below roof, above shelves */}
-                  <div className="relative flex justify-center pointer-events-none" style={{ zIndex: 1, marginTop: 60 }}>
+                  {/* Barn tools - fixed pixel size, centered */}
+                  <div className="relative pointer-events-none" style={{ zIndex: 1, marginTop: -10, overflow: 'visible' }}>
                     <img
                       src={assetPath('/assets/barn/barn_tools.png')}
                       alt="Barn Tools"
                       style={{
-                        transform: 'scale(0.95)',
-                        transformOrigin: 'center top',
+                        width: '450px',
+                        height: 'auto',
+                        maxWidth: 'none',
+                        position: 'relative',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
                       }}
                     />
                   </div>
 
-                  {/* Shelves and plants wrapper - uses fixed pixel positioning to match background */}
-                  <div className="relative" style={{ marginTop: -40 }} data-barn-shelves>
-                    {/* Shelves layer */}
-                    <div className="flex flex-col items-center">
-                      {[0, 1, 2, 3, 4, 5].map((shelfIndex) => (
+                  {/* Shelves and plants wrapper - each shelf with its plants in one container */}
+                  <div className="relative flex flex-col items-center" style={{ marginTop: -30 }} data-barn-shelves>
+                    {[0, 1, 2, 3, 4, 5].map((shelfIndex) => {
+                      const startPlant = shelfIndex * 4 + 1;
+                      return (
                         <div
                           key={shelfIndex}
-                          className="flex-shrink-0"
+                          className="flex-shrink-0 relative"
                           style={{
-                            marginTop: shelfIndex === 0 ? 0 : -65,
-                            transform: 'scale(1.1)',
-                            transformOrigin: 'center top',
+                            marginTop: shelfIndex === 0 ? 0 : -80,
+                            width: '530px',
                           }}
                         >
+                          {/* Shelf image */}
                           <img
                             src={assetPath('/assets/barn/barn_shelf.png')}
                             alt={`Shelf ${shelfIndex + 1}`}
                             className="pointer-events-none"
+                            style={{ width: '100%', height: 'auto' }}
                           />
-                        </div>
-                      ))}
-                    </div>
-                    {/* Plants overlay layer - positioned absolutely over shelves with fixed pixel sizes */}
-                    <div className="absolute inset-0 flex flex-col items-center pointer-events-none" style={{ zIndex: 10, marginTop: -30 }}>
-                      {[0, 1, 2, 3, 4, 5].map((shelfIndex) => {
-                        const startPlant = shelfIndex * 4 + 1;
-                        return (
-                          <div
-                            key={shelfIndex}
-                            className="flex-shrink-0 relative"
+                          {/* Plants on this shelf */}
+                          <div 
+                            className="absolute flex justify-center pointer-events-none"
                             style={{
-                              marginTop: shelfIndex === 0 ? 0 : -65,
-                              transform: 'scale(1.1)',
-                              transformOrigin: 'center top',
+                              left: '50%',
+                              transform: 'translateX(-50%)',
+                              bottom: '135px',
+                              gap: '-2px',
+                              zIndex: 10,
                             }}
                           >
-                            {/* Invisible shelf for sizing */}
-                            <img
-                              src={assetPath('/assets/barn/barn_shelf.png')}
-                              alt=""
-                              className="invisible"
-                            />
-                            {/* Plants positioned on shelf - fixed 60px size to match shelf scale */}
-                            <div 
-                              className="absolute flex justify-center"
-                              style={{
-                                left: '50%',
-                                transform: 'translateX(-50%)',
-                                bottom: '40%',
-                                gap: '8px',
-                              }}
-                            >
-                              {[0, 1, 2, 3].map((plantOffset) => {
-                                const plantLevel = startPlant + plantOffset;
-                                const isUnlocked = plantLevel <= highestPlantEver;
-                                return (
-                                  <img
-                                    key={plantOffset}
-                                    src={assetPath(`/assets/plants/plant_${isUnlocked ? plantLevel : 0}.png`)}
-                                    alt={`Plant ${plantLevel}`}
-                                    className={`object-contain ${isUnlocked ? 'cursor-pointer pointer-events-auto active:scale-95' : 'pointer-events-none'}`}
-                                    style={{
-                                      width: '60px',
-                                      height: '60px',
-                                    }}
-                                    onClick={isUnlocked ? (e) => {
-                                      e.stopPropagation();
-                                      setPlantInfoPopup({ isVisible: true, level: plantLevel });
-                                    } : undefined}
-                                  />
-                                );
-                              })}
-                            </div>
+                            {[0, 1, 2, 3].map((plantOffset) => {
+                              const plantLevel = startPlant + plantOffset;
+                              const isUnlocked = plantLevel <= highestPlantEver;
+                              return (
+                                <img
+                                  key={plantOffset}
+                                  src={assetPath(`/assets/plants/plant_${isUnlocked ? plantLevel : 0}.png`)}
+                                  alt={`Plant ${plantLevel}`}
+                                  className={`object-contain ${isUnlocked ? 'cursor-pointer pointer-events-auto active:scale-95' : 'pointer-events-none'}`}
+                                  style={{
+                                    width: '105px',
+                                    height: '105px',
+                                  }}
+                                  onClick={isUnlocked ? (e) => {
+                                    e.stopPropagation();
+                                    setPlantInfoPopup({ isVisible: true, level: plantLevel });
+                                  } : undefined}
+                                />
+                              );
+                            })}
                           </div>
-                        );
-                      })}
-                    </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -1779,6 +1761,22 @@ export default function App() {
               isUnlocked={plantInfoPopup.level <= highestPlantEver}
             />
           )}
+        </div>
+
+        {/* Debug Guide: 9:16 aspect ratio (1080x1920) dotted outline */}
+        <div 
+          className="fixed inset-0 pointer-events-none flex items-center justify-center"
+          style={{ zIndex: 9999 }}
+        >
+          <div
+            style={{
+              aspectRatio: '9 / 16',
+              height: '100%',
+              maxWidth: '100%',
+              border: '3px dashed #ff00ff',
+              boxSizing: 'border-box',
+            }}
+          />
         </div>
       </div>
     </div>
