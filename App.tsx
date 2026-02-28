@@ -174,40 +174,6 @@ export default function App() {
 
   const [spriteCenter, setSpriteCenter] = useState({ x: 50, y: 50 }); // % relative to column, for sprite center
 
-  // Responsive scaling: scale the game container to fit the viewport
-  // Design is based on 9:16 aspect ratio at 448px width (max-w-md)
-  const DESIGN_WIDTH = 448;
-  const DESIGN_ASPECT = 9 / 16;
-  const [viewportScale, setViewportScale] = useState(1);
-
-  useEffect(() => {
-    const updateScale = () => {
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      
-      // Calculate the scale needed to fit the design width into the viewport
-      // On narrow screens, we need to scale down proportionally
-      const widthScale = vw / DESIGN_WIDTH;
-      
-      // Also check height - if viewport is shorter than expected, scale by height
-      const expectedHeight = DESIGN_WIDTH / DESIGN_ASPECT;
-      const heightScale = vh / expectedHeight;
-      
-      // Use the smaller scale to ensure it fits both dimensions
-      const scale = Math.min(widthScale, heightScale, 1); // Cap at 1 (don't scale up)
-      
-      setViewportScale(scale);
-    };
-
-    updateScale();
-    window.addEventListener('resize', updateScale);
-    window.addEventListener('orientationchange', updateScale);
-    return () => {
-      window.removeEventListener('resize', updateScale);
-      window.removeEventListener('orientationchange', updateScale);
-    };
-  }, []);
-
   const updateSpriteCenter = useCallback(() => {
     const col = farmColumnRef.current;
     const area = hexAreaRef.current;
@@ -1266,11 +1232,7 @@ export default function App() {
       <div 
         ref={containerRef}
         id="game-container"
-        className="relative w-[448px] aspect-[9/16] shadow-[0_0_100px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col select-none font-['Inter'] grass-texture"
-        style={{
-          transform: `scale(${viewportScale})`,
-          transformOrigin: 'center center',
-        }}
+        className="relative w-full max-w-md aspect-[9/16] max-h-screen shadow-[0_0_100px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col select-none font-['Inter'] grass-texture"
       >
         {/* Grass Detail Overlay */}
         <div className="absolute inset-0 pointer-events-none grass-blades opacity-40"></div>
