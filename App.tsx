@@ -1237,7 +1237,7 @@ export default function App() {
         {/* Grass Detail Overlay */}
         <div className="absolute inset-0 pointer-events-none grass-blades opacity-40"></div>
 
-        <div className="flex-grow relative overflow-hidden h-full" style={{ zIndex: 10 }}>
+        <div className="flex-grow relative overflow-hidden min-h-0" style={{ zIndex: 10 }}>
           <div 
             className="absolute inset-0 flex transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]"
             style={{ transform: screenTranslateX, width: '300%' }}
