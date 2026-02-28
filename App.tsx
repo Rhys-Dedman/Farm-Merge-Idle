@@ -1232,7 +1232,7 @@ export default function App() {
       <div 
         ref={containerRef}
         id="game-container"
-        className="relative w-full max-w-md aspect-[9/16] max-h-screen shadow-[0_0_100px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col select-none font-['Inter'] grass-texture"
+        className="relative w-full max-w-md h-screen shadow-[0_0_100px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col select-none font-['Inter'] grass-texture"
       >
         {/* Grass Detail Overlay */}
         <div className="absolute inset-0 pointer-events-none grass-blades opacity-40"></div>
