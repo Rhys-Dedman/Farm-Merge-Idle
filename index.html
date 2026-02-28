@@ -20,6 +20,14 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
+        /* Fix for mobile viewport height (accounts for browser chrome) */
+        :root {
+            --vh: 1vh;
+        }
+        html, body, #root {
+            height: 100%;
+            height: calc(var(--vh, 1vh) * 100);
+        }
         body {
             font-family: 'Inter', sans-serif;
             background-color: #0f1115;
@@ -31,6 +39,12 @@
             -webkit-touch-callout: none;
             -webkit-user-select: none;
             user-select: none;
+        }
+        /* Use dvh (dynamic viewport height) where supported, fallback to vh */
+        .h-screen-safe {
+            height: 100vh;
+            height: 100dvh;
+            height: calc(var(--vh, 1vh) * 100);
         }
         /* Prevent mobile image long-press context menu */
         img {
@@ -103,6 +117,18 @@
       </defs>
     </svg>
     <div id="root"></div>
+    <script>
+        // Fix for mobile viewport height (100vh includes browser chrome)
+        function setVH() {
+            const vh = window.innerHeight * 0.01;
+            document.documentElement.style.setProperty('--vh', vh + 'px');
+        }
+        setVH();
+        window.addEventListener('resize', setVH);
+        window.addEventListener('orientationchange', function() {
+            setTimeout(setVH, 100);
+        });
+    </script>
     <script type="module" src="./index.tsx"></script>
 </body>
 </html>

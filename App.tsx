@@ -1228,11 +1228,11 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-    <div className="flex items-center justify-center min-h-screen bg-[#050608] overflow-hidden">
+    <div className="flex items-center justify-center bg-[#050608] overflow-hidden h-screen-safe">
       <div 
         ref={containerRef}
         id="game-container"
-        className="relative w-full h-screen shadow-[0_0_100px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col select-none font-['Inter'] grass-texture"
+        className="relative w-full h-full shadow-[0_0_100px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col select-none font-['Inter'] grass-texture"
       >
         {/* Grass Detail Overlay */}
         <div className="absolute inset-0 pointer-events-none grass-blades opacity-40"></div>
