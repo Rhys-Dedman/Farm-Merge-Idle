@@ -39,6 +39,7 @@ interface UnlockBurstProps {
   y: number;
   startTime: number;
   onComplete: () => void;
+  appScale?: number;
 }
 
 function createLeaves(count: number): LeafParticle[] {
@@ -55,7 +56,7 @@ function createLeaves(count: number): LeafParticle[] {
   }));
 }
 
-export const UnlockBurst: React.FC<UnlockBurstProps> = ({ x, y, startTime, onComplete }) => {
+export const UnlockBurst: React.FC<UnlockBurstProps> = ({ x, y, startTime, onComplete, appScale = 1 }) => {
   const [leaves] = useState<LeafParticle[]>(() => createLeaves(UNLOCK_BURST_COUNT));
   const [positions, setPositions] = useState<{ x: number; y: number; opacity: number; rotation: number; scale: number }[]>(
     () => leaves.map(() => ({ x: 0, y: 0, opacity: 1, rotation: 0, scale: 1 }))
@@ -161,7 +162,8 @@ export const UnlockBurst: React.FC<UnlockBurstProps> = ({ x, y, startTime, onCom
         top: y, // No vertical offset - spawn at direct center
         width: 1,
         height: 1,
-        transform: 'translate(-50%, -50%)',
+        transform: `translate(-50%, -50%) scale(${appScale})`,
+        transformOrigin: 'center center',
         zIndex: 70,
       }}
     >

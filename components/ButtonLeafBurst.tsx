@@ -30,6 +30,7 @@ interface ButtonLeafBurstProps {
   y: number;
   startTime: number;
   onComplete: () => void;
+  appScale?: number;
 }
 
 function createLeaves(count: number): LeafParticle[] {
@@ -46,7 +47,7 @@ function createLeaves(count: number): LeafParticle[] {
   }));
 }
 
-export const ButtonLeafBurst: React.FC<ButtonLeafBurstProps> = ({ x, y, startTime, onComplete }) => {
+export const ButtonLeafBurst: React.FC<ButtonLeafBurstProps> = ({ x, y, startTime, onComplete, appScale = 1 }) => {
   const [leaves] = useState<LeafParticle[]>(() => createLeaves(PARTICLE_COUNT));
   const [positions, setPositions] = useState<{ x: number; y: number; opacity: number; rotation: number; scale: number }[]>(
     () => leaves.map((l) => ({ 
@@ -165,7 +166,8 @@ export const ButtonLeafBurst: React.FC<ButtonLeafBurstProps> = ({ x, y, startTim
         top: y,
         width: 1,
         height: 1,
-        transform: 'translate(-50%, -50%)',
+        transform: `translate(-50%, -50%) scale(${appScale})`,
+        transformOrigin: 'center center',
         zIndex: 100, // high z-index to ensure visibility
       }}
     >

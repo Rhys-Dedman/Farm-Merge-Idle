@@ -363,8 +363,11 @@ export default function App() {
     };
   }, [barnScale]);
 
-  // Grid is "full" when all unlocked cells have items
-  const isGridFull = grid.every(cell => cell.locked || cell.item !== null);
+  // Get cells that have projectiles in flight (reserved)
+  const reservedCellsSet = new Set(activeProjectiles.map(p => p.targetIdx));
+  
+  // Grid is "full" when all unlocked cells have items OR have incoming projectiles
+  const isGridFull = grid.every((cell, idx) => cell.locked || cell.item !== null || reservedCellsSet.has(idx));
 
   const spawnProjectile = useCallback((targetIdx: number, plantLevel: number) => {
     if (plantButtonRef.current && containerRef.current) {
@@ -765,9 +768,12 @@ export default function App() {
 
     // When white (seeds in storage): only fire seed, no progress
     if (seedsInStorage > 0) {
-      // Only target unlocked empty cells
+      // Get cells that have projectiles in flight (reserved)
+      const reservedCells = new Set(activeProjectiles.map(p => p.targetIdx));
+      
+      // Only target unlocked empty cells that don't have incoming projectiles
       const emptyIndices = grid
-        .map((cell, idx) => (cell.item === null && !cell.locked ? idx : null))
+        .map((cell, idx) => (cell.item === null && !cell.locked && !reservedCells.has(idx) ? idx : null))
         .filter((idx): idx is number => idx !== null);
       if (emptyIndices.length > 0) {
         const targetIdx = emptyIndices[Math.floor(Math.random() * emptyIndices.length)];
@@ -1666,6 +1672,7 @@ export default function App() {
                 x={b.x}
                 y={b.y}
                 startTime={b.startTime}
+                appScale={appScale}
                 onComplete={() => setLeafBursts((prev) => prev.filter((x) => x.id !== b.id))}
               />
             ))}
@@ -1677,6 +1684,7 @@ export default function App() {
                 startTime={b.startTime}
                 particleCount={b.particleCount ?? LEAF_BURST_SMALL_COUNT}
                 useCircle={b.useCircle}
+                appScale={appScale}
                 onComplete={() => setLeafBurstsSmall((prev) => prev.filter((x) => x.id !== b.id))}
               />
             ))}
@@ -1686,6 +1694,7 @@ export default function App() {
                 x={b.x}
                 y={b.y}
                 startTime={b.startTime}
+                appScale={appScale}
                 onComplete={() => setUnlockBursts((prev) => prev.filter((x) => x.id !== b.id))}
               />
             ))}
@@ -1695,6 +1704,7 @@ export default function App() {
                 x={b.x}
                 y={b.y}
                 startTime={b.startTime}
+                appScale={appScale}
                 onComplete={() => setButtonLeafBursts((prev) => prev.filter((x) => x.id !== b.id))}
               />
             ))}
@@ -1706,6 +1716,7 @@ export default function App() {
                 cellWidth={b.cellWidth}
                 cellHeight={b.cellHeight}
                 startTime={b.startTime}
+                appScale={appScale}
                 onComplete={() => setCellHighlightBeams((prev) => prev.filter((x) => x.id !== b.id))}
               />
             ))}

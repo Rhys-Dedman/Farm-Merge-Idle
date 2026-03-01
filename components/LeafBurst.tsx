@@ -41,6 +41,8 @@ interface LeafBurstProps {
   particleCount?: number;
   /** Use circular spread instead of ellipse (default: false) */
   useCircle?: boolean;
+  /** App scale factor for scaling particle sizes (default: 1) */
+  appScale?: number;
 }
 
 function createLeaves(count: number): LeafParticle[] {
@@ -57,7 +59,7 @@ function createLeaves(count: number): LeafParticle[] {
   }));
 }
 
-export const LeafBurst: React.FC<LeafBurstProps> = ({ x, y, startTime, onComplete, particleCount = LEAF_BURST_BASELINE_COUNT, useCircle = false }) => {
+export const LeafBurst: React.FC<LeafBurstProps> = ({ x, y, startTime, onComplete, particleCount = LEAF_BURST_BASELINE_COUNT, useCircle = false, appScale = 1 }) => {
   const [leaves] = useState<LeafParticle[]>(() => createLeaves(particleCount));
   const [positions, setPositions] = useState<{ x: number; y: number; opacity: number; rotation: number; scale: number }[]>(
     () => leaves.map(() => ({ x: 0, y: 0, opacity: 1, rotation: 0, scale: 1 }))
@@ -163,10 +165,11 @@ export const LeafBurst: React.FC<LeafBurstProps> = ({ x, y, startTime, onComplet
       style={{
         position: 'fixed',
         left: x,
-        top: y - SPAWN_OFFSET_UP_PX,
+        top: y - SPAWN_OFFSET_UP_PX * appScale,
         width: 1,
         height: 1,
-        transform: 'translate(-50%, -50%)',
+        transform: `translate(-50%, -50%) scale(${appScale})`,
+        transformOrigin: 'center center',
         zIndex: 70,
       }}
     >
