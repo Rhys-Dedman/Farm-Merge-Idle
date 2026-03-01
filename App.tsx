@@ -127,7 +127,7 @@ export default function App() {
   // Plant info popup state (for barn)
   const [plantInfoPopup, setPlantInfoPopup] = useState<{ isVisible: boolean; level: number } | null>(null);
   // Limited offer popup state
-  const [limitedOfferPopup, setLimitedOfferPopup] = useState<{ isVisible: boolean; title: string; subtitle: string; description: string } | null>(null);
+  const [limitedOfferPopup, setLimitedOfferPopup] = useState<{ isVisible: boolean; title?: string; imageSrc: string; subtitle: string; description: string; buttonText: string } | null>(null);
   // Barn particles for "Add to Barn" button
   const [barnParticles, setBarnParticles] = useState<BarnParticleData[]>([]);
   // Barn notification state - shows when a new plant is added to barn
@@ -1335,9 +1335,10 @@ export default function App() {
                 <button
                   onClick={() => setLimitedOfferPopup({
                     isVisible: true,
-                    title: 'Limited Offer',
+                    imageSrc: assetPath('/assets/plants/plant_2.png'),
                     subtitle: 'Super Seeds!',
                     description: 'Increase the chance to produce level 2 plants',
+                    buttonText: 'Accept Offer',
                   })}
                   className="flex items-center justify-center transition-all active:scale-95"
                   style={{
@@ -1798,9 +1799,10 @@ export default function App() {
                 isVisible={limitedOfferPopup.isVisible}
                 onClose={() => setLimitedOfferPopup(null)}
                 title={limitedOfferPopup.title}
+                imageSrc={limitedOfferPopup.imageSrc}
                 subtitle={limitedOfferPopup.subtitle}
                 description={limitedOfferPopup.description}
-                buttonText="Accept Offer"
+                buttonText={limitedOfferPopup.buttonText}
                 appScale={appScale}
                 onButtonClick={() => {
                   console.log('Limited offer accepted!');
