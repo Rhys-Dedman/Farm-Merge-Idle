@@ -30,8 +30,6 @@ interface HexBoardProps {
   getMergeLevelIncrease?: (currentPlantLevel: number) => number;
   /** Called when a locked cell is tapped (opens upgrade panel to CROPS) */
   onLockedCellTap?: () => void;
-  /** Called when an empty unlocked cell is tapped (switches to CROPS but doesn't open panel) */
-  onEmptyCellTap?: () => void;
   /** Cell indices currently being unlocked (for unlock animation) */
   unlockingCellIndices?: number[];
   /** Cell indices currently being fertilized (for fertilize animation) */
@@ -76,7 +74,6 @@ export const HexBoard: React.FC<HexBoardProps> = ({
   onMergeImpactStart,
   getMergeLevelIncrease,
   onLockedCellTap,
-  onEmptyCellTap,
   unlockingCellIndices = [],
   fertilizingCellIndices = [],
   appScale = 1,
@@ -204,14 +201,13 @@ export const HexBoard: React.FC<HexBoardProps> = ({
       onLockedCellTap?.();
       return;
     }
-    // If cell is empty (unlocked), trigger empty cell tap callback (switches tab but doesn't open panel)
+    // If cell is empty (unlocked), do nothing
     if (!cell?.item) {
-      onEmptyCellTap?.();
       return;
     }
     if (dragState && dragState.phase !== 'impact') return;
     startDrag(index, e.clientX, e.clientY);
-  }, [grid, dragState, startDrag, onLockedCellTap, onEmptyCellTap]);
+  }, [grid, dragState, startDrag, onLockedCellTap]);
 
   // Global pointer move/up/cancel (attach in useEffect)
   useEffect(() => {

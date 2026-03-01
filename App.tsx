@@ -21,6 +21,7 @@ import { BarnParticle, BarnParticleData } from './components/BarnParticle';
 import { OfferParticle, OfferParticleData } from './components/OfferParticle';
 import { UpgradeTabsRef } from './components/UpgradeTabs';
 import { ButtonLeafBurst } from './components/ButtonLeafBurst';
+import { LoadingScreen } from './components/LoadingScreen';
 import { TabType, ScreenType, BoardCell, Item, DragState } from './types';
 import { assetPath } from './utils/assetPath';
 
@@ -108,9 +109,13 @@ export interface ProjectileData {
 }
 
 export default function App() {
+  // Loading screen state
+  const [isLoading, setIsLoading] = useState(true);
+  const [gameOpacity, setGameOpacity] = useState(0);
+  
   const [activeTab, setActiveTab] = useState<TabType>('SEEDS');
   const [activeScreen, setActiveScreen] = useState<ScreenType>('FARM');
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [money, setMoney] = useState(0);
 
   const [grid, setGrid] = useState<BoardCell[]>(generateInitialGrid());
@@ -460,6 +465,9 @@ export default function App() {
 
   // Only update React state when we hit 100% or reset; progress bar is driven at 60fps via progressRef in SideAction
   useEffect(() => {
+    // Don't start progress until loading is complete
+    if (isLoading) return;
+    
     // Auto-progress starts at 3/min even at level 0
     lastSeedProgressTimeRef.current = Date.now();
     let rafId: number;
@@ -487,7 +495,7 @@ export default function App() {
     };
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [seedProductionLevel]);
+  }, [seedProductionLevel, isLoading]);
 
   /**
    * At 100% seed progress: add one seed to storage (if room), reset to 0% immediately.
@@ -581,6 +589,9 @@ export default function App() {
 
   // Harvest auto-progress: driven at 60fps via harvestProgressRef for smooth updates
   useEffect(() => {
+    // Don't start progress until loading is complete
+    if (isLoading) return;
+    
     // Auto-progress starts at 3/min even at level 0
     lastHarvestProgressTimeRef.current = Date.now();
     let rafId: number;
@@ -607,7 +618,7 @@ export default function App() {
     };
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [harvestSpeedLevel]);
+  }, [harvestSpeedLevel, isLoading]);
 
   // Track previous value to detect when harvest button turns white
   const prevIsHarvestFlashingRef = useRef(isHarvestFlashing);
@@ -674,11 +685,6 @@ export default function App() {
   const handleLockedCellTap = useCallback(() => {
     setActiveTab('CROPS');
     setIsExpanded(true);
-  }, []);
-
-  // Handle tap on empty unlocked cell: switch to CROPS tab but don't open panel
-  const handleEmptyCellTap = useCallback(() => {
-    setActiveTab('CROPS');
   }, []);
 
   // Handle unlocking a cell when plot_expansion is upgraded
@@ -1302,9 +1308,35 @@ export default function App() {
 
   const screenTranslateX = `translateX(-${(getScreenIndex() * 100) / 3}%)`;
 
+  // Handle loading complete - fade in the game
+  const handleLoadComplete = useCallback(() => {
+    setIsLoading(false);
+    // Animate game opacity from 0 to 1
+    const fadeInDuration = 500;
+    const startTime = Date.now();
+    
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const newOpacity = Math.min(1, elapsed / fadeInDuration);
+      setGameOpacity(newOpacity);
+      
+      if (elapsed < fadeInDuration) {
+        requestAnimationFrame(animate);
+      } else {
+        setGameOpacity(1);
+      }
+    };
+    
+    requestAnimationFrame(animate);
+  }, []);
+
   return (
     <ErrorBoundary>
-<div className="flex items-center justify-center bg-[#050608] w-screen h-screen">
+      {/* Loading Screen */}
+      {isLoading && (
+        <LoadingScreen onLoadComplete={handleLoadComplete} />
+      )}
+<div className="flex items-center justify-center bg-[#050608] w-screen h-screen" style={{ opacity: gameOpacity }}>
       <div
         ref={containerRef}
         id="game-container"
@@ -1464,7 +1496,6 @@ export default function App() {
                     harvestBounceCellIndices={harvestBounceCellIndices}
                     getMergeLevelIncrease={getMergeLevelIncrease}
                     onLockedCellTap={handleLockedCellTap}
-                    onEmptyCellTap={handleEmptyCellTap}
                     unlockingCellIndices={unlockingCellIndices}
                     fertilizingCellIndices={fertilizingCellIndices}
                     appScale={appScale}
