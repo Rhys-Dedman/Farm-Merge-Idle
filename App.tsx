@@ -1,4 +1,4 @@
-﻿
+
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { HexBoard } from './components/HexBoard';
@@ -1663,8 +1663,8 @@ export default function App() {
         />
 
         {/* Leaf burst: portal to body so never clipped; viewport coords */}
-        {/* Only render when on FARM screen to prevent VFX showing on other screens */}
-        {activeScreen === 'FARM' && createPortal(
+        {/* Only render when on FARM screen and hide when popup is open */}
+        {activeScreen === 'FARM' && !discoveryPopup && !plantInfoPopup && createPortal(
           <div className="fixed inset-0 pointer-events-none overflow-visible" style={{ zIndex: 55 }}>
             {leafBursts.map((b) => (
               <LeafBurst
