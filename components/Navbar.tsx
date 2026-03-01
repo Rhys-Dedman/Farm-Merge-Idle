@@ -37,27 +37,19 @@ export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, ba
   ];
 
   return (
-    <nav 
-      className="relative h-[55px] flex items-start justify-center z-50 shrink-0 overflow-visible"
-      style={{ backgroundColor: '#282020' }}
-    >
-      {/* Top stroke layers */}
-      <div 
-        className="absolute left-0 right-0 pointer-events-none"
-        style={{
-          top: '-4px',
-          height: '2px',
-          backgroundColor: '#171515',
+    <div className="relative shrink-0 overflow-visible z-50" style={{ height: '60px' }}>
+      <nav 
+        className="absolute inset-0 flex items-start justify-center overflow-visible"
+        style={{ 
+          backgroundColor: '#282020',
+          marginLeft: '-4px',
+          marginRight: '-4px',
+          marginBottom: '-20px',
+          paddingLeft: '4px',
+          paddingRight: '4px',
+          paddingBottom: '20px',
         }}
-      />
-      <div 
-        className="absolute left-0 right-0 pointer-events-none"
-        style={{
-          top: '-2px',
-          height: '2px',
-          backgroundColor: '#443936',
-        }}
-      />
+      >
       
       {/* Scalable button container */}
       <div
@@ -81,7 +73,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, ba
               <div
                 className="absolute z-20 pointer-events-none"
                 style={{
-                  top: '-2px',
+                  top: '2px',
                   left: '50%',
                   transform: 'translateX(-50%)',
                 }}
@@ -124,6 +116,38 @@ export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, ba
                 opacity: isActive ? 1 : 0,
               }}
             />
+
+            {/* Top stroke layers - render on middle tab only to avoid duplicates */}
+            {item.id === 'FARM' && (
+              <>
+                {/* Stroke 1 (top/darker) */}
+                <div 
+                  className="absolute pointer-events-none"
+                  style={{
+                    top: '0px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    width: '200vw',
+                    height: '2px',
+                    backgroundColor: '#171515',
+                    zIndex: 4,
+                  }}
+                />
+                {/* Stroke 2 (bottom/lighter) */}
+                <div 
+                  className="absolute pointer-events-none"
+                  style={{
+                    top: '2px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    width: '200vw',
+                    height: '2px',
+                    backgroundColor: '#443936',
+                    zIndex: 4,
+                  }}
+                />
+              </>
+            )}
             
             {/* Active tab background - slides up/down */}
             <div
@@ -137,6 +161,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, ba
                 backgroundColor: '#302626',
                 borderRadius: '14px 14px 0 0',
                 opacity: isActive ? 1 : 0,
+                zIndex: 5,
                 transition: isActive 
                   ? 'top 0.25s cubic-bezier(0.34, 1.4, 0.64, 1), opacity 0.1s ease-out'
                   : 'top 0.1s ease-in, opacity 0.1s ease-in',
@@ -184,7 +209,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, ba
               <div 
                 className="flex flex-col items-center justify-center"
                 style={{
-                  marginTop: isActive ? '-2px' : '10px',
+                  marginTop: isActive ? '2px' : '14px',
                   transition: isActive 
                     ? 'margin-top 0.25s cubic-bezier(0.0, 1.2, 0.3, 1.3)'
                     : 'margin-top 0.1s ease-in',
@@ -221,6 +246,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, ba
         );
       })}
       </div>
-    </nav>
+      </nav>
+    </div>
   );
 };

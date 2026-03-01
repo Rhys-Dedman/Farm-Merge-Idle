@@ -1269,7 +1269,7 @@ export default function App() {
       <div
         ref={containerRef}
         id="game-container"
-        className="relative shadow-[0_0_100px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col select-none font-['Inter'] grass-texture"
+        className="relative shadow-[0_0_100px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col select-none font-['Inter'] bg-[#0c0d12]"
         style={{
           width: '448px',
           height: '796px',
@@ -1277,19 +1277,18 @@ export default function App() {
           transformOrigin: 'center center',
         }}
       >
-        {/* Grass Detail Overlay */}
-        <div className="absolute inset-0 pointer-events-none grass-blades opacity-40"></div>
-
         <div className="flex-grow relative overflow-hidden min-h-0" style={{ zIndex: 10 }}>
           <div 
             className="absolute inset-0 flex transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]"
             style={{ transform: screenTranslateX, width: '300%' }}
           >
-            <div className="w-1/3 h-full bg-[#0c0d12]/90 backdrop-blur-sm">
+            <div className="w-1/3 h-full bg-[#0c0d12]">
               <StoreScreen money={money} walletFlashActive={walletFlashActive} onAddMoney={(amt) => setMoney(prev => prev + amt)} />
             </div>
 
-            <div ref={farmColumnRef} className="w-1/3 h-full flex flex-col relative overflow-hidden">
+            <div ref={farmColumnRef} className="w-1/3 h-full flex flex-col relative overflow-hidden grass-texture">
+              {/* Grass Detail Overlay */}
+              <div className="absolute inset-0 pointer-events-none grass-blades opacity-40 z-[1]"></div>
               {/* 1. Bleed: flat #3d8f38, full column, behind sprite (visible behind upgrade curve) */}
               <div
                 className="absolute inset-0 pointer-events-none z-0"
