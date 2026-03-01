@@ -168,7 +168,7 @@ export const ButtonLeafBurst: React.FC<ButtonLeafBurstProps> = ({ x, y, startTim
         height: 1,
         transform: `translate(-50%, -50%) scale(${appScale})`,
         transformOrigin: 'center center',
-        zIndex: 100, // high z-index to ensure visibility
+        zIndex: 55,
       }}
     >
       {leaves.map((leaf, i) => (

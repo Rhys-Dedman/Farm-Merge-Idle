@@ -222,10 +222,14 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
       style={{ zIndex: 100, overflow: 'hidden' }}
       onClick={handleClose}
     >
-      {/* Backdrop */}
-      <div 
-        className="absolute inset-0"
-        style={{ 
+{/* Backdrop */}
+      <div
+        className="absolute"
+        style={{
+          top: '-10px',
+          left: '-10px',
+          right: '-10px',
+          bottom: '-10px',
           backgroundColor: 'rgba(0, 0, 0, 0.7)',
           opacity: isLeaving ? 0 : 1,
           transition: 'opacity 100ms ease-out',

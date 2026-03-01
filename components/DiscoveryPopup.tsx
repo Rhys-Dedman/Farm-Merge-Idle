@@ -300,10 +300,14 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
       className="fixed inset-0 flex items-center justify-center pointer-events-auto"
       style={{ zIndex: 100, overflow: 'hidden' }}
     >
-      {/* Backdrop */}
-      <div 
-        className="absolute inset-0 transition-opacity duration-300"
-        style={{ 
+{/* Backdrop */}
+      <div
+        className="absolute transition-opacity duration-300"
+        style={{
+          top: '-10px',
+          left: '-10px',
+          right: '-10px',
+          bottom: '-10px',
           backgroundColor: 'rgba(0, 0, 0, 0.7)',
           opacity: isLeaving ? 0 : 1,
         }}

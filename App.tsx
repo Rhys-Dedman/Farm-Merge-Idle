@@ -1724,6 +1724,51 @@ export default function App() {
           document.body
         )}
 
+        {/* Popups: portal to body with higher z-index than particles */}
+        {createPortal(
+          <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 100 }}>
+            {/* Discovery Popup */}
+            {discoveryPopup && (
+              <DiscoveryPopup
+                isVisible={discoveryPopup.isVisible}
+                onClose={() => setDiscoveryPopup(null)}
+                title="New Discovery"
+                imageSrc={assetPath(`/assets/plants/plant_${Math.min(discoveryPopup.level, 14)}.png`)}
+                imageLevel={discoveryPopup.level}
+                subtitle={getPlantData(discoveryPopup.level).name}
+                description={getPlantData(discoveryPopup.level).description}
+                buttonText="Add to Shed"
+                showCloseButton={false}
+                closeOnBackdropClick={false}
+                onButtonClick={(buttonRect) => {
+                  const container = containerRef.current;
+                  if (!container) return;
+                  const scale = appScaleRef.current;
+                  const containerRect = container.getBoundingClientRect();
+                  setBarnParticles(prev => [...prev, {
+                    id: `barn-${Date.now()}`,
+                    startX: (buttonRect.left + buttonRect.width / 2 - containerRect.left) / scale,
+                    startY: (buttonRect.top + buttonRect.height / 2 - containerRect.top) / scale,
+                  }]);
+                }}
+              />
+            )}
+
+            {/* Plant Info Popup (Barn) */}
+            {plantInfoPopup && (
+              <PlantInfoPopup
+                isVisible={plantInfoPopup.isVisible}
+                onClose={() => setPlantInfoPopup(null)}
+                plantLevel={plantInfoPopup.level}
+                plantName={getPlantData(plantInfoPopup.level).name}
+                plantDescription={getPlantData(plantInfoPopup.level).description}
+                isUnlocked={plantInfoPopup.level <= highestPlantEver}
+              />
+            )}
+          </div>,
+          document.body
+        )}
+
         <div className="absolute inset-0 pointer-events-none z-[60] overflow-hidden">
           {activeProjectiles.map(p => (
             <Projectile 
@@ -1796,33 +1841,6 @@ export default function App() {
             />
           ))}
           
-          {/* Discovery Popup */}
-          {discoveryPopup && (
-            <DiscoveryPopup
-              isVisible={discoveryPopup.isVisible}
-              onClose={() => setDiscoveryPopup(null)}
-              title="New Discovery"
-              imageSrc={assetPath(`/assets/plants/plant_${Math.min(discoveryPopup.level, 14)}.png`)}
-              imageLevel={discoveryPopup.level}
-              subtitle={getPlantData(discoveryPopup.level).name}
-              description={getPlantData(discoveryPopup.level).description}
-              buttonText="Add to Shed"
-              showCloseButton={false}
-              closeOnBackdropClick={false}
-              onButtonClick={(buttonRect) => {
-                const container = containerRef.current;
-                if (!container) return;
-                const scale = appScaleRef.current;
-                const containerRect = container.getBoundingClientRect();
-                setBarnParticles(prev => [...prev, {
-                  id: `barn-${Date.now()}`,
-                  startX: (buttonRect.left + buttonRect.width / 2 - containerRect.left) / scale,
-                  startY: (buttonRect.top + buttonRect.height / 2 - containerRect.top) / scale,
-                }]);
-              }}
-            />
-          )}
-          
           {/* Barn Particles */}
           {barnParticles.map((particle) => (
             <BarnParticle
@@ -1835,18 +1853,6 @@ export default function App() {
               onComplete={() => setBarnParticles(prev => prev.filter(p => p.id !== particle.id))}
             />
           ))}
-
-          {/* Plant Info Popup (Barn) */}
-          {plantInfoPopup && (
-            <PlantInfoPopup
-              isVisible={plantInfoPopup.isVisible}
-              onClose={() => setPlantInfoPopup(null)}
-              plantLevel={plantInfoPopup.level}
-              plantName={getPlantData(plantInfoPopup.level).name}
-              plantDescription={getPlantData(plantInfoPopup.level).description}
-              isUnlocked={plantInfoPopup.level <= highestPlantEver}
-            />
-          )}
         </div>
 
       </div>
