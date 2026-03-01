@@ -1281,6 +1281,7 @@ export default function App() {
           height: '796px',
           transform: `scale(${appScale})`,
           transformOrigin: 'center center',
+          zIndex: 45,
         }}
       >
         <div className="flex-grow relative overflow-hidden min-h-0" style={{ zIndex: 10 }}>
@@ -1663,9 +1664,10 @@ export default function App() {
         />
 
         {/* Leaf burst: portal to body so never clipped; viewport coords */}
-        {/* Only render when on FARM screen and no popup is open to prevent VFX showing above popups */}
-        {activeScreen === 'FARM' && !discoveryPopup && !plantInfoPopup && createPortal(
-          <div className="fixed inset-0 pointer-events-none overflow-visible" style={{ zIndex: 50 }}>
+        {/* Only render when on FARM screen to prevent VFX showing on other screens */}
+        {/* z-index drops to 40 when popup is open (below game container at 45), otherwise 55 (above game) */}
+        {activeScreen === 'FARM' && createPortal(
+          <div className="fixed inset-0 pointer-events-none overflow-visible" style={{ zIndex: (discoveryPopup || plantInfoPopup) ? 40 : 55 }}>
             {leafBursts.map((b) => (
               <LeafBurst
                 key={b.id}
