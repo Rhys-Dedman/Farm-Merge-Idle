@@ -16,6 +16,7 @@ import { WalletImpactBurst } from './components/WalletImpactBurst';
 import { PageHeader } from './components/PageHeader';
 import { DiscoveryPopup } from './components/DiscoveryPopup';
 import { PlantInfoPopup } from './components/PlantInfoPopup';
+import { LimitedOfferPopup } from './components/LimitedOfferPopup';
 import { BarnParticle, BarnParticleData } from './components/BarnParticle';
 import { ButtonLeafBurst } from './components/ButtonLeafBurst';
 import { TabType, ScreenType, BoardCell, Item, DragState } from './types';
@@ -125,6 +126,8 @@ export default function App() {
   const [discoveryPopup, setDiscoveryPopup] = useState<{ isVisible: boolean; level: number } | null>(null);
   // Plant info popup state (for barn)
   const [plantInfoPopup, setPlantInfoPopup] = useState<{ isVisible: boolean; level: number } | null>(null);
+  // Limited offer popup state
+  const [limitedOfferPopup, setLimitedOfferPopup] = useState<{ isVisible: boolean; title: string; subtitle: string; description: string } | null>(null);
   // Barn particles for "Add to Barn" button
   const [barnParticles, setBarnParticles] = useState<BarnParticleData[]>([]);
   // Barn notification state - shows when a new plant is added to barn
@@ -1320,7 +1323,7 @@ export default function App() {
               </div>
 
               {/* Farm Header - pinned to this screen */}
-              <div className="relative z-50">
+              <div className="relative z-50 flex items-center gap-2">
                 <PageHeader 
                   money={money}
                   walletRef={walletRef}
@@ -1328,6 +1331,27 @@ export default function App() {
                   walletFlashActive={walletFlashActive}
                   onWalletClick={() => setActiveScreen('STORE')}
                 />
+                {/* Limited Offer test button */}
+                <button
+                  onClick={() => setLimitedOfferPopup({
+                    isVisible: true,
+                    title: 'Limited Offer',
+                    subtitle: 'Super Seeds!',
+                    description: 'Increase the chance to produce level 2 plants',
+                  })}
+                  className="flex items-center justify-center transition-all active:scale-95"
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '8px',
+                    background: 'linear-gradient(180deg, #FFB347 0%, #FF9500 100%)',
+                    border: '2px solid #E88A00',
+                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                    marginTop: '8px',
+                  }}
+                >
+                  <span style={{ fontSize: '18px' }}>🎁</span>
+                </button>
               </div>
 
               <div 
@@ -1765,6 +1789,22 @@ export default function App() {
                 plantDescription={getPlantData(plantInfoPopup.level).description}
                 isUnlocked={plantInfoPopup.level <= highestPlantEver}
                 appScale={appScale}
+              />
+            )}
+
+            {/* Limited Offer Popup */}
+            {limitedOfferPopup && (
+              <LimitedOfferPopup
+                isVisible={limitedOfferPopup.isVisible}
+                onClose={() => setLimitedOfferPopup(null)}
+                title={limitedOfferPopup.title}
+                subtitle={limitedOfferPopup.subtitle}
+                description={limitedOfferPopup.description}
+                buttonText="Accept Offer"
+                appScale={appScale}
+                onButtonClick={() => {
+                  console.log('Limited offer accepted!');
+                }}
               />
             )}
           </div>,
