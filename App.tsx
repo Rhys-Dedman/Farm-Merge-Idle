@@ -150,7 +150,7 @@ export default function App() {
   const [sourceCellFadeOutIdx, setSourceCellFadeOutIdx] = useState<number | null>(null);
   const [newCellImpactIdx, setNewCellImpactIdx] = useState<number | null>(null);
   const [leafBursts, setLeafBursts] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
-  const [leafBurstsSmall, setLeafBurstsSmall] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
+  const [leafBurstsSmall, setLeafBurstsSmall] = useState<{ id: string; x: number; y: number; startTime: number; particleCount?: number; useCircle?: boolean }[]>([]);
   const [unlockBursts, setUnlockBursts] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
   const [buttonLeafBursts, setButtonLeafBursts] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
   const [cellHighlightBeams, setCellHighlightBeams] = useState<{ id: string; x: number; y: number; cellWidth: number; cellHeight: number; startTime: number }[]>([]);
@@ -1443,6 +1443,30 @@ export default function App() {
                         ]);
                       }
                     }}
+                    onDeletePlant={(cellIdx, px, py) => {
+                      const container = containerRef.current;
+                      if (!container) return;
+                      const scale = appScaleRef.current;
+                      const rect = container.getBoundingClientRect();
+                      // Spawn leaf burst at drop location (30 particles, circular spread)
+                      setLeafBurstsSmall((prev) => [
+                        ...prev,
+                        {
+                          id: `delete-${cellIdx}-${Date.now()}`,
+                          x: rect.left + px * scale,
+                          y: rect.top + py * scale,
+                          startTime: Date.now(),
+                          particleCount: 30,
+                          useCircle: true,
+                        },
+                      ]);
+                      // Remove the plant from the grid
+                      setGrid((prev) => {
+                        const newGrid = [...prev];
+                        newGrid[cellIdx] = { ...newGrid[cellIdx], item: null };
+                        return newGrid;
+                      });
+                    }}
                   />
                 </div>
               </div>
@@ -1651,7 +1675,8 @@ export default function App() {
                 x={b.x}
                 y={b.y}
                 startTime={b.startTime}
-                particleCount={LEAF_BURST_SMALL_COUNT}
+                particleCount={b.particleCount ?? LEAF_BURST_SMALL_COUNT}
+                useCircle={b.useCircle}
                 onComplete={() => setLeafBurstsSmall((prev) => prev.filter((x) => x.id !== b.id))}
               />
             ))}

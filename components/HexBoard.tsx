@@ -38,6 +38,8 @@ interface HexBoardProps {
   fertilizingCellIndices?: number[];
   /** App scale factor for coordinate calculations */
   appScale?: number;
+  /** Called when a plant is deleted by dropping outside hex cells */
+  onDeletePlant?: (cellIdx: number, x: number, y: number) => void;
 }
 
 // Increase when you add more plant_N.png. Merge level N uses plant_N (e.g. two plant_1 → plant_2).
@@ -78,6 +80,7 @@ export const HexBoard: React.FC<HexBoardProps> = ({
   unlockingCellIndices = [],
   fertilizingCellIndices = [],
   appScale = 1,
+  onDeletePlant,
 }) => {
   const liftStartRef = useRef<number>(0);
   const flyStartRef = useRef<number>(0);
@@ -237,19 +240,27 @@ export const HexBoard: React.FC<HexBoardProps> = ({
         const container = containerRef.current;
         if (!container) return;
         const contRect = container.getBoundingClientRect();
-        const releaseState = { ...dragState, pointerX: (e.clientX - contRect.left) / appScale, pointerY: (e.clientY - contRect.top) / appScale };
+        const dropX = (e.clientX - contRect.left) / appScale;
+        const dropY = (e.clientY - contRect.top) / appScale;
+        const releaseState = { ...dragState, pointerX: dropX, pointerY: dropY };
         const inBounds = contRect.left <= e.clientX && e.clientX <= contRect.right && contRect.top <= e.clientY && e.clientY <= contRect.bottom;
         const targetCell = targetIdx != null ? grid[targetIdx] : null;
         // Locked cells cannot be drop targets
         const isLocked = targetCell?.locked === true;
         const isValidMerge = targetIdx != null && targetIdx !== dragState.cellIdx && !isLocked && targetCell?.item && targetCell.item.level === dragState.item.level;
         const isEmptyCell = targetIdx != null && targetIdx !== dragState.cellIdx && !isLocked && targetCell?.item == null;
+        const droppedOnSameCell = targetIdx === dragState.cellIdx;
+        
         if (isValidMerge) {
           onReleaseFromCell(dragState.cellIdx);
           startFlyBack(releaseState, targetIdx!, true);
         } else if (inBounds && isEmptyCell) {
           onReleaseFromCell(dragState.cellIdx);
           startFlyBack(releaseState, targetIdx!);
+        } else if (inBounds && targetIdx == null && !droppedOnSameCell) {
+          // Dropped on background (not on any hex cell) - delete the plant
+          onDeletePlant?.(dragState.cellIdx, dropX, dropY);
+          setDragState(null);
         } else {
           onReleaseFromCell(dragState.cellIdx);
           startFlyBack(releaseState);

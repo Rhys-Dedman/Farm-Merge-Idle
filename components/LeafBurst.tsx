@@ -39,6 +39,8 @@ interface LeafBurstProps {
   onComplete: () => void;
   /** Particle count (default: baseline). Use LEAF_BURST_SMALL_COUNT for seed-impact variant. */
   particleCount?: number;
+  /** Use circular spread instead of ellipse (default: false) */
+  useCircle?: boolean;
 }
 
 function createLeaves(count: number): LeafParticle[] {
@@ -55,7 +57,7 @@ function createLeaves(count: number): LeafParticle[] {
   }));
 }
 
-export const LeafBurst: React.FC<LeafBurstProps> = ({ x, y, startTime, onComplete, particleCount = LEAF_BURST_BASELINE_COUNT }) => {
+export const LeafBurst: React.FC<LeafBurstProps> = ({ x, y, startTime, onComplete, particleCount = LEAF_BURST_BASELINE_COUNT, useCircle = false }) => {
   const [leaves] = useState<LeafParticle[]>(() => createLeaves(particleCount));
   const [positions, setPositions] = useState<{ x: number; y: number; opacity: number; rotation: number; scale: number }[]>(
     () => leaves.map(() => ({ x: 0, y: 0, opacity: 1, rotation: 0, scale: 1 }))
@@ -105,14 +107,17 @@ export const LeafBurst: React.FC<LeafBurstProps> = ({ x, y, startTime, onComplet
           p.x += p.vx * dtSec;
           p.y += p.vy * dtSec;
         } else {
-          const ellipseDist = Math.sqrt((p.x / ELLIPSE_A) ** 2 + (p.y / ELLIPSE_B) ** 2);
-          if (ellipseDist >= 1) {
+          // Use circle or ellipse based on prop
+          const boundaryDist = useCircle 
+            ? Math.sqrt(p.x ** 2 + p.y ** 2) / ELLIPSE_A
+            : Math.sqrt((p.x / ELLIPSE_A) ** 2 + (p.y / ELLIPSE_B) ** 2);
+          if (boundaryDist >= 1) {
             p.falling = true;
             p.fallStartTime = elapsed;
             p.vx *= 0.05;
             p.vy *= 0.05;
           } else {
-            const maxSpeed = leaf.initialSpeed * Math.max(0, 1 - ellipseDist);
+            const maxSpeed = leaf.initialSpeed * Math.max(0, 1 - boundaryDist);
             const speed = Math.hypot(p.vx, p.vy) || 1;
             if (speed > maxSpeed) {
               const scale = maxSpeed / speed;
