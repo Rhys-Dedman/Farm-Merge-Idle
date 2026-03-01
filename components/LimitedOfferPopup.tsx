@@ -32,6 +32,8 @@ interface LimitedOfferPopupProps {
   description: string;
   buttonText: string;
   onButtonClick?: (buttonRect: DOMRect) => void;
+  /** Called when X close button is clicked, with the accept button rect for particle origin */
+  onCloseButtonClick?: (acceptButtonRect: DOMRect) => void;
   showCloseButton?: boolean;
   imageLevel?: number;
   closeOnBackdropClick?: boolean;
@@ -103,6 +105,7 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
   description,
   buttonText,
   onButtonClick,
+  onCloseButtonClick,
   showCloseButton = true,
   imageLevel,
   closeOnBackdropClick = true,
@@ -536,7 +539,12 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
 {/* Close Button */}
         {showCloseButton && (
           <button
-            onClick={onClose}
+            onClick={() => {
+              if (onCloseButtonClick && buttonRef.current) {
+                onCloseButtonClick(buttonRef.current.getBoundingClientRect());
+              }
+              onClose();
+            }}
             className="absolute top-[56px] right-6 w-8 h-8 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
             style={{
               backgroundColor: 'transparent',

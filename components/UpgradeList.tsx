@@ -1,6 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { TabType } from '../types';
+import { assetPath } from '../utils/assetPath';
 
 export interface UpgradeState {
   level: number;
@@ -101,6 +102,18 @@ export const getSeedSurplusValue = (seedsState: SeedsState): number => {
 
 export type HarvestState = Record<string, UpgradeState>;
 
+/** Rewarded offer item that appears at top of upgrade list */
+export interface RewardedOffer {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  /** Which tab this offer appears in */
+  tab: TabType;
+  /** Time remaining in seconds (optional, for countdown display) */
+  timeRemaining?: number;
+}
+
 interface UpgradeListProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
@@ -125,6 +138,10 @@ interface UpgradeListProps {
   onFertilizeCell?: () => void;
   /** Highest plant level ever achieved by the player (for seed_quality max check) */
   highestPlantEver?: number;
+  /** Rewarded offers to display at top of relevant tabs */
+  rewardedOffers?: RewardedOffer[];
+  /** Called when a rewarded offer button is clicked */
+  onRewardedOfferClick?: (offerId: string) => void;
 }
 
 interface UpgradeDef {
@@ -196,27 +213,27 @@ const formatCost = (cost: number): string => {
 };
 
 const SEEDS_UPGRADES: UpgradeDef[] = [
-  { id: 'seed_production', name: 'Seed Production', icon: '🌱', description: 'Increase automatic seed production speed' },
-  { id: 'seed_quality', name: 'Seed Quality', icon: '🍎' }, // Description is dynamic, rendered inline
-  { id: 'seed_storage', name: 'Seed Storage', icon: '📦', description: 'Increase the amount of seeds you can store' },
-  { id: 'seed_surplus', name: 'Seed Surplus', icon: '🪙', description: 'Extra seeds become coins when storage is full' },
-  { id: 'bonus_seeds', name: 'Seed Luck', icon: '🍀', description: 'Increase the chance to produce a bonus plant' },
+  { id: 'seed_production', name: 'Seed Production', icon: assetPath('/assets/icons/icon_seedproduction.png'), description: 'Increase automatic seed production speed' },
+  { id: 'seed_quality', name: 'Seed Quality', icon: assetPath('/assets/icons/icon_seedquality.png') }, // Description is dynamic, rendered inline
+  { id: 'seed_storage', name: 'Seed Storage', icon: assetPath('/assets/icons/icon_seedstorage.png'), description: 'Increase the amount of seeds you can store' },
+  { id: 'seed_surplus', name: 'Seed Surplus', icon: assetPath('/assets/icons/icon_seedsurplus.png'), description: 'Extra seeds become coins when storage is full' },
+  { id: 'bonus_seeds', name: 'Seed Luck', icon: assetPath('/assets/icons/icon_luckyseed.png'), description: 'Increase the chance to produce a bonus plant' },
 ];
 
 const CROPS_UPGRADES: UpgradeDef[] = [
-  { id: 'plot_expansion', name: 'Plot Expansion', icon: '🗺️', description: 'Unlock additional plots for planting crops' },
-  { id: 'crop_merging', name: 'Crop Merging', icon: '🪙', description: 'Multiply coins earned from merging crops' },
-  { id: 'merge_harvest', name: 'Merge Harvest', icon: '🌿', description: 'Merges have a chance to instantly harvest adjacent crops' },
-  { id: 'fertile_soil', name: 'Fertile Soil', icon: '🥕', description: 'Fertile plots double the value of crops when harvested' },
-  { id: 'lucky_merge', name: 'Lucky Merge', icon: '✨', description: 'Increase chance for merges to upgrade crops by +2 levels' },
+  { id: 'plot_expansion', name: 'Plot Expansion', icon: assetPath('/assets/icons/icon_plotexpansion.png'), description: 'Unlock additional plots for planting crops' },
+  { id: 'crop_merging', name: 'Crop Merging', icon: assetPath('/assets/icons/icon_cropmerge.png'), description: 'Multiply coins earned from merging crops' },
+  { id: 'merge_harvest', name: 'Merge Harvest', icon: assetPath('/assets/icons/icon_mergeharvest.png'), description: 'Merges have a chance to instantly harvest adjacent crops' },
+  { id: 'fertile_soil', name: 'Fertile Soil', icon: assetPath('/assets/icons/icon_fetilesoil.png'), description: 'Fertile plots double the value of crops when harvested' },
+  { id: 'lucky_merge', name: 'Lucky Merge', icon: assetPath('/assets/icons/icon_luckymerge.png'), description: 'Increase chance for merges to upgrade crops by +2 levels' },
 ];
 
 const HARVEST_UPGRADES: UpgradeDef[] = [
-  { id: 'harvest_speed', name: 'Harvest Speed', icon: '🚜', description: 'Increase automatic harvest cycle speed' },
-  { id: 'crop_value', name: 'Crop Value', icon: '💰', description: 'Increase coin value of harvested crops' },
-  { id: 'harvest_boost', name: 'Harvest Boost', icon: '🥬', description: 'Merging crops increases the crop cycle progress' },
-  { id: 'crop_synergy', name: 'Crop Synergy', icon: '🌾', description: 'Increase coin value from adjacent matching crops' },
-  { id: 'lucky_harvest', name: 'Lucky Harvest', icon: '🍀', description: 'Increase the chance for a double harvest' },
+  { id: 'harvest_speed', name: 'Harvest Speed', icon: assetPath('/assets/icons/icon_harvestspeed.png'), description: 'Increase automatic harvest cycle speed' },
+  { id: 'crop_value', name: 'Crop Value', icon: assetPath('/assets/icons/icon_cropvalue.png'), description: 'Increase coin value of harvested crops' },
+  { id: 'harvest_boost', name: 'Harvest Boost', icon: assetPath('/assets/icons/icon_harvestboost.png'), description: 'Merging crops increases the crop cycle progress' },
+  { id: 'crop_synergy', name: 'Crop Synergy', icon: assetPath('/assets/icons/icon_cropsynergy.png'), description: 'Increase coin value from adjacent matching crops' },
+  { id: 'lucky_harvest', name: 'Lucky Harvest', icon: assetPath('/assets/icons/icon_luckyharvest.png'), description: 'Increase the chance for a double harvest' },
 ];
 
 const getUpgradesForTab = (tab: TabType): UpgradeDef[] => {
@@ -374,7 +391,7 @@ export const createInitialHarvestState = (): Record<string, UpgradeState> => ({
   lucky_harvest: { level: 0, progress: 0 },
 });
 
-export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange, money, setMoney, seedsState: propsSeedsState, setSeedsState: propsSetSeedsState, harvestState: propsHarvestState, setHarvestState: propsSetHarvestState, cropsState: propsCropsState, setCropsState: propsSetCropsState, lockedCellCount = 0, onUnlockCell, fertilizableCellCount = 0, onFertilizeCell, highestPlantEver = 1 }) => {
+export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange, money, setMoney, seedsState: propsSeedsState, setSeedsState: propsSetSeedsState, harvestState: propsHarvestState, setHarvestState: propsSetHarvestState, cropsState: propsCropsState, setCropsState: propsSetCropsState, lockedCellCount = 0, onUnlockCell, fertilizableCellCount = 0, onFertilizeCell, highestPlantEver = 1, rewardedOffers = [], onRewardedOfferClick }) => {
   const [internalSeedsState, setInternalSeedsState] = useState<Record<string, UpgradeState>>(createInitialSeedsState);
   const seedsState = propsSeedsState ?? internalSeedsState;
   const setSeedsState = propsSetSeedsState ?? setInternalSeedsState;
@@ -595,10 +612,103 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
     });
   };
 
+  const renderRewardedOfferItem = (offer: RewardedOffer) => {
+    const formatTime = (seconds: number) => {
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    return (
+      <div 
+        key={offer.id} 
+        className="relative flex flex-col transition-all duration-300 border-2 bg-[#fde8a1] shadow-[0_2px_10px_rgba(0,0,0,0.03)] border-[#fbc682] rounded-[11px]"
+      >
+        <div className="flex items-center p-1.5 px-3">
+          {/* Square Icon Box */}
+          <div className="w-[38px] h-[38px] shrink-0 flex items-center justify-center bg-[#764f40] rounded-[8px] shadow-sm">
+            <span className="text-[22px] leading-none select-none">{offer.icon}</span>
+          </div>
+          
+          {/* Text Content */}
+          <div className="flex-grow px-3">
+            <div className="flex items-baseline space-x-1.5">
+              <h3 className="text-[13px] font-black tracking-tight uppercase leading-none text-[#583c1f]">
+                {offer.name}
+              </h3>
+            </div>
+            <div 
+              className="text-[11px] font-semibold mt-0.5 tracking-tight"
+              style={{ color: '#f69d42' }}
+            >
+              {offer.description}
+            </div>
+          </div>
+
+          {/* Watch Ad Button with timer - 1.2x wider than normal buttons */}
+          <button 
+            onClick={() => onRewardedOfferClick?.(offer.id)}
+            className="relative flex items-center min-w-[84px] h-8 transition-all border outline outline-1 active:translate-y-[2px] active:border-b-0 active:mb-[4px] rounded-[8px] shadow-[inset_0_1px_1px_rgba(255,255,255,0.4)]"
+            style={{
+              backgroundColor: '#ffd856',
+              borderColor: '#f59d42',
+              borderBottomWidth: '4px',
+              outlineColor: '#f59d42',
+              paddingLeft: '6px',
+              paddingRight: '6px',
+            }}
+          >
+            {/* Watch Ad Icon - 1.2x scale (base 18px * 1.2 = ~22px) */}
+            <img
+              src={assetPath('/assets/icons/icon_watchad.png')}
+              alt=""
+              style={{
+                width: '22px',
+                height: '22px',
+                objectFit: 'contain',
+                filter: 'brightness(0) saturate(100%) invert(56%) sepia(67%) saturate(1000%) hue-rotate(346deg) brightness(97%) contrast(88%)',
+                flexShrink: 0,
+              }}
+            />
+            {/* Timer with fixed width to prevent layout shift */}
+            {offer.timeRemaining !== undefined && (
+              <span 
+                className="text-[13px] font-black tracking-tighter text-right"
+                style={{ 
+                  color: '#e6803a',
+                  width: '38px',
+                  flexShrink: 0,
+                  marginRight: '2px',
+                }}
+              >
+                {formatTime(offer.timeRemaining)}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Progress Bar - orange themed */}
+        <div className="flex w-full h-[10px] px-3 pb-2">
+          <div className="w-full h-[6px] bg-[#fcc371] rounded-full overflow-hidden relative" style={{ minHeight: '6px' }}>
+            <div 
+              className="absolute left-0 top-0 h-full bg-[#f59d42]"
+              style={{ 
+                width: '100%',
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderUpgradeItems = (category: TabType, stateMap: Record<string, UpgradeState>) => {
     const upgrades = getUpgradesForTab(category);
+    const categoryOffers = rewardedOffers.filter(o => o.tab === category);
     return (
     <div ref={(scrollRefs as any)[category]} className="flex-grow overflow-y-auto no-scrollbar px-3 pt-3 pb-3 h-full space-y-2.5 overscroll-contain cursor-grab active:cursor-grabbing select-none">
+      {/* Rewarded offers at top */}
+      {categoryOffers.map(offer => renderRewardedOfferItem(offer))}
       {upgrades.map((upgrade) => {
         const state = stateMap[upgrade.id];
         const currentCost = getUpgradeCostValue(upgrade.id, state.level);
@@ -655,8 +765,12 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
           >
             <div className="flex items-center p-1.5 px-3">
               {/* Square Icon Box */}
-              <div className="w-[38px] h-[38px] shrink-0 flex items-center justify-center bg-[#473a38] rounded-[8px] shadow-sm">
-                <span className="text-[22px] leading-none select-none">{upgrade.icon}</span>
+              <div className="w-[38px] h-[38px] shrink-0 flex items-center justify-center bg-[#764f40] rounded-[8px] shadow-sm">
+                {upgrade.icon.includes('.png') ? (
+                  <img src={upgrade.icon} alt="" className="w-[30px] h-[30px] object-contain select-none" />
+                ) : (
+                  <span className="text-[22px] leading-none select-none">{upgrade.icon}</span>
+                )}
               </div>
               
               {/* Text Content */}

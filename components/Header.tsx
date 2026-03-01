@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { assetPath } from '../utils/assetPath';
 
 interface HeaderProps {
   money: number;
@@ -38,10 +39,10 @@ export const Header: React.FC<HeaderProps> = ({ money, onStoreClick, walletRef, 
           />
           <span
             ref={walletIconRef}
-            className={`relative flex items-center justify-center text-sm leading-none transition-colors duration-75 ${walletFlashActive ? 'text-[#583c1f]' : 'text-white'}`}
+            className="relative flex items-center justify-center leading-none"
             aria-hidden
           >
-            🪙
+            <img src={assetPath('/assets/icons/icon_coin.png')} alt="" className="w-[18px] h-[18px] object-contain" />
           </span>
           <span
             className={`relative font-black text-xs tracking-tight transition-colors duration-75 ${walletFlashActive ? 'text-[#583c1f]' : 'text-white'}`}

@@ -32,7 +32,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeScreen, onScreenChange, ba
     : Math.min(1, viewportWidth / navDesignWidth);
   const items: { id: ScreenType; label: string; icon: string }[] = [
     { id: 'STORE', label: 'MARKET', icon: assetPath('/assets/icons/icon_market.png') },
-    { id: 'FARM', label: 'FARM', icon: assetPath('/assets/icons/icon_farm.png') },
+    { id: 'FARM', label: 'GARDEN', icon: assetPath('/assets/icons/icon_farm.png') },
     { id: 'BARN', label: 'SHED', icon: assetPath('/assets/icons/icon_barn.png') },
   ];
 

@@ -1,10 +1,16 @@
 
-import React from 'react';
+import React, { useRef, useImperativeHandle, forwardRef } from 'react';
 import { TabType } from '../types';
 
 interface UpgradeTabsProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
+  /** Tabs that currently have limited offers */
+  tabsWithOffers?: Set<TabType>;
+}
+
+export interface UpgradeTabsRef {
+  getTabRef: (tab: TabType) => HTMLSpanElement | null;
 }
 
 const TAB_ICONS: Record<TabType, string> = {
@@ -13,8 +19,27 @@ const TAB_ICONS: Record<TabType, string> = {
   HARVEST: '🧺',
 };
 
-export const UpgradeTabs: React.FC<UpgradeTabsProps> = ({ activeTab, onTabChange }) => {
+const NOTIFICATION_COLOR = '#e6803a';
+const NOTIFICATION_UNDERLINE_COLOR = '#f59d42';
+const NORMAL_UNDERLINE_COLOR = '#a7c957';
+
+export const UpgradeTabs = forwardRef<UpgradeTabsRef, UpgradeTabsProps>(({ activeTab, onTabChange, tabsWithOffers = new Set() }, ref) => {
   const tabs: TabType[] = ['SEEDS', 'CROPS', 'HARVEST'];
+  
+  const tabRefs = useRef<Record<TabType, HTMLSpanElement | null>>({
+    SEEDS: null,
+    CROPS: null,
+    HARVEST: null,
+  });
+
+  useImperativeHandle(ref, () => ({
+    getTabRef: (tab: TabType) => tabRefs.current[tab],
+  }));
+  
+  // Check if active tab has an offer (for underline/arrow color)
+  const activeTabHasOffer = tabsWithOffers.has(activeTab);
+  const underlineColor = activeTabHasOffer ? NOTIFICATION_UNDERLINE_COLOR : NORMAL_UNDERLINE_COLOR;
+
   return (
     <div className="flex w-full bg-[#fcf0c6] relative h-[43px] shrink-0 items-center px-4">
       {/* Background Underline - Spans full width, matches thickness of the active indicator */}
@@ -22,6 +47,19 @@ export const UpgradeTabs: React.FC<UpgradeTabsProps> = ({ activeTab, onTabChange
 
       {tabs.map((tab) => {
         const isActive = activeTab === tab;
+        const hasOffer = tabsWithOffers.has(tab);
+        
+        const getTextColor = () => {
+          // Active tab with offer = yellow
+          if (isActive && hasOffer) return NOTIFICATION_COLOR;
+          // Active tab without offer = green
+          if (isActive) return '#6a994e';
+          // Inactive tab with offers = yellow notification
+          if (hasOffer) return NOTIFICATION_COLOR;
+          // Inactive tab without offers = brown/tan
+          return '#c2b280';
+        };
+
         return (
           <button
             key={tab}
@@ -31,34 +69,37 @@ export const UpgradeTabs: React.FC<UpgradeTabsProps> = ({ activeTab, onTabChange
             <span className={`text-[9px] filter saturate-[0.8] ${isActive ? 'opacity-100' : 'opacity-40 grayscale'}`}>
               {TAB_ICONS[tab]}
             </span>
-            <span className={`text-[11px] font-black tracking-[0.1em] transition-colors duration-300 ${
-              isActive ? 'text-[#6a994e]' : 'text-[#c2b280]'
-            }`}>
+            <span 
+              ref={(el) => { tabRefs.current[tab] = el; }}
+              className="text-[11px] font-black tracking-[0.1em] transition-colors duration-300"
+              style={{ color: getTextColor() }}
+            >
               {tab}
             </span>
           </button>
         );
       })}
       
-      {/* Active Tab Indicator - Matches the image's green underline + triangle tip */}
+      {/* Active Tab Indicator - underline + triangle tip */}
       <div 
-        className="absolute bottom-0 h-[2px] bg-[#a7c957] transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] rounded-full z-20"
+        className="absolute bottom-0 h-[2px] transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] rounded-full z-20"
         style={{
           width: '28%',
-          left: activeTab === 'SEEDS' ? '4%' : activeTab === 'CROPS' ? '36%' : '68%'
+          left: activeTab === 'SEEDS' ? '4%' : activeTab === 'CROPS' ? '36%' : '68%',
+          backgroundColor: underlineColor,
         }}
       >
         <div 
-          className="absolute top-[-4px] left-1/2 -translate-x-1/2"
+          className="absolute top-[-4px] left-1/2 -translate-x-1/2 transition-colors duration-300"
           style={{
             width: 0,
             height: 0,
             borderLeft: '4px solid transparent',
             borderRight: '4px solid transparent',
-            borderBottom: '4px solid #a7c957',
+            borderBottom: `4px solid ${underlineColor}`,
           }}
         ></div>
       </div>
     </div>
   );
-};
+});

@@ -1,4 +1,5 @@
 import React from 'react';
+import { assetPath } from '../utils/assetPath';
 
 interface PageHeaderProps {
   money: number;
@@ -36,7 +37,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
           <button
             ref={walletRef}
             onClick={onWalletClick}
-            className="relative flex items-center gap-1 bg-black/50 backdrop-blur-md px-2 py-1 rounded-full border-0 outline-none shadow-2xl hover:bg-black/60 active:scale-95 transition-all overflow-hidden"
+            className="relative flex items-center gap-1 bg-black/50 backdrop-blur-md pl-1.5 pr-2.5 py-1 rounded-full border-0 outline-none shadow-2xl hover:bg-black/60 active:scale-95 transition-all overflow-hidden"
           >
             <div
               className="absolute inset-0 rounded-full pointer-events-none transition-opacity duration-75 ease-out border-0 outline-none"
@@ -48,10 +49,10 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
             />
             <span
               ref={walletIconRef}
-              className={`relative flex items-center justify-center text-sm leading-none transition-colors duration-75 ${walletFlashActive ? 'text-[#583c1f]' : 'text-white'}`}
+              className="relative flex items-center justify-center leading-none"
               aria-hidden
             >
-              🪙
+              <img src={assetPath('/assets/icons/icon_coin.png')} alt="" className="w-[18px] h-[18px] object-contain" />
             </span>
             <span
               className={`relative font-black text-xs tracking-tight transition-colors duration-75 ${walletFlashActive ? 'text-[#583c1f]' : 'text-white'}`}
@@ -60,7 +61,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
             </span>
           </button>
         ) : plantWallet ? (
-          <div className="relative flex items-center gap-1 bg-black/50 backdrop-blur-md px-2 py-1 rounded-full border-0 shadow-2xl overflow-hidden">
+          <div className="relative flex items-center gap-1 bg-black/50 backdrop-blur-md pl-1.5 pr-2.5 py-1 rounded-full border-0 shadow-2xl overflow-hidden">
             <span 
               className="relative flex items-center justify-center text-sm leading-none text-white"
               aria-hidden
@@ -72,7 +73,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
             </span>
           </div>
         ) : (
-          <div className="relative flex items-center gap-1 bg-black/50 backdrop-blur-md px-2 py-1 rounded-full border-0 shadow-2xl overflow-hidden">
+          <div className="relative flex items-center gap-1 bg-black/50 backdrop-blur-md pl-1.5 pr-2.5 py-1 rounded-full border-0 shadow-2xl overflow-hidden">
             <div
               className="absolute inset-0 rounded-full pointer-events-none transition-opacity duration-75 ease-out border-0 outline-none"
               style={{
@@ -82,10 +83,10 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
               aria-hidden
             />
             <span 
-              className={`relative flex items-center justify-center text-sm leading-none transition-colors duration-75 ${walletFlashActive ? 'text-[#583c1f]' : 'text-white'}`} 
+              className="relative flex items-center justify-center leading-none"
               aria-hidden
             >
-              🪙
+              <img src={assetPath('/assets/icons/icon_coin.png')} alt="" className="w-[18px] h-[18px] object-contain" />
             </span>
             <span className={`relative font-black text-xs tracking-tight transition-colors duration-75 ${walletFlashActive ? 'text-[#583c1f]' : 'text-white'}`}>
               {formatMoney(money)}

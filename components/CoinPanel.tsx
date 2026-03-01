@@ -2,6 +2,7 @@
  * Coin panel: reveal above plant → hold → move to wallet with trail; on impact add value to wallet.
  */
 import React, { useEffect, useRef, useState } from 'react';
+import { assetPath } from '../utils/assetPath';
 
 const REVEAL_MS = 220;
 const HOLD_MS = 250; // 0.25s at top before stagger
@@ -274,16 +275,16 @@ export const CoinPanel: React.FC<CoinPanelProps> = ({
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 1,
+              gap: 3,
               paddingTop: 4,
               paddingBottom: 4,
-              paddingLeft: 8,
-              paddingRight: 12,
+              paddingLeft: 2,
+              paddingRight: 6,
               transform: `scale(${contentScale * 0.88})`,
               opacity: contentOpacity,
             }}
           >
-            <span className="text-[11px] leading-none shrink-0" aria-hidden>🪙</span>
+            <img src={assetPath('/assets/icons/icon_coin.png')} alt="" className="w-[15px] h-[15px] shrink-0 object-contain" aria-hidden />
             <span
               className="font-black tabular-nums leading-none"
               style={{ color: '#583c1f', letterSpacing: '-0.04em', fontSize: '11px' }}

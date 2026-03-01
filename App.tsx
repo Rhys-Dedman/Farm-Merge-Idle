@@ -3,7 +3,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { HexBoard } from './components/HexBoard';
 import { UpgradeTabs } from './components/UpgradeTabs';
-import { UpgradeList, createInitialSeedsState, createInitialHarvestState, createInitialCropsState, getSeedQualityPercent, getSeedBaseTier, getBonusSeedChance, getSeedSurplusValue, getCropValueMultiplier, getHarvestBoostPercent, getCropSynergyMultiplier, getLuckyHarvestChance, getCropMergingMultiplier, getLuckyMergeChance, getMergeHarvestChance, HarvestState, UpgradeState } from './components/UpgradeList';
+import { UpgradeList, createInitialSeedsState, createInitialHarvestState, createInitialCropsState, getSeedQualityPercent, getSeedBaseTier, getBonusSeedChance, getSeedSurplusValue, getCropValueMultiplier, getHarvestBoostPercent, getCropSynergyMultiplier, getLuckyHarvestChance, getCropMergingMultiplier, getLuckyMergeChance, getMergeHarvestChance, HarvestState, UpgradeState, RewardedOffer } from './components/UpgradeList';
 import { Navbar } from './components/Navbar';
 import { StoreScreen } from './components/StoreScreen';
 import { SideAction } from './components/SideAction';
@@ -18,6 +18,8 @@ import { DiscoveryPopup } from './components/DiscoveryPopup';
 import { PlantInfoPopup } from './components/PlantInfoPopup';
 import { LimitedOfferPopup } from './components/LimitedOfferPopup';
 import { BarnParticle, BarnParticleData } from './components/BarnParticle';
+import { OfferParticle, OfferParticleData } from './components/OfferParticle';
+import { UpgradeTabsRef } from './components/UpgradeTabs';
 import { ButtonLeafBurst } from './components/ButtonLeafBurst';
 import { TabType, ScreenType, BoardCell, Item, DragState } from './types';
 import { assetPath } from './utils/assetPath';
@@ -127,9 +129,15 @@ export default function App() {
   // Plant info popup state (for barn)
   const [plantInfoPopup, setPlantInfoPopup] = useState<{ isVisible: boolean; level: number } | null>(null);
   // Limited offer popup state
-  const [limitedOfferPopup, setLimitedOfferPopup] = useState<{ isVisible: boolean; title?: string; imageSrc: string; subtitle: string; description: string; buttonText: string } | null>(null);
+  const [limitedOfferPopup, setLimitedOfferPopup] = useState<{ isVisible: boolean; title?: string; imageSrc: string; subtitle: string; description: string; buttonText: string; offerId?: string } | null>(null);
+  // Rewarded offers shown in upgrade list (when player declines popup)
+  const [rewardedOffers, setRewardedOffers] = useState<RewardedOffer[]>([]);
   // Barn particles for "Add to Barn" button
   const [barnParticles, setBarnParticles] = useState<BarnParticleData[]>([]);
+  // Offer particles for limited offer decline (fly to tab)
+  const [offerParticles, setOfferParticles] = useState<(OfferParticleData & { tab: TabType; offerData: { id: string; name: string; description: string } })[]>([]);
+  // Ref for upgrade tabs to get tab element positions
+  const upgradeTabsRef = useRef<UpgradeTabsRef>(null);
   // Barn notification state - shows when a new plant is added to barn
   const [barnNotification, setBarnNotification] = useState(false);
   const [unlockingCellIndices, setUnlockingCellIndices] = useState<number[]>([]); // Cells currently playing unlock animation
@@ -189,6 +197,28 @@ export default function App() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+// Countdown timer for rewarded offers (1 second tick)
+  useEffect(() => {
+    if (rewardedOffers.length === 0) return;
+
+    const interval = setInterval(() => {
+      setRewardedOffers(prev => {
+        const updated = prev.map(offer => ({
+          ...offer,
+          timeRemaining: offer.timeRemaining !== undefined ? offer.timeRemaining - 1 : undefined
+        }));
+
+        // Filter out expired offers (timer reached 0)
+        return updated.filter(o => o.timeRemaining === undefined || o.timeRemaining > 0);
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [rewardedOffers.length > 0]);
+  
+  // Derive which tabs have offers (for tab notification coloring)
+  const tabsWithOffers = new Set(rewardedOffers.map(o => o.tab));
   
   // Calculate scale to fit 9:16 app into viewport
   // Base dimensions match the original max-w-md (448px) with 9:16 aspect
@@ -1323,7 +1353,7 @@ export default function App() {
               </div>
 
               {/* Farm Header - pinned to this screen */}
-              <div className="relative z-50 flex items-center gap-2">
+              <div className="relative z-50 w-full">
                 <PageHeader 
                   money={money}
                   walletRef={walletRef}
@@ -1331,16 +1361,17 @@ export default function App() {
                   walletFlashActive={walletFlashActive}
                   onWalletClick={() => setActiveScreen('STORE')}
                 />
-                {/* Limited Offer test button */}
+                {/* Limited Offer test button - positioned absolutely */}
                 <button
                   onClick={() => setLimitedOfferPopup({
                     isVisible: true,
+                    offerId: 'super_seed_offer',
                     imageSrc: assetPath('/assets/plants/plant_2.png'),
-                    subtitle: 'Super Seeds!',
-                    description: 'Increase the chance to produce level 2 plants',
+                    subtitle: 'SUPER SEED',
+                    description: 'Spawn 10 seeds instantly onto the board',
                     buttonText: 'Accept Offer',
                   })}
-                  className="flex items-center justify-center transition-all active:scale-95"
+                  className="absolute flex items-center justify-center transition-all active:scale-95"
                   style={{
                     width: '36px',
                     height: '36px',
@@ -1348,7 +1379,8 @@ export default function App() {
                     background: 'linear-gradient(180deg, #FFB347 0%, #FF9500 100%)',
                     border: '2px solid #E88A00',
                     boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                    marginTop: '8px',
+                    top: '16px',
+                    left: '85px',
                   }}
                 >
                   <span style={{ fontSize: '18px' }}>🎁</span>
@@ -1367,11 +1399,11 @@ export default function App() {
                 />
                 <div className="absolute bottom-4 w-full px-3 flex justify-between items-end z-20 pointer-events-none transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]">
                    <div className="pointer-events-auto flex items-center justify-center" ref={plantButtonRef} style={{ transform: 'scale(0.9)', transformOrigin: 'center center' }} onClick={(e) => e.stopPropagation()}>
-                     <SideAction 
-                        label="Plant" 
+<SideAction
+                        label="Plant"
                         icon={assetPath(`/assets/plants/plant_${seedBaseTier}.png`)}
-                        iconScale={1.25}
-                        iconOffsetY={-3}
+                        iconScale={1.35}
+                        iconOffsetY={-1}
                         progress={Math.max(0, Math.min(1, seedProgress / 100))}
                         progressRef={seedProgressRef} 
                         color="#a7c957"
@@ -1388,7 +1420,7 @@ export default function App() {
                    <div className="pointer-events-auto flex items-center justify-center" ref={harvestButtonRef} style={{ transform: 'scale(0.9)', transformOrigin: 'center center' }} onClick={(e) => e.stopPropagation()}>
                      <SideAction 
                         label="Harvest" 
-                        icon="≡ƒº║" 
+                        icon={assetPath('/assets/icons/icon_harvest.png')} 
                         progress={harvestProgress / 100}
                         progressRef={harvestProgressRef}
                         color="#a7c957"
@@ -1398,6 +1430,7 @@ export default function App() {
                         isBoardFull={false}
                         noRotateOnFlash={true}
                         bounceTrigger={harvestBounceTrigger}
+                        iconScale={1.5}
                         onClick={handleHarvestClick}
                       />
                    </div>
@@ -1511,7 +1544,12 @@ export default function App() {
                   borderTop: '1px solid #ebdbaf'
                 }}
               >
-                <UpgradeTabs activeTab={activeTab} onTabChange={handleTabChange} />
+                <UpgradeTabs 
+                  ref={upgradeTabsRef}
+                  activeTab={activeTab} 
+                  onTabChange={handleTabChange}
+                  tabsWithOffers={tabsWithOffers}
+                />
                 <div className="flex-grow overflow-hidden relative">
                   <UpgradeList 
                     activeTab={activeTab} 
@@ -1529,6 +1567,21 @@ export default function App() {
                     fertilizableCellCount={fertilizableCellCount}
                     onFertilizeCell={handleFertilizeCell}
                     highestPlantEver={highestPlantEver}
+                    rewardedOffers={rewardedOffers}
+                    onRewardedOfferClick={(offerId) => {
+                      // Find the offer and show the popup
+                      const offer = rewardedOffers.find(o => o.id === offerId);
+                      if (offer) {
+                        setLimitedOfferPopup({
+                          isVisible: true,
+                          offerId: offer.id,
+                          imageSrc: assetPath('/assets/plants/plant_2.png'),
+                          subtitle: offer.name,
+                          description: offer.description,
+                          buttonText: 'Watch Ad',
+                        });
+                      }
+                    }}
                   />
                 </div>
               </div>
@@ -1797,7 +1850,36 @@ export default function App() {
             {limitedOfferPopup && (
               <LimitedOfferPopup
                 isVisible={limitedOfferPopup.isVisible}
-                onClose={() => setLimitedOfferPopup(null)}
+                onClose={() => {
+                  setLimitedOfferPopup(null);
+                }}
+                onCloseButtonClick={() => {
+                  // Fire particle from above the tab, falling down to it
+                  if (limitedOfferPopup.offerId) {
+                    const container = containerRef.current;
+                    const offerTab: TabType = 'SEEDS';
+                    const tabEl = upgradeTabsRef.current?.getTabRef(offerTab);
+                    if (container && tabEl) {
+                      const scale = appScaleRef.current;
+                      const containerRect = container.getBoundingClientRect();
+                      const tabRect = tabEl.getBoundingClientRect();
+                      // Spawn above the tab text
+                      const startX = (tabRect.left + tabRect.width / 2 - containerRect.left) / scale;
+                      const startY = (tabRect.top - 80 - containerRect.top) / scale;
+                      setOfferParticles(prev => [...prev, {
+                        id: `offer-${Date.now()}`,
+                        startX,
+                        startY,
+                        tab: offerTab,
+                        offerData: {
+                          id: limitedOfferPopup.offerId!,
+                          name: limitedOfferPopup.subtitle,
+                          description: limitedOfferPopup.description,
+                        },
+                      }]);
+                    }
+                  }
+                }}
                 title={limitedOfferPopup.title}
                 imageSrc={limitedOfferPopup.imageSrc}
                 subtitle={limitedOfferPopup.subtitle}
@@ -1806,6 +1888,11 @@ export default function App() {
                 appScale={appScale}
                 onButtonClick={() => {
                   console.log('Limited offer accepted!');
+                  // Remove from rewarded offers if it was there
+                  if (limitedOfferPopup.offerId) {
+                    setRewardedOffers(prev => prev.filter(o => o.id !== limitedOfferPopup.offerId));
+                  }
+                  setLimitedOfferPopup(null);
                 }}
               />
             )}
@@ -1897,6 +1984,35 @@ export default function App() {
               onComplete={() => setBarnParticles(prev => prev.filter(p => p.id !== particle.id))}
             />
           ))}
+
+          {/* Offer Particles (fall down to upgrade tab) */}
+          {offerParticles.map((particle) => {
+            const tabRef = { current: upgradeTabsRef.current?.getTabRef(particle.tab) ?? null };
+            return (
+              <OfferParticle
+                key={particle.id}
+                data={particle}
+                containerRef={containerRef}
+                targetRef={tabRef}
+                appScale={appScale}
+                onImpact={() => {
+                  // Add to rewarded offers on particle impact
+                  setRewardedOffers(prev => {
+                    if (prev.some(o => o.id === particle.offerData.id)) return prev;
+                    return [...prev, {
+                      id: particle.offerData.id,
+                      name: particle.offerData.name,
+                      icon: '📦',
+                      description: particle.offerData.description,
+                      tab: particle.tab,
+                      timeRemaining: 60,
+                    }];
+                  });
+                }}
+                onComplete={() => setOfferParticles(prev => prev.filter(p => p.id !== particle.id))}
+              />
+            );
+          })}
         </div>
 
       </div>
