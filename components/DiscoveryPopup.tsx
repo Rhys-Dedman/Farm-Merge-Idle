@@ -34,6 +34,7 @@ interface DiscoveryPopupProps {
   showCloseButton?: boolean;
   imageLevel?: number;
   closeOnBackdropClick?: boolean;
+  appScale?: number;
 }
 
 const POPUP_LEAF_COUNT = 40;
@@ -148,6 +149,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
   showCloseButton = true,
   imageLevel,
   closeOnBackdropClick = true,
+  appScale = 1,
 }) => {
   const [animState, setAnimState] = useState<'hidden' | 'entering' | 'visible' | 'leaving'>('hidden');
   const [assetsReady, setAssetsReady] = useState(false);
@@ -300,7 +302,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
       className="fixed inset-0 flex items-center justify-center pointer-events-auto"
       style={{ zIndex: 100, overflow: 'hidden' }}
     >
-{/* Backdrop */}
+{/* Backdrop - not scaled, covers full screen */}
       <div
         className="absolute transition-opacity duration-300"
         style={{
@@ -313,6 +315,15 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
         }}
         onClick={closeOnBackdropClick ? onClose : undefined}
       />
+
+      {/* Scaled content wrapper */}
+      <div
+        className="relative flex items-center justify-center"
+        style={{
+          transform: `scale(${appScale})`,
+          transformOrigin: 'center center',
+        }}
+      >
 
       {/* Leaf Burst VFX */}
       {(isEntering || animState === 'visible') && leaves.length > 0 && (
@@ -571,6 +582,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
             </svg>
           </button>
         )}
+      </div>
       </div>
     </div>
   );

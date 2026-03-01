@@ -28,6 +28,7 @@ interface PlantInfoPopupProps {
   plantName: string;
   plantDescription: string;
   isUnlocked: boolean;
+  appScale?: number;
 }
 
 const POPUP_LEAF_COUNT = 30;
@@ -87,6 +88,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
   plantName,
   plantDescription,
   isUnlocked,
+  appScale = 1,
 }) => {
   const [animState, setAnimState] = useState<'hidden' | 'entering' | 'visible' | 'leaving'>('hidden');
   const [assetsReady, setAssetsReady] = useState(false);
@@ -222,7 +224,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
       style={{ zIndex: 100, overflow: 'hidden' }}
       onClick={handleClose}
     >
-{/* Backdrop */}
+{/* Backdrop - not scaled, covers full screen */}
       <div
         className="absolute"
         style={{
@@ -236,6 +238,14 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
         }}
       />
 
+      {/* Scaled content wrapper */}
+      <div
+        className="relative flex items-center justify-center"
+        style={{
+          transform: `scale(${appScale})`,
+          transformOrigin: 'center center',
+        }}
+      >
       {/* Leaf Burst VFX */}
       {(isEntering || animState === 'visible') && leaves.length > 0 && (
         <div 
@@ -442,6 +452,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
             <path d="M2 2L12 12M12 2L2 12" />
           </svg>
         </button>
+      </div>
       </div>
     </div>
   );
