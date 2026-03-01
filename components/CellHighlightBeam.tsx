@@ -129,7 +129,7 @@ export const CellHighlightBeam: React.FC<CellHighlightBeamProps> = ({
         height: cellHeight,
         transform: `translate(-50%, -50%) scale(${appScale})`,
         transformOrigin: 'center center',
-        zIndex: 55,
+        zIndex: 60,
       }}
     >
       {/* Hexcell highlight sprite with additive blending - same size as the cell */}

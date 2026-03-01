@@ -164,7 +164,7 @@ export const UnlockBurst: React.FC<UnlockBurstProps> = ({ x, y, startTime, onCom
         height: 1,
         transform: `translate(-50%, -50%) scale(${appScale})`,
         transformOrigin: 'center center',
-        zIndex: 55,
+        zIndex: 70,
       }}
     >
       {leaves.map((leaf, i) => (
