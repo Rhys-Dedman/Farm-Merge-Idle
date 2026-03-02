@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { BoardCell, Item, DragState } from '../types';
 import { PLANT_CONTAINER_WIDTH, PLANT_CONTAINER_HEIGHT } from '../constants/boardLayout';
@@ -9,11 +9,21 @@ const SCALE_UP_MS = 60;
 const FLYBACK_SPEED_PX_PER_MS = 1;
 const FLYBACK_MIN_MS = 50;
 const IMPACT_BOUNCE_MS = 400;
+const SWAP_RETURN_MS = 200;
+
+interface SwapReturnState {
+  item: Item;
+  fromCellIdx: number;
+  toCellIdx: number;
+  progress: number;
+  startTime: number;
+}
 
 interface HexBoardProps {
   isActive?: boolean;
   grid: BoardCell[];
   onMerge: (sourceIdx: number, targetIdx: number) => void;
+  onSwap: (sourceIdx: number, targetIdx: number) => void;
   impactCellIdx: number | null;
   returnImpactCellIdx: number | null;
   onReturnImpact: (cellIdx: number | null) => void;
@@ -60,6 +70,7 @@ export const HexBoard: React.FC<HexBoardProps> = ({
   isActive,
   grid,
   onMerge,
+  onSwap,
   impactCellIdx,
   returnImpactCellIdx,
   onReturnImpact,
@@ -82,6 +93,9 @@ export const HexBoard: React.FC<HexBoardProps> = ({
   const liftStartRef = useRef<number>(0);
   const flyStartRef = useRef<number>(0);
   const rafRef = useRef<number>(0);
+  const swapRafRef = useRef<number>(0);
+  const [swapReturn, setSwapReturn] = useState<SwapReturnState | null>(null);
+  const [swapImpactCellIdx, setSwapImpactCellIdx] = useState<number | null>(null);
 
   // Logical size for grid positioning
   const hexSize = 34.2;
@@ -156,7 +170,7 @@ export const HexBoard: React.FC<HexBoardProps> = ({
     liftStartRef.current = Date.now();
   }, [grid, getHexCenterInContainer, containerRef, appScale]);
 
-  const startFlyBack = useCallback((state: DragState, targetIdx?: number, isMerge?: boolean) => {
+  const startFlyBack = useCallback((state: DragState, targetIdx?: number, isMerge?: boolean, isSwap?: boolean) => {
     const curX = state.pointerX;
     const curY = state.pointerY;
     let toX: number;
@@ -173,13 +187,15 @@ export const HexBoard: React.FC<HexBoardProps> = ({
         targetCellIdx: targetIdx,
         hoveredEmptyCellIdx: null,
         hoveredMatchCellIdx: null,
+        hoveredSwapCellIdx: null,
         isMerge: isMerge === true,
+        isSwap: isSwap === true,
         mergeResultLevel: isMerge ? state.item.level + levelIncrease : undefined,
       };
     } else {
       toX = state.originX;
       toY = state.originY;
-      nextState = { ...state, hoveredEmptyCellIdx: null, hoveredMatchCellIdx: null };
+      nextState = { ...state, hoveredEmptyCellIdx: null, hoveredMatchCellIdx: null, hoveredSwapCellIdx: null };
     }
     const distance = Math.hypot(toX - curX, toY - curY);
     const durationMs = Math.max(FLYBACK_MIN_MS, distance / FLYBACK_SPEED_PX_PER_MS);
@@ -227,7 +243,10 @@ export const HexBoard: React.FC<HexBoardProps> = ({
         const targetItem = underIdx != null && underIdx !== dragState.cellIdx && !isLocked ? grid[underIdx]?.item : null;
         const hoveredMatchCellIdx =
           targetItem != null && underIdx != null && targetItem.level === dragState.item.level && targetItem.type === dragState.item.type ? underIdx : null;
-        setDragState((prev) => prev ? { ...prev, pointerX, pointerY, hoveredEmptyCellIdx, hoveredMatchCellIdx } : null);
+        // Swap: hovering over a non-matching plant (different level)
+        const hoveredSwapCellIdx =
+          targetItem != null && underIdx != null && hoveredMatchCellIdx == null ? underIdx : null;
+        setDragState((prev) => prev ? { ...prev, pointerX, pointerY, hoveredEmptyCellIdx, hoveredMatchCellIdx, hoveredSwapCellIdx } : null);
       }
     };
     const onUp = (e: PointerEvent) => {
@@ -246,13 +265,19 @@ export const HexBoard: React.FC<HexBoardProps> = ({
         const isValidMerge = targetIdx != null && targetIdx !== dragState.cellIdx && !isLocked && targetCell?.item && targetCell.item.level === dragState.item.level;
         const isEmptyCell = targetIdx != null && targetIdx !== dragState.cellIdx && !isLocked && targetCell?.item == null;
         const droppedOnSameCell = targetIdx === dragState.cellIdx;
+        // Check for swap: dropping on a plant that can't merge (different level)
+        const isSwapTarget = targetIdx != null && targetIdx !== dragState.cellIdx && !isLocked && targetCell?.item && targetCell.item.level !== dragState.item.level;
         
         if (isValidMerge) {
           onReleaseFromCell(dragState.cellIdx);
-          startFlyBack(releaseState, targetIdx!, true);
+          startFlyBack(releaseState, targetIdx!, true, false);
         } else if (inBounds && isEmptyCell) {
           onReleaseFromCell(dragState.cellIdx);
-          startFlyBack(releaseState, targetIdx!);
+          startFlyBack(releaseState, targetIdx!, false, false);
+        } else if (inBounds && isSwapTarget) {
+          // Swap plants
+          onReleaseFromCell(dragState.cellIdx);
+          startFlyBack(releaseState, targetIdx!, false, true);
         } else if (inBounds && targetIdx == null && !droppedOnSameCell) {
           // Dropped on background (not on any hex cell) - delete the plant
           onDeletePlant?.(dragState.cellIdx, dropX, dropY);
@@ -318,13 +343,29 @@ export const HexBoard: React.FC<HexBoardProps> = ({
       if (t >= impactStartT) {
         const targetCellIdx = dragState.targetCellIdx;
         const isMerge = dragState.isMerge === true;
+        const isSwap = dragState.isSwap === true;
         const sourceIdx = dragState.cellIdx;
         if (targetCellIdx == null) {
           onReturnImpact(dragState.cellIdx);
         }
         if (targetCellIdx != null) {
-          onMerge(sourceIdx, targetCellIdx);
-          if (!isMerge) onLandOnNewCell(targetCellIdx);
+          if (isSwap) {
+            // Capture the target item before swap for the return animation
+            const targetItem = grid[targetCellIdx]?.item;
+            if (targetItem) {
+              setSwapReturn({
+                item: targetItem,
+                fromCellIdx: targetCellIdx,
+                toCellIdx: sourceIdx,
+                progress: 0,
+                startTime: Date.now(),
+              });
+            }
+            onSwap(sourceIdx, targetCellIdx);
+          } else {
+            onMerge(sourceIdx, targetCellIdx);
+            if (!isMerge) onLandOnNewCell(targetCellIdx);
+          }
         }
         if (isMerge && targetCellIdx != null) {
           // Use the pre-calculated mergeResultLevel (includes lucky merge)
@@ -363,7 +404,29 @@ export const HexBoard: React.FC<HexBoardProps> = ({
     };
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [dragState?.phase === 'flyingBack' ? dragState.cellIdx : -1, dragState?.targetCellIdx, getHexCenterInContainer, onReturnImpact, onMergeImpactStart, onMerge, onLandOnNewCell]);
+  }, [dragState?.phase === 'flyingBack' ? dragState.cellIdx : -1, dragState?.targetCellIdx, getHexCenterInContainer, onReturnImpact, onMergeImpactStart, onMerge, onSwap, onLandOnNewCell, grid]);
+
+  // Swap return animation: animate the swapped plant flying to its new cell
+  useEffect(() => {
+    if (!swapReturn) return;
+    const tick = () => {
+      const elapsed = Date.now() - swapReturn.startTime;
+      const progress = Math.min(elapsed / SWAP_RETURN_MS, 1);
+      // Ease-out for smooth deceleration
+      const eased = 1 - Math.pow(1 - progress, 2);
+      if (progress >= 1) {
+        // Trigger impact animation at the destination cell
+        setSwapImpactCellIdx(swapReturn.toCellIdx);
+        setTimeout(() => setSwapImpactCellIdx(null), IMPACT_BOUNCE_MS);
+        setSwapReturn(null);
+        return;
+      }
+      setSwapReturn(prev => prev ? { ...prev, progress: eased } : null);
+      swapRafRef.current = requestAnimationFrame(tick);
+    };
+    swapRafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(swapRafRef.current);
+  }, [swapReturn?.startTime]);
 
   const centerX = '50%';
   const centerY = '48%'; 
@@ -429,6 +492,14 @@ export const HexBoard: React.FC<HexBoardProps> = ({
         }
         .plant-impact-scale {
           animation: plantImpactScale 400ms ease-out forwards;
+        }
+        @keyframes plantImpactScaleSoft {
+          0% { transform: translateY(-5.5px) scale(1.25); }
+          50% { transform: translateY(-5.5px) scale(1.65); }
+          100% { transform: translateY(-5.5px) scale(1.5); }
+        }
+        .plant-impact-scale-soft {
+          animation: plantImpactScaleSoft 250ms ease-out forwards;
         }
         @keyframes plantHarvestBounce {
           0% { transform: translateY(-5.5px) scale(1.5); }
@@ -599,17 +670,22 @@ export const HexBoard: React.FC<HexBoardProps> = ({
 
         {/* PASS 4: PLANTS (hide source while dragging; hide target during impact when moved) */}
         {(() => {
-          const draggedCellIdx = dragState?.cellIdx ?? -1;
-          const hideTargetDuringImpact = dragState?.phase === 'impact' && dragState?.targetCellIdx != null ? dragState.targetCellIdx : -1;
+          // For swaps, don't treat the source cell as "dragged" during impact - Plant B is there now
+          const isSwapImpact = dragState?.phase === 'impact' && dragState?.isSwap === true;
+          const draggedCellIdx = isSwapImpact ? -1 : (dragState?.cellIdx ?? -1);
+          const hideTargetDuringImpact = dragState?.phase === 'impact' && dragState?.targetCellIdx != null && !isSwapImpact ? dragState.targetCellIdx : -1;
+          // Hide the plant at its destination cell during swap return animation
+          const hideSwapReturnDest = swapReturn?.toCellIdx ?? -1;
           const baseCells = grid.map((cell, i) => {
             const x = hexSize * (3 / 2) * cell.q * horizontalSpacing * gridSpacing;
             const y = hexSize * Math.sqrt(3) * (cell.r + cell.q / 2) * verticalSpacing * gridSpacing;
             return { i, cell, x, y };
           });
           let cellsWithPlants = baseCells
-            .filter(({ cell, i }) => cell.item != null && i !== hideTargetDuringImpact)
+            .filter(({ cell, i }) => cell.item != null && i !== hideTargetDuringImpact && i !== hideSwapReturnDest)
             .sort((a, b) => a.y - b.y);
-          if (dragState?.phase === 'impact' && dragState.cellIdx != null && !cellsWithPlants.some((c) => c.i === dragState.cellIdx)) {
+          // Add synthetic plant during impact for merges (not swaps - both plants already in grid)
+          if (dragState?.phase === 'impact' && dragState.cellIdx != null && !isSwapImpact && !cellsWithPlants.some((c) => c.i === dragState.cellIdx)) {
             const src = baseCells[dragState.cellIdx];
             if (src) {
               const syntheticItem = {
@@ -659,8 +735,14 @@ export const HexBoard: React.FC<HexBoardProps> = ({
                     : `translateY(-5.5px) scale(${scale})`;
                 // Don't apply harvest bounce to plants being dragged (would glitch mid-air)
                 const isHarvestBounce = !isDragged && harvestBounceCellIndices.includes(i);
+                // Check if this cell has a swap impact animation (Plant B landing)
+                const isSwapImpactB = swapImpactCellIdx === i;
+                // Check if Plant A is landing at swap target during impact
+                const isSwapImpactA = isSwapImpact && dragState?.targetCellIdx === i;
                 const innerClass = [
                   isDragged && isImpact ? 'plant-impact-scale' : '',
+                  isSwapImpactA ? 'plant-impact-scale' : '',
+                  isSwapImpactB ? 'plant-impact-scale-soft' : '',
                   isHarvestBounce ? 'plant-harvest-bounce' : '',
                 ].filter(Boolean).join(' ');
 
@@ -702,6 +784,64 @@ export const HexBoard: React.FC<HexBoardProps> = ({
                   </div>
                 );
               })}
+
+              {/* Swap return plant animation */}
+              {swapReturn && (() => {
+                const { item, fromCellIdx, toCellIdx, progress } = swapReturn;
+                const fromCell = grid[fromCellIdx];
+                const toCell = grid[toCellIdx];
+                if (!fromCell || !toCell) return null;
+                
+                // Calculate grid positions using the same formula as regular plants
+                const fromX = hexSize * (3 / 2) * fromCell.q * horizontalSpacing * gridSpacing;
+                const fromY = hexSize * Math.sqrt(3) * (fromCell.r + fromCell.q / 2) * verticalSpacing * gridSpacing;
+                const toX = hexSize * (3 / 2) * toCell.q * horizontalSpacing * gridSpacing;
+                const toY = hexSize * Math.sqrt(3) * (toCell.r + toCell.q / 2) * verticalSpacing * gridSpacing;
+                
+                // Interpolate position
+                const currentX = fromX + (toX - fromX) * progress;
+                const currentY = fromY + (toY - fromY) * progress;
+                
+                // Keep scale constant at 1.5 (normal plant scale)
+                const scale = 1.5;
+                // Slight lift during flight
+                const liftY = -5.5 - 10 * Math.sin(progress * Math.PI);
+
+                return (
+                  <div
+                    key="swap-return-plant"
+                    className="absolute flex items-center justify-center"
+                    style={{
+                      left: centerX,
+                      top: centerY,
+                      width: `${hexWidth}px`,
+                      height: `${hexHeight}px`,
+                      transform: `translate(calc(-50% + ${currentX}px), calc(-50% + ${currentY}px))`,
+                      zIndex: 50 + Math.round(currentY) + 500,
+                    }}
+                  >
+                    <div className="flex flex-col items-center justify-center relative w-full h-full">
+                      <div
+                        style={{ transform: `translateY(${liftY}px) scale(${scale})`, transformOrigin: '50% 50%' }}
+                        className="flex items-center justify-center w-full h-full"
+                      >
+                        <img
+                          src={getPlantSpritePath(item.level)}
+                          alt={`Plant ${item.level}`}
+                          draggable={false}
+                          className="w-[70%] h-[70%] object-contain drop-shadow-[0_4px_8px_rgba(0,0,0,0.4)]"
+                          style={{
+                            WebkitTouchCallout: 'none',
+                            WebkitUserSelect: 'none',
+                            userSelect: 'none',
+                            pointerEvents: 'none',
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           );
         })()}

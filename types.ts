@@ -44,7 +44,9 @@ export interface DragState {
   impactStartTime?: number;
   hoveredEmptyCellIdx?: number | null;
   hoveredMatchCellIdx?: number | null;
+  hoveredSwapCellIdx?: number | null;
   targetCellIdx?: number;
   isMerge?: boolean;
+  isSwap?: boolean;
   mergeResultLevel?: number;
 }

@@ -1297,6 +1297,21 @@ export default function App() {
     }
   };
 
+  // Swap plants when dropping on a non-mergeable plant
+  const handleSwap = useCallback((sourceIdx: number, targetIdx: number) => {
+    setGrid(prev => {
+      const newGrid = [...prev];
+      const sourceCell = newGrid[sourceIdx];
+      const targetCell = newGrid[targetIdx];
+      if (!sourceCell.item || !targetCell.item) return prev;
+      // Swap the items
+      const tempItem = sourceCell.item;
+      newGrid[sourceIdx] = { ...sourceCell, item: targetCell.item };
+      newGrid[targetIdx] = { ...targetCell, item: tempItem };
+      return newGrid;
+    });
+  }, []);
+
   const getScreenIndex = () => {
     switch (activeScreen) {
       case 'STORE': return 0;
@@ -1470,10 +1485,11 @@ export default function App() {
 
                 {/* Reduced height from 340px to 323px (5% smaller); pointer-events-none so taps on background close upgrade panel */}
                 <div className="relative w-full flex items-center justify-center h-[323px] overflow-visible mb-12 pointer-events-none">
-                  <HexBoard 
-                    isActive={activeTab === 'CROPS' && isExpanded} 
+                  <HexBoard
+                    isActive={activeTab === 'CROPS' && isExpanded}
                     grid={grid}
                     onMerge={handleMerge}
+                    onSwap={handleSwap}
                     impactCellIdx={impactCellIdx}
                     returnImpactCellIdx={returnImpactCellIdx}
                     onReturnImpact={(idx) => {
