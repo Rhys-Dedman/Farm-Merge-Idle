@@ -195,6 +195,16 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadComplete }) 
           }}
         />
 
+        {/* Logo in top 1/3 of screen */}
+        <div className="absolute top-0 left-0 right-0 h-1/3 flex items-center justify-center" style={{ marginTop: '60px' }}>
+          <img 
+            src={assetPath('/assets/icons/icon_logo.png')}
+            alt="Logo"
+            className="object-contain"
+            style={{ transform: 'scale(0.65)' }}
+          />
+        </div>
+
         {/* Content container - positioned at bottom */}
         <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center px-8 pb-16">
           {/* Progress bar outer container with stroke */}
