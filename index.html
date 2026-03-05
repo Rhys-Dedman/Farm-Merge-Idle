@@ -98,6 +98,23 @@
         .coin-bounce {
             animation: coin-bounce 100ms ease-out;
         }
+        /* Goal bounce: shift down then back, 500ms, fast start slow end */
+        @keyframes goal-bounce {
+            0% { transform: translateY(0); }
+            30% { transform: translateY(12px); }
+            100% { transform: translateY(0); }
+        }
+        .goal-bounce {
+            animation: goal-bounce 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        /* Goal slot fade-in: 0→100% opacity over 500ms (no bounce) */
+        @keyframes goal-slot-fade-in {
+            0% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+        .goal-slot-fade-in {
+            animation: goal-slot-fade-in 500ms ease-out forwards;
+        }
     </style>
 </head>
 <body>

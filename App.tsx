@@ -146,6 +146,13 @@ export default function App() {
   // Barn notification state - shows when a new plant is added to barn
   const [barnNotification, setBarnNotification] = useState(false);
   const [unlockingCellIndices, setUnlockingCellIndices] = useState<number[]>([]); // Cells currently playing unlock animation
+  // Goals: slot 1-5, each is 'empty' | 'loading' | 'green'. Only 1 loading at a time.
+  const [goalSlots, setGoalSlots] = useState<('empty' | 'loading' | 'green')[]>(['loading', 'empty', 'empty', 'empty', 'empty']);
+  const [goalLoadingSeconds, setGoalLoadingSeconds] = useState(5); // countdown 5->0
+  const [goalBounceSlot, setGoalBounceSlot] = useState<number | null>(null); // slot index bouncing
+  const [goalTransitionSlot, setGoalTransitionSlot] = useState<number | null>(null); // slot transitioning loading->green (for fade)
+  const [goalTransitionFade, setGoalTransitionFade] = useState(false); // triggers fade: loading out, green in
+  const [goalSlotFadeInSlot, setGoalSlotFadeInSlot] = useState<number | null>(null); // slot fading in 0→100% over 500ms; countdown waits until done
   const [fertilizingCellIndices, setFertilizingCellIndices] = useState<number[]>([]); // Cells currently playing fertilize animation
 
   // Calculate locked cell count from grid
@@ -496,6 +503,61 @@ export default function App() {
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
   }, [seedProductionLevel, isLoading]);
+
+  // Goal loading countdown: 5s per slot. Don't start until slot is 100% faded in. When slot 1 bounces, slot 2 starts loading (0% opacity) and fades in over 500ms.
+  const goalIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (isLoading) return;
+    const loadingIdx = goalSlots.findIndex((s) => s === 'loading');
+    if (loadingIdx < 0) return;
+    // Don't run countdown while slot is fading in (0→100% over 500ms)
+    if (loadingIdx === goalSlotFadeInSlot) return;
+    if (goalIntervalRef.current) clearInterval(goalIntervalRef.current);
+    goalIntervalRef.current = setInterval(() => {
+      setGoalLoadingSeconds((prev) => {
+        if (prev <= 1) {
+          if (goalIntervalRef.current) {
+            clearInterval(goalIntervalRef.current);
+            goalIntervalRef.current = null;
+          }
+          setGoalBounceSlot(loadingIdx);
+          setGoalTransitionSlot(loadingIdx);
+          setGoalTransitionFade(false);
+          requestAnimationFrame(() => requestAnimationFrame(() => setGoalTransitionFade(true)));
+          const nextSlot = loadingIdx + 1;
+          // After bounce 100% complete (500ms): set slot green, then initiate next slot
+          setTimeout(() => {
+            setGoalBounceSlot(null);
+            setGoalSlots((slots) => {
+              const next = [...slots];
+              next[loadingIdx] = 'green';
+              if (nextSlot < 5) next[nextSlot] = 'loading';
+              return next;
+            });
+            setGoalTransitionSlot(null);
+            setGoalTransitionFade(false);
+            // Initiate next slot only after bounce is done: loading at 0% opacity, fades in over 500ms
+            if (nextSlot < 5) {
+              setGoalSlotFadeInSlot(nextSlot);
+              setGoalLoadingSeconds(5); // show 5s during fade-in (countdown hasn't started yet)
+              setTimeout(() => {
+                setGoalSlotFadeInSlot(null);
+                setGoalLoadingSeconds(5); // ensure 5 when fade-in done, so countdown starts at 5
+              }, 500); // after fade-in, countdown starts
+            }
+          }, 500); // bounce duration 500ms
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => {
+      if (goalIntervalRef.current) {
+        clearInterval(goalIntervalRef.current);
+        goalIntervalRef.current = null;
+      }
+    };
+  }, [isLoading, goalSlots, goalSlotFadeInSlot]);
 
   /**
    * At 100% seed progress: add one seed to storage (if room), reset to 0% immediately.
@@ -1399,6 +1461,24 @@ export default function App() {
                 />
               </div>
 
+              {/* 3. Top UI gradient: above grass, below top UI & hex; top pinned; full sprite visible, stretched horizontally */}
+              <div
+                className="absolute left-0 right-0 top-0 pointer-events-none z-[6] overflow-hidden"
+                style={{ height: '280px' }}
+              >
+                <img
+                  src={assetPath('/assets/topui/topui_gradient.png')}
+                  alt=""
+                  className="block w-full h-full"
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'fill',
+                    objectPosition: 'top center',
+                  }}
+                />
+              </div>
+
               {/* Farm Header - pinned to this screen */}
               <div className="relative z-50 w-full">
                 <PageHeader 
@@ -1408,40 +1488,72 @@ export default function App() {
                   walletFlashActive={walletFlashActive}
                   walletBurstCount={walletBursts.length}
                   onWalletClick={() => setActiveScreen('STORE')}
+                  onGiftClick={() => setLimitedOfferPopup({
+                    isVisible: true,
+                    offerId: 'super_seed_offer',
+                    imageSrc: assetPath('/assets/plants/plant_2.png'),
+                    subtitle: 'SUPER SEED',
+                    description: 'Spawn 10 seeds instantly onto the board',
+                    buttonText: 'Accept Offer',
+                  })}
                 />
-                {/* Limited Offer / Gift button - centered in top UI */}
-                <div className="absolute left-1/2 -translate-x-1/2 top-4 flex items-center justify-center">
-                  <button
-                    onClick={() => setLimitedOfferPopup({
-                      isVisible: true,
-                      offerId: 'super_seed_offer',
-                      imageSrc: assetPath('/assets/plants/plant_2.png'),
-                      subtitle: 'SUPER SEED',
-                      description: 'Spawn 10 seeds instantly onto the board',
-                      buttonText: 'Accept Offer',
-                    })}
-                    className="flex items-center justify-center transition-all active:scale-95 w-9 h-9 rounded-lg"
-                    style={{
-                      background: 'linear-gradient(180deg, #FFB347 0%, #FF9500 100%)',
-                      border: '2px solid #E88A00',
-                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                    }}
-                  >
-                    <span style={{ fontSize: '18px' }}>🎁</span>
-                  </button>
-                </div>
               </div>
 
-              {/* Customer Area - sits between header and hex grid */}
+              {/* Goals Area - 5 goals, overlapping, left justified */}
               <div 
-                className="relative w-full z-20 flex-shrink-0 border-0"
+                className="relative w-full z-20 flex-shrink-0 flex items-start justify-start"
                 style={{
                   height: '100px',
-                  border: 'none',
-                  outline: 'none',
+                  marginLeft: 20,
                 }}
               >
-                {/* Customer content will go here */}
+                {[0, 1, 2, 3, 4].map((slotIdx) => {
+                  const state = goalSlots[slotIdx];
+                  const isBouncing = goalBounceSlot === slotIdx;
+                  const isTransitioning = goalTransitionSlot === slotIdx;
+                  const isLoadingState = state === 'loading';
+                  const isGreenState = state === 'green';
+                  const isEmpty = state === 'empty';
+                  const isFadingIn = slotIdx === goalSlotFadeInSlot;
+                  const showSlot = !isEmpty || isTransitioning;
+                  const loadingOpacity = isLoadingState ? (goalTransitionFade ? 0 : 1) : isTransitioning ? (goalTransitionFade ? 0 : 1) : 0;
+                  const greenOpacity = isGreenState ? 1 : isTransitioning ? (goalTransitionFade ? 1 : 0) : 0;
+                  const showGreenContent = isGreenState || (isTransitioning && goalTransitionFade);
+                  const showLoadingText = isLoadingState && !goalTransitionFade;
+                  return (
+                    <div
+                      key={slotIdx}
+                      className={`relative flex-shrink-0 ${isBouncing ? 'goal-bounce' : ''} ${isFadingIn ? 'goal-slot-fade-in' : ''}`}
+                      style={{
+                        width: '105px',
+                        height: '210px',
+                        marginRight: slotIdx < 4 ? '-30px' : 0,
+                        marginTop: '-25px',
+                        opacity: showSlot ? 1 : 0,
+                        pointerEvents: showSlot ? 'auto' : 'none',
+                      }}
+                    >
+                      {showSlot && (
+                        <>
+                          <img src={assetPath('/assets/goals/goal_shadow.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top transition-opacity duration-100" style={{ zIndex: 1, opacity: greenOpacity }} />
+                          <img src={assetPath('/assets/goals/goal_loading.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top transition-opacity duration-100" style={{ zIndex: 2, opacity: loadingOpacity }} />
+                          <img src={assetPath('/assets/goals/goal_green.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top transition-opacity duration-100" style={{ zIndex: 3, opacity: greenOpacity }} />
+                          <img src={assetPath('/assets/goals/goal_yellow.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top" style={{ zIndex: 4, opacity: 0 }} />
+                          <img src={assetPath('/assets/goals/goal_white.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top" style={{ zIndex: 5, opacity: 0 }} />
+                          {showGreenContent && (
+                            <>
+                              <img src={assetPath('/assets/icons/icon_harvestboost.png')} alt="" className="absolute left-1/2 object-contain pointer-events-none transition-opacity duration-100" style={{ zIndex: 6, bottom: '71%', width: 40, height: 40, opacity: greenOpacity, transform: 'translate(-50%, -2px)' }} />
+                              <span className="absolute left-1/2 font-bold pointer-events-none transition-opacity duration-100" style={{ zIndex: 6, bottom: '62%', color: '#7e9b50', fontSize: '15px', opacity: greenOpacity, transform: 'translate(-50%, -1px)' }}>5</span>
+                            </>
+                          )}
+                          {showLoadingText && (
+                            <span className="absolute left-1/2 font-bold pointer-events-none" style={{ zIndex: 6, bottom: '62%', color: '#fff4d0', fontSize: '15px', transform: 'translate(-50%, -1px)', opacity: 0.75 }}>{goalLoadingSeconds}s</span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               <div 
@@ -1594,9 +1706,9 @@ export default function App() {
 
               <div 
                 onClick={(e) => e.stopPropagation()}
-                className="flex flex-col overflow-hidden relative z-30 shadow-[0_-15px_50px_rgba(0,0,0,0.15)] rounded-t-[32px] transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
+                className="flex flex-col overflow-hidden relative z-30 flex-shrink-0 shadow-[0_-15px_50px_rgba(0,0,0,0.15)] rounded-t-[32px] transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
                 style={{
-                  height: isExpanded ? 'calc(30vh - 55px)' : '50px',
+                  flex: isExpanded ? '0 0 279px' : '0 0 50px',
                   background: '#fcf0c6',
                   borderTop: '1px solid #ebdbaf'
                 }}
