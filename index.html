@@ -148,6 +148,14 @@
         .goal-no-transition {
             transition: none !important;
         }
+        /* Progress bar flash: 50% white fade out over 300ms */
+        @keyframes progress-bar-flash {
+            0% { opacity: 0.5; }
+            100% { opacity: 0; }
+        }
+        .progress-bar-flash {
+            animation: progress-bar-flash 300ms ease-out forwards;
+        }
     </style>
 </head>
 <body>

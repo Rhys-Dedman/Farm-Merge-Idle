@@ -154,19 +154,19 @@ export default function App() {
   const [barnNotification, setBarnNotification] = useState(false);
   const [unlockingCellIndices, setUnlockingCellIndices] = useState<number[]>([]); // Cells currently playing unlock animation
   // Goals: slot 1-5, each is 'empty' | 'loading' | 'green' | 'completed'. Only 1 loading at a time.
-  const [goalSlots, setGoalSlots] = useState<('empty' | 'loading' | 'green' | 'completed')[]>(['loading', 'empty', 'empty', 'empty', 'empty']);
-  const [goalPlantTypes, setGoalPlantTypes] = useState<number[]>([0, 0, 0, 0, 0]); // plant level 1-5 per slot when green; 0 = not set
+  const [goalSlots, setGoalSlots] = useState<('empty' | 'loading' | 'green' | 'completed')[]>(['green', 'green', 'green', 'green', 'green']);
+  const [goalPlantTypes, setGoalPlantTypes] = useState<number[]>([1, 2, 3, 4, 5]); // plant level 1-5 per slot when green
   const [goalLoadingSeconds, setGoalLoadingSeconds] = useState(30); // countdown 30->0 (Order Speed)
   const [goalTransitionSlot, setGoalTransitionSlot] = useState<number | null>(null); // slot transitioning loading->green (for fade)
   const [goalTransitionFade, setGoalTransitionFade] = useState(false); // triggers fade: loading out, green in
   const [goalSlotFadeInSlot, setGoalSlotFadeInSlot] = useState<number | null>(null); // slot fading in 0→100% over 500ms; countdown waits until done
-  const [goalCounts, setGoalCounts] = useState<number[]>([0, 0, 0, 0, 0]); // remaining count per slot when green (e.g. 5→4→3)
+  const [goalCounts, setGoalCounts] = useState<number[]>([5, 5, 5, 5, 5]); // remaining count per slot when green (e.g. 5→4→3)
   const [goalCompletedValues, setGoalCompletedValues] = useState<number[]>([0, 0, 0, 0, 0]); // coin value when completed (plantValue × 5 × 2)
   const [goalImpactSlots, setGoalImpactSlots] = useState<number[]>([]); // slots currently playing impact (white flash + icon scale)
   const [goalBounceSlots, setGoalBounceSlots] = useState<number[]>([]); // slots currently bouncing (panel down)
   const [goalSlidingUpSlots, setGoalSlidingUpSlots] = useState<Set<number>>(new Set()); // slots currently playing slide-up animation
   const [goalCompactionStagger, setGoalCompactionStagger] = useState<{ completedSlotIdx: number; completedPosition: number; oldDisplayIndices: number[]; isOverlapping?: boolean } | null>(null);
-  const [goalDisplayOrder, setGoalDisplayOrder] = useState<number[]>([0]); // Fixed left-to-right order; never reshuffle by plant type
+  const [goalDisplayOrder, setGoalDisplayOrder] = useState<number[]>([0, 1, 2, 3, 4]); // Fixed left-to-right order; never reshuffle by plant type
   const [activeGoalCoinParticles, setActiveGoalCoinParticles] = useState<GoalCoinParticleData[]>([]);
   const goalIconRef0 = useRef<HTMLImageElement>(null);
   const goalIconRef1 = useRef<HTMLImageElement>(null);
@@ -204,6 +204,9 @@ export default function App() {
   const [harvestBounceCellIndices, setHarvestBounceCellIndices] = useState<number[]>([]);
   const [walletFlashActive, setWalletFlashActive] = useState(false);
   const [walletBursts, setWalletBursts] = useState<{ id: number; trigger: number }[]>([]);
+  const [playerLevel, setPlayerLevel] = useState(1);
+  const [playerLevelProgress, setPlayerLevelProgress] = useState(0); // 0-5, 5 goals to level up
+  const [playerLevelFlashTrigger, setPlayerLevelFlashTrigger] = useState(0);
   const nextWalletBurstIdRef = useRef(0);
   const nextGoalCoinBurstIdRef = useRef(0);
   const walletFlashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1541,13 +1544,16 @@ export default function App() {
 
               {/* Farm Header - pinned to this screen */}
               <div className="relative z-50 w-full">
-                <PageHeader 
+                <PageHeader
                   money={money}
                   walletRef={walletRef}
                   walletIconRef={walletIconRef}
                   walletFlashActive={walletFlashActive}
                   walletBurstCount={walletBursts.length}
                   onWalletClick={() => setActiveScreen('STORE')}
+                  playerLevel={playerLevel}
+                  playerLevelProgress={playerLevelProgress}
+                  playerLevelFlashTrigger={playerLevelFlashTrigger}
                   onGiftClick={() => setLimitedOfferPopup({
                     isVisible: true,
                     offerId: 'super_seed_offer',
@@ -1598,6 +1604,16 @@ export default function App() {
                       const startY = (r.top + r.height / 2 - cr.top) / appScale;
                       const value = goalCompletedValues[slotIdx] ?? 0;
                       setActiveGoalCoinParticles((prev) => [...prev, { id: `goal-coin-${slotIdx}-${Date.now()}`, startX, startY, value }]);
+                      // Player level: +1 progress on tap (not when coins hit wallet)
+                      setPlayerLevelProgress((prev) => {
+                        const next = prev + 1;
+                        if (next >= 5) {
+                          setPlayerLevel((l) => l + 1);
+                          return 0;
+                        }
+                        return next;
+                      });
+                      setPlayerLevelFlashTrigger((t) => t + 1);
                       // Leaf burst at tap (leaf 3 & 4, same stats as normal merge burst)
                       setGoalCoinLeafBursts((prev) => [...prev, {
                         id: `goal-coin-lb-${nextGoalCoinBurstIdRef.current++}`,
