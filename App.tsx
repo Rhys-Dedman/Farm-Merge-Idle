@@ -17,6 +17,7 @@ import { GoalCoinParticle, GoalCoinParticleData } from './components/GoalCoinPar
 import { WalletImpactBurst } from './components/WalletImpactBurst';
 import { PageHeader } from './components/PageHeader';
 import { DiscoveryPopup } from './components/DiscoveryPopup';
+import { LevelUpPopup } from './components/LevelUpPopup';
 import { PlantInfoPopup } from './components/PlantInfoPopup';
 import { LimitedOfferPopup } from './components/LimitedOfferPopup';
 import { BarnParticle, BarnParticleData } from './components/BarnParticle';
@@ -31,6 +32,33 @@ import { assetPath } from './utils/assetPath';
 export function getCoinValueForLevel(level: number): number {
   return 5 * Math.pow(2, level - 1);
 }
+
+/** Goals required to level up. Start at 3 for level 1→2; each level = round(previous × 1.25) */
+const getGoalsRequiredForLevel = (level: number): number => {
+  if (level <= 1) return 3;
+  let prev = 3;
+  for (let i = 2; i <= level; i++) {
+    prev = Math.round(prev * 1.25);
+  }
+  return prev;
+};
+
+/** Goal difficulty scaling: 0.9 = easier, 1.0 = normal, 1.1 = harder, 1.2 = much harder */
+const GOAL_DIFFICULTY_SCALING = 1.0;
+
+/** Crops required for goal order. Scales with player level, crop yield, and has random variation. */
+const getGoalCropRequired = (
+  playerLevel: number,
+  cropYieldLevel: number,
+  goalDifficultyScaling: number = GOAL_DIFFICULTY_SCALING
+): number => {
+  const baseGoal = 5 + Math.floor(playerLevel / 3) + Math.floor(cropYieldLevel * 0.5);
+  const variationRange = 1 + Math.floor(playerLevel / 10);
+  const randomOffset = Math.floor(Math.random() * (2 * variationRange + 1)) - variationRange;
+  const variedGoal = baseGoal + randomOffset;
+  const scaledGoal = Math.round(variedGoal * goalDifficultyScaling);
+  return Math.max(5, scaledGoal);
+};
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Preload popup assets on module load to prevent flash of unstyled content
@@ -161,7 +189,8 @@ export default function App() {
   const [goalTransitionFade, setGoalTransitionFade] = useState(false); // triggers fade: loading out, green in
   const [goalSlotFadeInSlot, setGoalSlotFadeInSlot] = useState<number | null>(null); // slot fading in 0→100% over 500ms; countdown waits until done
   const [goalCounts, setGoalCounts] = useState<number[]>([5, 5, 5, 5, 5]); // remaining count per slot when green (e.g. 5→4→3)
-  const [goalCompletedValues, setGoalCompletedValues] = useState<number[]>([0, 0, 0, 0, 0]); // coin value when completed (plantValue × 5 × 2)
+  const [goalAmountsRequired, setGoalAmountsRequired] = useState<number[]>([5, 5, 5, 5, 5]); // crops required when goal was created (for reward calc)
+  const [goalCompletedValues, setGoalCompletedValues] = useState<number[]>([0, 0, 0, 0, 0]); // coin value when completed (plantValue × amountRequired × 2)
   const [goalImpactSlots, setGoalImpactSlots] = useState<number[]>([]); // slots currently playing impact (white flash + icon scale)
   const [goalBounceSlots, setGoalBounceSlots] = useState<number[]>([]); // slots currently bouncing (panel down)
   const [goalSlidingUpSlots, setGoalSlidingUpSlots] = useState<Set<number>>(new Set()); // slots currently playing slide-up animation
@@ -207,8 +236,10 @@ export default function App() {
   const [playerLevel, setPlayerLevel] = useState(1);
   const [playerLevelProgress, setPlayerLevelProgress] = useState(0); // 0-5, 5 goals to level up
   const [playerLevelFlashTrigger, setPlayerLevelFlashTrigger] = useState(0);
+  const [levelUpPopup, setLevelUpPopup] = useState<{ isVisible: boolean; level: number } | null>(null);
   const nextWalletBurstIdRef = useRef(0);
   const nextGoalCoinBurstIdRef = useRef(0);
+  const levelUpGuardRef = useRef(false);
   const walletFlashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingMergeLevelIncreaseRef = useRef<number>(1);
   const plantButtonRef = useRef<HTMLDivElement>(null);
@@ -505,7 +536,7 @@ export default function App() {
     // Auto-progress starts at 3/min even at level 0
     lastSeedProgressTimeRef.current = Date.now();
     let rafId: number;
-    const perMinute = 3 + seedProductionLevel; // starts at 3/min (level 0), +1 per upgrade
+    const perMinute = Math.min(10, 3 + seedProductionLevel); // starts at 3/min (level 0), +1 per upgrade, max 10/min
     const percentPerMs = (perMinute * 100) / (60 * 1000); // % progress per millisecond
     const tick = () => {
       if (tapZoomRef.current) {
@@ -552,7 +583,10 @@ export default function App() {
         ? (minLevel >= 5 ? 5 : minLevel + 1 + Math.floor(Math.random() * (5 - minLevel)))
         : 1 + Math.floor(Math.random() * minLevel);
       setGoalPlantTypes((p) => { const n = [...p]; n[loadingIdx] = plantLevel; return n; });
-      setGoalCounts((c) => { const next = [...c]; next[loadingIdx] = 5; return next; });
+      const cropYieldLevel = cropsState?.crop_value?.level ?? 0;
+      const goalRequired = getGoalCropRequired(playerLevel, cropYieldLevel);
+      setGoalCounts((c) => { const next = [...c]; next[loadingIdx] = goalRequired; return next; });
+      setGoalAmountsRequired((a) => { const next = [...a]; next[loadingIdx] = goalRequired; return next; });
       requestAnimationFrame(() => requestAnimationFrame(() => setGoalTransitionFade(true)));
       setTimeout(() => {
         const firstEmptyIdx = goalSlots.findIndex((s) => s === 'empty');
@@ -590,11 +624,14 @@ export default function App() {
             ? (minLevel >= 5 ? 5 : minLevel + 1 + Math.floor(Math.random() * (5 - minLevel)))
             : 1 + Math.floor(Math.random() * minLevel);
           setGoalPlantTypes((p) => { const n = [...p]; n[loadingIdx] = plantLevel; return n; });
+          const cropYieldLevel = cropsState?.crop_value?.level ?? 0;
+          const goalRequired = getGoalCropRequired(playerLevel, cropYieldLevel);
           setGoalCounts((c) => {
             const next = [...c];
-            next[loadingIdx] = 5;
+            next[loadingIdx] = goalRequired;
             return next;
           });
+          setGoalAmountsRequired((a) => { const next = [...a]; next[loadingIdx] = goalRequired; return next; });
           requestAnimationFrame(() => requestAnimationFrame(() => setGoalTransitionFade(true)));
           setTimeout(() => {
             const firstEmptyIdx = goalSlots.findIndex((s) => s === 'empty');
@@ -625,7 +662,7 @@ export default function App() {
         goalIntervalRef.current = null;
       }
     };
-  }, [isLoading, goalSlots, goalSlotFadeInSlot, harvestState]);
+  }, [isLoading, goalSlots, goalSlotFadeInSlot, harvestState, playerLevel, cropsState]);
 
   /**
    * At 100% seed progress: add one seed to storage (if room), reset to 0% immediately.
@@ -725,7 +762,7 @@ export default function App() {
     // Auto-progress starts at 3/min even at level 0
     lastHarvestProgressTimeRef.current = Date.now();
     let rafId: number;
-    const perMinute = 3 + harvestSpeedLevel; // starts at 3/min (level 0), +1 per upgrade
+    const perMinute = Math.min(10, 3 + harvestSpeedLevel); // starts at 3/min (level 0), +1 per upgrade, max 10/min
     const percentPerMs = (perMinute * 100) / (60 * 1000); // % progress per millisecond
     const tick = () => {
       if (harvestTapZoomRef.current) {
@@ -1024,7 +1061,7 @@ export default function App() {
     harvestTapZoomRef.current = { start: current, end: next, startTime: Date.now(), duration: 100 };
     setHarvestTapZoomTrigger((t) => t + 1);
 
-    setActiveTab('HARVEST');
+    setActiveTab('CROPS');
   };
 
   // Helper: get hex neighbors in axial coordinates
@@ -1554,6 +1591,7 @@ export default function App() {
                   playerLevel={playerLevel}
                   playerLevelProgress={playerLevelProgress}
                   playerLevelFlashTrigger={playerLevelFlashTrigger}
+                  playerLevelGoalsRequired={getGoalsRequiredForLevel(playerLevel)}
                   onGiftClick={() => setLimitedOfferPopup({
                     isVisible: true,
                     offerId: 'super_seed_offer',
@@ -1604,12 +1642,17 @@ export default function App() {
                       const startY = (r.top + r.height / 2 - cr.top) / appScale;
                       const value = goalCompletedValues[slotIdx] ?? 0;
                       setActiveGoalCoinParticles((prev) => [...prev, { id: `goal-coin-${slotIdx}-${Date.now()}`, startX, startY, value }]);
-                      // Player level: +1 progress on tap (not when coins hit wallet)
+                      // Player level: +1 progress on tap (not when coins hit wallet). Goals required = 2^level (2, 4, 8, ...)
                       setPlayerLevelProgress((prev) => {
                         const next = prev + 1;
-                        if (next >= 5) {
-                          setPlayerLevel((l) => l + 1);
-                          return 0;
+                        const goalsRequired = getGoalsRequiredForLevel(playerLevel);
+                        if (next >= goalsRequired) {
+                          if (!levelUpGuardRef.current) {
+                            levelUpGuardRef.current = true;
+                            setLevelUpPopup({ isVisible: true, level: (playerLevel + 1) });
+                            setTimeout(() => { levelUpGuardRef.current = false; }, 0);
+                          }
+                          return goalsRequired; // Stay at 100% until Unlock Now clicked
                         }
                         return next;
                       });
@@ -1919,6 +1962,7 @@ export default function App() {
                     onFertilizeCell={handleFertilizeCell}
                     highestPlantEver={highestPlantEver}
                     rewardedOffers={rewardedOffers}
+                    playerLevel={playerLevel}
                     onRewardedOfferClick={(offerId) => {
                       // Find the offer and show the popup
                       const offer = rewardedOffers.find(o => o.id === offerId);
@@ -2169,6 +2213,20 @@ export default function App() {
         {/* Popups: portal to body with higher z-index than particles */}
         {createPortal(
           <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 100 }}>
+            {/* Level Up Popup */}
+            {levelUpPopup && (
+              <LevelUpPopup
+                isVisible={levelUpPopup.isVisible}
+                onClose={() => setLevelUpPopup(null)}
+                level={levelUpPopup.level}
+                onUnlockNow={() => {
+                  setPlayerLevel((l) => l + 1);
+                  setPlayerLevelProgress(0);
+                }}
+                appScale={appScale}
+              />
+            )}
+
             {/* Discovery Popup */}
             {discoveryPopup && (
               <DiscoveryPopup
@@ -2342,7 +2400,7 @@ export default function App() {
                   if (next[goalSlotIdx] === 0) {
                     const plantLevel = goalPlantTypes[goalSlotIdx] ?? goalSlotIdx + 1;
                     const plantValue = getCoinValueForLevel(plantLevel);
-                    const amountRequired = 5;
+                    const amountRequired = goalAmountsRequired[goalSlotIdx] ?? 5;
                     const marketMultiplier = getMarketValueMultiplier(harvestState);
                     const rawValue = plantValue * amountRequired * 2 * marketMultiplier;
                     const roundedValue = Math.round(rawValue / 5) * 5;

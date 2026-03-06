@@ -16,9 +16,11 @@ interface PageHeaderProps {
   };
   /** When set, shows gift button to the right of coin panel */
   onGiftClick?: () => void;
-  /** Player level progress (0-5 goals to level up) */
+  /** Player level progress (0 to goalsRequired) */
   playerLevel?: number;
   playerLevelProgress?: number;
+  /** Goals required to level up from current level (e.g. 2 for level 1, 4 for level 2) */
+  playerLevelGoalsRequired?: number;
   /** When this increments, triggers progress bar flash */
   playerLevelFlashTrigger?: number;
 }
@@ -41,6 +43,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   playerLevel = 1,
   playerLevelProgress = 0,
   playerLevelFlashTrigger = 0,
+  playerLevelGoalsRequired = 2,
 }) => {
   const isInteractive = !!walletRef;
   const prevBurstRef = useRef(walletBurstCount);
@@ -168,31 +171,33 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                 <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[calc(50%+0.5px)] font-black leading-none" style={{ color: '#c8e9eb', fontSize: 10, WebkitTextStroke: '1px rgba(0,0,0,0.5)', paintOrder: 'stroke fill' }}>{playerLevel}</span>
               </span>
               {/* Progress bar: 1px padding top/right/bottom, 4px left; track #775041; fill has 1px inner stroke */}
-              <div className="flex-1 h-full flex items-stretch" style={{ paddingTop: 1, paddingRight: 1, paddingBottom: 1, paddingLeft: 4 }}>
-                <div className="w-full h-full rounded-full overflow-hidden bg-[#775041]">
+              <div className="flex-1 h-full flex items-stretch" style={{ paddingTop: 1, paddingRight: 1, paddingBottom: 1, paddingLeft: 10 }}>
+                <div className="w-full h-full overflow-hidden bg-[#775041]" style={{ borderRadius: '0 9999px 9999px 0' }}>
                   {/* Progress completed: 2px padding, inner 2px stroke (gradient) on top of fill */}
                   <div
-                    className="relative h-full rounded-full transition-all duration-300 overflow-hidden"
-                    style={{ width: `${(playerLevelProgress / 5) * 100}%` }}
+                    className="relative h-full transition-all duration-300 overflow-hidden"
+                    style={{ width: `${playerLevelGoalsRequired > 0 ? (playerLevelProgress / playerLevelGoalsRequired) * 100 : 0}%`, borderRadius: '0 9999px 9999px 0' }}
                   >
                     <div
-                      className="w-full h-full rounded-full overflow-hidden relative"
+                      className="w-full h-full overflow-hidden relative"
                       style={{
                         padding: 1,
                         background: 'linear-gradient(180deg, #c2e3f6 0%, #2d77b5 100%)',
+                        borderRadius: '0 9999px 9999px 0',
                       }}
                     >
                       <div
-                        className="w-full h-full rounded-full"
+                        className="w-full h-full"
                         style={{
                           background: 'linear-gradient(180deg, #7fc8eb 0%, #559dcf 100%)',
+                          borderRadius: '0 9999px 9999px 0',
                         }}
                       />
                       {/* Flash overlay: only over progress completed, below icon, fades out with bar animation */}
                       {progressBarFlash && (
                         <div
-                          className="absolute inset-0 rounded-full pointer-events-none progress-bar-flash"
-                          style={{ backgroundColor: 'rgba(255,255,255,0.5)' }}
+                          className="absolute inset-0 pointer-events-none progress-bar-flash"
+                          style={{ backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: '0 9999px 9999px 0' }}
                         />
                       )}
                     </div>

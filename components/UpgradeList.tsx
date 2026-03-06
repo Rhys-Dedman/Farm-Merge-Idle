@@ -123,6 +123,8 @@ interface UpgradeListProps {
   rewardedOffers?: RewardedOffer[];
   /** Called when a rewarded offer button is clicked */
   onRewardedOfferClick?: (offerId: string) => void;
+  /** Player level (for Seeds tab upgrade locking) */
+  playerLevel?: number;
 }
 
 interface UpgradeDef {
@@ -201,6 +203,17 @@ const SEEDS_UPGRADES: UpgradeDef[] = [
   { id: 'bonus_seeds', name: 'Lucky Seed', icon: assetPath('/assets/icons/icon_luckyseed.png'), description: 'Increase the chance for seeds to grow an extra plant' },
 ];
 
+/** Placeholder unlock levels for Seeds tab (top to bottom: 1st=lvl1, 2nd=lvl2, etc.) */
+const SEEDS_UNLOCK_LEVELS: Record<string, number> = {
+  seed_production: 1,
+  seed_quality: 2,
+  seed_storage: 3,
+  seed_surplus: 4,
+  bonus_seeds: 5,
+};
+
+const ICON_LOCK = assetPath('/assets/icons/icon_lock.png');
+
 const CROPS_UPGRADES: UpgradeDef[] = [
   { id: 'harvest_speed', name: 'Harvest Speed', icon: assetPath('/assets/icons/icon_harvestspeed.png'), description: 'Increase automatic harvest cycle speed' },
   { id: 'plot_expansion', name: 'Garden Expansion', icon: assetPath('/assets/icons/icon_plotexpansion.png'), description: 'Unlock additional plots in the garden' },
@@ -230,7 +243,7 @@ const SEEDS_VALUE_GREEN = '#6a994e';
 const getSeedsUpgradeValue = (upgradeId: string, level: number, seedsState?: SeedsState): string | null => {
   switch (upgradeId) {
     case 'seed_production':
-      return `${3 + level}/min`;
+      return `${Math.min(10, 3 + level)}/min`;
     case 'seed_quality':
       // Display quality % within current tier (0-90%)
       const qualityPercent = seedsState ? getSeedQualityPercent(seedsState) : (level % 10) * 10;
@@ -250,7 +263,7 @@ const getSeedsUpgradeValue = (upgradeId: string, level: number, seedsState?: See
 const getCropsUpgradeValue = (upgradeId: string, level: number): string | null => {
   switch (upgradeId) {
     case 'harvest_speed':
-      return `${3 + level}/min`;
+      return `${Math.min(10, 3 + level)}/min`;
     case 'plot_expansion':
       return `+1`;
     case 'crop_value':
@@ -393,7 +406,7 @@ export const createInitialHarvestState = (): Record<string, UpgradeState> => ({
   happy_customer: { level: 0, progress: 0 },
 });
 
-export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange, money, setMoney, seedsState: propsSeedsState, setSeedsState: propsSetSeedsState, harvestState: propsHarvestState, setHarvestState: propsSetHarvestState, cropsState: propsCropsState, setCropsState: propsSetCropsState, lockedCellCount = 0, onUnlockCell, fertilizableCellCount = 0, onFertilizeCell, highestPlantEver = 1, rewardedOffers = [], onRewardedOfferClick }) => {
+export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange, money, setMoney, seedsState: propsSeedsState, setSeedsState: propsSetSeedsState, harvestState: propsHarvestState, setHarvestState: propsSetHarvestState, cropsState: propsCropsState, setCropsState: propsSetCropsState, lockedCellCount = 0, onUnlockCell, fertilizableCellCount = 0, onFertilizeCell, highestPlantEver = 1, rewardedOffers = [], onRewardedOfferClick, playerLevel = 1 }) => {
   const [internalSeedsState, setInternalSeedsState] = useState<Record<string, UpgradeState>>(createInitialSeedsState);
   const seedsState = propsSeedsState ?? internalSeedsState;
   const setSeedsState = propsSetSeedsState ?? setInternalSeedsState;
@@ -692,9 +705,15 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
         const canAfford = money >= currentCost;
         const isFlashing = flashingIds.has(upgrade.id);
         const isPressed = pressedId === upgrade.id;
+
+        // Seeds tab: check if upgrade is locked by player level (unlocks only when "Unlock Now" tapped on level-up popup)
+        const seedsUnlockLevel = category === 'SEEDS' ? (SEEDS_UNLOCK_LEVELS[upgrade.id] ?? 1) : null;
+        const isLocked = seedsUnlockLevel != null && playerLevel < seedsUnlockLevel;
         
         // Check if this upgrade is maxed
         const isMaxed = 
+          (upgrade.id === 'seed_production' && state.level >= 7) || // 3+7=10/min max
+          (upgrade.id === 'harvest_speed' && state.level >= 7) || // 3+7=10/min max
           (upgrade.id === 'seed_quality' && isSeedQualityMaxed(stateMap as SeedsState, highestPlantEver)) ||
           (upgrade.id === 'bonus_seeds' && isBonusSeedMaxed(stateMap as SeedsState)) ||
           (upgrade.id === 'plot_expansion' && isPlotExpansionMaxed(lockedCellCount)) ||
@@ -706,17 +725,22 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
           (upgrade.id === 'happy_customer' && isHappyCustomerMaxed(stateMap));
         
         const descTextColor = '#c2b180';
-        const buttonColor = '#cae060';
-        const buttonActiveColor = '#61882b';
-        const buttonDisabledColor = '#e3c28c';
+        // Locked (Seeds): blue theme
+        const LOCKED_MAIN = '#9cbed0';
+        const LOCKED_DEPTH = '#7497b0';
+        const LOCKED_FONT = '#507493';
+        // Normal: green/brown
+        const buttonColor = isLocked ? LOCKED_MAIN : '#cae060';
+        const buttonActiveColor = isLocked ? LOCKED_MAIN : '#61882b';
+        const buttonDisabledColor = isLocked ? LOCKED_MAIN : '#e3c28c';
         
-        const buttonDepthColor = '#9db546';
-        const buttonActiveDepthColor = '#61882b';
-        const buttonDisabledDepthColor = '#c7a36e';
+        const buttonDepthColor = isLocked ? LOCKED_DEPTH : '#9db546';
+        const buttonActiveDepthColor = isLocked ? LOCKED_DEPTH : '#61882b';
+        const buttonDisabledDepthColor = isLocked ? LOCKED_DEPTH : '#c7a36e';
         
-        const buttonFontColor = '#587e26';
-        const buttonActiveFontColor = '#cbe05d';
-        const buttonDisabledFontColor = '#a68e64';
+        const buttonFontColor = isLocked ? LOCKED_FONT : '#587e26';
+        const buttonActiveFontColor = isLocked ? LOCKED_FONT : '#cbe05d';
+        const buttonDisabledFontColor = isLocked ? LOCKED_FONT : '#a68e64';
 
         const displayProgress = isFlashing ? 10 : state.progress;
         const progressPercent = displayProgress * 10;
@@ -789,32 +813,54 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
 
               {/* Price Button */}
               <button 
-                onMouseDown={() => !isMaxed && canAfford && setPressedId(upgrade.id)}
+                onMouseDown={() => !isLocked && !isMaxed && canAfford && setPressedId(upgrade.id)}
                 onMouseUp={() => setPressedId(null)}
                 onMouseLeave={() => setPressedId(null)}
-                onClick={() => !isMaxed && handleUpgrade(upgrade.id, category, state.level)} 
-                className={`relative flex items-center justify-center min-w-[70px] h-8 transition-all border outline outline-1 ${
-                  !isMaxed && canAfford 
+                onClick={() => !isLocked && !isMaxed && handleUpgrade(upgrade.id, category, state.level)} 
+                className={`relative flex items-center justify-center gap-1 min-w-[70px] h-8 transition-all border outline outline-1 ${
+                  !isLocked && !isMaxed && canAfford 
                     ? 'active:translate-y-[2px] active:border-b-0 active:mb-[4px]' 
                     : ''
                 } rounded-[8px] shadow-[inset_0_1px_1px_rgba(255,255,255,0.4)]`}
                 style={{
-                  backgroundColor: isPressed ? buttonActiveColor : (isMaxed || !canAfford ? buttonDisabledColor : buttonColor),
-                  borderColor: isPressed ? buttonActiveDepthColor : (isMaxed || !canAfford ? buttonDisabledDepthColor : buttonDepthColor),
-                  borderBottomWidth: isPressed ? '0px' : '4px',
-                  marginBottom: isPressed ? '4px' : '0px',
-                  outlineColor: isPressed ? buttonActiveDepthColor : (isMaxed || !canAfford ? buttonDisabledDepthColor : buttonDepthColor),
-                  cursor: isMaxed ? 'default' : undefined,
+                  backgroundColor: isLocked ? LOCKED_MAIN : (isPressed ? buttonActiveColor : (isMaxed || !canAfford ? buttonDisabledColor : buttonColor)),
+                  borderColor: isLocked ? LOCKED_DEPTH : (isPressed ? buttonActiveDepthColor : (isMaxed || !canAfford ? buttonDisabledDepthColor : buttonDepthColor)),
+                  borderBottomWidth: isLocked ? '4px' : (isPressed ? '0px' : '4px'),
+                  marginBottom: isLocked ? '0px' : (isPressed ? '4px' : '0px'),
+                  outlineColor: isLocked ? LOCKED_DEPTH : (isPressed ? buttonActiveDepthColor : (isMaxed || !canAfford ? buttonDisabledDepthColor : buttonDepthColor)),
+                  cursor: isLocked || isMaxed ? 'default' : undefined,
                 }}
               >
-                <span 
-                  className="text-[13px] font-black tracking-tighter transition-colors"
-                  style={{ 
-                    color: isPressed ? buttonActiveFontColor : (isMaxed || !canAfford ? buttonDisabledFontColor : buttonFontColor)
-                  }}
-                >
-                  {isMaxed ? 'MAX' : currentCostDisplay}
-                </span>
+                {isLocked ? (
+                  <span className="flex items-center gap-0.5 -translate-x-1">
+                    <div
+                      className="w-4 h-4 shrink-0"
+                      style={{
+                        backgroundColor: LOCKED_FONT,
+                        maskImage: `url(${ICON_LOCK})`,
+                        maskSize: 'contain',
+                        maskRepeat: 'no-repeat',
+                        maskPosition: 'center',
+                        WebkitMaskImage: `url(${ICON_LOCK})`,
+                        WebkitMaskSize: 'contain',
+                        WebkitMaskRepeat: 'no-repeat',
+                        WebkitMaskPosition: 'center',
+                      }}
+                    />
+                    <span className="text-[13px] font-black tracking-tighter" style={{ color: LOCKED_FONT }}>
+                      lvl {seedsUnlockLevel}
+                    </span>
+                  </span>
+                ) : (
+                  <span 
+                    className="text-[13px] font-black tracking-tighter transition-colors"
+                    style={{ 
+                      color: isPressed ? buttonActiveFontColor : (isMaxed || !canAfford ? buttonDisabledFontColor : buttonFontColor)
+                    }}
+                  >
+                    {isMaxed ? 'MAX' : currentCostDisplay}
+                  </span>
+                )}
               </button>
             </div>
 

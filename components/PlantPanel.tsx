@@ -284,7 +284,7 @@ export const PlantPanel: React.FC<PlantPanelProps> = ({
               className="font-black tabular-nums leading-none"
               style={{ color: '#583c1f', letterSpacing: '-0.04em', fontSize: '11px' }}
             >
-              1
+              {data.harvestAmount ?? 1}
             </span>
           </div>
         </div>
