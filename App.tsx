@@ -398,9 +398,10 @@ export default function App() {
   const scaleX = viewportWidth / baseWidth;
   const scaleY = availableHeight / baseHeight;
   const fitScale = Math.min(scaleX, scaleY);
+  const fillScale = Math.max(scaleX, scaleY);
   // Desktop (wide viewport): cap at 1 so game stays 448×796, 9:16 at 100%
-  // Mobile (narrow): scale to fit available space (below address bar); fill width or height, no black bars
-  const appScale = viewportWidth >= mobileBreakpoint ? Math.min(fitScale, 1) : fitScale;
+  // Mobile (narrow): fill viewport (use larger scale) so game reaches top and bottom; may overflow in one axis
+  const appScale = viewportWidth >= mobileBreakpoint ? Math.min(fitScale, 1) : fillScale;
   const appScaleRef = useRef(appScale);
   appScaleRef.current = appScale;
   
@@ -1635,7 +1636,7 @@ export default function App() {
         <LoadingScreen onLoadComplete={handleLoadComplete} />
       )}
 <div
-        className={`flex justify-center bg-[#050608] w-screen ${viewportWidth < mobileBreakpoint ? 'min-h-[100dvh] overflow-y-auto overflow-x-hidden' : 'h-screen items-center'}`}
+        className={`flex justify-center bg-[#050608] w-screen ${viewportWidth < mobileBreakpoint ? 'min-h-[100dvh] overflow-y-auto overflow-x-hidden h-[100dvh]' : 'h-screen items-center'}`}
         style={{
           opacity: gameOpacity,
           paddingTop: viewportWidth < mobileBreakpoint ? Math.max(viewportOffsetTop, 50) : 0,
