@@ -395,8 +395,8 @@ export default function App() {
   const fitScale = Math.min(scaleX, scaleY);
   const mobileBreakpoint = 500;
   // Desktop (wide viewport): cap at 1 so game stays 448×796, 9:16 at 100%
-  // Mobile (narrow): scale to fit, can scale up to fill the screen
-  const appScale = viewportWidth >= mobileBreakpoint ? Math.min(fitScale, 1) : fitScale;
+  // Mobile (narrow): fill width (scaleX) so game goes edge-to-edge; may scroll vertically
+  const appScale = viewportWidth >= mobileBreakpoint ? Math.min(fitScale, 1) : scaleX;
   const appScaleRef = useRef(appScale);
   appScaleRef.current = appScale;
   
@@ -1630,7 +1630,18 @@ export default function App() {
       {isLoading && (
         <LoadingScreen onLoadComplete={handleLoadComplete} />
       )}
-<div className="flex items-center justify-center bg-[#050608] w-screen h-screen" style={{ opacity: gameOpacity }}>
+<div
+        className={`flex justify-center bg-[#050608] w-screen ${viewportWidth < mobileBreakpoint ? 'min-h-screen overflow-y-auto overflow-x-hidden' : 'h-screen items-center'}`}
+        style={{ opacity: gameOpacity }}
+      >
+      <div
+        style={{
+          width: 448 * appScale,
+          minHeight: 796 * appScale,
+          flexShrink: 0,
+          overflow: 'hidden',
+        }}
+      >
       <div
         ref={containerRef}
         id="game-container"
@@ -1639,7 +1650,7 @@ export default function App() {
           width: '448px',
           height: '796px',
           transform: `scale(${appScale})`,
-          transformOrigin: 'center center',
+          transformOrigin: 'top left',
         }}
       >
         <div className="flex-grow relative overflow-hidden min-h-0" style={{ zIndex: 10 }}>
@@ -2688,6 +2699,7 @@ export default function App() {
           })}
         </div>
 
+      </div>
       </div>
     </div>
     </ErrorBoundary>
