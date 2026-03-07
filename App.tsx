@@ -338,7 +338,11 @@ export default function App() {
   const getViewportSize = () => {
     if (typeof window === 'undefined') return { width: 420, height: 800, offsetTop: 0 };
     const vv = window.visualViewport;
-    if (vv) return { width: vv.width, height: vv.height, offsetTop: vv.offsetTop ?? 0 };
+    if (vv) {
+      // Use the smaller of visualViewport and innerWidth for width - ensures we never overflow on devices where they differ
+      const width = Math.min(vv.width, window.innerWidth);
+      return { width, height: vv.height, offsetTop: vv.offsetTop ?? 0 };
+    }
     return { width: window.innerWidth, height: window.innerHeight, offsetTop: 0 };
   };
   const [viewportWidth, setViewportWidth] = useState(typeof window !== 'undefined' ? getViewportSize().width : 420);
@@ -398,10 +402,9 @@ export default function App() {
   const scaleX = viewportWidth / baseWidth;
   const scaleY = availableHeight / baseHeight;
   const fitScale = Math.min(scaleX, scaleY);
-  const fillScale = Math.max(scaleX, scaleY);
   // Desktop (wide viewport): cap at 1 so game stays 448×796, 9:16 at 100%
-  // Mobile (narrow): fill viewport (use larger scale) so game reaches top and bottom; may overflow in one axis
-  const appScale = viewportWidth >= mobileBreakpoint ? Math.min(fitScale, 1) : fillScale;
+  // Mobile (narrow): scale to fit - prioritizes correct width (no horizontal overflow); may have black bar at bottom on tall phones
+  const appScale = viewportWidth >= mobileBreakpoint ? Math.min(fitScale, 1) : fitScale;
   const appScaleRef = useRef(appScale);
   appScaleRef.current = appScale;
   

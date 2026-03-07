@@ -8,7 +8,7 @@ interface StoreScreenProps {
   onAddMoney: (amount: number) => void;
 }
 
-const BUILD_VERSION = '1.0.8';
+const BUILD_VERSION = '1.0.9';
 
 export const StoreScreen: React.FC<StoreScreenProps> = ({ money, walletFlashActive, onAddMoney }) => {
   return (
