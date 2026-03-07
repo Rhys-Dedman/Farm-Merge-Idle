@@ -336,19 +336,21 @@ export default function App() {
   // Track viewport dimensions for responsive scaling
   // Use visualViewport when available (more accurate on mobile when browser chrome shows/hides)
   const getViewportSize = () => {
-    if (typeof window === 'undefined') return { width: 420, height: 800 };
+    if (typeof window === 'undefined') return { width: 420, height: 800, offsetTop: 0 };
     const vv = window.visualViewport;
-    if (vv) return { width: vv.width, height: vv.height };
-    return { width: window.innerWidth, height: window.innerHeight };
+    if (vv) return { width: vv.width, height: vv.height, offsetTop: vv.offsetTop ?? 0 };
+    return { width: window.innerWidth, height: window.innerHeight, offsetTop: 0 };
   };
   const [viewportWidth, setViewportWidth] = useState(typeof window !== 'undefined' ? getViewportSize().width : 420);
   const [viewportHeight, setViewportHeight] = useState(typeof window !== 'undefined' ? getViewportSize().height : 800);
+  const [viewportOffsetTop, setViewportOffsetTop] = useState(typeof window !== 'undefined' ? getViewportSize().offsetTop : 0);
   
   useEffect(() => {
     const update = () => {
-      const { width, height } = getViewportSize();
+      const { width, height, offsetTop } = getViewportSize();
       setViewportWidth(width);
       setViewportHeight(height);
+      setViewportOffsetTop(offsetTop);
     };
     update();
     window.addEventListener('resize', update);
@@ -390,13 +392,15 @@ export default function App() {
   // Base dimensions match the original max-w-md (448px) with 9:16 aspect
   const baseWidth = 448;
   const baseHeight = 796; // 448 * 16/9
-  const scaleX = viewportWidth / baseWidth;
-  const scaleY = viewportHeight / baseHeight;
-  const fitScale = Math.min(scaleX, scaleY);
   const mobileBreakpoint = 500;
+  const safeTop = viewportWidth < mobileBreakpoint ? Math.max(viewportOffsetTop, 50) : 0;
+  const availableHeight = viewportHeight - safeTop;
+  const scaleX = viewportWidth / baseWidth;
+  const scaleY = availableHeight / baseHeight;
+  const fitScale = Math.min(scaleX, scaleY);
   // Desktop (wide viewport): cap at 1 so game stays 448×796, 9:16 at 100%
-  // Mobile (narrow): fill width (scaleX) so game goes edge-to-edge; may scroll vertically
-  const appScale = viewportWidth >= mobileBreakpoint ? Math.min(fitScale, 1) : scaleX;
+  // Mobile (narrow): scale to fit available space (below address bar); fill width or height, no black bars
+  const appScale = viewportWidth >= mobileBreakpoint ? Math.min(fitScale, 1) : fitScale;
   const appScaleRef = useRef(appScale);
   appScaleRef.current = appScale;
   
@@ -1631,8 +1635,11 @@ export default function App() {
         <LoadingScreen onLoadComplete={handleLoadComplete} />
       )}
 <div
-        className={`flex justify-center bg-[#050608] w-screen ${viewportWidth < mobileBreakpoint ? 'min-h-screen overflow-y-auto overflow-x-hidden' : 'h-screen items-center'}`}
-        style={{ opacity: gameOpacity }}
+        className={`flex justify-center bg-[#050608] w-screen ${viewportWidth < mobileBreakpoint ? 'min-h-[100dvh] overflow-y-auto overflow-x-hidden' : 'h-screen items-center'}`}
+        style={{
+          opacity: gameOpacity,
+          paddingTop: viewportWidth < mobileBreakpoint ? Math.max(viewportOffsetTop, 50) : 0,
+        }}
       >
       <div
         style={{
