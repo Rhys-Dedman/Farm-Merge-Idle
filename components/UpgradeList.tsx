@@ -333,7 +333,7 @@ const getCropsUpgradeValue = (upgradeId: string, level: number): string | null =
 const getHarvestUpgradeValue = (upgradeId: string, level: number): string | null => {
   switch (upgradeId) {
     case 'customer_speed':
-      return `${Math.max(0, 30 - 5 * level)}s`;
+      return `${Math.max(0, 10 - level)}s`;
     case 'market_value':
       return `${(1 + 0.5 * level).toFixed(1)}x`;
     case 'premium_orders':
@@ -359,15 +359,15 @@ export const isCropYieldMaxed = (cropsState: Record<string, UpgradeState>): bool
   return level >= 9; // 1 + 9 = 10 max
 };
 
-/** Order Speed: goal loading time in seconds (30 base - 5 per level, min 0). Max at level 6. */
+/** Order Speed: goal loading time in seconds (10 base - 1 per level, min 0). Max at level 10. */
 export const getGoalLoadingSeconds = (harvestState: HarvestState): number => {
   const level = harvestState?.customer_speed?.level ?? 0;
-  return Math.max(0, 30 - 5 * level);
+  return Math.max(0, 10 - level);
 };
 
 export const isCustomerSpeedMaxed = (harvestState: Record<string, UpgradeState>): boolean => {
   const level = harvestState?.customer_speed?.level ?? 0;
-  return level >= 6; // 30 - 30 = 0s
+  return level >= 10; // 10 - 10 = 0s
 };
 
 /** Market Value: multiplier for goal completion coins (1.0 + 0.5 per level) */

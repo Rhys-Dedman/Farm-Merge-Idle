@@ -17,7 +17,6 @@ interface CellHighlightBeamProps {
   cellHeight: number;
   startTime: number;
   onComplete: () => void;
-  appScale?: number;
 }
 
 const VFX_DURATION_MS = 1200;
@@ -58,7 +57,6 @@ export const CellHighlightBeam: React.FC<CellHighlightBeamProps> = ({
   cellHeight,
   startTime,
   onComplete,
-  appScale = 1,
 }) => {
   const [progress, setProgress] = useState(0);
   const [spriteOpacity, setSpriteOpacity] = useState(0);
@@ -127,7 +125,7 @@ export const CellHighlightBeam: React.FC<CellHighlightBeamProps> = ({
         top: y,
         width: cellWidth,
         height: cellHeight,
-        transform: `translate(-50%, -50%) scale(${appScale})`,
+        transform: 'translate(-50%, -50%)',
         transformOrigin: 'center center',
         zIndex: 60,
       }}

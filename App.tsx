@@ -50,6 +50,34 @@ const getGoalsRequiredForLevel = (level: number): number => {
 /** Goal difficulty scaling: 0.9 = easier, 1.0 = normal, 1.1 = harder, 1.2 = much harder */
 const GOAL_DIFFICULTY_SCALING = 1.0;
 
+/** Discovery goal frequency: every X goals show a +1 plant goal. Based on highest plant level. */
+const getDiscoveryGoalEvery = (highestPlant: number): number => {
+  if (highestPlant <= 2) return 5;
+  if (highestPlant <= 4) return 6;
+  if (highestPlant <= 6) return 7;
+  if (highestPlant <= 8) return 8;
+  if (highestPlant <= 10) return 9;
+  return 10; // 11+ : every 10 goals, max
+};
+
+/** Pick plant level for a new goal. Every X goals is a discovery goal (highestPlantEver+1). Mutates counterRef. */
+const pickGoalPlantLevel = (
+  highestPlantEver: number,
+  counterRef: { current: number },
+  minLevel: number
+): number => {
+  const every = getDiscoveryGoalEvery(highestPlantEver);
+  if (highestPlantEver < 24 && counterRef.current >= every - 1) {
+    counterRef.current = 0;
+    return highestPlantEver + 1;
+  }
+  counterRef.current++;
+  const aboveMin = Math.random() < 0.5;
+  return aboveMin
+    ? (minLevel >= 5 ? 5 : minLevel + 1 + Math.floor(Math.random() * (5 - minLevel)))
+    : 1 + Math.floor(Math.random() * minLevel);
+};
+
 /** Crops required for goal order. Scales with player level, crop yield, and has random variation. */
 const getGoalCropRequired = (
   playerLevel: number,
@@ -120,9 +148,9 @@ POPUP_ASSETS_TO_PRELOAD.forEach((src) => {
   img.src = src;
 });
 
-/** Goal icon for plant level: plant_N uses icon_goal_N.png (plants 1-5 for now) */
+/** Goal icon for plant level: plant_N uses icon_goal_N.png (plants 1-24) */
 const getGoalIconForPlantLevel = (plantLevel: number): string =>
-  assetPath(`/assets/icons/icons_goals/icon_goal_${Math.max(1, Math.min(5, plantLevel))}.png`);
+  assetPath(`/assets/icons/icons_goals/icon_goal_${Math.max(1, Math.min(24, plantLevel))}.png`);
 
 /** Plant names and descriptions for discovery popups */
 const PLANT_DATA: Record<number, { name: string; description: string }> = {
@@ -207,6 +235,8 @@ export default function App() {
   const [harvestState, setHarvestState] = useState<HarvestState>(createInitialHarvestState);
   const [cropsState, setCropsState] = useState<Record<string, UpgradeState>>(createInitialCropsState);
   const [highestPlantEver, setHighestPlantEver] = useState(1); // Track highest plant level ever created
+  const highestPlantEverRef = useRef(1);
+  const discoveryGoalCounterRef = useRef(3); // Goals shown since last discovery (3 initial slots count)
   const [seedsInStorage, setSeedsInStorage] = useState(0);
   
   // Discovery popup state
@@ -229,7 +259,7 @@ export default function App() {
   // Goals: start with 3 slots; unlock 4th at level 5, 5th at level 9
   const [goalSlots, setGoalSlots] = useState<('empty' | 'loading' | 'green' | 'completed')[]>(['green', 'green', 'green', 'empty', 'empty']);
   const [goalPlantTypes, setGoalPlantTypes] = useState<number[]>([1, 2, 3, 0, 0]); // plant level 1-5 per slot when green
-  const [goalLoadingSeconds, setGoalLoadingSeconds] = useState(30); // countdown 30->0 (Order Speed)
+  const [goalLoadingSeconds, setGoalLoadingSeconds] = useState(10); // countdown 10->0 (Order Speed)
   const [goalTransitionSlot, setGoalTransitionSlot] = useState<number | null>(null); // slot transitioning loading->green (for fade)
   const [goalTransitionFade, setGoalTransitionFade] = useState(false); // triggers fade: loading out, green in
   const [goalSlotFadeInSlot, setGoalSlotFadeInSlot] = useState<number | null>(null); // slot fading in 0→100% over 500ms; countdown waits until done
@@ -298,6 +328,8 @@ export default function App() {
   const barnButtonRef = useRef<HTMLButtonElement>(null);
   const barnScrollRef = useRef<HTMLDivElement>(null);
   const barnScrollYRef = useRef(0);
+
+  useEffect(() => { highestPlantEverRef.current = highestPlantEver; }, [highestPlantEver]);
 
   const [spriteCenter, setSpriteCenter] = useState({ x: 50, y: 50 }); // % relative to column, for sprite center
 
@@ -608,7 +640,7 @@ export default function App() {
     return () => cancelAnimationFrame(rafId);
   }, [seedProductionLevel, isLoading]);
 
-  // Goal loading countdown: Order Speed (30s base - 5s per level, min 0). Don't start until slot is 100% faded in.
+  // Goal loading countdown: Order Speed (10s base - 1s per level, min 0). Don't start until slot is 100% faded in.
   const goalIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
     if (isLoading) return;
@@ -624,10 +656,7 @@ export default function App() {
       setGoalTransitionSlot(loadingIdx);
       setGoalTransitionFade(false);
       const minLevel = getPremiumOrdersMinLevel(harvestState);
-      const aboveMin = Math.random() < 0.5;
-      const plantLevel = aboveMin
-        ? (minLevel >= 5 ? 5 : minLevel + 1 + Math.floor(Math.random() * (5 - minLevel)))
-        : 1 + Math.floor(Math.random() * minLevel);
+      const plantLevel = pickGoalPlantLevel(highestPlantEverRef.current, discoveryGoalCounterRef, minLevel);
       setGoalPlantTypes((p) => { const n = [...p]; n[loadingIdx] = plantLevel; return n; });
       const cropYieldLevel = cropsState?.crop_value?.level ?? 0;
       const goalRequired = getGoalCropRequired(playerLevel, cropYieldLevel);
@@ -666,10 +695,7 @@ export default function App() {
           setGoalTransitionSlot(loadingIdx);
           setGoalTransitionFade(false);
           const minLevel = getPremiumOrdersMinLevel(harvestState);
-          const aboveMin = Math.random() < 0.5;
-          const plantLevel = aboveMin
-            ? (minLevel >= 5 ? 5 : minLevel + 1 + Math.floor(Math.random() * (5 - minLevel)))
-            : 1 + Math.floor(Math.random() * minLevel);
+          const plantLevel = pickGoalPlantLevel(highestPlantEverRef.current, discoveryGoalCounterRef, minLevel);
           setGoalPlantTypes((p) => { const n = [...p]; n[loadingIdx] = plantLevel; return n; });
           const cropYieldLevel = cropsState?.crop_value?.level ?? 0;
           const goalRequired = getGoalCropRequired(playerLevel, cropYieldLevel);
@@ -1085,9 +1111,9 @@ export default function App() {
 
     if (isSeedFlashing) return;
 
-    // Add +15% progress when button is green (no seeds in storage)
+    // Add +30% progress when button is green (no seeds in storage)
     const start = Math.max(0, seedProgressRef.current);
-    const totalAfterTap = start + 15;
+    const totalAfterTap = start + 30;
     
     if (totalAfterTap > 100) {
       // Tap goes past 100%: add to storage, reset to 0%, then continue with remainder
@@ -1121,9 +1147,9 @@ export default function App() {
     e.stopPropagation();
     if (isHarvestFlashing) return;
 
-    // Add +15 progress per tap (animated via harvestTapZoomRef)
+    // Add +30% progress per tap (animated via harvestTapZoomRef)
     const current = harvestProgressRef.current;
-    const next = Math.min(100, current + 15);
+    const next = Math.min(100, current + 30);
     harvestTapZoomRef.current = { start: current, end: next, startTime: Date.now(), duration: 100 };
     setHarvestTapZoomTrigger((t) => t + 1);
 
@@ -1201,7 +1227,7 @@ export default function App() {
       grid.forEach((cell, cellIdx) => {
         if (!cell.item) return;
         const level = cell.item.level;
-        const slotIdx = level >= 1 && level <= 5
+        const slotIdx = level >= 1 && level <= 24
           ? goalPlantTypes.findIndex((pt, i) => pt === level && goalSlots[i] === 'green' && goalCounts[i] > 0)
           : -1;
         const hasGoalForPlant = slotIdx >= 0;
@@ -1350,7 +1376,7 @@ export default function App() {
       if (!cell.item) return;
 
       const level = cell.item.level;
-      const slotIdx = level >= 1 && level <= 5
+      const slotIdx = level >= 1 && level <= 24
         ? goalPlantTypes.findIndex((pt, i) => pt === level && goalSlots[i] === 'green' && goalCounts[i] > 0)
         : -1;
       const hasGoalForPlant = slotIdx >= 0;
@@ -1964,7 +1990,7 @@ export default function App() {
                         },
                       ]);
                       if (mergeResultLevel != null) {
-                        const slotIdx = mergeResultLevel >= 1 && mergeResultLevel <= 5
+                        const slotIdx = mergeResultLevel >= 1 && mergeResultLevel <= 24
                           ? goalPlantTypes.findIndex((pt, i) => pt === mergeResultLevel && goalSlots[i] === 'green' && goalCounts[i] > 0)
                           : -1;
                         const hasGoalForPlant = slotIdx >= 0;
@@ -2316,7 +2342,6 @@ export default function App() {
                 cellWidth={b.cellWidth}
                 cellHeight={b.cellHeight}
                 startTime={b.startTime}
-                appScale={appScale}
                 onComplete={() => setCellHighlightBeams((prev) => prev.filter((x) => x.id !== b.id))}
               />
             ))}
