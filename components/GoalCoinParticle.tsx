@@ -7,11 +7,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import { assetPath } from '../utils/assetPath';
 
 const MOVE_DURATION_MS = 350;
-const MAX_TRAIL_POINTS = 19; // 25% shorter (was 25)
+/** Shorter trail = fewer SVG elements when many coins fly at once (e.g. 5+ goals). */
+const MAX_TRAIL_POINTS = 8;
 const TRAIL_FADE_AFTER_HIT_MS = 220;
 const PARTICLE_SIZE = 40; // same as goal icon
 const TRAIL_COLOR = '#dfbb38';
-const TRAIL_STROKE_WIDTH = 32; // 1.5x thicker (was 21)
+const TRAIL_STROKE_WIDTH = 32;
+/** When more than this many particles are active, skip trail entirely to keep FPS up. */
+const SKIP_TRAIL_WHEN_ACTIVE_ABOVE = 4;
 
 interface Point {
   x: number;
@@ -33,6 +36,8 @@ interface GoalCoinParticleProps {
   onImpact: (value: number) => void;
   onComplete: () => void;
   appScale?: number;
+  /** When > SKIP_TRAIL_WHEN_ACTIVE_ABOVE, trail is disabled to reduce cost (e.g. 5+ coins at once). */
+  activeCount?: number;
 }
 
 export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
@@ -43,7 +48,9 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
   onImpact,
   onComplete,
   appScale = 1,
+  activeCount = 1,
 }) => {
+  const useTrail = activeCount <= SKIP_TRAIL_WHEN_ACTIVE_ABOVE;
   const [frame, setFrame] = useState<{
     phase: 'moving' | 'trailOnly';
     pos: Point;
@@ -119,18 +126,31 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
                  Math.pow(tt, 3) * target.y;
 
         const coinScale = t <= 0.5 ? 1 - (1 - 0.65) * (t / 0.5) : 0.65;
-        trailRef.current = [{ p: { x, y }, color: TRAIL_COLOR, t }, ...trailRef.current].slice(0, MAX_TRAIL_POINTS);
+        if (useTrail) {
+          trailRef.current = [{ p: { x, y }, color: TRAIL_COLOR, t }, ...trailRef.current].slice(0, MAX_TRAIL_POINTS);
+        }
 
         if (t >= 1) {
           if (!impactFiredRef.current) {
             impactFiredRef.current = true;
             onImpact(data.value);
           }
-          trailOnlyStartRef.current = now;
-          phaseRef.current = 'trailOnly';
-          setFrame({ phase: 'trailOnly', pos: { x, y }, scale: coinScale, trail: [...trailRef.current], trailOpacity: 1 });
+          if (useTrail) {
+            trailOnlyStartRef.current = now;
+            phaseRef.current = 'trailOnly';
+            setFrame({ phase: 'trailOnly', pos: { x, y }, scale: coinScale, trail: [...trailRef.current], trailOpacity: 1 });
+          } else {
+            onComplete();
+            return;
+          }
         } else {
-          setFrame({ phase: 'moving', pos: { x, y }, scale: coinScale, trail: [...trailRef.current], trailOpacity: 1 });
+          setFrame({
+            phase: 'moving',
+            pos: { x, y },
+            scale: coinScale,
+            trail: useTrail ? [...trailRef.current] : [],
+            trailOpacity: 1,
+          });
         }
         rafRef.current = requestAnimationFrame(tick);
         return;
@@ -153,20 +173,16 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
 
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [data, containerRef, walletRef, walletIconRef, appScale, onImpact, onComplete]);
+  }, [data, containerRef, walletRef, walletIconRef, appScale, onImpact, onComplete, useTrail]);
 
   const { phase, pos, scale, trail, trailOpacity } = frame;
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-visible" style={{ zIndex: 200 }}>
-      {trail.length > 1 && (
+      {useTrail && trail.length > 1 && (
         <svg className="absolute inset-0 w-full h-full overflow-visible" style={{ pointerEvents: 'none' }}>
-          <defs>
-            <filter id={`goal-coin-trail-${data.id}`}>
-              <feGaussianBlur in="SourceGraphic" stdDeviation="0.6" />
-            </filter>
-          </defs>
-          <g filter={`url(#goal-coin-trail-${data.id})`} style={{ opacity: trailOpacity }}>
+          {/* No blur filter to reduce GPU cost when many coins fly */}
+          <g style={{ opacity: trailOpacity }}>
             {trail.map((seg, i) => {
               if (i === 0) return null;
               const prev = trail[i - 1];

@@ -3300,6 +3300,7 @@ export default function App() {
               walletRef={walletRef}
               walletIconRef={walletIconRef}
               appScale={appScale}
+              activeCount={activeGoalCoinParticles.length}
               onImpact={(value) => {
                 const happiestCustomersActive = activeBoosts.some(b => b.offerId === 'happiest_customers');
                 let finalValue = value;
