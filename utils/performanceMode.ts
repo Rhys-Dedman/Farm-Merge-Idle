@@ -1,11 +1,11 @@
 /**
  * Performance mode: when ON, caps FPS at 30 and reduces particles/trails for low-end devices.
- * Persisted in localStorage so it survives refresh.
+ * Default is OFF. Persisted in localStorage when user toggles in settings.
  */
 
 const STORAGE_KEY = 'farm-merge-performance-mode';
 
-let performanceMode = false;
+let performanceMode = false; // default OFF
 
 function readFromStorage(): boolean {
   if (typeof localStorage === 'undefined') return false;
@@ -33,7 +33,7 @@ export function setPerformanceMode(on: boolean): void {
   }
 }
 
-/** Call once at app init to load from localStorage. */
+/** Call once at app init. Default is OFF; only ON if user previously saved 'true' in localStorage. */
 export function initPerformanceMode(): void {
   performanceMode = readFromStorage();
 }
