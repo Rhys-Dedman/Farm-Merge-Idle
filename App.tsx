@@ -767,6 +767,20 @@ export default function App() {
     }
   }, []);
 
+  // Tap decay: progress per tap goes from 40% down to 10% the more taps in the last 5 seconds. Resets after 5s idle.
+  const TAP_DECAY_WINDOW_MS = 5000;
+  const seedTapTimestampsRef = useRef<number[]>([]);
+  const harvestTapTimestampsRef = useRef<number[]>([]);
+  const getTapProgressPercent = (timestampsRef: React.MutableRefObject<number[]>) => {
+    const now = Date.now();
+    const cutoff = now - TAP_DECAY_WINDOW_MS;
+    timestampsRef.current = timestampsRef.current.filter(t => t >= cutoff);
+    const count = timestampsRef.current.length;
+    const percent = Math.max(10, 35 - count * 5);
+    timestampsRef.current.push(now);
+    return percent;
+  };
+
   // Seed Production upgrade: auto-increase progress when level >= 1. Rate = level completions per minute (+1/min per upgrade).
   const seedProductionLevel = seedsState?.seed_production?.level ?? 0;
   const lastSeedProgressTimeRef = useRef<number>(0);
@@ -1410,9 +1424,10 @@ export default function App() {
 
     if (isSeedFlashing) return;
 
-    // Add +35% progress when button is green (no seeds in storage)
+    // Add progress per tap with decay: 40% down to 10% based on taps in last 5 seconds
+    const tapPercent = getTapProgressPercent(seedTapTimestampsRef);
     const start = Math.max(0, seedProgressRef.current);
-    const totalAfterTap = start + 35;
+    const totalAfterTap = start + tapPercent;
     
     if (totalAfterTap > 100) {
       // Tap goes past 100%: add to storage, reset to 0%, then continue with remainder
@@ -1446,9 +1461,10 @@ export default function App() {
     e.stopPropagation();
     if (isHarvestFlashing) return;
 
-    // Add +35% progress per tap (animated via harvestTapZoomRef)
+    // Add progress per tap with decay: 40% down to 10% based on taps in last 5 seconds
+    const tapPercent = getTapProgressPercent(harvestTapTimestampsRef);
     const current = harvestProgressRef.current;
-    const next = Math.min(100, current + 35);
+    const next = Math.min(100, current + tapPercent);
     harvestTapZoomRef.current = { start: current, end: next, startTime: Date.now(), duration: 100 };
     setHarvestTapZoomTrigger((t) => t + 1);
 

@@ -124,43 +124,6 @@ interface UpgradeDef {
   description?: string;
 }
 
-/** Upgrade cost configuration: base cost and growth rate per level */
-interface UpgradeCostConfig {
-  baseCost: number;
-  growth: number;
-}
-
-const UPGRADE_COSTS: Record<string, UpgradeCostConfig> = {
-  // SEEDS
-  seed_production: { baseCost: 75, growth: 1.18 },
-  seed_storage: { baseCost: 40, growth: 1.16 },
-  seed_surplus: { baseCost: 120, growth: 1.22 },
-  bonus_seeds: { baseCost: 300, growth: 1.28 }, // Seed Luck
-  
-  // CROPS (Garden)
-  harvest_speed: { baseCost: 90, growth: 1.18 },
-  plot_expansion: { baseCost: 150, growth: 1.35 },
-  crop_value: { baseCost: 250, growth: 1.23 },
-  fertile_soil: { baseCost: 500, growth: 1.33 },
-  merge_harvest: { baseCost: 350, growth: 1.27 },
-
-  // HARVEST (Orders)
-  customer_speed: { baseCost: 100, growth: 1.20 },
-  market_value: { baseCost: 200, growth: 1.25 },
-  surplus_sales: { baseCost: 120, growth: 1.18 },
-  happy_customer: { baseCost: 250, growth: 1.28 },
-};
-
-/** Calculate upgrade cost for a given level, rounded to nearest 5 */
-const calculateUpgradeCost = (upgradeId: string, currentLevel: number): number => {
-  const config = UPGRADE_COSTS[upgradeId];
-  if (!config) return 0;
-  
-  // Normal exponential scaling: cost = base * (growth^level)
-  const rawCost = config.baseCost * Math.pow(config.growth, currentLevel);
-  return Math.round(rawCost / 5) * 5;
-};
-
 /** Format cost for display (e.g., 1500 -> "1.5K", 2500000 -> "2.5M") */
 const formatCost = (cost: number): string => {
   if (cost >= 1000000) {
@@ -201,6 +164,52 @@ const HARVEST_UNLOCK_LEVELS: Record<string, number> = {
   market_value: 4,
   surplus_sales: 8,
   happy_customer: 11,
+};
+
+/** Upgrade cost formula: base = round(avgGoalValue × unlockLevel × strength × scale), then each purchase = round(previous × 1.6). All to nearest 5. */
+const AVG_GOAL_VALUE = 50;
+const UPGRADE_COST_SCALE = 1.0;
+const UPGRADE_GROWTH_MULTIPLIER = 1.6;
+
+/** Strength multiplier per upgrade (how powerful the upgrade is). Used only in cost formula. */
+const UPGRADE_STRENGTH_MULTIPLIERS: Record<string, number> = {
+  seed_production: 1.8,
+  seed_storage: 1.8,
+  seed_surplus: 1.8,
+  bonus_seeds: 1.8,
+  harvest_speed: 1.8,
+  plot_expansion: 1.8,
+  crop_value: 1.8,
+  fertile_soil: 1.8,
+  merge_harvest: 1.8,
+  customer_speed: 1.8,
+  market_value: 1.8,
+  surplus_sales: 1.8,
+  happy_customer: 1.8,
+};
+
+const roundToNearest5 = (value: number): number => Math.round(value / 5) * 5;
+
+const getUpgradeUnlockLevel = (upgradeId: string): number =>
+  SEEDS_UNLOCK_LEVELS[upgradeId] ?? CROPS_UNLOCK_LEVELS[upgradeId] ?? HARVEST_UNLOCK_LEVELS[upgradeId] ?? 1;
+
+/**
+ * Calculate upgrade cost for the next purchase (currentLevel = level before buying).
+ * baseUpgradeCost = round(avgGoalValue × unlockLevel × strength × scale) to nearest 5.
+ * Then for each purchase after: nextUpgradeCost = round(previous × 1.6) to nearest 5.
+ * This is the only cost used by the upgrade panel and handleUpgrade.
+ */
+const calculateUpgradeCost = (upgradeId: string, currentLevel: number): number => {
+  const strengthMultiplier = UPGRADE_STRENGTH_MULTIPLIERS[upgradeId];
+  if (strengthMultiplier == null) return 0;
+
+  const unlockLevel = getUpgradeUnlockLevel(upgradeId);
+  let cost = roundToNearest5(AVG_GOAL_VALUE * unlockLevel * strengthMultiplier * UPGRADE_COST_SCALE);
+
+  for (let i = 0; i < currentLevel; i++) {
+    cost = roundToNearest5(cost * UPGRADE_GROWTH_MULTIPLIER);
+  }
+  return cost;
 };
 
 /** Get level unlock info for level-up popup. Returns title, description, icon, and optionally upgradeId/tab for Unlock Now behavior. */
