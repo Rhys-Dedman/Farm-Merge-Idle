@@ -292,6 +292,7 @@ export default function App() {
   const lastShownOfferTabRef = useRef<TabType | null>(null);
   const lastLimitedOfferClosedAtRef = useRef<number>(0);
   const lastFakeAdClosedAtRef = useRef<number>(0); // 10s cooldown before showing limited offer popup after closing fake ad
+  const lastOtherPopupClosedAtRef = useRef<number>(0); // 5–10s cooldown after closing level up / discovery / seed progression / plant info before showing limited offer
   const showFakeAdRef = useRef<boolean>(false); // so timers can pause while fake ad is visible
   const limitedOfferCooldownInitializedRef = useRef(false);
   // Rewarded offers shown in upgrade list (when player declines popup)
@@ -493,10 +494,17 @@ export default function App() {
     const interval = setInterval(() => {
       if (limitedOfferPopup?.isVisible) return;
       if (showFakeAdRef.current) return; // never show limited offer while fake ad is on screen
+      // Don't show limited offer while another popup is on screen
+      if (levelUpPopup?.isVisible) return;
+      if (discoveryPopup?.isVisible) return;
+      if (seedProgressionPopup) return;
+      if (plantInfoPopup?.isVisible) return;
       const now = Date.now();
       // Don't show another popup for 10s after user just closed one
       if (lastLimitedOfferClosedAtRef.current && (now - lastLimitedOfferClosedAtRef.current) < 10000) return;
       if (lastFakeAdClosedAtRef.current && (now - lastFakeAdClosedAtRef.current) < 10000) return;
+      // Wait 7.5s after user closed level up / discovery / seed progression / plant info before showing limited offer
+      if (lastOtherPopupClosedAtRef.current && (now - lastOtherPopupClosedAtRef.current) < 7500) return;
       const elapsed = now - lastLimitedOfferShownAtRef.current;
       if (elapsed < 90000) return; // Rule 1: 90s cooldown
       const unlockedCount = grid.filter(c => !c.locked).length;
@@ -548,7 +556,7 @@ export default function App() {
       }
     }, 2000);
     return () => clearInterval(interval);
-  }, [playerLevel, grid, money, limitedOfferPopup?.isVisible, goalSlots, harvestState, highestPlantEver]);
+  }, [playerLevel, grid, money, limitedOfferPopup?.isVisible, goalSlots, harvestState, highestPlantEver, levelUpPopup?.isVisible, discoveryPopup?.isVisible, seedProgressionPopup, plantInfoPopup?.isVisible]);
 
   // Derive which tabs have offers (for tab notification coloring)
   const tabsWithOffers = new Set(rewardedOffers.map(o => o.tab));
@@ -2842,7 +2850,7 @@ export default function App() {
               return (
                 <LevelUpPopup
                   isVisible={levelUpPopup.isVisible}
-                  onClose={() => setLevelUpPopup(null)}
+                  onClose={() => { lastOtherPopupClosedAtRef.current = Date.now(); setLevelUpPopup(null); }}
                   level={levelUpPopup.level}
                   title={unlockInfo.title}
                   description={unlockInfo.description}
@@ -2880,7 +2888,7 @@ export default function App() {
             {discoveryPopup && (
               <DiscoveryPopup
                 isVisible={discoveryPopup.isVisible}
-                onClose={() => setDiscoveryPopup(null)}
+                onClose={() => { lastOtherPopupClosedAtRef.current = Date.now(); setDiscoveryPopup(null); }}
                 title="New Discovery"
                 imageSrc={assetPath(`/assets/plants/plant_${Math.min(discoveryPopup.level, 14)}.png`)}
                 imageLevel={discoveryPopup.level}
@@ -2909,7 +2917,7 @@ export default function App() {
               <div className="absolute inset-0" style={{ zIndex: 110 }}>
                 <LevelUpPopup
                   isVisible={seedProgressionPopup}
-                  onClose={() => setSeedProgressionPopup(false)}
+                  onClose={() => { lastOtherPopupClosedAtRef.current = Date.now(); setSeedProgressionPopup(false); }}
                   title="Seeds Evolve!"
                   description="Discovering more plants will increase the level of seeds you generate"
                   icon={assetPath('/assets/icons/icon_seedquality.png')}
@@ -2926,7 +2934,7 @@ export default function App() {
             {plantInfoPopup && (
               <PlantInfoPopup
                 isVisible={plantInfoPopup.isVisible}
-                onClose={() => setPlantInfoPopup(null)}
+                onClose={() => { lastOtherPopupClosedAtRef.current = Date.now(); setPlantInfoPopup(null); }}
                 plantLevel={plantInfoPopup.level}
                 plantName={getPlantData(plantInfoPopup.level).name}
                 plantDescription={getPlantData(plantInfoPopup.level).description}
@@ -2946,6 +2954,7 @@ export default function App() {
                   setLimitedOfferPopup(null);
                 }}
                 closeOnButtonClick={false}
+                closeOnBackdropClick={false}
                 onCloseButtonClick={() => {
                   if (limitedOfferPopup.activeBoostEndTime != null) {
                     const now = Date.now();
