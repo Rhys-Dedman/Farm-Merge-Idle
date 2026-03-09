@@ -398,6 +398,9 @@ export default function App() {
   const nextGoalCoinBurstIdRef = useRef(0);
   const levelUpGuardRef = useRef(false);
   const walletFlashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Batch coin panel impacts (many harvests) to one setState flush per frame for FPS. */
+  const pendingCoinImpactRef = useRef({ total: 0, scheduled: false });
+  const walletImpactFlushRafRef = useRef<number>(0);
   const pendingMergeLevelIncreaseRef = useRef<number>(1);
   const plantButtonRef = useRef<HTMLDivElement>(null);
   const harvestButtonRef = useRef<HTMLDivElement>(null);
@@ -1630,21 +1633,26 @@ export default function App() {
         setHarvestBounceCellIndices(harvestCellIndices);
         setTimeout(() => setHarvestBounceCellIndices([]), 250);
 
-        harvestCellIndices.forEach((cellIdx) => {
-          const hexEl = document.getElementById(`hex-${cellIdx}`);
-          if (hexEl) {
+        // Batch leaf bursts into one setState; use fewer particles when many harvests (FPS)
+        const now = Date.now();
+        const manyHarvests = harvestCellIndices.length > 10;
+        const newBursts = harvestCellIndices
+          .map((cellIdx) => {
+            const hexEl = document.getElementById(`hex-${cellIdx}`);
+            if (!hexEl) return null;
             const r = hexEl.getBoundingClientRect();
-            setLeafBurstsSmall((prev) => [
-              ...prev,
-              {
-                id: `harvest-${cellIdx}-${Date.now()}-${Math.random().toString(36).slice(2)}${idSuffix}`,
-                x: r.left + r.width / 2,
-                y: r.top + r.height / 2,
-                startTime: Date.now(),
-              },
-            ]);
-          }
-        });
+            return {
+              id: `harvest-${cellIdx}-${now}-${Math.random().toString(36).slice(2)}${idSuffix}`,
+              x: r.left + r.width / 2,
+              y: r.top + r.height / 2,
+              startTime: now,
+              ...(manyHarvests ? { particleCount: 2 } : {}),
+            };
+          })
+          .filter((b): b is NonNullable<typeof b> => b !== null);
+        if (newBursts.length > 0) {
+          setLeafBurstsSmall((prev) => [...prev, ...newBursts]);
+        }
 
         if (coinPanelsWithDist.length > 0) {
           const N = coinPanelsWithDist.length;
@@ -1716,6 +1724,11 @@ export default function App() {
       };
     };
 
+    const mergeBursts: { id: string; x: number; y: number; startTime: number; particleCount?: number }[] = [];
+    const mergeBeams: { id: string; x: number; y: number; cellWidth: number; cellHeight: number; startTime: number }[] = [];
+    const mergeNow = Date.now();
+    const manyMergeHarvests = triggeredCells.length > 10;
+
     triggeredCells.forEach((cellIdx) => {
       const cell = grid[cellIdx];
       if (!cell.item) return;
@@ -1756,7 +1769,7 @@ export default function App() {
         plantPanelsWithDist.push({
           dist,
           panel: {
-            id: `merge-plant-${cellIdx}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            id: `merge-plant-${cellIdx}-${mergeNow}-${Math.random().toString(36).slice(2)}`,
             goalSlotIdx: slotIdx,
             iconSrc: getGoalIconForPlantLevel(plantLevel),
             harvestAmount: effectiveCropYield,
@@ -1777,7 +1790,7 @@ export default function App() {
         coinPanelsWithDist.push({
           dist,
           panel: {
-            id: `merge-harvest-${cellIdx}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            id: `merge-harvest-${cellIdx}-${mergeNow}-${Math.random().toString(36).slice(2)}`,
             value,
             startX,
             startY,
@@ -1788,30 +1801,29 @@ export default function App() {
         });
       }
 
-      // Spawn leaf burst for harvested cell
-      setLeafBurstsSmall((prev) => [
-        ...prev,
-        {
-          id: `merge-harvest-burst-${cellIdx}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          x: hexRect.left + hexRect.width / 2,
-          y: hexRect.top + hexRect.height / 2,
-          startTime: Date.now(),
-        },
-      ]);
-      
-      // Spawn highlight VFX for merge harvest bonus
-      setCellHighlightBeams((prev) => [
-        ...prev,
-        {
-          id: `merge-harvest-highlight-${cellIdx}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          x: hexRect.left + hexRect.width / 2,
-          y: hexRect.top + hexRect.height / 2,
-          cellWidth: hexRect.width,
-          cellHeight: hexRect.height,
-          startTime: Date.now(),
-        },
-      ]);
+      mergeBursts.push({
+        id: `merge-harvest-burst-${cellIdx}-${mergeNow}-${Math.random().toString(36).slice(2)}`,
+        x: hexRect.left + hexRect.width / 2,
+        y: hexRect.top + hexRect.height / 2,
+        startTime: mergeNow,
+        ...(manyMergeHarvests ? { particleCount: 2 } : {}),
+      });
+      mergeBeams.push({
+        id: `merge-harvest-highlight-${cellIdx}-${mergeNow}-${Math.random().toString(36).slice(2)}`,
+        x: hexRect.left + hexRect.width / 2,
+        y: hexRect.top + hexRect.height / 2,
+        cellWidth: hexRect.width,
+        cellHeight: hexRect.height,
+        startTime: mergeNow,
+      });
     });
+
+    if (mergeBursts.length > 0) {
+      setLeafBurstsSmall((prev) => [...prev, ...mergeBursts]);
+    }
+    if (mergeBeams.length > 0) {
+      setCellHighlightBeams((prev) => [...prev, ...mergeBeams]);
+    }
 
     if (coinPanelsWithDist.length > 0) {
       const N = coinPanelsWithDist.length;
@@ -3238,12 +3250,22 @@ export default function App() {
               walletRef={walletRef}
               walletIconRef={walletIconRef}
               appScale={appScale}
+              activePanelCount={activeCoinPanels.length}
               onImpact={(value) => {
-                setMoney(prev => prev + value);
-                setWalletFlashActive(true);
-                setWalletBounceTrigger((t) => t + 1);
-                if (walletFlashTimeoutRef.current) clearTimeout(walletFlashTimeoutRef.current);
-                walletFlashTimeoutRef.current = setTimeout(() => setWalletFlashActive(false), 120);
+                pendingCoinImpactRef.current.total += value;
+                if (!pendingCoinImpactRef.current.scheduled) {
+                  pendingCoinImpactRef.current.scheduled = true;
+                  walletImpactFlushRafRef.current = requestAnimationFrame(() => {
+                    const total = pendingCoinImpactRef.current.total;
+                    pendingCoinImpactRef.current = { total: 0, scheduled: false };
+                    walletImpactFlushRafRef.current = 0;
+                    setMoney((prev) => prev + total);
+                    setWalletBounceTrigger((t) => t + 1);
+                    setWalletFlashActive(true);
+                    if (walletFlashTimeoutRef.current) clearTimeout(walletFlashTimeoutRef.current);
+                    walletFlashTimeoutRef.current = setTimeout(() => setWalletFlashActive(false), 120);
+                  });
+                }
               }}
               onComplete={() => setActiveCoinPanels(prev => prev.filter((c) => c.id !== coin.id))}
             />
