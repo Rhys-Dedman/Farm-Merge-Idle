@@ -65,9 +65,9 @@ export const ActiveBoostIndicator: React.FC<ActiveBoostIndicatorProps> = ({ data
     return () => cancelAnimationFrame(rafId);
   }, [data.id, data.endTime, data.durationMs, circumference]);
 
-  const iconSrc = data.icon.startsWith('/') || data.icon.startsWith('http')
+  const iconSrc = data.icon.startsWith('http')
     ? data.icon
-    : assetPath(`/assets/icons/${data.icon}.png`);
+    : assetPath(data.icon.startsWith('/') ? data.icon : `/assets/icons/${data.icon}.png`);
 
   const centerPx = SIZE_PX / 2; // 13
   const innerCircleTotalPx = INNER_RADIUS * 2 + STROKE_PX * 2; // 22

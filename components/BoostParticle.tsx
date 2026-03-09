@@ -24,6 +24,10 @@ export interface BoostParticleData {
   startY: number;
   /** Slot index where the new boost will appear; particle targets this slot's center */
   targetSlotIndex?: number;
+  /** When particle impacts, add boost with this offer (duration + icon) */
+  offerId?: string;
+  durationMs?: number;
+  icon?: string;
 }
 
 interface BoostParticleProps {
@@ -32,7 +36,7 @@ interface BoostParticleProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
   /** Boost area (sibling in same container); target = boostArea.offsetLeft + slot*28+13, offsetTop+11 */
   boostAreaRef: React.RefObject<HTMLElement | null>;
-  onImpact?: () => void;
+  onImpact?: (data: BoostParticleData) => void;
   onComplete: () => void;
 }
 
@@ -112,7 +116,7 @@ export const BoostParticle: React.FC<BoostParticleProps> = ({
         if (t >= 1) {
           if (!impactFiredRef.current) {
             impactFiredRef.current = true;
-            onImpact?.();
+            onImpact?.(data);
           }
           setPhase('trailOnly');
           trailOnlyStartRef.current = now;

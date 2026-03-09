@@ -3,7 +3,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { HexBoard } from './components/HexBoard';
 import { UpgradeTabs } from './components/UpgradeTabs';
-import { UpgradeList, createInitialSeedsState, createInitialHarvestState, createInitialCropsState, getSeedLevelFromHighestPlant, getBonusSeedChance, getSeedSurplusValue, getCropYieldPerHarvest, getHarvestSpeedLevel, getMergeHarvestChance, getGoalLoadingSeconds, getMarketValueMultiplier, getPremiumOrdersMinLevel, getSurplusSalesMultiplier, getHappyCustomerChance, HarvestState, UpgradeState, RewardedOffer, getLevelUnlockInfo } from './components/UpgradeList';
+import { UpgradeList, createInitialSeedsState, createInitialHarvestState, createInitialCropsState, getSeedLevelFromHighestPlant, getBonusSeedChance, getSeedSurplusValue, getCropYieldPerHarvest, getHarvestSpeedLevel, getMergeHarvestChance, getGoalLoadingSeconds, getMarketValueMultiplier, getPremiumOrdersMinLevel, getSurplusSalesMultiplier, getHappyCustomerChance, HarvestState, UpgradeState, RewardedOffer, getLevelUnlockInfo, isCustomerSpeedMaxed } from './components/UpgradeList';
 import { Navbar } from './components/Navbar';
 import { StoreScreen } from './components/StoreScreen';
 import { SideAction } from './components/SideAction';
@@ -62,13 +62,16 @@ const getGoalsRequiredForLevel = (level: number): number => {
 const GOAL_DIFFICULTY_SCALING = 1.0;
 
 /** Build limited offer popup state from offer id (uses offers.ts config). */
-function buildLimitedOfferPopupState(offerId: string, overrides?: { activeBoostEndTime?: number }): { isVisible: boolean; title: string; imageSrc: string; subtitle: string; description: string; buttonText: string; offerId: string; tab: TabType; durationMinutes: number | null; durationSeconds?: number | null; activeBoostEndTime?: number } | null {
+function buildLimitedOfferPopupState(offerId: string, overrides?: { activeBoostEndTime?: number; highestPlantEver?: number }): { isVisible: boolean; title: string; imageSrc: string; subtitle: string; description: string; buttonText: string; offerId: string; tab: TabType; durationMinutes: number | null; durationSeconds?: number | null; activeBoostEndTime?: number } | null {
   const offer = getOfferById(offerId);
   if (!offer) return null;
+  const imageSrc = offer.id === 'special_delivery' && overrides?.highestPlantEver != null
+    ? assetPath(`/assets/plants/plant_${Math.max(1, Math.min(24, overrides.highestPlantEver - 1))}.png`)
+    : assetPath(offer.headerIcon);
   return {
     isVisible: true,
     title: 'Limited Offer',
-    imageSrc: assetPath(offer.headerIcon),
+    imageSrc,
     subtitle: offer.title,
     description: offer.description,
     buttonText: 'Accept Offer',
@@ -247,6 +250,8 @@ export interface ProjectileData {
   startY: number;
   targetIdx: number;
   plantLevel: number; // The level of plant to spawn on impact
+  /** When true, projectile is Special Delivery: on impact spawn or upgrade cell, then beam + bounce */
+  isSpecialDelivery?: boolean;
 }
 
 export default function App() {
@@ -284,6 +289,7 @@ export default function App() {
   const [limitedOfferPopup, setLimitedOfferPopup] = useState<{ isVisible: boolean; title?: string; imageSrc: string; subtitle: string; description: string; buttonText: string; offerId?: string; tab?: TabType; durationMinutes?: number | null; durationSeconds?: number | null; activeBoostEndTime?: number } | null>(null);
   const lastLimitedOfferShownAtRef = useRef<number>(0);
   const lastShownOfferIdRef = useRef<string | null>(null);
+  const lastShownOfferTabRef = useRef<TabType | null>(null);
   const lastLimitedOfferClosedAtRef = useRef<number>(0);
   const lastFakeAdClosedAtRef = useRef<number>(0); // 10s cooldown before showing limited offer popup after closing fake ad
   const showFakeAdRef = useRef<boolean>(false); // so timers can pause while fake ad is visible
@@ -342,6 +348,7 @@ export default function App() {
   const lastCoinGoalHiddenAtRef = useRef<number>(Date.now());
   const nextCoinGoalDelayRef = useRef<number>(30000 + Math.random() * 30000); // 30–60s until next spawn, new random each hide
   const pendingAdSourceRef = useRef<'limitedOffer' | 'upgradeList' | 'coinGoal' | null>(null);
+  const pendingOfferIdRef = useRef<string | null>(null); // for boost particle: only shoot if offer has duration
   const [activePlantPanels, setActivePlantPanels] = useState<PlantPanelData[]>([]);
   const [fertilizingCellIndices, setFertilizingCellIndices] = useState<number[]>([]); // Cells currently playing fertilize animation
 
@@ -356,7 +363,11 @@ export default function App() {
   const seedStorageMax = 1 + seedStorageLevel; // +1 storage per upgrade
   const seedLevel = getSeedLevelFromHighestPlant(highestPlantEver); // Seed level scales with highest plant discovered
   
+  const gridRef = useRef<BoardCell[]>([]);
+  gridRef.current = grid;
   const [activeProjectiles, setActiveProjectiles] = useState<ProjectileData[]>([]);
+  const activeProjectilesRef = useRef<ProjectileData[]>([]);
+  activeProjectilesRef.current = activeProjectiles;
   const [impactCellIdx, setImpactCellIdx] = useState<number | null>(null);
   const [returnImpactCellIdx, setReturnImpactCellIdx] = useState<number | null>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
@@ -394,6 +405,9 @@ export default function App() {
   const barnScrollYRef = useRef(0);
   // Slots with in-flight crops that will complete the goal; exclude from routing so follow-up harvests go to next goal
   const goalsPendingCompletionRef = useRef<Set<number>>(new Set());
+  const nextRewardedAdOfferIndexRef = useRef(0);
+  const activeBoostsRef = useRef(activeBoosts);
+  activeBoostsRef.current = activeBoosts;
 
   useEffect(() => {
     goalSlots.forEach((s, i) => {
@@ -489,31 +503,52 @@ export default function App() {
       const filledCount = grid.filter(c => !c.locked && c.item != null).length;
       const gardenFillPercent = unlockedCount > 0 ? filledCount / unlockedCount : 0;
       const lastId = lastShownOfferIdRef.current;
+      const lastTab = lastShownOfferTabRef.current;
       // Eligible: trigger matches and not same as last
+      const hasGoalAvailable = goalSlots.some(s => s === 'green' || s === 'loading');
       const eligible = LIMITED_OFFERS.filter(o => {
         if (o.id === lastId) return false;
         if (o.trigger === 'garden_fill_max_50') return gardenFillPercent <= 0.5;
         if (o.trigger === 'wallet_empty') return money === 0;
+        if (o.trigger === 'anytime') return true;
+        if (o.trigger === 'order_speed_not_maxed') return !isCustomerSpeedMaxed(harvestState);
+        if (o.trigger === 'has_goal_available') return hasGoalAvailable;
         return false;
       });
+      // Prefer a different category (tab) from the previous offer for variety
+      const pickFrom = (list: typeof LIMITED_OFFERS) => {
+        if (list.length === 0) return null;
+        const differentTab = list.filter(o => o.upgradeTab !== lastTab);
+        const pool = differentTab.length > 0 ? differentTab : list;
+        return pool[Math.floor(Math.random() * pool.length)];
+      };
       let offerToShow: typeof LIMITED_OFFERS[0] | null = null;
       if (eligible.length > 0) {
-        offerToShow = eligible[0];
+        offerToShow = pickFrom(eligible);
       } else if (elapsed >= 120000) {
-        const other = LIMITED_OFFERS.filter(o => o.id !== lastId);
-        if (other.length > 0) offerToShow = other[Math.floor(Math.random() * other.length)];
+        const other = LIMITED_OFFERS.filter(o => {
+          if (o.id === lastId) return false;
+          if (o.trigger === 'garden_fill_max_50') return gardenFillPercent <= 0.5;
+          if (o.trigger === 'wallet_empty') return money === 0;
+          if (o.trigger === 'anytime') return true;
+          if (o.trigger === 'order_speed_not_maxed') return !isCustomerSpeedMaxed(harvestState);
+          if (o.trigger === 'has_goal_available') return hasGoalAvailable;
+          return false;
+        });
+        offerToShow = pickFrom(other);
       }
       if (offerToShow) {
-        const state = buildLimitedOfferPopupState(offerToShow.id);
+        const state = buildLimitedOfferPopupState(offerToShow.id, { highestPlantEver });
         if (state) {
           setLimitedOfferPopup(state);
           lastShownOfferIdRef.current = offerToShow.id;
+          lastShownOfferTabRef.current = offerToShow.upgradeTab;
           // 90s cooldown starts when user closes popup (timer starts), not when we show it
         }
       }
     }, 2000);
     return () => clearInterval(interval);
-  }, [playerLevel, grid, money, limitedOfferPopup?.isVisible]);
+  }, [playerLevel, grid, money, limitedOfferPopup?.isVisible, goalSlots, harvestState, highestPlantEver]);
 
   // Derive which tabs have offers (for tab notification coloring)
   const tabsWithOffers = new Set(rewardedOffers.map(o => o.tab));
@@ -704,7 +739,7 @@ export default function App() {
   // Grid is "full" when all unlocked cells have items OR have incoming projectiles
   const isGridFull = grid.every((cell, idx) => cell.locked || cell.item !== null || reservedCellsSet.has(idx));
 
-  const spawnProjectile = useCallback((targetIdx: number, plantLevel: number) => {
+  const spawnProjectile = useCallback((targetIdx: number, plantLevel: number, isSpecialDelivery?: boolean) => {
     if (plantButtonRef.current && containerRef.current) {
       const scale = appScaleRef.current;
       const btnRect = plantButtonRef.current.getBoundingClientRect();
@@ -717,7 +752,8 @@ export default function App() {
         startX,
         startY,
         targetIdx,
-        plantLevel
+        plantLevel,
+        ...(isSpecialDelivery ? { isSpecialDelivery: true } : {}),
       };
       setActiveProjectiles(prev => [...prev, newProj]);
     }
@@ -765,10 +801,11 @@ export default function App() {
     // Don't start progress until loading is complete
     if (isLoading) return;
     
-    // Auto-progress starts at 3/min even at level 0
+    // Rapid Seeds boost: 15/min; otherwise 3/min base +1 per upgrade, max 10/min
+    const hasRapidSeedsBoost = activeBoosts.some(b => b.offerId === 'rapid_seeds');
+    const perMinute = hasRapidSeedsBoost ? 15 : Math.min(10, 3 + seedProductionLevel);
     lastSeedProgressTimeRef.current = Date.now();
     let rafId: number;
-    const perMinute = Math.min(10, 3 + seedProductionLevel); // starts at 3/min (level 0), +1 per upgrade, max 10/min
     const percentPerMs = (perMinute * 100) / (60 * 1000); // % progress per millisecond
     const tick = () => {
       if (tapZoomRef.current) {
@@ -792,9 +829,9 @@ export default function App() {
     };
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [seedProductionLevel, isLoading]);
+  }, [seedProductionLevel, isLoading, activeBoosts]);
 
-  // Goal loading countdown: Order Speed (10s base - 1s per level, min 0). Don't start until slot is 100% faded in.
+  // Goal loading countdown: Order Speed (10s base - 1s per level, min 0). Rush Orders boost = 0s. Don't start until slot is 100% faded in.
   const goalIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
     if (isLoading) return;
@@ -803,8 +840,9 @@ export default function App() {
     // Don't run countdown while slot is fading in (0→100% over 500ms)
     if (loadingIdx === goalSlotFadeInSlot) return;
     if (goalIntervalRef.current) clearInterval(goalIntervalRef.current);
-    const loadingSeconds = getGoalLoadingSeconds(harvestState);
-    if (loadingSeconds <= 0) {
+    const hasRushOrdersBoost = activeBoosts.some(b => b.offerId === 'rush_orders');
+    const effectiveGoalLoadingSeconds = hasRushOrdersBoost ? 0 : getGoalLoadingSeconds(harvestState);
+    if (effectiveGoalLoadingSeconds <= 0) {
       // Instant: complete immediately
       setGoalBounceSlots((prev) => prev.includes(loadingIdx) ? prev : [...prev, loadingIdx]);
       setGoalTransitionSlot(loadingIdx);
@@ -831,7 +869,7 @@ export default function App() {
         if (firstEmptyIdx >= 0) {
           setGoalDisplayOrder((prev) => (prev.includes(firstEmptyIdx) ? prev : [...prev, firstEmptyIdx]));
           setGoalSlotFadeInSlot(firstEmptyIdx);
-          setGoalLoadingSeconds(getGoalLoadingSeconds(harvestState));
+          setGoalLoadingSeconds(hasRushOrdersBoost ? 0 : getGoalLoadingSeconds(harvestState));
           setTimeout(() => setGoalSlotFadeInSlot(null), 500);
         }
         setGoalTransitionSlot(null);
@@ -875,7 +913,7 @@ export default function App() {
             if (firstEmptyIdx >= 0) {
               setGoalDisplayOrder((prev) => (prev.includes(firstEmptyIdx) ? prev : [...prev, firstEmptyIdx]));
               setGoalSlotFadeInSlot(firstEmptyIdx);
-              setGoalLoadingSeconds(getGoalLoadingSeconds(harvestState));
+              setGoalLoadingSeconds(hasRushOrdersBoost ? 0 : getGoalLoadingSeconds(harvestState));
               setTimeout(() => setGoalSlotFadeInSlot(null), 500);
             }
             setGoalTransitionSlot(null);
@@ -892,7 +930,7 @@ export default function App() {
         goalIntervalRef.current = null;
       }
     };
-  }, [isLoading, goalSlots, goalSlotFadeInSlot, harvestState, playerLevel, cropsState]);
+  }, [isLoading, goalSlots, goalSlotFadeInSlot, harvestState, playerLevel, cropsState, activeBoosts]);
 
   // When player levels up and unlocks a new goal slot, start loading in that slot if empty and no other loading
   useEffect(() => {
@@ -1112,15 +1150,15 @@ export default function App() {
     return () => cancelAnimationFrame(rafId);
   }, [harvestTapZoomTrigger]);
 
-  // Harvest auto-progress: driven at 60fps via harvestProgressRef for smooth updates
+  // Harvest auto-progress: driven at 60fps via harvestProgressRef for smooth updates. Rapid Harvest boost = 15/min.
   useEffect(() => {
     // Don't start progress until loading is complete
     if (isLoading) return;
     
-    // Auto-progress starts at 3/min even at level 0
+    const hasRapidHarvestBoost = activeBoosts.some(b => b.offerId === 'rapid_harvest');
+    const perMinute = hasRapidHarvestBoost ? 15 : Math.min(10, 3 + harvestSpeedLevel); // Rapid Harvest: 15/min; else 3/min base +1 per upgrade, max 10/min
     lastHarvestProgressTimeRef.current = Date.now();
     let rafId: number;
-    const perMinute = Math.min(10, 3 + harvestSpeedLevel); // starts at 3/min (level 0), +1 per upgrade, max 10/min
     const percentPerMs = (perMinute * 100) / (60 * 1000); // % progress per millisecond
     const tick = () => {
       if (harvestTapZoomRef.current) {
@@ -1143,7 +1181,7 @@ export default function App() {
     };
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [harvestSpeedLevel, isLoading]);
+  }, [harvestSpeedLevel, isLoading, activeBoosts]);
 
   // Track previous value to detect when harvest button turns white
   const prevIsHarvestFlashingRef = useRef(isHarvestFlashing);
@@ -1464,6 +1502,8 @@ export default function App() {
       const plantPanelsWithDist: { panel: PlantPanelData; dist: number }[] = [];
 
       const cropYieldPerHarvest = getCropYieldPerHarvest(cropsState);
+      const hasDoubleHarvestBoost = activeBoosts.some(b => b.offerId === 'double_harvest');
+      const effectiveCropYield = hasDoubleHarvestBoost ? cropYieldPerHarvest * 2 : cropYieldPerHarvest;
 
       const getGoalIconCenter = (slotIdx: number): { x: number; y: number } | null => {
         const iconEl = goalIconRefs[slotIdx]?.current;
@@ -1506,7 +1546,7 @@ export default function App() {
         const hoverY = hexTopY - offsetUp;
 
         if (hasGoalForPlant) {
-          allocated[slotIdx] = (allocated[slotIdx] ?? 0) + cropYieldPerHarvest;
+          allocated[slotIdx] = (allocated[slotIdx] ?? 0) + effectiveCropYield;
           if ((goalCounts[slotIdx] ?? 0) - (allocated[slotIdx] ?? 0) <= 0) {
             goalsPendingCompletionRef.current.add(slotIdx);
           }
@@ -1519,7 +1559,7 @@ export default function App() {
               id: `plant-${cellIdx}-${Date.now()}-${Math.random().toString(36).slice(2)}${idSuffix}`,
               goalSlotIdx: slotIdx,
               iconSrc: getGoalIconForPlantLevel(plantLevel),
-              harvestAmount: cropYieldPerHarvest,
+              harvestAmount: effectiveCropYield,
               startX,
               startY,
               hoverX,
@@ -1532,6 +1572,7 @@ export default function App() {
           let value = baseValue;
           if (cell.fertile) value *= 2;
           value = Math.floor(value * surplusMultiplier);
+          if (hasDoubleHarvestBoost) value *= 2;
           const dist = Math.hypot(hoverX - walletCenterX, hoverY - walletCenterY);
           coinPanelsWithDist.push({
             dist,
@@ -1622,6 +1663,8 @@ export default function App() {
     const coinPanelsWithDist: { panel: CoinPanelData; dist: number }[] = [];
     const plantPanelsWithDist: { panel: PlantPanelData; dist: number }[] = [];
     const cropYieldPerHarvest = getCropYieldPerHarvest(cropsState);
+    const hasDoubleHarvestBoost = activeBoosts.some(b => b.offerId === 'double_harvest');
+    const effectiveCropYield = hasDoubleHarvestBoost ? cropYieldPerHarvest * 2 : cropYieldPerHarvest;
     const surplusMultiplier = getSurplusSalesMultiplier(harvestState);
     const surplusSalesUnlocked = playerLevel >= 12;
     const allocated: Record<number, number> = {};
@@ -1666,7 +1709,7 @@ export default function App() {
       const hoverY = hexTopY - offsetUp;
 
       if (hasGoalForPlant) {
-        allocated[slotIdx] = (allocated[slotIdx] ?? 0) + cropYieldPerHarvest;
+        allocated[slotIdx] = (allocated[slotIdx] ?? 0) + effectiveCropYield;
         if ((goalCounts[slotIdx] ?? 0) - (allocated[slotIdx] ?? 0) <= 0) {
           goalsPendingCompletionRef.current.add(slotIdx);
         }
@@ -1679,7 +1722,7 @@ export default function App() {
             id: `merge-plant-${cellIdx}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
             goalSlotIdx: slotIdx,
             iconSrc: getGoalIconForPlantLevel(plantLevel),
-            harvestAmount: cropYieldPerHarvest,
+            harvestAmount: effectiveCropYield,
             startX,
             startY,
             hoverX,
@@ -1692,6 +1735,7 @@ export default function App() {
         let value = baseValue;
         if (cell.fertile) value *= 2;
         value = Math.floor(value * surplusMultiplier);
+        if (hasDoubleHarvestBoost) value *= 2;
         const dist = Math.hypot(hoverX - walletCenterX, hoverY - walletCenterY);
         coinPanelsWithDist.push({
           dist,
@@ -1760,7 +1804,7 @@ export default function App() {
 
     setHarvestBounceCellIndices(triggeredCells);
     setTimeout(() => setHarvestBounceCellIndices([]), 250);
-  }, [grid, cropsState, goalSlots, goalCounts, goalPlantTypes, harvestState, playerLevel]);
+  }, [grid, cropsState, goalSlots, goalCounts, goalPlantTypes, harvestState, playerLevel, activeBoosts]);
 
   /**
    * At 100% harvest progress: perform harvest (spawn coin panels, leaf bursts), flash white, reset to 0%.
@@ -2033,7 +2077,7 @@ export default function App() {
                   }}
                   onBoostClick={(boost) => {
                     if (!boost.offerId) return;
-                    const state = buildLimitedOfferPopupState(boost.offerId, { activeBoostEndTime: boost.endTime });
+                    const state = buildLimitedOfferPopupState(boost.offerId, { activeBoostEndTime: boost.endTime, highestPlantEver });
                     if (state) setLimitedOfferPopup(state);
                   }}
                 />
@@ -2077,7 +2121,8 @@ export default function App() {
                       const cr = container.getBoundingClientRect();
                       const startX = (r.left + r.width / 2 - cr.left) / appScale;
                       const startY = (r.top + r.height / 2 - cr.top) / appScale;
-                      const value = goalCompletedValues[slotIdx] ?? 0;
+                      const baseValue = goalCompletedValues[slotIdx] ?? 0;
+                      const value = baseValue * (activeBoosts.some(b => b.offerId === 'happiest_customers') ? 2 : 1);
                       setActiveGoalCoinParticles((prev) => [...prev, { id: `goal-coin-${slotIdx}-${Date.now()}`, startX, startY, value }]);
                       // Player level: +1 progress on tap (not when coins hit wallet). Goals required = 2^level (2, 4, 8, ...)
                       setPlayerLevelProgress((prev) => {
@@ -2190,7 +2235,7 @@ export default function App() {
                           {showCompletedContent && (
                             <>
                               <img ref={goalIconRefs[slotIdx]} src={assetPath('/assets/icons/icon_coin.png')} alt="" className={`absolute left-1/2 object-contain pointer-events-none ${isBouncing ? 'goal-icon-bounce' : ''}`} style={{ zIndex: 6, bottom: '71%', width: 40, height: 40, transform: 'translate(-50%, -2px)' }} />
-                              <span className="absolute left-1/2 font-bold pointer-events-none" style={{ zIndex: 6, bottom: '62%', color: '#c99959', fontSize: '15px', transform: 'translate(-50%, -1px)' }}>{formatGoalCoin(goalCompletedValues[slotIdx] ?? 0)}</span>
+                              <span className="absolute left-1/2 font-bold pointer-events-none" style={{ zIndex: 6, bottom: '62%', color: '#c99959', fontSize: '15px', transform: 'translate(-50%, -1px)' }}>{formatGoalCoin((goalCompletedValues[slotIdx] ?? 0) * (activeBoosts.some(b => b.offerId === 'happiest_customers') ? 2 : 1))}</span>
                             </>
                           )}
                           {showLoadingText && (
@@ -2219,6 +2264,8 @@ export default function App() {
                       setShowFakeAd(true);
                       setPendingAdComplete(() => () => {
                         pendingAdSourceRef.current = null;
+                        const happiestActive = activeBoostsRef.current.some(b => b.offerId === 'happiest_customers');
+                        const effectiveValue = coinGoalValue * (happiestActive ? 2 : 1);
                         const iconEl = coinGoalIconRef.current;
                         const container = containerRef.current;
                         if (iconEl && container) {
@@ -2232,8 +2279,7 @@ export default function App() {
                             y: r.top + r.height / 2 + 30,
                             startTime: Date.now(),
                           }]);
-                          setActiveGoalCoinParticles((prev) => [...prev, { id: `coin-goal-${Date.now()}`, startX, startY, value: coinGoalValue }]);
-                          setMoney((m) => m + coinGoalValue);
+                          setActiveGoalCoinParticles((prev) => [...prev, { id: `coin-goal-${Date.now()}`, startX, startY, value: effectiveValue }]);
                         }
                         lastCoinGoalHiddenAtRef.current = Date.now();
                         nextCoinGoalDelayRef.current = 30000 + Math.random() * 30000;
@@ -2261,7 +2307,7 @@ export default function App() {
                       </svg>
                       <img ref={coinGoalIconRef} src={assetPath('/assets/icons/icon_coin_watchad.png')} alt="" className="object-contain absolute z-[1]" style={{ left: 1, top: 1, width: 40, height: 40, pointerEvents: 'none' }} />
                     </div>
-                    <span className="absolute left-1/2 font-bold pointer-events-none" style={{ zIndex: 6, bottom: '62%', color: '#c77d34', fontSize: '13px', transform: 'translate(-50%, -1px)' }}>{formatGoalCoin(coinGoalValue)}</span>
+                    <span className="absolute left-1/2 font-bold pointer-events-none" style={{ zIndex: 6, bottom: '62%', color: '#c77d34', fontSize: '13px', transform: 'translate(-50%, -1px)' }}>{formatGoalCoin(coinGoalValue * (activeBoosts.some(b => b.offerId === 'happiest_customers') ? 2 : 1))}</span>
                   </div>
                 )}
                 </div>
@@ -2380,6 +2426,9 @@ export default function App() {
                           : -1;
                         const hasGoalForPlant = slotIdx >= 0;
                         const surplusSalesUnlocked = playerLevel >= 12;
+                        const hasDoubleHarvestBoost = activeBoosts.some(b => b.offerId === 'double_harvest');
+                        const baseCropYield = getCropYieldPerHarvest(cropsState);
+                        const harvestAmount = hasDoubleHarvestBoost ? baseCropYield * 2 : baseCropYield;
                         const hexEl = document.getElementById(`hex-${cellIdx}`);
                         const panelHeightPx = 14;
                         const offsetUp = (panelHeightPx / 2 + 4) * 0.4;
@@ -2388,7 +2437,6 @@ export default function App() {
                           ? ((hexEl.getBoundingClientRect().top - rect.top) / scale) - offsetUp
                           : py - offsetUp;
                         if (hasGoalForPlant) {
-                          const harvestAmount = getCropYieldPerHarvest(cropsState);
                           if ((goalCounts[slotIdx] ?? 0) - harvestAmount <= 0) {
                             goalsPendingCompletionRef.current.add(slotIdx);
                           }
@@ -2408,9 +2456,12 @@ export default function App() {
                             },
                           ]);
                         } else if (surplusSalesUnlocked) {
-                          const baseValue = getCoinValueForLevel(mergeResultLevel);
+                          const cell = grid[cellIdx];
+                          let baseValue = getCoinValueForLevel(mergeResultLevel);
+                          if (cell?.fertile) baseValue *= 2;
                           const surplusMultiplier = getSurplusSalesMultiplier(harvestState);
-                          const value = Math.floor(baseValue * surplusMultiplier);
+                          let value = Math.floor(baseValue * surplusMultiplier);
+                          if (hasDoubleHarvestBoost) value *= 2;
                           setActiveCoinPanels((prev) => [
                             ...prev,
                             {
@@ -2495,15 +2546,45 @@ export default function App() {
                     isExpanded={isExpanded}
                     protectedOfferId={limitedOfferPopup?.isVisible && limitedOfferPopup?.offerId ? limitedOfferPopup.offerId : null}
                     onRewardedOfferPanelClick={(offerId) => {
-                      const state = buildLimitedOfferPopupState(offerId);
+                      const state = buildLimitedOfferPopupState(offerId, { highestPlantEver });
                       if (state) setLimitedOfferPopup(state);
                     }}
                     onRewardedOfferClick={(offerId) => {
                       // Tap on Watch Ad button: open fake ad directly (skip popup), grant reward on Activate Reward
+                      pendingAdSourceRef.current = 'upgradeList';
+                      pendingOfferIdRef.current = offerId;
                       setShowFakeAd(true);
                       setPendingAdComplete(() => () => {
                         setRewardedOffers(prev => prev.filter(o => o.id !== offerId));
                         setShowFakeAd(false);
+                        // Apply same offer rewards as limited offer popup path (e.g. Seed Storm)
+                        if (offerId === 'seed_storm') {
+                          const g = gridRef.current;
+                          const reservedCells = new Set(activeProjectilesRef.current.map(p => p.targetIdx));
+                          const emptyIndices = g
+                            .map((cell, idx) => (cell.item === null && !cell.locked && !reservedCells.has(idx) ? idx : null))
+                            .filter((idx): idx is number => idx !== null);
+                          emptyIndices.forEach((targetIdx, i) => {
+                            setTimeout(() => spawnProjectile(targetIdx, seedLevel), 200 * i);
+                          });
+                        }
+                        // Special Delivery: shoot a seed that spawns/upgrades to high-level plant; beam + bounce on impact
+                        if (offerId === 'special_delivery') {
+                          const plantLevel = Math.max(1, highestPlantEverRef.current - 1);
+                          const g = gridRef.current;
+                          const reserved = new Set(activeProjectilesRef.current.map(p => p.targetIdx));
+                          const emptyIndices = g.map((c, i) => (!c.locked && c.item === null && !reserved.has(i) ? i : -1)).filter((i): i is number => i !== -1);
+                          let targetIdx: number;
+                          if (emptyIndices.length > 0) {
+                            targetIdx = emptyIndices[Math.floor(Math.random() * emptyIndices.length)];
+                          } else {
+                            const withPlants = g.map((c, i) => (c.item ? { idx: i, level: c.item.level } : null)).filter((x): x is { idx: number; level: number } => x != null);
+                            if (withPlants.length === 0) return;
+                            withPlants.sort((a, b) => a.level - b.level);
+                            targetIdx = withPlants[0].idx;
+                          }
+                          spawnProjectile(targetIdx, plantLevel, true);
+                        }
                       });
                     }}
                   />
@@ -2910,8 +2991,11 @@ export default function App() {
                 durationMinutes={limitedOfferPopup.durationMinutes}
                 durationSeconds={limitedOfferPopup.durationSeconds}
                 onButtonClick={() => {
-                  // Show fake ad; when user taps "Complete ad", grant reward and close popup
+                  // Show fake ad; when user taps "Complete ad", grant reward. Close limited offer popup now so it's gone when fake ad closes.
                   const offerId = limitedOfferPopup.offerId;
+                  pendingAdSourceRef.current = 'limitedOffer';
+                  pendingOfferIdRef.current = offerId ?? null;
+                  setLimitedOfferPopup(null);
                   setShowFakeAd(true);
                   setPendingAdComplete(() => () => {
                     if (offerId) {
@@ -2922,6 +3006,34 @@ export default function App() {
                     lastLimitedOfferShownAtRef.current = now;
                     setLimitedOfferPopup(null);
                     setShowFakeAd(false);
+                    // Seed Storm: fire free seeds to all empty unlocked cells, 1 every 200ms, no storage/progress cost
+                    if (offerId === 'seed_storm') {
+                      const g = gridRef.current;
+                      const reservedCells = new Set(activeProjectilesRef.current.map(p => p.targetIdx));
+                      const emptyIndices = g
+                        .map((cell, idx) => (cell.item === null && !cell.locked && !reservedCells.has(idx) ? idx : null))
+                        .filter((idx): idx is number => idx !== null);
+                      emptyIndices.forEach((targetIdx, i) => {
+                        setTimeout(() => spawnProjectile(targetIdx, seedLevel), 200 * i);
+                      });
+                    }
+                    // Special Delivery: shoot a seed that spawns/upgrades to high-level plant; beam + bounce on impact
+                    if (offerId === 'special_delivery') {
+                      const plantLevel = Math.max(1, highestPlantEverRef.current - 1);
+                      const g = gridRef.current;
+                      const reserved = new Set(activeProjectilesRef.current.map(p => p.targetIdx));
+                      const emptyIndices = g.map((c, i) => (!c.locked && c.item === null && !reserved.has(i) ? i : -1)).filter((i): i is number => i !== -1);
+                      let targetIdx: number;
+                      if (emptyIndices.length > 0) {
+                        targetIdx = emptyIndices[Math.floor(Math.random() * emptyIndices.length)];
+                      } else {
+                        const withPlants = g.map((c, i) => (c.item ? { idx: i, level: c.item.level } : null)).filter((x): x is { idx: number; level: number } => x != null);
+                        if (withPlants.length === 0) return;
+                        withPlants.sort((a, b) => a.level - b.level);
+                        targetIdx = withPlants[0].idx;
+                      }
+                      spawnProjectile(targetIdx, plantLevel, true);
+                    }
                   });
                 }}
               />
@@ -2933,11 +3045,20 @@ export default function App() {
               appScale={appScale}
               onActivateRewardClick={(buttonRect) => {
                 if (pendingAdSourceRef.current === 'coinGoal') return;
+                const offerId = pendingOfferIdRef.current;
+                const offer = offerId ? getOfferById(offerId) : null;
+                const hasDuration = offer && (offer.durationMinutes != null || (offer.durationSeconds != null && offer.durationSeconds > 0));
+                if (!hasDuration) return;
                 const wrapper = headerLeftWrapperRef.current;
                 if (!wrapper) return;
                 const wr = wrapper.getBoundingClientRect();
                 const scale = wr.width / wrapper.offsetWidth;
                 const targetSlotIndex = activeBoosts.length;
+                const durationMs = offer?.durationSeconds != null
+                  ? offer.durationSeconds * 1000
+                  : offer?.durationMinutes != null
+                    ? offer.durationMinutes * 60 * 1000
+                    : 60000;
                 setBoostParticles((prev) => [
                   ...prev,
                   {
@@ -2945,6 +3066,9 @@ export default function App() {
                     startX: (buttonRect.left + buttonRect.width / 2 - wr.left) / scale,
                     startY: (buttonRect.top + buttonRect.height / 2 - wr.top) / scale,
                     targetSlotIndex,
+                    offerId: offer?.id,
+                    durationMs,
+                    icon: offer?.headerIcon,
                   },
                 ]);
               }}
@@ -2962,7 +3086,9 @@ export default function App() {
               isVisible={pauseMenuOpen}
               onClose={() => setPauseMenuOpen(false)}
               onRewardedAdClick={() => {
-                const state = buildLimitedOfferPopupState('seed_storm');
+                const offer = LIMITED_OFFERS[nextRewardedAdOfferIndexRef.current];
+                nextRewardedAdOfferIndexRef.current = (nextRewardedAdOfferIndexRef.current + 1) % LIMITED_OFFERS.length;
+                const state = buildLimitedOfferPopupState(offer.id, { highestPlantEver });
                 if (state) setLimitedOfferPopup(state);
               }}
               onLevelUpClick={() => {
@@ -3002,7 +3128,31 @@ export default function App() {
               data={p}
               appScale={appScale}
               onImpact={(targetIdx) => {
-                // Use the plantLevel that was determined when the seed was shot
+                if (p.isSpecialDelivery) {
+                  // Special Delivery: spawn on empty cell or upgrade existing plant; then beam + bounce
+                  const g = gridRef.current;
+                  const cell = g?.[targetIdx];
+                  if (cell && cell.item === null) {
+                    spawnCropAt(targetIdx, p.plantLevel);
+                  } else {
+                    setGrid(prev => {
+                      const next = [...prev];
+                      const cur = next[targetIdx]?.item;
+                      if (next[targetIdx] && cur) next[targetIdx] = { ...next[targetIdx], item: { ...cur, level: p.plantLevel } };
+                      return next;
+                    });
+                    setImpactCellIdx(targetIdx);
+                    setTimeout(() => setImpactCellIdx(null), 500);
+                  }
+                  const hexEl = document.getElementById(`hex-${targetIdx}`);
+                  if (hexEl) {
+                    const r = hexEl.getBoundingClientRect();
+                    setLeafBurstsSmall((prev) => [...prev, { id: `sd-burst-${targetIdx}-${Date.now()}`, x: r.left + r.width / 2, y: r.top + r.height / 2, startTime: Date.now() }]);
+                    setCellHighlightBeams((prev) => [...prev, { id: `special-delivery-${targetIdx}-${Date.now()}`, x: r.left + r.width / 2, y: r.top + r.height / 2, cellWidth: r.width, cellHeight: r.height, startTime: Date.now() }]);
+                  }
+                  return;
+                }
+                // Normal seed: spawn plant and optional seed-quality beam
                 spawnCropAt(targetIdx, p.plantLevel);
                 const hexEl = document.getElementById(`hex-${targetIdx}`);
                 if (hexEl) {
@@ -3017,7 +3167,6 @@ export default function App() {
                     },
                   ]);
                   
-                  // Seed Quality bonus: play highlight VFX if plant spawned at higher level than base tier
                   if (p.plantLevel > seedLevel) {
                     setCellHighlightBeams((prev) => [
                       ...prev,
@@ -3118,10 +3267,11 @@ export default function App() {
               walletIconRef={walletIconRef}
               appScale={appScale}
               onImpact={(value) => {
+                const happiestCustomersActive = activeBoosts.some(b => b.offerId === 'happiest_customers');
                 let finalValue = value;
-                const happyChance = getHappyCustomerChance(harvestState);
-                if (happyChance > 0 && Math.random() * 100 < happyChance) {
-                  finalValue *= 2;
+                if (!happiestCustomersActive) {
+                  const happyChance = getHappyCustomerChance(harvestState);
+                  if (happyChance > 0 && Math.random() * 100 < happyChance) finalValue *= 2;
                 }
                 setMoney((prev) => prev + finalValue);
                 setWalletFlashActive(true);
@@ -3155,13 +3305,13 @@ export default function App() {
                   data={particle}
                   containerRef={headerLeftWrapperRef}
                   boostAreaRef={activeBoostAreaRef}
-                  onImpact={() => {
+                  onImpact={(data) => {
                     const wrapper = headerLeftWrapperRef.current;
                     const el = activeBoostAreaRef.current;
                     if (wrapper && el) {
                       const wr = wrapper.getBoundingClientRect();
                       const scale = wr.width / wrapper.offsetWidth;
-                      const slotIndex = particle.targetSlotIndex ?? 0;
+                      const slotIndex = data.targetSlotIndex ?? 0;
                       const tx = el.offsetLeft + slotIndex * 28 + 13;
                       const ty = el.offsetTop + 11;
                       setBoostBursts((prev) => [
@@ -3174,17 +3324,18 @@ export default function App() {
                         },
                       ]);
                     }
+                    const durationMs = data.durationMs ?? 60000;
+                    const icon = data.icon ?? '/assets/icons/icon_seedproduction.png';
                     setActiveBoosts((prev) => {
                       if (prev.length >= 5) return prev;
-                      const durationMs = 60000;
                       return [
                         ...prev,
                         {
                           id: `boost-${Date.now()}`,
                           endTime: Date.now() + durationMs,
                           durationMs,
-                          icon: 'icon_seedstorage',
-                          offerId: 'seed_storm',
+                          icon,
+                          offerId: data.offerId,
                         },
                       ];
                     });

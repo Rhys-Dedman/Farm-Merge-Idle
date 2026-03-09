@@ -811,24 +811,24 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
             </div>
           </div>
 
-          {/* Watch Ad Button - opens fake ad directly (stopPropagation so panel click doesn't fire) */}
+          {/* Watch Ad Button - opens fake ad directly (stopPropagation so panel click doesn't fire); fixed width to match normal upgrade button */}
           <button 
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               onRewardedOfferClick?.(offer.id);
             }}
-            className="relative flex items-center min-w-[84px] h-8 transition-all border outline outline-1 active:translate-y-[2px] active:border-b-0 active:mb-[4px] rounded-[8px] shadow-[inset_0_1px_1px_rgba(255,255,255,0.4)]"
+            className="relative flex items-center w-[70px] h-8 transition-all border outline outline-1 active:translate-y-[2px] active:border-b-0 active:mb-[4px] rounded-[8px] shadow-[inset_0_1px_1px_rgba(255,255,255,0.4)]"
             style={{
               backgroundColor: '#ffd856',
               borderColor: '#f59d42',
               borderBottomWidth: '4px',
               outlineColor: '#f59d42',
-              paddingLeft: '6px',
-              paddingRight: '6px',
+              paddingLeft: '8px',
+              paddingRight: '4px',
             }}
           >
-            {/* Watch Ad Icon - 1.2x scale (base 18px * 1.2 = ~22px) */}
+            {/* Watch Ad Icon - 1.2x scale (base 18px * 1.2 = ~22px); 3px gap before timer */}
             <img
               src={assetPath('/assets/icons/icon_watchad.png')}
               alt=""
@@ -838,17 +838,16 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
                 objectFit: 'contain',
                 filter: 'brightness(0) saturate(100%) invert(56%) sepia(67%) saturate(1000%) hue-rotate(346deg) brightness(97%) contrast(88%)',
                 flexShrink: 0,
+                marginRight: '3px',
               }}
             />
-            {/* Timer with fixed width to prevent layout shift */}
+            {/* Timer - sits next to icon, no fixed width */}
             {offer.timeRemaining !== undefined && (
               <span 
-                className="text-[13px] font-black tracking-tighter text-right"
+                className="text-[13px] font-black tracking-tighter"
                 style={{ 
                   color: '#e6803a',
-                  width: '38px',
                   flexShrink: 0,
-                  marginRight: '2px',
                 }}
               >
                 {formatTime(offer.timeRemaining)}

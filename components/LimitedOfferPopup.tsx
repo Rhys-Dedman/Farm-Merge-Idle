@@ -584,6 +584,7 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
                   width: '60px',
                   height: '60px',
                   objectFit: 'contain',
+                  marginLeft: '-8px',
                   filter: 'brightness(0) saturate(100%) invert(56%) sepia(67%) saturate(1000%) hue-rotate(346deg) brightness(97%) contrast(88%)',
                 }}
               />
