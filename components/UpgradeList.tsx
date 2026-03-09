@@ -375,6 +375,14 @@ export const getSurplusSalesMultiplier = (harvestState: HarvestState): number =>
   return 1 + 0.2 * level;
 };
 
+/** Player level at which Surplus Sales unlocks (coin harvest for plants without goals). */
+export const SURPLUS_SALES_UNLOCK_PLAYER_LEVEL = 8;
+
+/** Whether Surplus Sales is unlocked (plants without goals can be harvested for coins). Active as soon as player reaches level 8, at 1.0x multiplier; upgrade points increase multiplier. */
+export const isSurplusSalesUnlocked = (harvestState: HarvestState, playerLevel: number): boolean => {
+  return playerLevel >= SURPLUS_SALES_UNLOCK_PLAYER_LEVEL;
+};
+
 /** Happy Customer: chance to double order payment (0-50%, 5% per level) */
 export const getHappyCustomerChance = (harvestState: HarvestState): number => {
   const level = harvestState?.happy_customer?.level ?? 0;

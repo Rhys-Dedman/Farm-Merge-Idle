@@ -3,7 +3,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { HexBoard } from './components/HexBoard';
 import { UpgradeTabs } from './components/UpgradeTabs';
-import { UpgradeList, createInitialSeedsState, createInitialHarvestState, createInitialCropsState, getSeedLevelFromHighestPlant, getBonusSeedChance, getSeedSurplusValue, getCropYieldPerHarvest, getHarvestSpeedLevel, getMergeHarvestChance, getGoalLoadingSeconds, getMarketValueMultiplier, getPremiumOrdersMinLevel, getSurplusSalesMultiplier, getHappyCustomerChance, HarvestState, UpgradeState, RewardedOffer, getLevelUnlockInfo, isCustomerSpeedMaxed } from './components/UpgradeList';
+import { UpgradeList, createInitialSeedsState, createInitialHarvestState, createInitialCropsState, getSeedLevelFromHighestPlant, getBonusSeedChance, getSeedSurplusValue, getCropYieldPerHarvest, getHarvestSpeedLevel, getMergeHarvestChance, getGoalLoadingSeconds, getMarketValueMultiplier, getPremiumOrdersMinLevel, getSurplusSalesMultiplier, isSurplusSalesUnlocked, getHappyCustomerChance, HarvestState, UpgradeState, RewardedOffer, getLevelUnlockInfo, isCustomerSpeedMaxed } from './components/UpgradeList';
 import { Navbar } from './components/Navbar';
 import { StoreScreen } from './components/StoreScreen';
 import { SideAction } from './components/SideAction';
@@ -385,10 +385,14 @@ export default function App() {
   const [harvestBounceCellIndices, setHarvestBounceCellIndices] = useState<number[]>([]);
   const [walletFlashActive, setWalletFlashActive] = useState(false);
   const [walletBursts, setWalletBursts] = useState<{ id: number; trigger: number }[]>([]);
+  /** Increments on coin impact to trigger wallet icon bounce (sparkles removed, bounce kept). */
+  const [walletBounceTrigger, setWalletBounceTrigger] = useState(0);
   const [playerLevel, setPlayerLevel] = useState(1);
   const [playerLevelProgress, setPlayerLevelProgress] = useState(0); // 0-5, 5 goals to level up
   const [playerLevelFlashTrigger, setPlayerLevelFlashTrigger] = useState(0);
   const [levelUpPopup, setLevelUpPopup] = useState<{ isVisible: boolean; level: number } | null>(null);
+  /** Queued level-up popups (e.g. from pause menu fast-level); shown one by one after pause menu closes. */
+  const [levelUpPopupQueue, setLevelUpPopupQueue] = useState<number[]>([]);
   const [pendingUnlockUpgradeId, setPendingUnlockUpgradeId] = useState<string | null>(null);
   const nextWalletBurstIdRef = useRef(0);
   const nextGoalCoinBurstIdRef = useRef(0);
@@ -1549,7 +1553,7 @@ export default function App() {
       };
 
       const surplusMultiplier = getSurplusSalesMultiplier(harvestState);
-      const surplusSalesUnlocked = playerLevel >= 12;
+      const surplusSalesUnlocked = isSurplusSalesUnlocked(harvestState, playerLevel);
       const allocated: Record<number, number> = {}; // per-slot allocation within this harvest
       grid.forEach((cell, cellIdx) => {
         if (!cell.item) return;
@@ -1699,7 +1703,7 @@ export default function App() {
     const hasDoubleHarvestBoost = activeBoosts.some(b => b.offerId === 'double_harvest');
     const effectiveCropYield = hasDoubleHarvestBoost ? cropYieldPerHarvest * 2 : cropYieldPerHarvest;
     const surplusMultiplier = getSurplusSalesMultiplier(harvestState);
-    const surplusSalesUnlocked = playerLevel >= 12;
+    const surplusSalesUnlocked = isSurplusSalesUnlocked(harvestState, playerLevel);
     const allocated: Record<number, number> = {};
 
     const getGoalIconCenter = (slotIdx: number): { x: number; y: number } | null => {
@@ -2056,7 +2060,7 @@ export default function App() {
                   walletRef={walletRef}
                   walletIconRef={walletIconRef}
                   walletFlashActive={walletFlashActive}
-                  walletBurstCount={walletBursts.length}
+                  walletBurstCount={walletBounceTrigger}
                   onWalletClick={() => setActiveScreen('STORE')}
                   playerLevel={playerLevel}
                   playerLevelProgress={playerLevelProgress}
@@ -2458,7 +2462,7 @@ export default function App() {
                             )
                           : -1;
                         const hasGoalForPlant = slotIdx >= 0;
-                        const surplusSalesUnlocked = playerLevel >= 12;
+                        const surplusSalesUnlocked = isSurplusSalesUnlocked(harvestState, playerLevel);
                         const hasDoubleHarvestBoost = activeBoosts.some(b => b.offerId === 'double_harvest');
                         const baseCropYield = getCropYieldPerHarvest(cropsState);
                         const harvestAmount = hasDoubleHarvestBoost ? baseCropYield * 2 : baseCropYield;
@@ -2875,7 +2879,17 @@ export default function App() {
               return (
                 <LevelUpPopup
                   isVisible={levelUpPopup.isVisible}
-                  onClose={() => { lastOtherPopupClosedAtRef.current = Date.now(); setLevelUpPopup(null); }}
+                  onClose={() => {
+                    lastOtherPopupClosedAtRef.current = Date.now();
+                    setLevelUpPopup(null);
+                    setLevelUpPopupQueue((q) => {
+                      if (q.length > 0) {
+                        setLevelUpPopup({ isVisible: true, level: q[0] });
+                        return q.slice(1);
+                      }
+                      return q;
+                    });
+                  }}
                   level={levelUpPopup.level}
                   title={unlockInfo.title}
                   description={unlockInfo.description}
@@ -3118,7 +3132,16 @@ export default function App() {
             {/* Pause Menu - opened from settings/gear; Rewarded Ad = gift offer + close, Level Up = +1 goal XP (does not close) */}
             <PauseMenuPopup
               isVisible={pauseMenuOpen}
-              onClose={() => setPauseMenuOpen(false)}
+              onClose={() => {
+                setPauseMenuOpen(false);
+                setLevelUpPopupQueue((q) => {
+                  if (q.length > 0) {
+                    setLevelUpPopup({ isVisible: true, level: q[0] });
+                    return q.slice(1);
+                  }
+                  return q;
+                });
+              }}
               onRewardedAdClick={() => {
                 const offer = LIMITED_OFFERS[nextRewardedAdOfferIndexRef.current];
                 nextRewardedAdOfferIndexRef.current = (nextRewardedAdOfferIndexRef.current + 1) % LIMITED_OFFERS.length;
@@ -3126,27 +3149,13 @@ export default function App() {
                 if (state) setLimitedOfferPopup(state);
               }}
               onLevelUpClick={() => {
-                setPlayerLevelProgress((prev) => {
-                  const next = prev + 1;
-                  const goalsRequired = getGoalsRequiredForLevel(playerLevel);
-                  if (next >= goalsRequired) {
-                    if (!levelUpGuardRef.current) {
-                      levelUpGuardRef.current = true;
-                      const nextLevel = playerLevel + 1;
-                      if (nextLevel <= 12) {
-                        setLevelUpPopup({ isVisible: true, level: nextLevel });
-                      } else {
-                        setPlayerLevel((l) => l + 1);
-                        setTimeout(() => { levelUpGuardRef.current = false; }, 0);
-                        return 0;
-                      }
-                      setTimeout(() => { levelUpGuardRef.current = false; }, 0);
-                    }
-                    return goalsRequired;
-                  }
-                  return next;
-                });
+                const nextLevel = playerLevel + 1;
+                setPlayerLevel(nextLevel);
+                setPlayerLevelProgress(0);
                 setPlayerLevelFlashTrigger((t) => t + 1);
+                if (nextLevel <= 12) {
+                  setLevelUpPopupQueue((q) => [...q, nextLevel]);
+                }
               }}
               closeOnBackdropClick
               appScale={appScale}
@@ -3232,7 +3241,7 @@ export default function App() {
               onImpact={(value) => {
                 setMoney(prev => prev + value);
                 setWalletFlashActive(true);
-                setWalletBursts((prev) => [...prev, { id: nextWalletBurstIdRef.current++, trigger: Date.now() }]);
+                setWalletBounceTrigger((t) => t + 1);
                 if (walletFlashTimeoutRef.current) clearTimeout(walletFlashTimeoutRef.current);
                 walletFlashTimeoutRef.current = setTimeout(() => setWalletFlashActive(false), 120);
               }}
@@ -3310,7 +3319,7 @@ export default function App() {
                 }
                 setMoney((prev) => prev + finalValue);
                 setWalletFlashActive(true);
-                setWalletBursts((prev) => [...prev, { id: nextWalletBurstIdRef.current++, trigger: Date.now() }]);
+                setWalletBounceTrigger((t) => t + 1);
                 if (walletFlashTimeoutRef.current) clearTimeout(walletFlashTimeoutRef.current);
                 walletFlashTimeoutRef.current = setTimeout(() => setWalletFlashActive(false), 120);
               }}
