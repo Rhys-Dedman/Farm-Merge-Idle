@@ -1,9 +1,10 @@
 /**
  * Single active reward/boost indicator: circle with icon and radial progress (time left 100% → 0%).
- * Progress updates at 60fps; on 0% calls onComplete.
+ * Progress updates at 10fps (timer drains over minutes – no need for 60fps).
  */
 import React, { useEffect, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { shouldTick10 } from '../utils/raf60';
 
 const INNER_RADIUS = 9;
 const STROKE_PX = 2; // outer stroke around brown circle
@@ -37,6 +38,7 @@ export const ActiveBoostIndicator: React.FC<ActiveBoostIndicatorProps> = ({ data
   const progressCircleRef = useRef<SVGCircleElement>(null);
   const completedRef = useRef(false);
   const onCompleteRef = useRef(onComplete);
+  const raf10LastTickRef = useRef(0);
   onCompleteRef.current = onComplete;
 
   const circumference = 2 * Math.PI * RING_RADIUS;
@@ -48,17 +50,18 @@ export const ActiveBoostIndicator: React.FC<ActiveBoostIndicatorProps> = ({ data
       const remaining = Math.max(0, data.endTime - now);
       const pct = data.durationMs > 0 ? (remaining / data.durationMs) * 100 : 0;
 
-      if (progressCircleRef.current) {
-        const offset = circumference - (pct / 100) * circumference;
-        progressCircleRef.current.style.strokeDashoffset = String(offset);
-        progressCircleRef.current.style.transition = 'none';
-      }
-
       if (pct <= 0 && !completedRef.current) {
         completedRef.current = true;
         onCompleteRef.current(data.id);
         return;
       }
+
+      if (shouldTick10(raf10LastTickRef) && progressCircleRef.current) {
+        const offset = circumference - (pct / 100) * circumference;
+        progressCircleRef.current.style.strokeDashoffset = String(offset);
+        progressCircleRef.current.style.transition = 'none';
+      }
+
       rafId = requestAnimationFrame(tick);
     };
     rafId = requestAnimationFrame(tick);

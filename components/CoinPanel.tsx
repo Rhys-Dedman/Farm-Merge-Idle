@@ -3,6 +3,7 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { getPerformanceMode } from '../utils/performanceMode';
 
 const REVEAL_MS = 220;
 const HOLD_MS = 250; // 0.25s at top before stagger
@@ -29,6 +30,8 @@ function lerpHex(hex1: string, hex2: string, t: number): string {
 const TRAIL_FADE_AFTER_HIT_MS = 280;
 const ARC_HEIGHT_PX = 18; // upward arc when moving to wallet
 const SIZE_SCALE = 0.6; // coin panel size scale (affects panel + circle + trail)
+/** When more than this many panels are active, skip trail + blur to keep FPS (e.g. 19 surplus harvests). */
+const SKIP_TRAIL_WHEN_PANELS_ABOVE = 8;
 
 interface Point {
   x: number;
@@ -53,6 +56,8 @@ interface CoinPanelProps {
   onImpact: (value: number) => void;
   onComplete: () => void;
   appScale?: number;
+  /** When > SKIP_TRAIL_WHEN_PANELS_ABOVE, trail and blur are disabled for FPS (many harvests). */
+  activePanelCount?: number;
 }
 
 export const CoinPanel: React.FC<CoinPanelProps> = ({
@@ -63,7 +68,14 @@ export const CoinPanel: React.FC<CoinPanelProps> = ({
   appScale = 1,
   onImpact,
   onComplete,
+  activePanelCount = 1,
 }) => {
+  // Freeze at spawn: if we ever had "many" panels for current threshold, never show trail (avoids mid-flight switch)
+  const skipTrailLifetimeRef = useRef(false);
+  const trailThreshold = getPerformanceMode() ? 4 : SKIP_TRAIL_WHEN_PANELS_ABOVE;
+  if (activePanelCount > trailThreshold) skipTrailLifetimeRef.current = true;
+  const useTrail = activePanelCount <= trailThreshold && !skipTrailLifetimeRef.current;
+
   const [phase, setPhase] = useState<'reveal' | 'hold' | 'moveToWallet' | 'trailOnly'>('reveal');
   const [pos, setPos] = useState<Point>({ x: data.startX, y: data.startY });
   // size as scale: start 0 width, 0.5 height → end 1, 1
@@ -176,17 +188,23 @@ export const CoinPanel: React.FC<CoinPanelProps> = ({
         setIsCircle(shrinkT >= 1);
         setContentOpacity(1 - shrinkT);
 
-        // Trail: add point each frame with current color (so trail fades white → yellow)
-        trailRef.current = [{ p: { x, y }, color: currentColor }, ...trailRef.current].slice(0, MAX_TRAIL_POINTS);
-        setTrail([...trailRef.current]);
+        if (useTrail) {
+          trailRef.current = [{ p: { x, y }, color: currentColor }, ...trailRef.current].slice(0, MAX_TRAIL_POINTS);
+          setTrail([...trailRef.current]);
+        }
 
         if (t >= 1) {
           if (!impactFiredRef.current) {
             impactFiredRef.current = true;
             onImpact(data.value);
           }
-          setPhase('trailOnly');
-          trailOnlyStartRef.current = now;
+          if (useTrail) {
+            setPhase('trailOnly');
+            trailOnlyStartRef.current = now;
+          } else {
+            onComplete();
+            return;
+          }
         }
         rafRef.current = requestAnimationFrame(tick);
         return;
@@ -196,7 +214,7 @@ export const CoinPanel: React.FC<CoinPanelProps> = ({
         const trailElapsed = now - trailOnlyStartRef.current;
         const fade = Math.max(0, 1 - trailElapsed / TRAIL_FADE_AFTER_HIT_MS);
         setTrailOpacity(fade);
-        setTrail([...trailRef.current]);
+        if (useTrail) setTrail([...trailRef.current]);
         if (fade <= 0) {
           onComplete();
           return;
@@ -210,7 +228,7 @@ export const CoinPanel: React.FC<CoinPanelProps> = ({
 
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [phase, data, containerRef, walletRef, walletIconRef, onImpact, onComplete]);
+  }, [phase, data, containerRef, walletRef, walletIconRef, onImpact, onComplete, useTrail]);
 
   const showPanel = phase === 'reveal' || phase === 'hold' || (phase === 'moveToWallet' && !isCircle);
   const showCircle = phase === 'moveToWallet' && isCircle;
@@ -218,8 +236,8 @@ export const CoinPanel: React.FC<CoinPanelProps> = ({
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-visible" style={{ zIndex: 75 }}>
-      {/* Trail (like seed particle trail) */}
-      {trail.length > 1 && (
+      {/* Trail (like seed particle trail); skipped when many panels for FPS */}
+      {useTrail && trail.length > 1 && (
         <svg className="absolute inset-0 w-full h-full overflow-visible" style={{ pointerEvents: 'none' }}>
           <defs>
             <filter id="coin-trail-glow">

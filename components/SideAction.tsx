@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
+import { shouldTick30 } from '../utils/raf60';
 
 interface TapRipple {
   id: number;
@@ -58,13 +59,18 @@ export const SideAction: React.FC<SideActionProps> = ({
   const whiteCircumference = 2 * Math.PI * whiteProgressRadius;
   const whiteProgressCircleRef = useRef<SVGCircleElement>(null);
   const isFlashingRef = useRef(isFlashing);
+  const raf30LastTickRef = useRef(0);
   isFlashingRef.current = isFlashing;
 
-  // When progressRef is provided, drive both progress rings at 60fps via direct DOM updates (no React re-renders)
+  // When progressRef is provided, drive both progress rings at 30fps (smooth enough, less work than 60fps)
   useEffect(() => {
     if (!progressRef) return;
     let rafId: number;
     const tick = () => {
+      if (!shouldTick30(raf30LastTickRef)) {
+        rafId = requestAnimationFrame(tick);
+        return;
+      }
       const raw = progressRef.current;
       const pct = Math.max(0, Math.min(100, raw));
       // Green progress bar hides when flashing or at 100%

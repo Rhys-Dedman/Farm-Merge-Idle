@@ -14,35 +14,35 @@ interface Point {
   y: number;
 }
 
-interface Sparkle {
-  id: number;
-  x: number;
-  y: number;
-  life: number;
-  size: number;
-  vx: number;
-  vy: number;
-}
-
 export const Projectile: React.FC<ProjectileProps> = ({ data, onImpact, onComplete, appScale = 1 }) => {
-  const [airPos, setAirPos] = useState<Point>({ x: data.startX, y: data.startY });
-  const [shadowPos, setShadowPos] = useState<Point>({ x: data.startX, y: data.startY });
-  
-  const [airTrail, setAirTrail] = useState<Point[]>([]);
-  const [shadowTrail, setShadowTrail] = useState<Point[]>([]);
-  
-  const [sparkles, setSparkles] = useState<Sparkle[]>([]);
-  const [isImpacted, setIsImpacted] = useState(false);
-  
+  const [frame, setFrame] = useState<{
+    airPos: Point;
+    shadowPos: Point;
+    airTrail: Point[];
+    shadowTrail: Point[];
+    isImpacted: boolean;
+  }>({
+    airPos: { x: data.startX, y: data.startY },
+    shadowPos: { x: data.startX, y: data.startY },
+    airTrail: [],
+    shadowTrail: [],
+    isImpacted: false,
+  });
+
   const frameRef = useRef<number>(0);
   const startTimeRef = useRef<number>(Date.now());
-  const particleIdCounter = useRef(0);
+  const airTrailRef = useRef<Point[]>([]);
+  const shadowTrailRef = useRef<Point[]>([]);
+  const airPosRef = useRef<Point>({ x: data.startX, y: data.startY });
+  const shadowPosRef = useRef<Point>({ x: data.startX, y: data.startY });
+  const isImpactedRef = useRef(false);
   const [targetCoords, setTargetCoords] = useState<Point | null>(null);
   const [containerHeight, setContainerHeight] = useState(800);
 
   const particleDiameter = 21;
-  const maxTrailPoints = 25; 
-  const maxShadowTrailPoints = Math.floor(maxTrailPoints * 1.5); // 50% longer trail for shadow
+  /** Shorter trails = fewer SVG elements per projectile; helps when many seeds fly (e.g. seed storm). */
+  const maxTrailPoints = 12;
+  const maxShadowTrailPoints = Math.floor(maxTrailPoints * 1.5);
 
   useEffect(() => {
     const el = document.getElementById(`hex-${data.targetIdx}`);
@@ -94,7 +94,6 @@ export const Projectile: React.FC<ProjectileProps> = ({ data, onImpact, onComple
       const elapsed = now - startTimeRef.current;
       let t = Math.min(elapsed / DURATION, 1);
 
-      // Fast Start, Medium Airtime, Fast Impact Easing (Power curve 0.7)
       const p = 0.7;
       let tt: number;
       if (t < 0.5) {
@@ -103,72 +102,58 @@ export const Projectile: React.FC<ProjectileProps> = ({ data, onImpact, onComple
         tt = 1 - 0.5 * Math.pow((1 - t) * 2, p);
       }
 
-      if (t < 1) {
-        const ax = Math.pow(1 - tt, 3) * data.startX + 
-                   3 * Math.pow(1 - tt, 2) * tt * airCp1.x + 
-                   3 * (1 - tt) * Math.pow(tt, 2) * airCp2.x + 
-                   Math.pow(tt, 3) * targetCoords.x;
-                   
-        const ayReal = Math.pow(1 - tt, 3) * data.startY + 
-                       3 * Math.pow(1 - tt, 2) * tt * airCp1.y + 
-                       3 * (1 - tt) * Math.pow(tt, 2) * airCp2.y + 
-                       Math.pow(tt, 3) * targetCoords.y;
+      let newAirPos = airPosRef.current;
+      let newShadowPos = shadowPosRef.current;
+      let nextAirTrail = airTrailRef.current;
+      let nextShadowTrail = shadowTrailRef.current;
 
-        const sx = Math.pow(1 - tt, 3) * data.startX + 
-                   3 * Math.pow(1 - tt, 2) * tt * shadowCp1.x + 
-                   3 * (1 - tt) * Math.pow(tt, 2) * shadowCp2.x + 
+      if (t < 1) {
+        const ax = Math.pow(1 - tt, 3) * data.startX +
+                   3 * Math.pow(1 - tt, 2) * tt * airCp1.x +
+                   3 * (1 - tt) * Math.pow(tt, 2) * airCp2.x +
                    Math.pow(tt, 3) * targetCoords.x;
-                   
-        const sy = Math.pow(1 - tt, 3) * data.startY + 
-                   3 * Math.pow(1 - tt, 2) * tt * shadowCp1.y + 
-                   3 * (1 - tt) * Math.pow(tt, 2) * shadowCp2.y + 
+        const ayReal = Math.pow(1 - tt, 3) * data.startY +
+                       3 * Math.pow(1 - tt, 2) * tt * airCp1.y +
+                       3 * (1 - tt) * Math.pow(tt, 2) * airCp2.y +
+                       Math.pow(tt, 3) * targetCoords.y;
+        const sx = Math.pow(1 - tt, 3) * data.startX +
+                   3 * Math.pow(1 - tt, 2) * tt * shadowCp1.x +
+                   3 * (1 - tt) * Math.pow(tt, 2) * shadowCp2.x +
+                   Math.pow(tt, 3) * targetCoords.x;
+        const sy = Math.pow(1 - tt, 3) * data.startY +
+                   3 * Math.pow(1 - tt, 2) * tt * shadowCp1.y +
+                   3 * (1 - tt) * Math.pow(tt, 2) * shadowCp2.y +
                    Math.pow(tt, 3) * targetCoords.y;
 
-        const newAirPos = { x: ax, y: ayReal };
-        const newShadowPos = { x: sx, y: sy };
-        
-        setAirPos(newAirPos);
-        setShadowPos(newShadowPos);
-        
-        setAirTrail(prev => [newAirPos, ...prev].slice(0, maxTrailPoints));
-        setShadowTrail(prev => [newShadowPos, ...prev].slice(0, maxShadowTrailPoints));
-
-        const sparkleChance = t > 0.6 ? 0.22 : 0.12;
-        if (Math.random() < sparkleChance) {
-          const count = Math.floor(Math.random() * 2) + 2;
-          for (let i = 0; i < count; i++) {
-            const pId = particleIdCounter.current++;
-            setSparkles(prev => [...prev, {
-              id: pId,
-              x: ax + (Math.random() - 0.5) * 6,
-              y: ayReal + (Math.random() - 0.5) * 6,
-              life: 1,
-              size: Math.random() * 3 + 3,
-              vx: (Math.random() - 0.5) * 0.7,
-              vy: (Math.random() - 0.5) * 0.7
-            }]);
-          }
-        }
-      } else if (!isImpacted) {
-        setIsImpacted(true);
+        newAirPos = { x: ax, y: ayReal };
+        newShadowPos = { x: sx, y: sy };
+        nextAirTrail = [newAirPos, ...airTrailRef.current].slice(0, maxTrailPoints);
+        nextShadowTrail = [newShadowPos, ...shadowTrailRef.current].slice(0, maxShadowTrailPoints);
+      } else if (!isImpactedRef.current) {
+        isImpactedRef.current = true;
         onImpact(data.targetIdx);
       }
 
-      setSparkles(prev => 
-        prev.map(p => ({ 
-          ...p, 
-          x: p.x + p.vx,
-          y: p.y + p.vy + 0.018, 
-          life: p.life - 0.025 
-        })).filter(p => p.life > 0)
-      );
-
       if (t >= 1) {
-        setAirTrail(prev => prev.slice(0, Math.max(0, prev.length - 3)));
-        setShadowTrail(prev => prev.slice(0, Math.max(0, prev.length - 3)));
+        nextAirTrail = nextAirTrail.slice(0, Math.max(0, nextAirTrail.length - 3));
+        nextShadowTrail = nextShadowTrail.slice(0, Math.max(0, nextShadowTrail.length - 3));
       }
 
-      if (t >= 1 && airTrail.length === 0 && shadowTrail.length === 0 && sparkles.length === 0) {
+      airTrailRef.current = nextAirTrail;
+      shadowTrailRef.current = nextShadowTrail;
+      airPosRef.current = newAirPos;
+      shadowPosRef.current = newShadowPos;
+      if (t >= 1) isImpactedRef.current = true;
+
+      setFrame({
+        airPos: newAirPos,
+        shadowPos: newShadowPos,
+        airTrail: nextAirTrail,
+        shadowTrail: nextShadowTrail,
+        isImpacted: isImpactedRef.current,
+      });
+
+      if (t >= 1 && nextAirTrail.length === 0 && nextShadowTrail.length === 0) {
         onComplete();
       } else {
         frameRef.current = requestAnimationFrame(animate);
@@ -177,22 +162,16 @@ export const Projectile: React.FC<ProjectileProps> = ({ data, onImpact, onComple
 
     frameRef.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(frameRef.current);
-  }, [targetCoords, data.startX, data.startY, isImpacted, airTrail.length, shadowTrail.length, sparkles.length, containerHeight]);
+  }, [targetCoords, data.startX, data.startY, data.targetIdx, containerHeight, onImpact, onComplete]);
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden">
       <svg className="absolute inset-0 w-full h-full overflow-visible">
-        <defs>
-          <filter id="p-glow">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="0.6" />
-          </filter>
-        </defs>
-        
-        {/* Shadow Trail Group: black, 20% opacity */}
-        <g filter="url(#p-glow)" style={{ opacity: 0.2 }}>
-          {shadowTrail.map((p, i) => {
+        {/* Shadow trail: no blur to reduce cost when many seeds fly */}
+        <g style={{ opacity: 0.2 }}>
+          {frame.shadowTrail.map((p, i) => {
             if (i === 0) return null;
-            const prev = shadowTrail[i-1];
+            const prev = frame.shadowTrail[i-1];
             const taperProgress = i / maxShadowTrailPoints;
             const widthScale = 1.0 - (taperProgress * 0.5); // 100% to 50%
             const fadeScale = 1.0 - taperProgress;
@@ -212,11 +191,11 @@ export const Projectile: React.FC<ProjectileProps> = ({ data, onImpact, onComple
           })}
         </g>
 
-        {/* Air Trail Group */}
-        <g filter="url(#p-glow)">
-          {airTrail.map((p, i) => {
+        {/* Air trail: no blur to reduce cost when many seeds fly */}
+        <g>
+          {frame.airTrail.map((p, i) => {
             if (i === 0) return null;
-            const prev = airTrail[i-1];
+            const prev = frame.airTrail[i-1];
             const taperProgress = i / maxTrailPoints;
             const widthScale = 1.0 - (taperProgress * 0.5); // 100% to 50%
             const opacityScale = (1.0 - taperProgress) * 0.75;
@@ -237,29 +216,14 @@ export const Projectile: React.FC<ProjectileProps> = ({ data, onImpact, onComple
         </g>
       </svg>
 
-      {sparkles.map(p => (
-        <div 
-          key={p.id} 
-          className="absolute rounded-full bg-[#fdf9e9] shadow-[0_0_12px_#fcf0c6] mix-blend-screen" 
-          style={{ 
-            left: p.x, 
-            top: p.y, 
-            width: p.size, 
-            height: p.size, 
-            opacity: p.life,
-            transform: 'translate(-50%, -50%)' 
-          }} 
-        />
-      ))}
-
-      {!isImpacted && (
+      {!frame.isImpacted && (
         <>
           {/* Shadow Head: black, 20% opacity */}
           <div 
             className="absolute z-[9]" 
             style={{ 
-              left: shadowPos.x, 
-              top: shadowPos.y, 
+              left: frame.shadowPos.x, 
+              top: frame.shadowPos.y, 
               opacity: 0.2,
               transform: 'translate(-50%, -50%)' 
             }}
@@ -278,8 +242,8 @@ export const Projectile: React.FC<ProjectileProps> = ({ data, onImpact, onComple
           <div 
             className="absolute z-10" 
             style={{ 
-              left: airPos.x, 
-              top: airPos.y, 
+              left: frame.airPos.x, 
+              top: frame.airPos.y, 
               transform: 'translate(-50%, -50%)' 
             }}
           >

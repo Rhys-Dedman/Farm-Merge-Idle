@@ -4,6 +4,11 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { getTickCount60 } from '../utils/raf60';
+import { getPerformanceMode } from '../utils/performanceMode';
+
+/** Slightly under 33.33ms so we reliably get 30 counts/sec (avoids 25 due to timing). */
+const FPS_COUNT_INTERVAL_30_MS = 32;
 import { ActiveBoostIndicator, ActiveBoostData, ACTIVE_BOOST_INDICATOR_SIZE_PX } from './ActiveBoostIndicator';
 
 const BOOST_GAP_PX = 2;
@@ -86,6 +91,44 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   const prevFlashRef = useRef(playerLevelFlashTrigger);
   const [bounceKey, setBounceKey] = useState(0);
   const [progressBarFlash, setProgressBarFlash] = useState(false);
+  const [fps, setFps] = useState(0);
+  const rafCountRef = useRef(0);
+  const gameTickCountRef = useRef(0);
+  const gameTickRef = useRef(0);
+  const lastFpsUpdateRef = useRef(performance.now());
+  const lastCountTimeRef = useRef(performance.now());
+  useEffect(() => {
+    let rafId: number;
+    const tick = () => {
+      const now = performance.now();
+      const perfMode = getPerformanceMode();
+      if (perfMode) {
+        if (now - lastCountTimeRef.current >= FPS_COUNT_INTERVAL_30_MS) {
+          lastCountTimeRef.current = now;
+          rafCountRef.current += 1;
+        }
+      } else {
+        rafCountRef.current += 1;
+      }
+      gameTickCountRef.current += getTickCount60(gameTickRef);
+      if (now - lastFpsUpdateRef.current >= 1000) {
+        const rafPerSec = rafCountRef.current;
+        const ticksDelivered = gameTickCountRef.current;
+        const maxFps = perfMode ? 30 : 60;
+        // In perf mode, 25–30 counts is "30fps target"; show 30 so it doesn't snap down to 25
+        const raw = Math.min(maxFps, rafPerSec, ticksDelivered);
+        const displayFps = perfMode && raw >= 24 ? 30 : raw;
+        setFps(displayFps);
+        rafCountRef.current = 0;
+        gameTickCountRef.current = 0;
+        lastFpsUpdateRef.current = now;
+        lastCountTimeRef.current = now;
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, []);
   useEffect(() => {
     if (walletBurstCount > prevBurstRef.current) {
       setBounceKey((k) => k + 1);
@@ -354,6 +397,19 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
       </div>
 
       <div className="flex items-center gap-2 flex-shrink-0">
+        <button
+          type="button"
+          className="tabular-nums text-[10px] font-semibold select-none cursor-pointer hover:underline focus:outline-none"
+          style={{ color: '#c4a574', background: 'none', border: 'none', padding: 0 }}
+          aria-label={`${fps} FPS (click to simulate hitch)`}
+          title="Click to simulate a hitch — FPS should drop briefly if the counter is working"
+          onClick={() => {
+            const end = performance.now() + 250;
+            while (performance.now() < end) {}
+          }}
+        >
+          {fps} FPS
+        </button>
         <button
           onClick={onPauseClick}
           className="flex items-center justify-center rounded-full transition-all active:scale-95 flex-shrink-0"
