@@ -50,12 +50,12 @@ const formatGoalCoin = (amount: number): string => {
 const getMaxGoalSlots = (playerLevel: number): number =>
   playerLevel >= 5 ? 4 : 3;
 
-/** Goals required to level up. Start at 5 for level 1→2; each level = round(previous × 1.4) */
+/** Goals required to level up. Level 1→2: 7; then each level = round(previous × 1.35) */
 const getGoalsRequiredForLevel = (level: number): number => {
-  if (level <= 1) return 5;
-  let prev = 5;
+  if (level <= 1) return 7;
+  let prev = 7;
   for (let i = 2; i <= level; i++) {
-    prev = Math.round(prev * 1.4);
+    prev = Math.round(prev * 1.35);
   }
   return prev;
 };
@@ -95,17 +95,44 @@ const getDiscoveryGoalEvery = (highestPlant: number): number => {
   return 10; // 11+ : every 10 goals, max
 };
 
-/** Pick plant level for a new goal. Every X goals is a discovery goal (highestPlantEver+1). Mutates counterRef. Never returns below seedLevel. */
+/** Pick plant level for a new goal. Every X goals is a discovery goal (highestPlantEver+1). Counter never resets; after discovery we add 3 and enforce a buffer of 3 non-discovery goals. If hasDiscoveryGoalOnBoard, skip assigning another +1 (pick random, increment counter only). */
 const pickGoalPlantLevel = (
   highestPlantEver: number,
   counterRef: { current: number },
+  bufferRef: { current: number },
+  hasDiscoveryGoalOnBoard: boolean,
   minLevel: number,
   seedLevel: number
 ): number => {
   const every = getDiscoveryGoalEvery(highestPlantEver);
-  if (highestPlantEver < 24 && counterRef.current >= every - 1) {
-    counterRef.current = 0;
+  // Buffer: after a discovery (or after player discovers by merge), next 3 goals must be at or below current highest
+  if (bufferRef.current > 0) {
+    bufferRef.current--;
+    counterRef.current++;
+    const effectiveMin = Math.max(minLevel, seedLevel);
+    const maxForRandom = Math.max(5, Math.min(24, highestPlantEver));
+    const aboveMin = Math.random() < 0.5;
+    const level = aboveMin
+      ? (effectiveMin >= maxForRandom ? maxForRandom : effectiveMin + 1 + Math.floor(Math.random() * (maxForRandom - effectiveMin)))
+      : effectiveMin + Math.floor(Math.random() * Math.max(1, maxForRandom - effectiveMin + 1));
+    return Math.max(seedLevel, Math.min(24, level));
+  }
+  // Would assign discovery, but one is already on board: skip (pick random, increment counter only; no +3, no buffer)
+  if (highestPlantEver < 24 && counterRef.current >= every - 1 && !hasDiscoveryGoalOnBoard) {
+    counterRef.current += 3; // Don't reset; add 3 so frequency continues, just delayed
+    bufferRef.current = 3; // Next 3 goals cannot be discovery
     return highestPlantEver + 1;
+  }
+  if (highestPlantEver < 24 && counterRef.current >= every - 1 && hasDiscoveryGoalOnBoard) {
+    // Defer discovery to next slot; only increment counter so rhythm is preserved
+    counterRef.current++;
+    const effectiveMin = Math.max(minLevel, seedLevel);
+    const maxForRandom = Math.max(5, Math.min(24, highestPlantEver));
+    const aboveMin = Math.random() < 0.5;
+    const level = aboveMin
+      ? (effectiveMin >= maxForRandom ? maxForRandom : effectiveMin + 1 + Math.floor(Math.random() * (maxForRandom - effectiveMin)))
+      : effectiveMin + Math.floor(Math.random() * Math.max(1, maxForRandom - effectiveMin + 1));
+    return Math.max(seedLevel, Math.min(24, level));
   }
   counterRef.current++;
   const effectiveMin = Math.max(minLevel, seedLevel);
@@ -123,12 +150,12 @@ const getGoalCropRequired = (
   cropYieldLevel: number,
   goalDifficultyScaling: number = GOAL_DIFFICULTY_SCALING
 ): number => {
-  const baseGoal = 5 + Math.floor(playerLevel / 3) + Math.floor(cropYieldLevel * 0.5);
+  const baseGoal = 3 + Math.floor(playerLevel / 3) + Math.floor(cropYieldLevel * 0.5);
   const variationRange = 1 + Math.floor(playerLevel / 10);
   const randomOffset = Math.floor(Math.random() * (2 * variationRange + 1)) - variationRange;
   const variedGoal = baseGoal + randomOffset;
   const scaledGoal = Math.round(variedGoal * goalDifficultyScaling);
-  return Math.max(5, scaledGoal);
+  return Math.max(3, scaledGoal);
 };
 import { ErrorBoundary } from './components/ErrorBoundary';
 
@@ -277,7 +304,8 @@ export default function App() {
   const [cropsState, setCropsState] = useState<Record<string, UpgradeState>>(createInitialCropsState);
   const [highestPlantEver, setHighestPlantEver] = useState(1); // Track highest plant level ever created
   const highestPlantEverRef = useRef(1);
-  const discoveryGoalCounterRef = useRef(3); // Goals shown since last discovery (3 initial slots count)
+  const discoveryGoalCounterRef = useRef(3); // Monotonic counter for discovery rhythm (never reset; +3 after each discovery)
+  const discoveryBufferRef = useRef(0); // After a discovery, next N goals must be non-discovery (buffer of 3)
   const [seedsInStorage, setSeedsInStorage] = useState(0);
   
   // Discovery popup state
@@ -323,12 +351,16 @@ export default function App() {
   // Goals: 3 slots initially; unlock 4th plant goal at level 5. Slot 4 (5th) is coin goal only.
   const [goalSlots, setGoalSlots] = useState<('empty' | 'loading' | 'green' | 'completed')[]>(['green', 'green', 'green', 'empty', 'empty']);
   const [goalPlantTypes, setGoalPlantTypes] = useState<number[]>([1, 2, 3, 0, 0]); // plant level 1-5 per slot when green
+  const goalSlotsRef = useRef(goalSlots);
+  const goalPlantTypesRef = useRef(goalPlantTypes);
+  goalSlotsRef.current = goalSlots;
+  goalPlantTypesRef.current = goalPlantTypes;
   const [goalLoadingSeconds, setGoalLoadingSeconds] = useState(15); // countdown 15->0 (Order Speed: 15 base - 2 per level)
   const [goalTransitionSlot, setGoalTransitionSlot] = useState<number | null>(null); // slot transitioning loading->green (for fade)
   const [goalTransitionFade, setGoalTransitionFade] = useState(false); // triggers fade: loading out, green in
   const [goalSlotFadeInSlot, setGoalSlotFadeInSlot] = useState<number | null>(null); // slot fading in 0→100% over 500ms; countdown waits until done
-  const [goalCounts, setGoalCounts] = useState<number[]>([5, 5, 5, 0, 0]); // remaining count per slot when green (e.g. 5→4→3)
-  const [goalAmountsRequired, setGoalAmountsRequired] = useState<number[]>([5, 5, 5, 0, 0]); // crops required when goal was created (for reward calc)
+  const [goalCounts, setGoalCounts] = useState<number[]>([3, 3, 3, 0, 0]); // remaining count per slot when green (e.g. 3→2→1)
+  const [goalAmountsRequired, setGoalAmountsRequired] = useState<number[]>([3, 3, 3, 0, 0]); // crops required when goal was created (for reward calc)
   const [goalCompletedValues, setGoalCompletedValues] = useState<number[]>([0, 0, 0, 0, 0]); // coin value when completed (plantValue × amountRequired × 2)
   const [goalImpactSlots, setGoalImpactSlots] = useState<number[]>([]); // slots currently playing impact (white flash + icon scale)
   const [goalBounceSlots, setGoalBounceSlots] = useState<number[]>([]); // slots currently bouncing (panel down)
@@ -884,7 +916,11 @@ export default function App() {
       setGoalTransitionFade(false);
       const minLevel = getPremiumOrdersMinLevel(harvestState);
       const seedLevel = getSeedLevelFromHighestPlant(highestPlantEverRef.current);
-      const plantLevel = pickGoalPlantLevel(highestPlantEverRef.current, discoveryGoalCounterRef, minLevel, seedLevel);
+      const highest = highestPlantEverRef.current;
+      const slots = goalSlotsRef.current;
+      const types = goalPlantTypesRef.current;
+      const hasDiscoveryOnBoard = slots.some((s, i) => i !== loadingIdx && s === 'green' && (types[i] ?? 0) === highest + 1);
+      const plantLevel = pickGoalPlantLevel(highestPlantEverRef.current, discoveryGoalCounterRef, discoveryBufferRef, hasDiscoveryOnBoard, minLevel, seedLevel);
       setGoalPlantTypes((p) => { const n = [...p]; n[loadingIdx] = plantLevel; return n; });
       const cropYieldLevel = cropsState?.crop_value?.level ?? 0;
       const goalRequired = getGoalCropRequired(playerLevel, cropYieldLevel);
@@ -924,7 +960,11 @@ export default function App() {
           setGoalTransitionFade(false);
           const minLevel = getPremiumOrdersMinLevel(harvestState);
           const seedLevel = getSeedLevelFromHighestPlant(highestPlantEverRef.current);
-          const plantLevel = pickGoalPlantLevel(highestPlantEverRef.current, discoveryGoalCounterRef, minLevel, seedLevel);
+          const highest = highestPlantEverRef.current;
+          const slots = goalSlotsRef.current;
+          const types = goalPlantTypesRef.current;
+          const hasDiscoveryOnBoard = slots.some((s, i) => i !== loadingIdx && s === 'green' && (types[i] ?? 0) === highest + 1);
+          const plantLevel = pickGoalPlantLevel(highestPlantEverRef.current, discoveryGoalCounterRef, discoveryBufferRef, hasDiscoveryOnBoard, minLevel, seedLevel);
           setGoalPlantTypes((p) => { const n = [...p]; n[loadingIdx] = plantLevel; return n; });
           const cropYieldLevel = cropsState?.crop_value?.level ?? 0;
           const goalRequired = getGoalCropRequired(playerLevel, cropYieldLevel);
@@ -995,7 +1035,7 @@ export default function App() {
         const amountRequired = getGoalCropRequired(playerLevel, cropYieldLevel);
         const plantValue = getCoinValueForLevel(highestPlantEver);
         const marketMultiplier = getMarketValueMultiplier(harvestState);
-        const rawValue = plantValue * amountRequired * 2 * marketMultiplier * 1.0;
+        const rawValue = plantValue * amountRequired * 1.5 * marketMultiplier * 1.0;
         const roundedValue = Math.round(rawValue / 5) * 5;
         setCoinGoalValue(roundedValue);
         setCoinGoalTimeRemaining(30);
@@ -1082,9 +1122,9 @@ export default function App() {
       slotsToComplete.forEach((slotIdx) => {
         const plantLevel = goalPlantTypes[slotIdx] ?? slotIdx + 1;
         const plantValue = getCoinValueForLevel(plantLevel);
-        const amountRequired = goalAmountsRequired[slotIdx] ?? 5;
+        const amountRequired = goalAmountsRequired[slotIdx] ?? 3;
         const marketMultiplier = getMarketValueMultiplier(harvestState);
-        const rawValue = plantValue * amountRequired * 2 * marketMultiplier;
+        const rawValue = plantValue * amountRequired * 1.5 * marketMultiplier;
         const roundedValue = Math.round(rawValue / 5) * 5;
         setGoalCompletedValues((v) => { const n = [...v]; n[slotIdx] = roundedValue; return n; });
         setGoalCounts((c) => { const n = [...c]; n[slotIdx] = 0; return n; });
@@ -1441,8 +1481,8 @@ export default function App() {
 
     if (isSeedFlashing) return;
 
-    // Add progress per tap with decay: 40% down to 10% based on taps in last 5 seconds
-    const tapPercent = getTapProgressPercent(seedTapTimestampsRef);
+    // Seed button: flat 20% progress per tap (no decay)
+    const tapPercent = 20;
     const start = Math.max(0, seedProgressRef.current);
     const totalAfterTap = start + tapPercent;
     
@@ -1926,7 +1966,8 @@ export default function App() {
         setSeedProgressionPopup(true);
       }
       setHighestPlantEver(newLevel);
-      discoveryGoalCounterRef.current = 0; // Reset so player gets to enjoy new plant before next discovery goal
+      discoveryGoalCounterRef.current += 3; // Don't reset; add 3 so next 3 goals can't be +1, frequency resumes as normal
+      discoveryBufferRef.current = 3; // Buffer: next 3 goals at or below what they just discovered
       // Show discovery popup immediately when merge starts (feels more responsive)
       setDiscoveryPopup({ isVisible: true, level: newLevel });
     }
@@ -3307,9 +3348,9 @@ export default function App() {
                   if (next[goalSlotIdx] === 0) {
                     const plantLevel = goalPlantTypes[goalSlotIdx] ?? goalSlotIdx + 1;
                     const plantValue = getCoinValueForLevel(plantLevel);
-                    const amountRequired = goalAmountsRequired[goalSlotIdx] ?? 5;
+                    const amountRequired = goalAmountsRequired[goalSlotIdx] ?? 3;
                     const marketMultiplier = getMarketValueMultiplier(harvestState);
-                    const rawValue = plantValue * amountRequired * 2 * marketMultiplier;
+                    const rawValue = plantValue * amountRequired * 1.5 * marketMultiplier;
                     const roundedValue = Math.round(rawValue / 5) * 5;
                     setGoalCompletedValues((v) => {
                       const vNext = [...v];
