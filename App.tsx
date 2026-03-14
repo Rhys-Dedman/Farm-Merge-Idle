@@ -3,7 +3,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { HexBoard } from './components/HexBoard';
 import { UpgradeTabs } from './components/UpgradeTabs';
-import { UpgradeList, createInitialSeedsState, createInitialHarvestState, createInitialCropsState, getSeedLevelFromHighestPlant, getBonusSeedChance, getSeedSurplusValue, getCropYieldPerHarvest, getHarvestSpeedLevel, getMergeHarvestChance, getGoalLoadingSeconds, getMarketValueMultiplier, getPremiumOrdersMinLevel, getSurplusSalesMultiplier, isSurplusSalesUnlocked, getHappyCustomerChance, HarvestState, UpgradeState, RewardedOffer, getLevelUnlockInfo, isCustomerSpeedMaxed } from './components/UpgradeList';
+import { UpgradeList, createInitialSeedsState, createInitialHarvestState, createInitialCropsState, getSeedLevelFromHighestPlant, getBonusSeedChance, getSeedSurplusValue, getSeedStorageMax, getCropYieldPerHarvest, getHarvestSpeedLevel, getMergeHarvestChance, getGoalLoadingSeconds, getMarketValueMultiplier, getPremiumOrdersMinLevel, getSurplusSalesMultiplier, isSurplusSalesUnlocked, getHappyCustomerChance, HarvestState, UpgradeState, RewardedOffer, getLevelUnlockInfo, isCustomerSpeedMaxed } from './components/UpgradeList';
 import { Navbar } from './components/Navbar';
 import { StoreScreen } from './components/StoreScreen';
 import { SideAction } from './components/SideAction';
@@ -310,13 +310,17 @@ export default function App() {
   const [seedProgress, setSeedProgress] = useState(0);
   const [harvestProgress, setHarvestProgress] = useState(0);
   const [isSeedFlashing, setIsSeedFlashing] = useState(false);
-  const [isHarvestFlashing, setIsHarvestFlashing] = useState(false);
+  /** Harvest charges: max 3, start full (3/3); white button when > 0 */
+  const HARVEST_CHARGES_MAX = 3;
+  const [harvestCharges, setHarvestCharges] = useState(HARVEST_CHARGES_MAX);
+  const harvestChargesRef = useRef(HARVEST_CHARGES_MAX);
+  harvestChargesRef.current = harvestCharges;
   const [seedsState, setSeedsState] = useState(createInitialSeedsState);
   const [harvestState, setHarvestState] = useState<HarvestState>(createInitialHarvestState);
   const [cropsState, setCropsState] = useState<Record<string, UpgradeState>>(createInitialCropsState);
   const [highestPlantEver, setHighestPlantEver] = useState(1); // Track highest plant level ever created
   const highestPlantEverRef = useRef(1);
-  const [seedsInStorage, setSeedsInStorage] = useState(0);
+  const [seedsInStorage, setSeedsInStorage] = useState(5); // Start 5/5; max grows with Storage Capacity (15)
   
   // Discovery popup state
   const [discoveryPopup, setDiscoveryPopup] = useState<{ isVisible: boolean; level: number } | null>(null);
@@ -349,6 +353,8 @@ export default function App() {
   const [pendingOfferHighlightId, setPendingOfferHighlightId] = useState<string | null>(null);
   // Pause menu (opened from settings/gear button)
   const [pauseMenuOpen, setPauseMenuOpen] = useState(false);
+  /** After spamming Unlock plant, show discovery only for this level when pause closes */
+  const discoveryLevelAfterPauseCloseRef = useRef<number | null>(null);
   // Fake ad popup: show full-screen "ad", on Complete ad run callback then close
   const [showFakeAd, setShowFakeAd] = useState(false);
   showFakeAdRef.current = showFakeAd;
@@ -411,7 +417,7 @@ export default function App() {
   const [harvestBounceTrigger, setHarvestBounceTrigger] = useState(0); // increment each harvest so bounce animation re-runs
 
   const seedStorageLevel = seedsState?.seed_storage?.level ?? 0;
-  const seedStorageMax = Math.min(10, 1 + seedStorageLevel); // +1 per upgrade, cap 10
+  const seedStorageMax = getSeedStorageMax(seedsState); // 5 + level, max 15
   const seedLevel = getSeedLevelFromHighestPlant(highestPlantEver); // Seed level scales with highest plant discovered
   
   const gridRef = useRef<BoardCell[]>([]);
@@ -463,6 +469,8 @@ export default function App() {
   const barnScrollYRef = useRef(0);
   // Slots with in-flight crops that will complete the goal; exclude from routing so follow-up harvests go to next goal
   const goalsPendingCompletionRef = useRef<Set<number>>(new Set());
+  /** Crop amount already flying to each goal slot (mid-air panels); subtract on impact so rapid harvest taps can't over-commit */
+  const goalInFlightHarvestBySlotRef = useRef<Record<number, number>>({});
   const nextRewardedAdOfferIndexRef = useRef(0);
   const activeBoostsRef = useRef(activeBoosts);
   activeBoostsRef.current = activeBoosts;
@@ -470,6 +478,7 @@ export default function App() {
   useEffect(() => {
     goalSlots.forEach((s, i) => {
       if (s === 'green') goalsPendingCompletionRef.current.delete(i);
+      if (s !== 'green') goalInFlightHarvestBySlotRef.current[i] = 0;
     });
   }, [goalSlots]);
 
@@ -846,7 +855,11 @@ export default function App() {
   const tapZoomRef = useRef<{ start: number; end: number; startTime: number; duration: number } | null>(null);
   const [tapZoomTrigger, setTapZoomTrigger] = useState(0);
 
-  // Tap zoom: animate +20% over a very short duration (fast smooth zoom)
+  /** Tap on empty seed/harvest button (no charges): +5% bar per tap */
+  const TAP_BAR_PERCENT = 5;
+  /** Merge same-level plants: +20% on both seed and harvest bars */
+  const MERGE_BAR_PERCENT = 20;
+  // Tap zoom: animate tap % per seed tap over a very short duration (fast smooth zoom)
   useEffect(() => {
     const zoom = tapZoomRef.current;
     if (!zoom) return;
@@ -1172,67 +1185,98 @@ export default function App() {
   }, [highestPlantEver, harvestState, playerLevel, goalSlots, goalPlantTypes, goalAmountsRequired, grid]);
 
   /**
-   * At 100% seed progress: add one seed to storage (if room), reset to 0% immediately.
-   * If storage is full and seed_surplus is upgraded, spawn a coin panel instead.
+   * At 100% seed progress: +1 seed; cap at storage max. Excess → surplus coin or lost.
    */
   useEffect(() => {
     if (seedProgress !== 100 || !isSeedFlashing) return;
     seedProgressRef.current = 0;
     setSeedProgress(0);
     setTimeout(() => setIsSeedFlashing(false), 300);
-    
-    // Check if storage is full BEFORE we would add
-    const isStorageFull = seedsInStorage >= seedStorageMax;
+
+    const seedsToAdd = 1;
     const surplusValue = getSeedSurplusValue(seedsState);
-    
-    if (isStorageFull && surplusValue > 0) {
-      // Storage full with seed surplus upgrade: spawn coin panel
+    const maxCap = getSeedStorageMax(seedsState);
+
+    const total = seedsInStorage + seedsToAdd;
+    const capped = Math.min(maxCap, total);
+    const excess = total - capped;
+
+    setSeedsInStorage(capped);
+
+    if (excess > 0 && surplusValue > 0) {
       const container = containerRef.current;
       const plantBtn = plantButtonRef.current;
       const walletIcon = walletIconRef.current;
       const wallet = walletRef.current;
       const walletEl = walletIcon || wallet;
-      
       if (container && plantBtn && walletEl) {
         const scale = appScaleRef.current;
         const containerRect = container.getBoundingClientRect();
         const btnRect = plantBtn.getBoundingClientRect();
-        
         const startX = (btnRect.left + btnRect.width / 2 - containerRect.left) / scale;
         const startY = (btnRect.top + btnRect.height / 2 - containerRect.top) / scale;
         const hoverX = startX;
         const panelHeightPx = 14;
         const offsetUp = (panelHeightPx / 2 + 4) * 1.2;
         const hoverY = (btnRect.top - containerRect.top) / scale - offsetUp;
-        
-        setActiveCoinPanels((prev) => [
-          ...prev,
-          {
-            id: `seed-surplus-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-            value: surplusValue,
-            startX,
-            startY,
-            hoverX,
-            hoverY,
-            moveToWalletDelayMs: 0,
-          },
-        ]);
+        const panelsToAdd = Array.from({ length: excess }, (_, i) => ({
+          id: `seed-surplus-${Date.now()}-${i}-${Math.random().toString(36).slice(2)}`,
+          value: surplusValue,
+          startX,
+          startY,
+          hoverX,
+          hoverY,
+          moveToWalletDelayMs: 0,
+        }));
+        setActiveCoinPanels((p) => [...p, ...panelsToAdd]);
       }
-    } else {
-      // Normal case: add seed to storage
-      setSeedsInStorage((prev) => Math.min(seedStorageMax, prev + 1));
     }
-  }, [seedProgress, isSeedFlashing, seedStorageMax, seedsInStorage, seedsState]);
+  }, [seedProgress, isSeedFlashing, seedsInStorage, seedsState, seedStorageMax]);
 
-  // Harvest Speed upgrade: auto-increase progress when level >= 1. Rate = level completions per minute (+1/min per upgrade).
-  const harvestSpeedLevel = getHarvestSpeedLevel(cropsState);
-  const lastHarvestProgressTimeRef = useRef<number>(0);
   const harvestProgressRef = useRef<number>(0);
-  const harvestRaf60LastTickRef = useRef<number>(0);
   const harvestTapZoomRef = useRef<{ start: number; end: number; startTime: number; duration: number } | null>(null);
   const [harvestTapZoomTrigger, setHarvestTapZoomTrigger] = useState(0);
+  const harvestSpeedLevel = getHarvestSpeedLevel(cropsState);
+  const lastHarvestProgressTimeRef = useRef<number>(0);
+  const harvestRaf60LastTickRef = useRef<number>(0);
 
-  // Harvest tap zoom: animate +20% over a very short duration (fast smooth zoom)
+  // Harvest auto-progress (Harvest Speed + Rapid Harvest); at 100% +1 charge (waste if full), reset bar — like seeds production
+  useEffect(() => {
+    if (isLoading) return;
+    const hasRapidHarvestBoost = activeBoosts.some(b => b.offerId === 'rapid_harvest');
+    const perMinute = hasRapidHarvestBoost ? 15 : Math.min(10, 3 + harvestSpeedLevel);
+    lastHarvestProgressTimeRef.current = Date.now();
+    let rafId: number;
+    const percentPerMs = (perMinute * 100) / (60 * 1000);
+    const tick = () => {
+      if (harvestTapZoomRef.current) {
+        lastHarvestProgressTimeRef.current = Date.now();
+        rafId = scheduleNextFrame(tick);
+        return;
+      }
+      const n = getTickCount60(harvestRaf60LastTickRef);
+      if (n === 0) {
+        rafId = scheduleNextFrame(tick);
+        return;
+      }
+      const deltaMs = Math.min(n * TARGET_FRAME_MS, 50);
+      let next = harvestProgressRef.current + deltaMs * percentPerMs;
+      let cycled = false;
+      while (next >= 100) {
+        next -= 100;
+        cycled = true;
+        setHarvestCharges((c) => (c < HARVEST_CHARGES_MAX ? c + 1 : c));
+        setHarvestBounceTrigger((t) => t + 1);
+      }
+      harvestProgressRef.current = next;
+      if (cycled) setHarvestProgress(next);
+      rafId = scheduleNextFrame(tick);
+    };
+    rafId = scheduleNextFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [harvestSpeedLevel, isLoading, activeBoosts]);
+
+  // Harvest tap zoom: TAP_BAR_PERCENT per tap when no charges (fast smooth zoom)
   useEffect(() => {
     const zoom = harvestTapZoomRef.current;
     if (!zoom) return;
@@ -1251,8 +1295,16 @@ export default function App() {
         harvestProgressRef.current = zoom.end;
         harvestTapZoomRef.current = null;
         if (zoom.end >= 100) {
-          setHarvestProgress(100);
-          setIsHarvestFlashing(true);
+          let p = zoom.end;
+          let c = harvestChargesRef.current;
+          while (p >= 100) {
+            p -= 100;
+            if (c < HARVEST_CHARGES_MAX) c++;
+          }
+          harvestProgressRef.current = p;
+          setHarvestProgress(p);
+          setHarvestCharges(c);
+          setHarvestBounceTrigger((t) => t + 1);
         }
         return;
       }
@@ -1262,63 +1314,21 @@ export default function App() {
     return () => cancelAnimationFrame(rafId);
   }, [harvestTapZoomTrigger]);
 
-  // Harvest auto-progress: driven at 60fps via harvestProgressRef for smooth updates. Rapid Harvest boost = 15/min.
+  // Leaf burst when harvest gains first charge (button turns white)
+  const prevHarvestChargesRef = useRef(harvestCharges);
   useEffect(() => {
-    // Don't start progress until loading is complete
-    if (isLoading) return;
-    
-    const hasRapidHarvestBoost = activeBoosts.some(b => b.offerId === 'rapid_harvest');
-    const perMinute = hasRapidHarvestBoost ? 15 : Math.min(10, 3 + harvestSpeedLevel); // Rapid Harvest: 15/min; else 3/min base +1 per upgrade, max 10/min
-    lastHarvestProgressTimeRef.current = Date.now();
-    let rafId: number;
-    const percentPerMs = (perMinute * 100) / (60 * 1000); // % progress per millisecond
-    const tick = () => {
-      if (harvestTapZoomRef.current) {
-        lastHarvestProgressTimeRef.current = Date.now();
-        rafId = scheduleNextFrame(tick);
-        return;
-      }
-      const n = getTickCount60(harvestRaf60LastTickRef);
-      if (n === 0) {
-        rafId = scheduleNextFrame(tick);
-        return;
-      }
-      lastHarvestProgressTimeRef.current = Date.now();
-      const deltaMs = Math.min(n * TARGET_FRAME_MS, 50); // cap for tab backgrounding
-      const added = deltaMs * percentPerMs;
-      const next = Math.min(100, harvestProgressRef.current + added);
-      harvestProgressRef.current = next;
-      if (next >= 100) {
-        setHarvestProgress(100);
-        setIsHarvestFlashing(true);
-      }
-      rafId = scheduleNextFrame(tick);
-    };
-    rafId = scheduleNextFrame(tick);
-    return () => cancelAnimationFrame(rafId);
-  }, [harvestSpeedLevel, isLoading, activeBoosts]);
-
-  // Track previous value to detect when harvest button turns white
-  const prevIsHarvestFlashingRef = useRef(isHarvestFlashing);
-
-  // Trigger leaf burst when harvest button turns white (isHarvestFlashing becomes true)
-  useEffect(() => {
-    const wasNotFlashing = !prevIsHarvestFlashingRef.current;
-    const nowFlashing = isHarvestFlashing;
-    prevIsHarvestFlashingRef.current = isHarvestFlashing;
-    
-    if (wasNotFlashing && nowFlashing && harvestButtonRef.current && !getPerformanceMode()) {
+    const prev = prevHarvestChargesRef.current;
+    prevHarvestChargesRef.current = harvestCharges;
+    if (prev === 0 && harvestCharges > 0 && harvestButtonRef.current && !getPerformanceMode()) {
       const rect = harvestButtonRef.current.getBoundingClientRect();
-      const centerX = rect.left + rect.width / 2;
-      const centerY = rect.top + rect.height / 2;
       setButtonLeafBursts(prev => [...prev, {
         id: `harvest-${Date.now()}`,
-        x: centerX,
-        y: centerY,
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
         startTime: Date.now()
       }]);
     }
-  }, [isHarvestFlashing]);
+  }, [harvestCharges]);
 
   // Helper function to trigger seed button leaf burst (called when shooting a seed)
   const triggerSeedButtonLeafBurst = useCallback(() => {
@@ -1330,6 +1340,18 @@ export default function App() {
         id: `seed-${Date.now()}`,
         x: centerX,
         y: centerY,
+        startTime: Date.now()
+      }]);
+    }
+  }, []);
+
+  const triggerHarvestButtonLeafBurst = useCallback(() => {
+    if (harvestButtonRef.current && !getPerformanceMode()) {
+      const rect = harvestButtonRef.current.getBoundingClientRect();
+      setButtonLeafBursts(prev => [...prev, {
+        id: `harvest-tap-${Date.now()}`,
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
         startTime: Date.now()
       }]);
     }
@@ -1517,20 +1539,38 @@ export default function App() {
 
     if (isSeedFlashing) return;
 
-    // Seed button: flat 20% progress per tap (no decay)
-    const tapPercent = 20;
+    // Seed button: TAP_BAR_PERCENT when empty (no seeds to fire)
+    const tapPercent = TAP_BAR_PERCENT;
     const start = Math.max(0, seedProgressRef.current);
     const totalAfterTap = start + tapPercent;
     
     if (totalAfterTap > 100) {
-      // Tap goes past 100%: add to storage, reset to 0%, then continue with remainder
+      // Tap goes past 100%: add 1 seed (cap storage max). If already full, excess → surplus coin or lost.
       const remainder = totalAfterTap - 100;
+      const surplusValue = getSeedSurplusValue(seedsState);
+      if (seedsInStorage >= seedStorageMax && surplusValue > 0) {
+        const container = containerRef.current;
+        const plantBtn = plantButtonRef.current;
+        const walletIcon = walletIconRef.current;
+        const wallet = walletRef.current;
+        const walletEl = walletIcon || wallet;
+        if (container && plantBtn && walletEl) {
+          const scale = appScaleRef.current;
+          const containerRect = container.getBoundingClientRect();
+          const btnRect = plantBtn.getBoundingClientRect();
+          const startX = (btnRect.left + btnRect.width / 2 - containerRect.left) / scale;
+          const startY = (btnRect.top + btnRect.height / 2 - containerRect.top) / scale;
+          const panelHeightPx = 14;
+          const offsetUp = (panelHeightPx / 2 + 4) * 1.2;
+          const hoverY = (btnRect.top - containerRect.top) / scale - offsetUp;
+          setActiveCoinPanels((p) => [...p, { id: `seed-surplus-tap-${Date.now()}`, value: surplusValue, startX, startY, hoverX: startX, hoverY, moveToWalletDelayMs: 0 }]);
+        }
+      }
       setSeedsInStorage((prev) => Math.min(seedStorageMax, prev + 1));
       seedProgressRef.current = 0;
       setSeedProgress(0);
       setIsSeedFlashing(false);
       setSeedBounceTrigger((t) => t + 1);
-      // Zoom from 0% to remainder (e.g. 5%)
       tapZoomRef.current = { start: 0, end: remainder, startTime: Date.now(), duration: 100 };
       setTapZoomTrigger((n) => n + 1);
     } else {
@@ -1552,15 +1592,50 @@ export default function App() {
 
   const handleHarvestClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isHarvestFlashing) return;
+    if (harvestTapZoomRef.current) return;
 
-    // Add progress per tap with decay: 40% down to 10% based on taps in last 5 seconds
-    const tapPercent = getTapProgressPercent(harvestTapTimestampsRef);
+    if (harvestCharges > 0) {
+      const hasPlant = grid.some((c) => c.item);
+      if (!hasPlant) return;
+      let canSpendCharge = isSurplusSalesUnlocked(harvestState, playerLevel);
+      if (!canSpendCharge) {
+        for (let i = 0; i < goalSlots.length; i++) {
+          if (goalSlots[i] !== 'green' || (goalCounts[i] ?? 0) <= 0) continue;
+          const inFlight = goalInFlightHarvestBySlotRef.current[i] ?? 0;
+          if ((goalCounts[i] ?? 0) - inFlight <= 0) continue;
+          const pt = goalPlantTypes[i] ?? 0;
+          if (grid.some((cell) => cell.item && cell.item.level === pt)) {
+            canSpendCharge = true;
+            break;
+          }
+        }
+      }
+      if (!canSpendCharge) return;
+      performHarvest(0, '');
+      triggerHarvestButtonLeafBurst();
+      setHarvestBounceTrigger((t) => t + 1);
+      setHarvestCharges((c) => Math.max(0, c - 1));
+      setActiveTab('CROPS');
+      return;
+    }
+
+    const tapPercent = TAP_BAR_PERCENT;
     const current = harvestProgressRef.current;
-    const next = Math.min(100, current + tapPercent);
-    harvestTapZoomRef.current = { start: current, end: next, startTime: Date.now(), duration: 100 };
-    setHarvestTapZoomTrigger((t) => t + 1);
-
+    const totalAfter = current + tapPercent;
+    if (totalAfter >= 100) {
+      const remainder = totalAfter - 100;
+      let c = harvestChargesRef.current;
+      if (c < HARVEST_CHARGES_MAX) c++;
+      harvestProgressRef.current = remainder;
+      setHarvestProgress(remainder);
+      setHarvestCharges(c);
+      setHarvestBounceTrigger((t) => t + 1);
+      harvestTapZoomRef.current = { start: 0, end: remainder, startTime: Date.now(), duration: 100 };
+      setHarvestTapZoomTrigger((t) => t + 1);
+    } else {
+      harvestTapZoomRef.current = { start: current, end: totalAfter, startTime: Date.now(), duration: 100 };
+      setHarvestTapZoomTrigger((t) => t + 1);
+    }
     setActiveTab('CROPS');
   };
 
@@ -1635,6 +1710,8 @@ export default function App() {
       const surplusMultiplier = getSurplusSalesMultiplier(harvestState);
       const surplusSalesUnlocked = isSurplusSalesUnlocked(harvestState, playerLevel);
       const allocated: Record<number, number> = {}; // per-slot allocation within this harvest
+      // Snapshot so one performHarvest pass doesn't double-count panels we spawn in this same pass
+      const inFlightAtStart: Record<number, number> = { ...goalInFlightHarvestBySlotRef.current };
       grid.forEach((cell, cellIdx) => {
         if (!cell.item) return;
         const level = cell.item.level;
@@ -1644,7 +1721,7 @@ export default function App() {
               let minRemaining = Infinity;
               goalPlantTypes.forEach((pt, i) => {
                 if (pt !== level || goalSlots[i] !== 'green' || (goalCounts[i] ?? 0) <= 0 || goalsPendingCompletionRef.current.has(i)) return;
-                const remaining = (goalCounts[i] ?? 0) - (allocated[i] ?? 0);
+                const remaining = (goalCounts[i] ?? 0) - (inFlightAtStart[i] ?? 0) - (allocated[i] ?? 0);
                 if (remaining > 0 && remaining < minRemaining) {
                   minRemaining = remaining;
                   best = i;
@@ -1670,7 +1747,8 @@ export default function App() {
 
         if (hasGoalForPlant) {
           allocated[slotIdx] = (allocated[slotIdx] ?? 0) + effectiveCropYield;
-          if ((goalCounts[slotIdx] ?? 0) - (allocated[slotIdx] ?? 0) <= 0) {
+          goalInFlightHarvestBySlotRef.current[slotIdx] = (goalInFlightHarvestBySlotRef.current[slotIdx] ?? 0) + effectiveCropYield;
+          if ((goalCounts[slotIdx] ?? 0) - (inFlightAtStart[slotIdx] ?? 0) - (allocated[slotIdx] ?? 0) <= 0) {
             goalsPendingCompletionRef.current.add(slotIdx);
           }
           const goalCenter = getGoalIconCenter(slotIdx);
@@ -1796,12 +1874,12 @@ export default function App() {
 
     const coinPanelsWithDist: { panel: CoinPanelData; dist: number }[] = [];
     const plantPanelsWithDist: { panel: PlantPanelData; dist: number }[] = [];
-    const cropYieldPerHarvest = getCropYieldPerHarvest(cropsState);
-    const hasDoubleHarvestBoost = activeBoosts.some(b => b.offerId === 'double_harvest');
-    const effectiveCropYield = hasDoubleHarvestBoost ? cropYieldPerHarvest * 2 : cropYieldPerHarvest;
+    /** Chain harvest (merge-adjacent): always 1 crop toward goals; no crop yield, no double-harvest ad */
+    const mergeHarvestCropAmount = 1;
     const surplusMultiplier = getSurplusSalesMultiplier(harvestState);
     const surplusSalesUnlocked = isSurplusSalesUnlocked(harvestState, playerLevel);
     const allocated: Record<number, number> = {};
+    const inFlightAtStartMerge: Record<number, number> = { ...goalInFlightHarvestBySlotRef.current };
 
     const getGoalIconCenter = (slotIdx: number): { x: number; y: number } | null => {
       const iconEl = goalIconRefs[slotIdx]?.current;
@@ -1831,7 +1909,7 @@ export default function App() {
             let minRemaining = Infinity;
             goalPlantTypes.forEach((pt, i) => {
               if (pt !== level || goalSlots[i] !== 'green' || (goalCounts[i] ?? 0) <= 0 || goalsPendingCompletionRef.current.has(i)) return;
-              const remaining = (goalCounts[i] ?? 0) - (allocated[i] ?? 0);
+              const remaining = (goalCounts[i] ?? 0) - (inFlightAtStartMerge[i] ?? 0) - (allocated[i] ?? 0);
               if (remaining > 0 && remaining < minRemaining) {
                 minRemaining = remaining;
                 best = i;
@@ -1856,8 +1934,9 @@ export default function App() {
       const hoverY = hexTopY - offsetUp;
 
       if (hasGoalForPlant) {
-        allocated[slotIdx] = (allocated[slotIdx] ?? 0) + effectiveCropYield;
-        if ((goalCounts[slotIdx] ?? 0) - (allocated[slotIdx] ?? 0) <= 0) {
+        allocated[slotIdx] = (allocated[slotIdx] ?? 0) + mergeHarvestCropAmount;
+        goalInFlightHarvestBySlotRef.current[slotIdx] = (goalInFlightHarvestBySlotRef.current[slotIdx] ?? 0) + mergeHarvestCropAmount;
+        if ((goalCounts[slotIdx] ?? 0) - (inFlightAtStartMerge[slotIdx] ?? 0) - (allocated[slotIdx] ?? 0) <= 0) {
           goalsPendingCompletionRef.current.add(slotIdx);
         }
         const goalCenter = getGoalIconCenter(slotIdx);
@@ -1869,7 +1948,7 @@ export default function App() {
             id: `merge-plant-${cellIdx}-${mergeNow}-${Math.random().toString(36).slice(2)}`,
             goalSlotIdx: slotIdx,
             iconSrc: getGoalIconForPlantLevel(plantLevel),
-            harvestAmount: effectiveCropYield,
+            harvestAmount: mergeHarvestCropAmount,
             startX,
             startY,
             hoverX,
@@ -1882,7 +1961,7 @@ export default function App() {
         let value = baseValue;
         if (cell.fertile) value *= 2;
         value = Math.floor(value * surplusMultiplier);
-        if (hasDoubleHarvestBoost) value *= 2;
+        /* no double_harvest ad on chain harvest */
         const dist = Math.hypot(hoverX - walletCenterX, hoverY - walletCenterY);
         coinPanelsWithDist.push({
           dist,
@@ -1950,23 +2029,7 @@ export default function App() {
 
     setHarvestBounceCellIndices(triggeredCells);
     setTimeout(() => setHarvestBounceCellIndices([]), 250);
-  }, [grid, cropsState, goalSlots, goalCounts, goalPlantTypes, harvestState, playerLevel, activeBoosts]);
-
-  /**
-   * At 100% harvest progress: perform harvest (spawn coin panels, leaf bursts), flash white, reset to 0%.
-   */
-  useEffect(() => {
-    if (harvestProgress !== 100 || !isHarvestFlashing) return;
-    
-    // Perform harvest and trigger bounce
-    performHarvest(0, '');
-    setHarvestBounceTrigger((t) => t + 1);
-
-    // Reset to 0% and continue auto-progress
-    harvestProgressRef.current = 0;
-    setHarvestProgress(0);
-    setTimeout(() => setIsHarvestFlashing(false), 300);
-  }, [harvestProgress, isHarvestFlashing, performHarvest]);
+  }, [grid, goalSlots, goalCounts, goalPlantTypes, harvestState, playerLevel]);
 
   // Called by HexBoard when starting a merge to calculate level increase
   const getMergeLevelIncrease = useCallback((_currentPlantLevel: number) => {
@@ -2027,6 +2090,82 @@ export default function App() {
       const mergeHarvestChance = getMergeHarvestChance(cropsState);
       if (mergeHarvestChance > 0) {
         performMergeHarvest(targetIdx, mergeHarvestChance, sourceIdx);
+      }
+      // Harvest bar: MERGE_BAR_PERCENT per merge
+      {
+        let p = harvestProgressRef.current + MERGE_BAR_PERCENT;
+        let c = harvestChargesRef.current;
+        while (p >= 100) {
+          p -= 100;
+          if (c < HARVEST_CHARGES_MAX) c++;
+        }
+        harvestProgressRef.current = p;
+        setHarvestProgress(p);
+        setHarvestCharges(c);
+        setHarvestBounceTrigger((t) => t + 1);
+      }
+      // Seed bar: MERGE_BAR_PERCENT per merge
+      {
+        const seedMergeDelta = MERGE_BAR_PERCENT;
+        let sp = tapZoomRef.current ? tapZoomRef.current.end : seedProgressRef.current;
+        sp += seedMergeDelta;
+        if (sp >= 100) {
+          const remainder = sp - 100;
+          const surplusValue = getSeedSurplusValue(seedsState);
+          const maxCap = getSeedStorageMax(seedsState);
+          setSeedsInStorage((prev) => {
+            const wasFull = prev >= maxCap;
+            const next = Math.min(maxCap, prev + 1);
+            if (wasFull && surplusValue > 0) {
+              const container = containerRef.current;
+              const plantBtn = plantButtonRef.current;
+              const walletIcon = walletIconRef.current;
+              const wallet = walletRef.current;
+              const walletEl = walletIcon || wallet;
+              if (container && plantBtn && walletEl) {
+                const scale = appScaleRef.current;
+                const containerRect = container.getBoundingClientRect();
+                const btnRect = plantBtn.getBoundingClientRect();
+                const startX = (btnRect.left + btnRect.width / 2 - containerRect.left) / scale;
+                const startY = (btnRect.top + btnRect.height / 2 - containerRect.top) / scale;
+                const panelHeightPx = 14;
+                const offsetUp = (panelHeightPx / 2 + 4) * 1.2;
+                const hoverY = (btnRect.top - containerRect.top) / scale - offsetUp;
+                queueMicrotask(() =>
+                  setActiveCoinPanels((p) => [
+                    ...p,
+                    {
+                      id: `seed-surplus-merge-${Date.now()}`,
+                      value: surplusValue,
+                      startX,
+                      startY,
+                      hoverX: startX,
+                      hoverY,
+                      moveToWalletDelayMs: 0,
+                    },
+                  ])
+                );
+              }
+            }
+            return next;
+          });
+          seedProgressRef.current = remainder;
+          setSeedProgress(remainder);
+          setIsSeedFlashing(false);
+          tapZoomRef.current =
+            remainder > 0 ? { start: 0, end: remainder, startTime: Date.now(), duration: 100 } : null;
+          setTapZoomTrigger((n) => n + 1);
+          setSeedBounceTrigger((t) => t + 1);
+        } else {
+          seedProgressRef.current = sp;
+          setSeedProgress(sp);
+          if (tapZoomRef.current) {
+            tapZoomRef.current.end = sp;
+          } else {
+            tapZoomRef.current = { start: sp - seedMergeDelta, end: sp, startTime: Date.now(), duration: 100 };
+          }
+          setTapZoomTrigger((n) => n + 1);
+        }
       }
     }
   };
@@ -2510,10 +2649,12 @@ export default function App() {
                         progressRef={harvestProgressRef}
                         color="#a7c957"
                         isActive={activeTab === 'HARVEST' && isExpanded}
-                        isFlashing={isHarvestFlashing}
+                        isFlashing={harvestCharges > 0}
                         shouldAnimate={true}
                         isBoardFull={false}
                         noRotateOnFlash={true}
+                        storageCount={harvestCharges}
+                        storageMax={HARVEST_CHARGES_MAX}
                         bounceTrigger={harvestBounceTrigger}
                         iconScale={1.5}
                         onClick={handleHarvestClick}
@@ -2576,7 +2717,8 @@ export default function App() {
                               let minRemaining = Infinity;
                               goalPlantTypes.forEach((pt, i) => {
                                 if (pt !== mergeResultLevel || goalSlots[i] !== 'green' || (goalCounts[i] ?? 0) <= 0 || goalsPendingCompletionRef.current.has(i)) return;
-                                const remaining = goalCounts[i] ?? 0;
+                                const inFlight = goalInFlightHarvestBySlotRef.current[i] ?? 0;
+                                const remaining = (goalCounts[i] ?? 0) - inFlight;
                                 if (remaining > 0 && remaining < minRemaining) {
                                   minRemaining = remaining;
                                   best = i;
@@ -2587,9 +2729,8 @@ export default function App() {
                           : -1;
                         const hasGoalForPlant = slotIdx >= 0;
                         const surplusSalesUnlocked = isSurplusSalesUnlocked(harvestState, playerLevel);
-                        const hasDoubleHarvestBoost = activeBoosts.some(b => b.offerId === 'double_harvest');
-                        const baseCropYield = getCropYieldPerHarvest(cropsState);
-                        const harvestAmount = hasDoubleHarvestBoost ? baseCropYield * 2 : baseCropYield;
+                        /** Merge result cell auto-harvest: 1 crop only; no crop yield / double-harvest ad */
+                        const harvestAmount = 1;
                         const hexEl = document.getElementById(`hex-${cellIdx}`);
                         const panelHeightPx = 14;
                         const offsetUp = (panelHeightPx / 2 + 4) * 0.4;
@@ -2598,7 +2739,8 @@ export default function App() {
                           ? ((hexEl.getBoundingClientRect().top - rect.top) / scale) - offsetUp
                           : py - offsetUp;
                         if (hasGoalForPlant) {
-                          if ((goalCounts[slotIdx] ?? 0) - harvestAmount <= 0) {
+                          goalInFlightHarvestBySlotRef.current[slotIdx] = (goalInFlightHarvestBySlotRef.current[slotIdx] ?? 0) + harvestAmount;
+                          if ((goalCounts[slotIdx] ?? 0) - (goalInFlightHarvestBySlotRef.current[slotIdx] ?? 0) <= 0) {
                             goalsPendingCompletionRef.current.add(slotIdx);
                           }
                           const plantLevel = goalPlantTypes[slotIdx] ?? slotIdx + 1;
@@ -2622,7 +2764,7 @@ export default function App() {
                           if (cell?.fertile) baseValue *= 2;
                           const surplusMultiplier = getSurplusSalesMultiplier(harvestState);
                           let value = Math.floor(baseValue * surplusMultiplier);
-                          if (hasDoubleHarvestBoost) value *= 2;
+                          /* no double_harvest ad on merge-impact surplus */
                           setActiveCoinPanels((prev) => [
                             ...prev,
                             {
@@ -3054,7 +3196,7 @@ export default function App() {
                 isVisible={discoveryPopup.isVisible}
                 onClose={() => { lastOtherPopupClosedAtRef.current = Date.now(); setDiscoveryPopup(null); }}
                 title="New Discovery"
-                imageSrc={assetPath(`/assets/plants/plant_${Math.min(discoveryPopup.level, 14)}.png`)}
+                imageSrc={assetPath(`/assets/plants/plant_${Math.max(1, Math.min(24, discoveryPopup.level))}.png`)}
                 imageLevel={discoveryPopup.level}
                 subtitle={getPlantData(discoveryPopup.level).name}
                 description={getPlantData(discoveryPopup.level).description}
@@ -3259,6 +3401,11 @@ export default function App() {
               isVisible={pauseMenuOpen}
               onClose={() => {
                 setPauseMenuOpen(false);
+                const plantLevelToDiscover = discoveryLevelAfterPauseCloseRef.current;
+                discoveryLevelAfterPauseCloseRef.current = null;
+                if (plantLevelToDiscover != null) {
+                  setDiscoveryPopup({ isVisible: true, level: plantLevelToDiscover });
+                }
                 setLevelUpPopupQueue((q) => {
                   if (q.length > 0) {
                     setLevelUpPopup({ isVisible: true, level: q[0] });
@@ -3281,6 +3428,16 @@ export default function App() {
                 if (nextLevel <= 12) {
                   setLevelUpPopupQueue((q) => [...q, nextLevel]);
                 }
+              }}
+              canUnlockPlant={highestPlantEver < 24}
+              onUnlockPlantClick={() => {
+                if (highestPlantEver >= 24) return;
+                const newLevel = highestPlantEver + 1;
+                setHighestPlantEver(newLevel);
+                highestPlantEverRef.current = newLevel;
+                newGoalsSinceDiscoveryRef.current = 0;
+                lastMergeDiscoveryLevelRef.current = newLevel;
+                discoveryLevelAfterPauseCloseRef.current = newLevel; // latest only; popup when pause closes
               }}
               closeOnBackdropClick
               appScale={appScale}
@@ -3395,6 +3552,7 @@ export default function App() {
               targetRef={goalIconRefs[panel.goalSlotIdx]}
               appScale={appScale}
               onImpact={(goalSlotIdx, amount) => {
+                goalInFlightHarvestBySlotRef.current[goalSlotIdx] = Math.max(0, (goalInFlightHarvestBySlotRef.current[goalSlotIdx] ?? 0) - amount);
                 goalsPendingCompletionRef.current.delete(goalSlotIdx);
                 setGoalBounceSlots((prev) => prev.includes(goalSlotIdx) ? prev : [...prev, goalSlotIdx]);
                 setGoalImpactSlots((prev) => prev.includes(goalSlotIdx) ? prev : [...prev, goalSlotIdx]);

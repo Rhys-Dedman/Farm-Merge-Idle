@@ -27,10 +27,18 @@ export const isBonusSeedMaxed = (seedsState: SeedsState): boolean => {
   return level >= 10; // Max at level 10 (50%)
 };
 
-/** Seed Storage: cap at 10 (1 + level, so level 9 = 10). */
+/** Storage Capacity: base 5 + level, max 15 (levels 0–10). */
+export const SEED_STORAGE_BASE = 5;
+export const SEED_STORAGE_MAX_CAP = 15;
+
+export const getSeedStorageMax = (seedsState: SeedsState): number => {
+  const level = seedsState?.seed_storage?.level ?? 0;
+  return Math.min(SEED_STORAGE_MAX_CAP, SEED_STORAGE_BASE + level);
+};
+
 export const isSeedStorageMaxed = (seedsState: SeedsState): boolean => {
   const level = seedsState?.seed_storage?.level ?? 0;
-  return level >= 9;
+  return SEED_STORAGE_BASE + level >= SEED_STORAGE_MAX_CAP;
 };
 
 /** Get the merge harvest chance percentage (5% per level, chance to harvest adjacent crops on merge) */
@@ -152,15 +160,15 @@ const SEEDS_UPGRADES: UpgradeDef[] = [
 
 const SEEDS_UNLOCK_LEVELS: Record<string, number> = {
   seed_production: 1,
-  seed_storage: 2,
+  seed_storage: 2, // Storage Capacity: unlocks at level 2
   seed_surplus: 6,
   bonus_seeds: 9,
 };
 
 const CROPS_UNLOCK_LEVELS: Record<string, number> = {
   harvest_speed: 1,
-  plot_expansion: 7,
-  crop_value: 3,
+  plot_expansion: 3, // Garden Expansion unlocks at player level 3
+  crop_value: 7, // Crop Yield unlocks at player level 7
   fertile_soil: 12,
   merge_harvest: 10,
 };
@@ -234,12 +242,12 @@ const calculateUpgradeCost = (upgradeId: string, currentLevel: number): number =
 /** Get level unlock info for level-up popup. Returns title, description, icon, and optionally upgradeId/tab for Unlock Now behavior. */
 export const getLevelUnlockInfo = (level: number): { title: string; description: string; icon: string; upgradeId?: string; tab?: TabType } => {
   const allUnlocks: { level: number; upgradeId: string; tab: TabType; name: string; description: string; icon: string; popupDescription?: string }[] = [
-    { level: 2, upgradeId: 'seed_storage', tab: 'SEEDS', name: 'Storage Capacity', description: 'Increase the amount of seeds you can store', icon: 'icon_seedstorage.png' },
-    { level: 3, upgradeId: 'crop_value', tab: 'CROPS', name: 'Crop Yield', description: 'harvest more crops from each plant', icon: 'icon_cropvalue.png', popupDescription: 'You can now increase the number of crops harvested from each plant' },
+    { level: 2, upgradeId: 'seed_storage', tab: 'SEEDS', name: 'Storage Capacity', description: 'Increase the amount of seeds you can store', icon: 'icon_seedstorage.png', popupDescription: 'You can now increase the amount of seeds you can store' },
+    { level: 3, upgradeId: 'plot_expansion', tab: 'CROPS', name: 'Garden Expansion', description: 'Unlock additional plots in the garden', icon: 'icon_plotexpansion.png', popupDescription: 'You can now unlock additional plots in the garden' },
     { level: 4, upgradeId: 'market_value', tab: 'HARVEST', name: 'Market Value', description: 'Increase the coins earned when completing orders', icon: 'icon_marketvalue.png' },
     { level: 5, upgradeId: '', tab: 'HARVEST', name: 'Extra Orders', description: 'You can now hold +1 extra order at a time', icon: 'icon_extracustomer.png' },
     { level: 6, upgradeId: 'seed_surplus', tab: 'SEEDS', name: 'Surplus Seeds', description: 'Extra seeds become coins when storage is full', icon: 'icon_seedsurplus.png', popupDescription: 'Extra seeds will now become coins when your storage is full' },
-    { level: 7, upgradeId: 'plot_expansion', tab: 'CROPS', name: 'Garden Expansion', description: 'Unlock additional plots in the garden', icon: 'icon_plotexpansion.png' },
+    { level: 7, upgradeId: 'crop_value', tab: 'CROPS', name: 'Crop Yield', description: 'harvest more crops from each plant', icon: 'icon_cropvalue.png', popupDescription: 'You can now increase the number of crops harvested from each plant' },
     { level: 8, upgradeId: 'surplus_sales', tab: 'HARVEST', name: 'Surplus Sales', description: 'Increase the coins earned from surplus plants', icon: 'icon_surplussales.png', popupDescription: 'Plants without matching orders can now be harvested for coins' },
     { level: 9, upgradeId: 'bonus_seeds', tab: 'SEEDS', name: 'Lucky Seed', description: 'Increase the chance for seeds to grow an extra plant', icon: 'icon_luckyseed.png' },
     { level: 10, upgradeId: 'merge_harvest', tab: 'CROPS', name: 'Chain Harvest', description: 'Increase chance for merges to harvest nearby plants', icon: 'icon_mergeharvest.png', popupDescription: 'Merging now has a chance to instantly harvest nearby plants' },
@@ -265,8 +273,8 @@ const ICON_LOCK = assetPath('/assets/icons/icon_lock.png');
 
 const CROPS_UPGRADES: UpgradeDef[] = [
   { id: 'harvest_speed', name: 'Harvest Speed', icon: assetPath('/assets/icons/icon_harvestspeed.png'), description: 'Increase automatic harvest cycle speed' },
-  { id: 'crop_value', name: 'Crop Yield', icon: assetPath('/assets/icons/icon_cropvalue.png'), description: 'Plants produce more crops per harvest' },
   { id: 'plot_expansion', name: 'Garden Expansion', icon: assetPath('/assets/icons/icon_plotexpansion.png'), description: 'Unlock additional plots in the garden' },
+  { id: 'crop_value', name: 'Crop Yield', icon: assetPath('/assets/icons/icon_cropvalue.png'), description: 'Plants produce more crops per harvest' },
   { id: 'merge_harvest', name: 'Chain Harvest', icon: assetPath('/assets/icons/icon_mergeharvest.png'), description: 'Increase chance for merges to harvest nearby plants' },
   { id: 'fertile_soil', name: 'Fertile Soil', icon: assetPath('/assets/icons/icon_fetilesoil.png'), description: 'Fertile plots yield double crops when harvested' },
 ];
@@ -293,7 +301,7 @@ const getSeedsUpgradeValue = (upgradeId: string, level: number, seedsState?: See
     case 'seed_production':
       return `${Math.min(10, 3 + level)}/min`;
     case 'seed_storage':
-      return `${Math.min(10, 1 + level)}`; // +1 per upgrade, cap 10
+      return `${Math.min(SEED_STORAGE_MAX_CAP, SEED_STORAGE_BASE + level)}`;
     case 'bonus_seeds':
       return `${level * 5}%`;
     case 'seed_surplus':

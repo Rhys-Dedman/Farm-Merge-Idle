@@ -12,6 +12,10 @@ interface PauseMenuPopupProps {
   onRewardedAdClick: () => void;
   /** Level Up: same as + next to player level – 1 goal XP per tap. Does not close pause menu. */
   onLevelUpClick: () => void;
+  /** Dev/cheat: unlock next plant in background; pause stays open. Discovery shows on pause close (latest only). */
+  onUnlockPlantClick?: () => void;
+  /** When false, Unlock Plant button is disabled (all plants unlocked) */
+  canUnlockPlant?: boolean;
   closeOnBackdropClick?: boolean;
   appScale?: number;
 }
@@ -27,12 +31,15 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   onClose,
   onRewardedAdClick,
   onLevelUpClick,
+  onUnlockPlantClick,
+  canUnlockPlant = true,
   closeOnBackdropClick = true,
   appScale = 1,
 }) => {
   const [animState, setAnimState] = useState<'hidden' | 'entering' | 'visible' | 'leaving'>('hidden');
   const [rewardedPressed, setRewardedPressed] = useState(false);
   const [levelUpPressed, setLevelUpPressed] = useState(false);
+  const [unlockPlantPressed, setUnlockPlantPressed] = useState(false);
   const [performanceMode, setPerformanceModeLocal] = useState(false);
 
   useEffect(() => {
@@ -245,6 +252,45 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                     Level Up
                   </span>
                 </button>
+                {onUnlockPlantClick ? (
+                  <button
+                    type="button"
+                    disabled={!canUnlockPlant}
+                    onMouseDown={() => canUnlockPlant && setUnlockPlantPressed(true)}
+                    onMouseUp={() => setUnlockPlantPressed(false)}
+                    onMouseLeave={() => setUnlockPlantPressed(false)}
+                    onClick={() => {
+                      if (!canUnlockPlant || !onUnlockPlantClick) return;
+                      onUnlockPlantClick();
+                    }}
+                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                    style={{
+                      height: '40px',
+                      opacity: canUnlockPlant ? 1 : 0.45,
+                      cursor: canUnlockPlant ? 'pointer' : 'not-allowed',
+                      backgroundColor: unlockPlantPressed && canUnlockPlant ? buttonPressedBg : buttonBgColor,
+                      border: `3px solid ${buttonBorderColor}`,
+                      borderRadius: '16px',
+                      boxShadow:
+                        unlockPlantPressed && canUnlockPlant
+                          ? 'inset 0 3px 6px rgba(0,0,0,0.15)'
+                          : `0 6px 0 ${buttonBorderColor}, 0 8px 16px rgba(0,0,0,0.15)`,
+                      transform: unlockPlantPressed && canUnlockPlant ? 'translateY(3px)' : 'translateY(0)',
+                    }}
+                  >
+                    <span
+                      className="font-bold tracking-tight"
+                      style={{
+                        color: buttonTextColor,
+                        fontFamily: 'Inter, sans-serif',
+                        textShadow: '0 1px 0 rgba(255,255,255,0.3)',
+                        fontSize: '0.875rem',
+                      }}
+                    >
+                      Unlock plant
+                    </span>
+                  </button>
+                ) : null}
               </div>
             </div>
           </div>
