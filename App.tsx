@@ -30,6 +30,7 @@ import { ButtonLeafBurst } from './components/ButtonLeafBurst';
 import { LoadingScreen } from './components/LoadingScreen';
 import { FtuePopup } from './components/FtuePopup';
 import { Ftue2Overlay } from './components/Ftue2Overlay';
+import { Ftue3Overlay } from './components/Ftue3Overlay';
 import { TabType, ScreenType, BoardCell, Item, DragState } from './types';
 import type { FtueStageId } from './ftue/ftueConfig';
 import { assetPath } from './utils/assetPath';
@@ -461,6 +462,8 @@ export default function App() {
   const [ftue2SeedFireCount, setFtue2SeedFireCount] = useState(0);
   /** FTUE_2: true when fading out finger + text after 2 seeds */
   const [ftue2FadingOut, setFtue2FadingOut] = useState(false);
+  /** FTUE_3: true when fading out finger + textbox after successful 4→13 merge */
+  const [ftue3FadingOut, setFtue3FadingOut] = useState(false);
   /** FTUE_2: seed button rect for overlay hole + finger + text position */
   const [seedButtonRect, setSeedButtonRect] = useState<DOMRect | null>(null);
   /** FTUE: hide player level section until we reveal it (set to true when ready) */
@@ -469,8 +472,8 @@ export default function App() {
   const [ftueUpgradePanelVisible, setFtueUpgradePanelVisible] = useState(false);
   /** FTUE: hide seeds button during loading and welcome; reveal when FTUE_2 (seed_tap) shows. Hidden from first frame so no fade-in flash. */
   const ftueHideSeedsButton = isLoading || activeFtueStage === 'welcome';
-  /** FTUE: hide harvest button during loading and welcome/seed_tap (and future ftue3/ftue4). Hidden from first frame so no fade-in flash. */
-  const ftueHideHarvestButton = isLoading || activeFtueStage === 'welcome' || activeFtueStage === 'seed_tap';
+  /** FTUE: hide harvest button during loading and welcome/seed_tap/merge_drag (and future ftue4). Hidden from first frame so no fade-in flash. */
+  const ftueHideHarvestButton = isLoading || activeFtueStage === 'welcome' || activeFtueStage === 'seed_tap' || activeFtueStage === 'merge_drag';
   const [pendingUnlockUpgradeId, setPendingUnlockUpgradeId] = useState<string | null>(null);
   const nextWalletBurstIdRef = useRef(0);
   const nextGoalCoinBurstIdRef = useRef(0);
@@ -1569,7 +1572,10 @@ export default function App() {
         if (activeFtueStage === 'seed_tap') {
           setFtue2SeedFireCount((c) => {
             const next = c + 1;
-            if (next >= 2) setFtue2FadingOut(true);
+            if (next >= 2) {
+              setFtue2FadingOut(true);
+              setTimeout(() => setActiveFtueStage('merge_drag'), 750); // Delay before FTUE_3
+            }
             return next;
           });
         }
@@ -2106,6 +2112,11 @@ export default function App() {
     const source = grid[sourceIdx];
     const target = grid[targetIdx];
     const willMerge = source.item && target.item && target.item.level === source.item.level;
+
+    // FTUE_3: successful drag 4→13 merge → fade out finger + textbox
+    if (activeFtueStage === 'merge_drag' && sourceIdx === 4 && targetIdx === 13 && willMerge) {
+      setFtue3FadingOut(true);
+    }
     
     // Use the level increase that was calculated when the merge started (by HexBoard calling getMergeLevelIncrease)
     const levelIncrease = pendingMergeLevelIncreaseRef.current;
@@ -2760,6 +2771,7 @@ export default function App() {
                     unlockingCellIndices={unlockingCellIndices}
                     fertilizingCellIndices={fertilizingCellIndices}
                     appScale={appScale}
+                    ftue3OnlyMerge4To13={activeFtueStage === 'merge_drag'}
                     onMergeImpactStart={(cellIdx, px, py, mergeResultLevel) => {
                       const container = containerRef.current;
                       if (!container) return;
@@ -3237,9 +3249,19 @@ export default function App() {
                 isFadingOut={ftue2FadingOut}
                 seedFireCount={ftue2SeedFireCount}
                 onFadeOutComplete={() => {
-                  setActiveFtueStage(null);
                   setFtue2FadingOut(false);
                   setFtue2SeedFireCount(0);
+                }}
+              />
+            )}
+            {/* FTUE_3: finger slides 4→13, textbox "Merge these two plants together"; only valid move is drag 4→13; fades out on merge */}
+            {(activeFtueStage === 'merge_drag' || ftue3FadingOut) && (
+              <Ftue3Overlay
+                isActive={activeFtueStage === 'merge_drag'}
+                isFadingOut={ftue3FadingOut}
+                onFadeOutComplete={() => {
+                  setActiveFtueStage(null);
+                  setFtue3FadingOut(false);
                 }}
               />
             )}
@@ -3303,11 +3325,11 @@ export default function App() {
                 imageLevel={discoveryPopup.level}
                 subtitle={getPlantData(discoveryPopup.level).name}
                 description={getPlantData(discoveryPopup.level).description}
-                buttonText="Add to Shed"
+                buttonText={discoveryPopup.level === 2 ? 'Excellent!' : 'Add to Shed'}
                 showCloseButton={false}
                 closeOnBackdropClick={false}
                 appScale={appScale}
-                onButtonClick={(buttonRect) => {
+                onButtonClick={discoveryPopup.level === 2 ? undefined : (buttonRect) => {
                   const container = containerRef.current;
                   if (!container) return;
                   const scale = appScaleRef.current;

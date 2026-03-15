@@ -51,6 +51,8 @@ interface HexBoardProps {
   appScale?: number;
   /** Called when a plant is deleted by dropping outside hex cells */
   onDeletePlant?: (cellIdx: number, x: number, y: number) => void;
+  /** FTUE_3: when true, only allow drag from cell 4 to cell 13 (merge). Any other drop returns plant to 4. */
+  ftue3OnlyMerge4To13?: boolean;
 }
 
 // Increase when you add more plant_N.png. Merge level N uses plant_N (e.g. two plant_1 → plant_2).
@@ -92,6 +94,7 @@ export const HexBoard: React.FC<HexBoardProps> = ({
   fertilizingCellIndices = [],
   appScale = 1,
   onDeletePlant,
+  ftue3OnlyMerge4To13 = false,
 }) => {
   const liftStartRef = useRef<number>(0);
   const flyStartRef = useRef<number>(0);
@@ -270,7 +273,18 @@ export const HexBoard: React.FC<HexBoardProps> = ({
         const droppedOnSameCell = targetIdx === dragState.cellIdx;
         // Check for swap: dropping on a plant that can't merge (different level)
         const isSwapTarget = targetIdx != null && targetIdx !== dragState.cellIdx && !isLocked && targetCell?.item && targetCell.item.level !== dragState.item.level;
-        
+
+        // FTUE_3: only allow drag from cell 4 to cell 13 (merge). Any other drop returns plant to 4.
+        if (ftue3OnlyMerge4To13 && dragState.cellIdx === 4) {
+          onReleaseFromCell(dragState.cellIdx);
+          if (targetIdx === 13 && isValidMerge) {
+            startFlyBack(releaseState, 13, true, false);
+          } else {
+            startFlyBack(releaseState);
+          }
+          return;
+        }
+
         if (isValidMerge) {
           onReleaseFromCell(dragState.cellIdx);
           startFlyBack(releaseState, targetIdx!, true, false);
@@ -302,7 +316,7 @@ export const HexBoard: React.FC<HexBoardProps> = ({
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onCancel);
     };
-  }, [dragState, getCellIndexUnderPoint, grid, startFlyBack, containerRef]);
+  }, [dragState, getCellIndexUnderPoint, grid, startFlyBack, containerRef, ftue3OnlyMerge4To13]);
 
   // Lift + scale-up: scale 0→1 over SCALE_UP_MS (fast), lift 0→1 over LIFT_MS
   useEffect(() => {

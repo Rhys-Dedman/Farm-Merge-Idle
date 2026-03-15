@@ -3,7 +3,7 @@
  * Each stage has: name, description (shown/hidden to player), behaviour, trigger.
  */
 
-export type FtueStageId = 'welcome' | 'seed_tap';
+export type FtueStageId = 'welcome' | 'seed_tap' | 'merge_drag';
 
 export type FtueDescriptionVisibility = 'shown' | 'hidden';
 
@@ -32,7 +32,16 @@ export const FTUE_2: FtueStageDef = {
   trigger: 'after_ftue1_close',
 };
 
+/** FTUE_3: Merge drag – finger slides from cell 4 to 13; only valid move is drag plant from 4 to 13. */
+export const FTUE_3: FtueStageDef = {
+  id: 'merge_drag',
+  name: 'Merge Drag',
+  descriptionVisibility: 'shown',
+  trigger: 'after_ftue2_close',
+};
+
 export const FTUE_STAGES: Record<FtueStageId, FtueStageDef> = {
   welcome: FTUE_1,
   seed_tap: FTUE_2,
+  merge_drag: FTUE_3,
 };
