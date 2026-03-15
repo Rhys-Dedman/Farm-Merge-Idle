@@ -268,7 +268,7 @@ export const SideAction: React.FC<SideActionProps> = ({
             style={{ 
               strokeDashoffset: useRefDrive ? refDriveOffset : strokeDashoffset,
               transition: useRefDrive ? 'stroke 0.3s ease' : `${transitionStyle}, stroke 0.3s ease`,
-              transform: 'rotate(-90deg)',
+              transform: 'rotate(90deg)',
               transformOrigin: '50% 50%',
               opacity: (clampedProgress >= 1 && !isFlashing) ? 0 : 1
             }}
@@ -301,7 +301,7 @@ export const SideAction: React.FC<SideActionProps> = ({
             style={{ 
               strokeDashoffset: useRefDrive ? whiteRefDriveOffset : (isFlashing ? whiteStrokeDashoffset : whiteCircumference),
               transition: useRefDrive ? 'opacity 0.3s ease' : `opacity 0.3s ease, stroke-dashoffset 0.08s cubic-bezier(0.25, 0.1, 0.25, 1)`,
-              transform: 'rotate(-90deg)',
+              transform: 'rotate(90deg)',
               transformOrigin: '50% 50%',
               opacity: isFlashing ? 1 : 0
             }}

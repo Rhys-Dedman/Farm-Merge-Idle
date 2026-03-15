@@ -1,0 +1,38 @@
+/**
+ * FTUE (First Time User Experience) config.
+ * Each stage has: name, description (shown/hidden to player), behaviour, trigger.
+ */
+
+export type FtueStageId = 'welcome' | 'seed_tap';
+
+export type FtueDescriptionVisibility = 'shown' | 'hidden';
+
+export interface FtueStageDef {
+  id: FtueStageId;
+  name: string;
+  /** Whether description is shown in a textbox or hidden */
+  descriptionVisibility: FtueDescriptionVisibility;
+  /** Trigger that causes this stage to show (e.g. 'after_splash') */
+  trigger: string;
+}
+
+/** FTUE_1: Welcome Message – shown after splash/loading. */
+export const FTUE_1: FtueStageDef = {
+  id: 'welcome',
+  name: 'Welcome Message',
+  descriptionVisibility: 'shown',
+  trigger: 'after_splash',
+};
+
+/** FTUE_2: Tap Seeds – text + finger above seed button; must tap 2x to plant 2 seeds. */
+export const FTUE_2: FtueStageDef = {
+  id: 'seed_tap',
+  name: 'Tap Seeds',
+  descriptionVisibility: 'shown',
+  trigger: 'after_ftue1_close',
+};
+
+export const FTUE_STAGES: Record<FtueStageId, FtueStageDef> = {
+  welcome: FTUE_1,
+  seed_tap: FTUE_2,
+};

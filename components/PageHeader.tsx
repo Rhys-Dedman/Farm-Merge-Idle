@@ -29,6 +29,8 @@ interface PageHeaderProps {
   };
   /** When set, shows gift button to the right of coin panel */
   onGiftClick?: () => void;
+  /** When true, player level section is invisible and untappable (FTUE hide until we reveal) */
+  hidePlayerLevel?: boolean;
   /** Player level progress (0 to goalsRequired) */
   playerLevel?: number;
   playerLevelProgress?: number;
@@ -71,6 +73,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   onWalletClick,
   plantWallet,
   onGiftClick,
+  hidePlayerLevel = false,
   playerLevel = 1,
   playerLevelProgress = 0,
   playerLevelFlashTrigger = 0,
@@ -251,7 +254,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                 {formatMoney(money)}
               </span>
             </button>
-            {/* Player level: 155px wide, icon + progress bar (overflow-visible so icon isn't masked) - fixed size */}
+            {/* Player level: 155px wide, icon + progress bar (overflow-visible so icon isn't masked) - fixed size; hidden when hidePlayerLevel (FTUE) */}
             <div
               className="relative inline-flex items-center rounded-full border flex-shrink-0 overflow-visible"
               style={{
@@ -262,6 +265,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                 backgroundColor: '#775041',
                 borderWidth: 1,
                 borderColor: '#e9dcaf',
+                ...(hidePlayerLevel && { visibility: 'hidden' as const, pointerEvents: 'none' as const }),
               }}
             >
               <span className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center justify-center leading-none -ml-3 pointer-events-none z-10 w-[30px] h-[30px]">

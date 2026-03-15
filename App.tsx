@@ -28,7 +28,10 @@ import { ActiveBoostData, ACTIVE_BOOST_INDICATOR_SIZE_PX } from './components/Ac
 import { UpgradeTabsRef } from './components/UpgradeTabs';
 import { ButtonLeafBurst } from './components/ButtonLeafBurst';
 import { LoadingScreen } from './components/LoadingScreen';
+import { FtuePopup } from './components/FtuePopup';
+import { Ftue2Overlay } from './components/Ftue2Overlay';
 import { TabType, ScreenType, BoardCell, Item, DragState } from './types';
+import type { FtueStageId } from './ftue/ftueConfig';
 import { assetPath } from './utils/assetPath';
 import { getTickCount60, TARGET_FRAME_MS, scheduleNextFrame } from './utils/raf60';
 import { getPerformanceMode } from './utils/performanceMode';
@@ -270,6 +273,10 @@ const getHexDistance = (q: number, r: number): number => {
   return (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2;
 };
 
+/** FTUE_2: first two seeds always land in these two cells (4 and 13). Order doesn't matter. */
+const FTUE_2_SEED_CELL_A = 4;
+const FTUE_2_SEED_CELL_B = 13;
+
 const generateInitialGrid = (): BoardCell[] => {
   const cells: BoardCell[] = [];
   for (let q = -2; q <= 2; q++) {
@@ -448,6 +455,22 @@ export default function App() {
   const [levelUpPopup, setLevelUpPopup] = useState<{ isVisible: boolean; level: number } | null>(null);
   /** Queued level-up popups (e.g. from pause menu fast-level); shown one by one after pause menu closes. */
   const [levelUpPopupQueue, setLevelUpPopupQueue] = useState<number[]>([]);
+  /** FTUE: current stage (e.g. 'welcome' after splash); null when not in FTUE */
+  const [activeFtueStage, setActiveFtueStage] = useState<FtueStageId | null>(null);
+  /** FTUE_2: number of seeds fired (must be exactly 2 to complete); block 3rd tap */
+  const [ftue2SeedFireCount, setFtue2SeedFireCount] = useState(0);
+  /** FTUE_2: true when fading out finger + text after 2 seeds */
+  const [ftue2FadingOut, setFtue2FadingOut] = useState(false);
+  /** FTUE_2: seed button rect for overlay hole + finger + text position */
+  const [seedButtonRect, setSeedButtonRect] = useState<DOMRect | null>(null);
+  /** FTUE: hide player level section until we reveal it (set to true when ready) */
+  const [ftuePlayerLevelVisible, setFtuePlayerLevelVisible] = useState(false);
+  /** FTUE: hide upgrade panel until we reveal it (set to true when ready) */
+  const [ftueUpgradePanelVisible, setFtueUpgradePanelVisible] = useState(false);
+  /** FTUE: hide seeds button during loading and welcome; reveal when FTUE_2 (seed_tap) shows. Hidden from first frame so no fade-in flash. */
+  const ftueHideSeedsButton = isLoading || activeFtueStage === 'welcome';
+  /** FTUE: hide harvest button during loading and welcome/seed_tap (and future ftue3/ftue4). Hidden from first frame so no fade-in flash. */
+  const ftueHideHarvestButton = isLoading || activeFtueStage === 'welcome' || activeFtueStage === 'seed_tap';
   const [pendingUnlockUpgradeId, setPendingUnlockUpgradeId] = useState<string | null>(null);
   const nextWalletBurstIdRef = useRef(0);
   const nextGoalCoinBurstIdRef = useRef(0);
@@ -487,6 +510,21 @@ export default function App() {
   useEffect(() => {
     if (getSeedLevelFromHighestPlant(highestPlantEver) > 1) hasShownSeedProgressionRef.current = true;
   }, [highestPlantEver]);
+
+  // FTUE_2: keep seed button rect for overlay hole + finger + text position
+  const updateSeedButtonRect = useCallback(() => {
+    if (plantButtonRef.current) setSeedButtonRect(plantButtonRef.current.getBoundingClientRect());
+  }, []);
+  useEffect(() => {
+    if (activeFtueStage !== 'seed_tap' && !ftue2FadingOut) return;
+    updateSeedButtonRect();
+    window.addEventListener('resize', updateSeedButtonRect);
+    const raf = requestAnimationFrame(updateSeedButtonRect);
+    return () => {
+      window.removeEventListener('resize', updateSeedButtonRect);
+      cancelAnimationFrame(raf);
+    };
+  }, [activeFtueStage, ftue2FadingOut, updateSeedButtonRect]);
 
   const prevSeedLevelRef = useRef(0);
 
@@ -1378,15 +1416,22 @@ export default function App() {
 
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
+    if (!ftueUpgradePanelVisible) return; // FTUE: panel hidden until we reveal it
     setIsExpanded(true);
   };
+
+  // When upgrade panel is hidden by FTUE, keep it collapsed so state is correct when we reveal later
+  useEffect(() => {
+    if (!ftueUpgradePanelVisible && isExpanded) setIsExpanded(false);
+  }, [ftueUpgradePanelVisible, isExpanded]);
 
   // Handle tap on locked cell: open CROPS tab (opens the upgrade panel). Set to false to disable.
   const ENABLE_LOCKED_CELL_TAP = false;
   const handleLockedCellTap = useCallback(() => {
+    if (!ftueUpgradePanelVisible) return;
     setActiveTab('CROPS');
     setIsExpanded(true);
-  }, []);
+  }, [ftueUpgradePanelVisible]);
 
   // Handle unlocking a cell when plot_expansion is upgraded
   const handleUnlockCell = useCallback(() => {
@@ -1494,6 +1539,9 @@ export default function App() {
   const handlePlantClick = (e: React.MouseEvent) => {
     e.stopPropagation();
 
+    // FTUE_2: must tap exactly 2 times to plant 2 seeds; block 3rd tap
+    if (activeFtueStage === 'seed_tap' && ftue2SeedFireCount >= 2) return;
+
     // When white (seeds in storage): only fire seed, no progress
     if (seedsInStorage > 0) {
       // Get cells that have projectiles in flight (reserved)
@@ -1504,14 +1552,30 @@ export default function App() {
         .map((cell, idx) => (cell.item === null && !cell.locked && !reservedCells.has(idx) ? idx : null))
         .filter((idx): idx is number => idx !== null);
       if (emptyIndices.length > 0) {
-        const targetIdx = emptyIndices[Math.floor(Math.random() * emptyIndices.length)];
+        // FTUE_2: first seed → cell 4, second seed → cell 13. Pick by which is still empty (avoids stale state on second tap).
+        let targetIdx: number;
+        if (activeFtueStage === 'seed_tap') {
+          if (emptyIndices.includes(FTUE_2_SEED_CELL_A)) targetIdx = FTUE_2_SEED_CELL_A;
+          else if (emptyIndices.includes(FTUE_2_SEED_CELL_B)) targetIdx = FTUE_2_SEED_CELL_B;
+          else targetIdx = emptyIndices[Math.floor(Math.random() * emptyIndices.length)];
+        } else {
+          targetIdx = emptyIndices[Math.floor(Math.random() * emptyIndices.length)];
+        }
         // All seeds spawn at seedLevel (from highest plant discovered)
         spawnProjectile(targetIdx, seedLevel);
         setSeedsInStorage((prev) => Math.max(0, prev - 1));
         triggerSeedButtonLeafBurst();
+        // FTUE_2: count this seed; after 2, start fade out
+        if (activeFtueStage === 'seed_tap') {
+          setFtue2SeedFireCount((c) => {
+            const next = c + 1;
+            if (next >= 2) setFtue2FadingOut(true);
+            return next;
+          });
+        }
         
-        // Bonus Seed: chance to fire a second seed
-        const bonusChance = getBonusSeedChance(seedsState);
+        // Bonus Seed: chance to fire a second seed (skip during FTUE_2 so we only fire exactly 2 seeds from 2 taps)
+        const bonusChance = activeFtueStage === 'seed_tap' ? 0 : getBonusSeedChance(seedsState);
         if (bonusChance > 0 && Math.random() * 100 < bonusChance) {
           // Get remaining empty unlocked cells (excluding the first target)
           const remainingEmptyIndices = emptyIndices.filter(idx => idx !== targetIdx);
@@ -2199,6 +2263,7 @@ export default function App() {
   // Handle loading complete - fade in the game
   const handleLoadComplete = useCallback(() => {
     setIsLoading(false);
+    setActiveFtueStage('welcome'); // FTUE_1: Welcome Message right after splash
     // Animate game opacity from 0 to 1
     const fadeInDuration = 500;
     const startTime = Date.now();
@@ -2313,6 +2378,7 @@ export default function App() {
                   walletFlashActive={walletFlashActive}
                   walletBurstCount={walletBounceTrigger}
                   onWalletClick={() => setActiveScreen('STORE')}
+                  hidePlayerLevel={!ftuePlayerLevelVisible}
                   playerLevel={playerLevel}
                   playerLevelProgress={playerLevelProgress}
                   playerLevelFlashTrigger={playerLevelFlashTrigger}
@@ -2622,7 +2688,7 @@ export default function App() {
                     transitionTimingFunction: isExpanded ? 'cubic-bezier(0.05, 0, 0, 1)' : 'cubic-bezier(0.22, 0, 0.12, 1)',
                   }}
                 >
-                   <div className="pointer-events-auto flex items-center justify-center" ref={plantButtonRef} style={{ transform: 'scale(0.9)', transformOrigin: 'center center' }} onClick={(e) => e.stopPropagation()}>
+                   <div className="pointer-events-auto flex items-center justify-center" ref={plantButtonRef} style={{ transform: 'scale(0.9)', transformOrigin: 'center center', ...(ftueHideSeedsButton && { visibility: 'hidden' as const, pointerEvents: 'none' as const }) }} onClick={(e) => e.stopPropagation()}>
 <SideAction
                         label="Plant"
                         icon={assetPath(`/assets/plants/plant_${seedLevel}.png`)}
@@ -2641,7 +2707,7 @@ export default function App() {
                         onClick={handlePlantClick}
                       />
                    </div>
-                   <div className="pointer-events-auto flex items-center justify-center" ref={harvestButtonRef} style={{ transform: 'scale(0.9)', transformOrigin: 'center center' }} onClick={(e) => e.stopPropagation()}>
+                   <div className="pointer-events-auto flex items-center justify-center" ref={harvestButtonRef} style={{ transform: 'scale(0.9)', transformOrigin: 'center center', ...(ftueHideHarvestButton && { visibility: 'hidden' as const, pointerEvents: 'none' as const }) }} onClick={(e) => e.stopPropagation()}>
                      <SideAction 
                         label="Harvest" 
                         icon={assetPath('/assets/icons/icon_harvest.png')} 
@@ -2813,10 +2879,13 @@ export default function App() {
                 onClick={(e) => e.stopPropagation()}
                 className="flex flex-col overflow-hidden relative z-30 flex-shrink-0 shadow-[0_-15px_50px_rgba(0,0,0,0.15)] rounded-t-[32px]"
                 style={{
-                  height: panelHeight,
+                  height: ftueUpgradePanelVisible ? panelHeight : 0,
+                  minHeight: 0,
                   background: '#fcf0c6',
                   borderTop: '1px solid #ebdbaf',
                   touchAction: 'manipulation',
+                  visibility: ftueUpgradePanelVisible ? 'visible' : 'hidden',
+                  pointerEvents: ftueUpgradePanelVisible ? 'auto' : 'none',
                 }}
               >
                 <UpgradeTabs 
@@ -3140,6 +3209,40 @@ export default function App() {
         {/* Popups: portal to body with higher z-index than particles */}
         {createPortal(
           <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 100 }}>
+            {/* FTUE: Welcome (FTUE_1) - only "Lets go!" is clickable */}
+            {activeFtueStage === 'welcome' && (
+              <FtuePopup
+                isVisible={true}
+                onClose={() => {
+                  setActiveFtueStage('seed_tap');
+                  setFtue2SeedFireCount(0);
+                  setFtue2FadingOut(false);
+                }}
+                blockBackdropClick={true}
+                header={{ icon: assetPath('/assets/icons/icon_happycustomer.png') }}
+                title="Welcome Gardener!"
+                showDivider={true}
+                description="Lets plant some seeds, grow some crops & make the customers happy"
+                button={{ text: "Lets go!" }}
+                burstWidth={260}
+                burstHeight={320}
+                appScale={appScale}
+              />
+            )}
+            {/* FTUE_2: overlay (hole + finger + text above Seeds button); fade in 1s after FTUE_1, fade out after 2 seeds */}
+            {(activeFtueStage === 'seed_tap' || ftue2FadingOut) && (
+              <Ftue2Overlay
+                buttonRect={seedButtonRect}
+                isActive={activeFtueStage === 'seed_tap'}
+                isFadingOut={ftue2FadingOut}
+                seedFireCount={ftue2SeedFireCount}
+                onFadeOutComplete={() => {
+                  setActiveFtueStage(null);
+                  setFtue2FadingOut(false);
+                  setFtue2SeedFireCount(0);
+                }}
+              />
+            )}
             {/* Level Up Popup */}
             {levelUpPopup && (() => {
               const unlockInfo = getLevelUnlockInfo(levelUpPopup.level);
@@ -3176,7 +3279,7 @@ export default function App() {
                         merge_harvest: { level: 1, progress: 0 },
                       }));
                     }
-                    if (unlockInfo.tab) {
+                    if (unlockInfo.tab && ftueUpgradePanelVisible) {
                       setIsExpanded(true);
                       setActiveTab(unlockInfo.tab);
                       if (unlockInfo.upgradeId) {
@@ -3285,9 +3388,11 @@ export default function App() {
                           timeRemaining: 60,
                         }];
                       });
-                      setIsExpanded(true);
-                      setActiveTab(offerConfig.upgradeTab);
-                      setPendingOfferHighlightId(offerId);
+                      if (ftueUpgradePanelVisible) {
+                        setIsExpanded(true);
+                        setActiveTab(offerConfig.upgradeTab);
+                        setPendingOfferHighlightId(offerId);
+                      }
                     }
                     const now = Date.now();
                     lastLimitedOfferClosedAtRef.current = now;
