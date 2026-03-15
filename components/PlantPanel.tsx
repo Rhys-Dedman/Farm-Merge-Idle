@@ -45,6 +45,8 @@ export interface PlantPanelData {
   hoverX: number;
   hoverY: number;
   moveToTargetDelayMs: number;
+  /** Optional scale for panel + trail (e.g. 2 for FTUE 5) */
+  visualScale?: number;
 }
 
 interface PlantPanelProps {
@@ -82,9 +84,10 @@ export const PlantPanel: React.FC<PlantPanelProps> = ({
   const trailOnlyStartRef = useRef<number>(0);
   const rafRef = useRef<number>(0);
 
-  const panelHeight = 28 * SIZE_SCALE;
-  const panelMinWidth = 56 * SIZE_SCALE;
-  const panelWidth = Math.max(panelMinWidth, (44 + 10) * SIZE_SCALE); // value always 1
+  const scaleMult = data.visualScale ?? 1;
+  const panelHeight = 28 * SIZE_SCALE * scaleMult;
+  const panelMinWidth = 56 * SIZE_SCALE * scaleMult;
+  const panelWidth = Math.max(panelMinWidth, (44 + 10) * SIZE_SCALE * scaleMult); // value always 1
   const sizeW = sizeScale.w * panelWidth;
   const sizeH = sizeScale.h * panelHeight;
 
@@ -284,7 +287,7 @@ export const PlantPanel: React.FC<PlantPanelProps> = ({
               paddingBottom: 4,
               paddingLeft: 2,
               paddingRight: 6,
-              transform: `scale(${contentScale * 0.88})`,
+              transform: `scale(${contentScale * 0.88 * scaleMult})`,
               opacity: contentOpacity,
             }}
           >

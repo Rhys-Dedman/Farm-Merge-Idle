@@ -3,7 +3,7 @@
  * Each stage has: name, description (shown/hidden to player), behaviour, trigger.
  */
 
-export type FtueStageId = 'welcome' | 'seed_tap' | 'merge_drag' | 'first_goal';
+export type FtueStageId = 'welcome' | 'seed_tap' | 'merge_drag' | 'first_goal' | 'first_harvest';
 
 export type FtueDescriptionVisibility = 'shown' | 'hidden';
 
@@ -48,9 +48,18 @@ export const FTUE_4: FtueStageDef = {
   trigger: 'after_ftue3_close',
 };
 
+/** FTUE_5: First harvest – harvest button visible (free mode); tap until goal slot 0 is completed. */
+export const FTUE_5: FtueStageDef = {
+  id: 'first_harvest',
+  name: 'First Harvest',
+  descriptionVisibility: 'shown',
+  trigger: 'after_ftue4_close',
+};
+
 export const FTUE_STAGES: Record<FtueStageId, FtueStageDef> = {
   welcome: FTUE_1,
   seed_tap: FTUE_2,
   merge_drag: FTUE_3,
   first_goal: FTUE_4,
+  first_harvest: FTUE_5,
 };

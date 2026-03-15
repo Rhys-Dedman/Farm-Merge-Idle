@@ -15,7 +15,7 @@ export const FTUE_TEXTBOX = {
 export const FTUE_TEXTBOX_DIVIDER_MARGIN_BOTTOM = '14px';
 
 export const FTUE_TEXTBOX_TEXT = {
-  color: '#c7a36e',
+  color: '#775041',
   fontFamily: 'Inter, sans-serif',
   fontSize: '24px',
   textAlign: 'center' as const,

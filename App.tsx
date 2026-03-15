@@ -32,6 +32,7 @@ import { FtuePopup } from './components/FtuePopup';
 import { Ftue2Overlay } from './components/Ftue2Overlay';
 import { Ftue3Overlay } from './components/Ftue3Overlay';
 import { Ftue4Overlay } from './components/Ftue4Overlay';
+import { Ftue5Overlay } from './components/Ftue5Overlay';
 import { TabType, ScreenType, BoardCell, Item, DragState } from './types';
 import type { FtueStageId } from './ftue/ftueConfig';
 import { assetPath } from './utils/assetPath';
@@ -471,18 +472,21 @@ export default function App() {
   const [ftue4Pending, setFtue4Pending] = useState(false);
   /** FTUE_2: seed button rect for overlay hole + finger + text position */
   const [seedButtonRect, setSeedButtonRect] = useState<DOMRect | null>(null);
+  const [harvestButtonRect, setHarvestButtonRect] = useState<DOMRect | null>(null);
   /** FTUE: hide player level section until we reveal it (set to true when ready) */
   const [ftuePlayerLevelVisible, setFtuePlayerLevelVisible] = useState(false);
   /** FTUE: hide upgrade panel until we reveal it (set to true when ready) */
   const [ftueUpgradePanelVisible, setFtueUpgradePanelVisible] = useState(false);
   /** FTUE: hide seeds button during loading and welcome; reveal when FTUE_2 (seed_tap) shows. Hidden from first frame so no fade-in flash. */
   const ftueHideSeedsButton = isLoading || activeFtueStage === 'welcome';
-  /** FTUE: hide harvest button during loading and welcome/seed_tap/merge_drag/first_goal. Hidden from first frame so no fade-in flash. */
+  /** FTUE: hide harvest button during loading and welcome/seed_tap/merge_drag/first_goal (visible during first_harvest for FTUE 5). */
   const ftueHideHarvestButton = isLoading || activeFtueStage === 'welcome' || activeFtueStage === 'seed_tap' || activeFtueStage === 'merge_drag' || activeFtueStage === 'first_goal';
   /** FTUE: hide goals area during welcome/seed_tap/merge_drag (empty during FTUE 1–3) */
   const ftueHideGoals = activeFtueStage === 'welcome' || activeFtueStage === 'seed_tap' || activeFtueStage === 'merge_drag';
   /** FTUE 1–4: seeds button in "free" mode – 0% progress, badge "FREE", tap works but doesn't consume seeds */
   const seedsFreeMode = activeFtueStage != null;
+  /** FTUE 5: harvest button in "free" mode – 0% progress, badge "FREE", tap works but doesn't consume charges */
+  const harvestFreeMode = activeFtueStage === 'first_harvest';
   const [pendingUnlockUpgradeId, setPendingUnlockUpgradeId] = useState<string | null>(null);
   const nextWalletBurstIdRef = useRef(0);
   const nextGoalCoinBurstIdRef = useRef(0);
@@ -537,6 +541,33 @@ export default function App() {
       cancelAnimationFrame(raf);
     };
   }, [activeFtueStage, ftue2FadingOut, updateSeedButtonRect]);
+
+  // FTUE_5: keep harvest button rect for overlay hole + finger + text
+  const updateHarvestButtonRect = useCallback(() => {
+    if (harvestButtonRef.current) setHarvestButtonRect(harvestButtonRef.current.getBoundingClientRect());
+  }, []);
+  useEffect(() => {
+    if (activeFtueStage !== 'first_harvest') return;
+    updateHarvestButtonRect();
+    window.addEventListener('resize', updateHarvestButtonRect);
+    const raf = requestAnimationFrame(updateHarvestButtonRect);
+    return () => {
+      window.removeEventListener('resize', updateHarvestButtonRect);
+      cancelAnimationFrame(raf);
+    };
+  }, [activeFtueStage, updateHarvestButtonRect]);
+
+  // FTUE: keep seeds and harvest progress bars at 0% (reset refs + state when in FTUE)
+  useEffect(() => {
+    if (activeFtueStage != null) {
+      seedProgressRef.current = 0;
+      setSeedProgress(0);
+    }
+    if (activeFtueStage === 'first_harvest') {
+      harvestProgressRef.current = 0;
+      setHarvestProgress(0);
+    }
+  }, [activeFtueStage]);
 
   const prevSeedLevelRef = useRef(0);
 
@@ -1309,6 +1340,11 @@ export default function App() {
         rafId = scheduleNextFrame(tick);
         return;
       }
+      // FTUE 5: harvest in free mode – don't advance progress
+      if (activeFtueStage === 'first_harvest') {
+        rafId = scheduleNextFrame(tick);
+        return;
+      }
       const n = getTickCount60(harvestRaf60LastTickRef);
       if (n === 0) {
         rafId = scheduleNextFrame(tick);
@@ -1329,7 +1365,7 @@ export default function App() {
     };
     rafId = scheduleNextFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [harvestSpeedLevel, isLoading, activeBoosts]);
+  }, [harvestSpeedLevel, isLoading, activeBoosts, activeFtueStage]);
 
   // Harvest tap zoom: TAP_BAR_PERCENT per tap when no charges (fast smooth zoom)
   useEffect(() => {
@@ -1681,6 +1717,31 @@ export default function App() {
     e.stopPropagation();
     if (harvestTapZoomRef.current) return;
 
+    // FTUE 5 free mode: harvest works but doesn't consume charges; no progress bar fill
+    if (harvestFreeMode) {
+      const hasPlant = grid.some((c) => c.item);
+      if (!hasPlant) return;
+      let canSpendCharge = isSurplusSalesUnlocked(harvestState, playerLevel);
+      if (!canSpendCharge) {
+        for (let i = 0; i < goalSlots.length; i++) {
+          if (goalSlots[i] !== 'green' || (goalCounts[i] ?? 0) <= 0) continue;
+          const inFlight = goalInFlightHarvestBySlotRef.current[i] ?? 0;
+          if ((goalCounts[i] ?? 0) - inFlight <= 0) continue;
+          const pt = goalPlantTypes[i] ?? 0;
+          if (grid.some((cell) => cell.item && cell.item.level === pt)) {
+            canSpendCharge = true;
+            break;
+          }
+        }
+      }
+      if (!canSpendCharge) return;
+      performHarvest(0, '');
+      triggerHarvestButtonLeafBurst();
+      setHarvestBounceTrigger((t) => t + 1);
+      setActiveTab('CROPS');
+      return;
+    }
+
     if (harvestCharges > 0) {
       const hasPlant = grid.some((c) => c.item);
       if (!hasPlant) return;
@@ -1853,6 +1914,7 @@ export default function App() {
               hoverX,
               hoverY,
               moveToTargetDelayMs: delayMs,
+              ...(activeFtueStage === 'first_harvest' ? { visualScale: 2 } : {}),
             },
           });
         } else {
@@ -1935,7 +1997,7 @@ export default function App() {
         }
       }, delayMs);
     }
-  }, [grid, cropsState, goalSlots, goalCounts, goalPlantTypes, harvestState, playerLevel]);
+  }, [grid, cropsState, goalSlots, goalCounts, goalPlantTypes, harvestState, playerLevel, activeFtueStage]);
 
   // Perform merge harvest: roll chance per adjacent cell to harvest (spawn coin or plant panel) without removing plant
   const performMergeHarvest = useCallback((centerCellIdx: number, chancePercent: number, excludeCellIdx?: number) => {
@@ -2041,6 +2103,7 @@ export default function App() {
             hoverX,
             hoverY,
             moveToTargetDelayMs: 0,
+            ...(activeFtueStage === 'first_harvest' ? { visualScale: 2 } : {}),
           },
         });
       } else {
@@ -2116,7 +2179,7 @@ export default function App() {
 
     setHarvestBounceCellIndices(triggeredCells);
     setTimeout(() => setHarvestBounceCellIndices([]), 250);
-  }, [grid, goalSlots, goalCounts, goalPlantTypes, harvestState, playerLevel]);
+  }, [grid, goalSlots, goalCounts, goalPlantTypes, harvestState, playerLevel, activeFtueStage]);
 
   // Called by HexBoard when starting a merge to calculate level increase
   const getMergeLevelIncrease = useCallback((_currentPlantLevel: number) => {
@@ -2728,7 +2791,7 @@ export default function App() {
                         progressRef={seedProgressRef}
                         color="#a7c957"
                         isActive={activeTab === 'SEEDS' && isExpanded}
-                        isFlashing={seedsFreeMode ? true : seedsInStorage > 0}
+                        isFlashing={seedsFreeMode ? (ftue2SeedFireCount >= 2 ? false : true) : seedsInStorage > 0}
                         shouldAnimate={!isGridFull}
                         isBoardFull={isGridFull}
                         storageCount={seedsInStorage}
@@ -2742,16 +2805,17 @@ export default function App() {
                      <SideAction 
                         label="Harvest" 
                         icon={assetPath('/assets/icons/icon_harvest.png')} 
-                        progress={harvestProgress / 100}
+                        progress={harvestFreeMode ? 0 : harvestProgress / 100}
                         progressRef={harvestProgressRef}
                         color="#a7c957"
                         isActive={activeTab === 'HARVEST' && isExpanded}
-                        isFlashing={harvestCharges > 0}
+                        isFlashing={harvestFreeMode ? (activeFtueStage === 'first_harvest' && goalSlots[0] === 'completed' ? false : true) : harvestCharges > 0}
                         shouldAnimate={true}
                         isBoardFull={false}
                         noRotateOnFlash={true}
                         storageCount={harvestCharges}
                         storageMax={HARVEST_CHARGES_MAX}
+                        freeMode={harvestFreeMode}
                         bounceTrigger={harvestBounceTrigger}
                         iconScale={1.5}
                         onClick={handleHarvestClick}
@@ -2854,6 +2918,7 @@ export default function App() {
                               hoverX,
                               hoverY,
                               moveToTargetDelayMs: 0,
+                              ...(activeFtueStage === 'first_harvest' ? { visualScale: 2 } : {}),
                             },
                           ]);
                         } else if (surplusSalesUnlocked) {
@@ -3270,7 +3335,7 @@ export default function App() {
                 seedFireCount={ftue2SeedFireCount}
                 onFadeOutComplete={() => {
                   setFtue2FadingOut(false);
-                  setFtue2SeedFireCount(0);
+                  /* keep ftue2SeedFireCount at 2 so seeds button stays green through FTUE 3–5 (and 6) */
                 }}
               />
             )}
@@ -3295,9 +3360,16 @@ export default function App() {
                   setFtue4FadingOut(true);
                 }}
                 onFadeOutComplete={() => {
-                  setActiveFtueStage(null);
+                  setActiveFtueStage('first_harvest');
                   setFtue4FadingOut(false);
                 }}
+              />
+            )}
+            {/* FTUE_5: harvest visible (free mode); textbox + finger from other side; only harvest tappable; ends when goal slot 0 completed */}
+            {(activeFtueStage === 'first_harvest') && (
+              <Ftue5Overlay
+                buttonRect={harvestButtonRect}
+                isActive={activeFtueStage === 'first_harvest'}
               />
             )}
             {/* Level Up Popup */}
@@ -3751,6 +3823,7 @@ export default function App() {
                       sNext[goalSlotIdx] = 'completed';
                       return sNext;
                     });
+                    if (goalSlotIdx === 0) setActiveFtueStage((stage) => (stage === 'first_harvest' ? null : stage));
                   }
                   return next;
                 });
