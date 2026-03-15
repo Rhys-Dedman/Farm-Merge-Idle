@@ -3,7 +3,7 @@
  * Each stage has: name, description (shown/hidden to player), behaviour, trigger.
  */
 
-export type FtueStageId = 'welcome' | 'seed_tap' | 'merge_drag' | 'first_goal' | 'first_harvest' | 'first_goal_collect' | 'first_more_orders' | 'first_harvest_multi';
+export type FtueStageId = 'welcome' | 'seed_tap' | 'merge_drag' | 'first_goal' | 'first_harvest' | 'first_goal_collect' | 'first_more_orders' | 'first_harvest_multi' | 'first_collect_both';
 
 export type FtueDescriptionVisibility = 'shown' | 'hidden';
 
@@ -80,6 +80,14 @@ export const FTUE_8: FtueStageDef = {
   trigger: 'after_ftue7_second_seed_lands',
 };
 
+/** FTUE_9: Finger on goal slot 1; block everything except the 2 goals. Fade out after both goals collected. */
+export const FTUE_9: FtueStageDef = {
+  id: 'first_collect_both',
+  name: 'First Collect Both',
+  descriptionVisibility: 'hidden',
+  trigger: 'after_ftue8_close',
+};
+
 export const FTUE_STAGES: Record<FtueStageId, FtueStageDef> = {
   welcome: FTUE_1,
   seed_tap: FTUE_2,
@@ -89,4 +97,5 @@ export const FTUE_STAGES: Record<FtueStageId, FtueStageDef> = {
   first_goal_collect: FTUE_6,
   first_more_orders: FTUE_7,
   first_harvest_multi: FTUE_8,
+  first_collect_both: FTUE_9,
 };

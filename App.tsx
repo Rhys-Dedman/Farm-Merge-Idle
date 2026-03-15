@@ -36,6 +36,7 @@ import { Ftue5Overlay } from './components/Ftue5Overlay';
 import { Ftue6Overlay } from './components/Ftue6Overlay';
 import { Ftue7Overlay } from './components/Ftue7Overlay';
 import { Ftue8Overlay } from './components/Ftue8Overlay';
+import { Ftue9Overlay } from './components/Ftue9Overlay';
 import { TabType, ScreenType, BoardCell, Item, DragState } from './types';
 import type { FtueStageId } from './ftue/ftueConfig';
 import { assetPath } from './utils/assetPath';
@@ -490,9 +491,11 @@ export default function App() {
   const [goalSpawnBounceSlots, setGoalSpawnBounceSlots] = useState<number[]>([]);
   const [ftue7SeedFireCount, setFtue7SeedFireCount] = useState(0);
   const [ftue7FadingOut, setFtue7FadingOut] = useState(false);
-  /** FTUE 8: count down when FTUE 7's 2 seeds land; when 0, start first_harvest_multi */
-  const ftue8PendingLandCountRef = useRef(0);
   const [ftue8FadingOut, setFtue8FadingOut] = useState(false);
+  /** FTUE 9: collect both goals – finger on slot 1; fade out after both collected. No new goal loading during FTUE 9. */
+  const [ftue9CollectedCount, setFtue9CollectedCount] = useState(0);
+  const [ftue9FadingOut, setFtue9FadingOut] = useState(false);
+  const ftue9NoNewGoalsRef = useRef(false);
   /** FTUE: hide upgrade panel until we reveal it (set to true when ready) */
   const [ftueUpgradePanelVisible, setFtueUpgradePanelVisible] = useState(false);
   /** FTUE: hide seeds button during loading and welcome; reveal when FTUE_2 (seed_tap) shows. Hidden from first frame so no fade-in flash. */
@@ -635,6 +638,11 @@ export default function App() {
     if (activeFtueStage !== 'first_harvest_multi') return;
     if (goalSlots[0] === 'completed' && goalSlots[1] === 'completed') setFtue8FadingOut(true);
   }, [activeFtueStage, goalSlots]);
+
+  // FTUE 9: block new goal loading while active or fading out (collect 1 → 1 goal left, no loading)
+  useEffect(() => {
+    ftue9NoNewGoalsRef.current = activeFtueStage === 'first_collect_both' || ftue9FadingOut;
+  }, [activeFtueStage, ftue9FadingOut]);
 
   const prevSeedLevelRef = useRef(0);
 
@@ -1709,7 +1717,6 @@ export default function App() {
             const next = c + 1;
             if (next >= 2) {
               setFtue7FadingOut(true);
-              ftue8PendingLandCountRef.current = 2; // when both seeds land, start FTUE 8
             }
             return next;
           });
@@ -2654,6 +2661,13 @@ export default function App() {
                       setFtue7Scheduled(true);
                       setActivePlantPanels((prev) => prev.filter((p) => p.goalSlotIdx !== 0 && p.goalSlotIdx !== 1));
                     }
+                    if (activeFtueStage === 'first_collect_both') {
+                      setFtue9CollectedCount((c) => {
+                        const next = c + 1;
+                        if (next >= 2) setFtue9FadingOut(true);
+                        return next;
+                      });
+                    }
                     setGoalSlidingUpSlots((prev) => new Set(prev).add(slotIdx));
                     const iconEl = goalIconRefs[slotIdx]?.current;
                     const container = containerRef.current;
@@ -2724,6 +2738,7 @@ export default function App() {
                         setGoalCompactionStagger(null);
                         const maxSlots = getMaxGoalSlots(playerLevel);
                         setGoalSlots((s) => {
+                          if (ftue9NoNewGoalsRef.current) return s; // FTUE 9: no new goal loading; keep slot empty
                           const hasLoading = s.some((state) => state === 'loading');
                           if (hasLoading) return s;
                           const n = [...s];
@@ -2748,7 +2763,7 @@ export default function App() {
                   return (
                     <div
                       key={slotIdx}
-                      id={slotIdx === 0 ? 'goal-slot-0' : undefined}
+                      id={slotIdx === 0 ? 'goal-slot-0' : slotIdx === 1 ? 'goal-slot-1' : undefined}
                       className={`absolute ${(isFadingIn || isFtue7RevealNoSlide) ? 'goal-no-transition' : 'goal-slide-over'} ${isFtue4Bounce ? 'goal-bounce-ftue4' : (isBouncing || goalSpawnBounceSlots.includes(slotIdx)) && !isFadingIn ? 'goal-bounce' : ''} ${isFadingIn && (isBouncing || goalSpawnBounceSlots.includes(slotIdx)) ? 'goal-slot-fade-in-with-bounce' : isFadingIn ? 'goal-slot-fade-in' : ''} ${isSlidingUp ? 'goal-slide-up' : ''} ${showCompletedContent ? 'pointer-events-auto cursor-pointer' : 'pointer-events-none'}`}
                       style={{
                         width: '105px',
@@ -3476,8 +3491,19 @@ export default function App() {
                 isActive={activeFtueStage === 'first_harvest_multi'}
                 isFadingOut={ftue8FadingOut}
                 onFadeOutComplete={() => {
-                  setActiveFtueStage(null);
+                  setActiveFtueStage('first_collect_both'); // FTUE 9: finger on goals, collect both
                   setFtue8FadingOut(false);
+                }}
+              />
+            )}
+            {(activeFtueStage === 'first_collect_both' || ftue9FadingOut) && (
+              <Ftue9Overlay
+                isActive={activeFtueStage === 'first_collect_both'}
+                isFadingOut={ftue9FadingOut}
+                onFadeOutComplete={() => {
+                  setActiveFtueStage(null);
+                  setFtue9FadingOut(false);
+                  setFtue9CollectedCount(0);
                 }}
               />
             )}
@@ -3829,10 +3855,7 @@ export default function App() {
               data={p}
               appScale={appScale}
               onImpact={(targetIdx) => {
-                if (!p.isSpecialDelivery && ftue8PendingLandCountRef.current > 0) {
-                  ftue8PendingLandCountRef.current--;
-                  if (ftue8PendingLandCountRef.current === 0) setActiveFtueStage('first_harvest_multi');
-                }
+                // FTUE 8 starts only from FTUE 7 overlay onFadeOutComplete (no seed-land trigger) so 7→8 transition is instant
                 if (p.isSpecialDelivery) {
                   // Special Delivery: spawn on empty cell or upgrade existing plant; then beam + bounce
                   const g = gridRef.current;
