@@ -515,8 +515,23 @@ export default function App() {
   const ftueHideGoals = activeFtueStage === 'welcome' || activeFtueStage === 'seed_tap' || activeFtueStage === 'merge_drag';
   /** FTUE 1–4 (+ gap before FTUE 7): seeds button in "free" mode – 0% progress, badge "FREE"; green during ftue7Scheduled, white when FTUE 7 finger is showing */
   const seedsFreeMode = activeFtueStage != null || ftue7Scheduled;
-  /** FTUE 5–8 (+ gap before FTUE 7): harvest button in "free" mode – 0% progress, badge "FREE"; green after FTUE 5 until FTUE 8 (then white until both goals done) */
-  const harvestFreeMode = (activeFtueStage === 'first_harvest' || activeFtueStage === 'first_goal_collect' || activeFtueStage === 'first_more_orders' || activeFtueStage === 'first_harvest_multi' || ftue7Scheduled) && !(activeFtueStage === 'first_upgrade' && ftue10Phase !== 'finger');
+  /**
+   * Harvest button free mode:
+   * - FTUE 5–8: first_harvest → first_goal_collect → first_more_orders → first_harvest_multi
+   * - FTUE 9–10: stays green through first_collect_both and first_upgrade
+   * - Turns normal only after FTUE 10 completes (harvest_speed purchased and overlay fades out)
+   */
+  const harvestFreeMode =
+    activeFtueStage === 'first_harvest' ||
+    activeFtueStage === 'first_goal_collect' ||
+    activeFtueStage === 'first_more_orders' ||
+    activeFtueStage === 'first_harvest_multi' ||
+    activeFtueStage === 'first_collect_both' ||
+    activeFtueStage === 'first_upgrade' ||
+    ftue7Scheduled ||
+    ftue8FadingOut ||
+    ftue9FadingOut ||
+    ftue10FadingOut;
   const [pendingUnlockUpgradeId, setPendingUnlockUpgradeId] = useState<string | null>(null);
   const nextWalletBurstIdRef = useRef(0);
   const nextGoalCoinBurstIdRef = useRef(0);
@@ -1585,10 +1600,10 @@ export default function App() {
       setFtue10Phase('panel_open_orders');
       return;
     }
-    if (activeFtueStage === 'first_upgrade' && ftue10Phase === 'panel_open_orders' && tab === 'SEEDS') {
-      setActiveTab('SEEDS');
+    if (activeFtueStage === 'first_upgrade' && ftue10Phase === 'panel_open_orders' && tab === 'CROPS') {
+      setActiveTab('CROPS');
       setFtue10Phase('finger');
-      setFtue10GreenFlashUpgradeId('seed_production');
+      setFtue10GreenFlashUpgradeId('harvest_speed');
       return;
     }
     setActiveTab(tab);
@@ -3133,7 +3148,7 @@ export default function App() {
 
               <div 
                 onClick={(e) => e.stopPropagation()}
-                className="flex flex-col overflow-hidden relative z-30 flex-shrink-0 shadow-[0_-15px_50px_rgba(0,0,0,0.15)] rounded-t-[32px]"
+                className="flex flex-col overflow-visible relative z-30 flex-shrink-0 shadow-[0_-15px_50px_rgba(0,0,0,0.15)] rounded-t-[32px]"
                 style={{
                   height: panelHeight,
                   minHeight: 0,
@@ -3145,6 +3160,42 @@ export default function App() {
                   transition: 'opacity 400ms ease-out',
                 }}
               >
+                {/* Upgrade panel top UI: inside panel, anchored to its top edge so it moves together with open/close animation and opacity */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsExpanded((prev) => !prev);
+                  }}
+                  className="pointer-events-auto absolute left-1/2 top-0"
+                  style={{
+                    transform: 'translate(-50%, -100%)',
+                    opacity: ftueUpgradePanelVisible ? 1 : 0,
+                    transition: 'opacity 400ms ease-out',
+                  }}
+                >
+                  <div className="relative">
+                    <img
+                      src={assetPath('/assets/topui/ui_upgradepanel_open.png')}
+                      alt=""
+                      className="block"
+                      style={{ width: 120, height: 'auto' }}
+                    />
+                    <img
+                      src={assetPath('/assets/topui/ui_upgradepanel_arrow.png')}
+                      alt=""
+                      className="absolute left-1/2 top-1/2"
+                      style={{
+                        width: 32,
+                        height: 'auto',
+                        transform: `translate(-50%, -28%) rotate(${isExpanded ? 0 : 180}deg)`,
+                        transformOrigin: '50% 50%',
+                        transition: 'transform 350ms cubic-bezier(0.05, 0, 0, 1)',
+                      }}
+                    />
+                  </div>
+                </button>
+
                 <UpgradeTabs 
                   ref={upgradeTabsRef}
                   activeTab={activeTab} 
@@ -3179,7 +3230,7 @@ export default function App() {
                     ftue10PurchaseButtonRef={ftue10PurchaseButtonRef}
                     ftue10LockScroll={activeFtueStage === 'first_upgrade' && ftue10Phase === 'finger'}
                     onUpgradePurchase={(upgradeId) => {
-                      if (upgradeId === 'seed_production' && activeFtueStage === 'first_upgrade') {
+                      if (upgradeId === 'harvest_speed' && activeFtueStage === 'first_upgrade') {
                         setFtue10Phase(null);
                         setFtue10GreenFlashUpgradeId(null);
                         setFtue10FadingOut(true);
@@ -3567,7 +3618,7 @@ export default function App() {
                 onFadeOutComplete={() => {
                   setFtue9FadingOut(false);
                   setFtue9CollectedCount(0);
-                  // FTUE 10: reveal upgrade panel (closed on Orders), then auto-open and navigate to Seeds
+                  // FTUE 10: reveal upgrade panel (closed on Orders), then auto-open and navigate to Garden
                   setFtueUpgradePanelVisible(true);
                   setActiveTab('HARVEST');
                   setIsExpanded(false);

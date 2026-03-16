@@ -225,7 +225,7 @@ const getUpgradeUnlockLevel = (upgradeId: string): number =>
  * This is the only cost used by the upgrade panel and handleUpgrade.
  */
 const calculateUpgradeCost = (upgradeId: string, currentLevel: number): number => {
-  if (upgradeId === 'seed_production' && currentLevel === 0) return 100;
+  if (upgradeId === 'harvest_speed' && currentLevel === 0) return 100;
   if (upgradeId === 'plot_expansion' || upgradeId === 'crop_value') {
     // First = 1500, then each = previous × 2.5 (rounded to nearest 5)
     if (currentLevel < 0) return 0;
