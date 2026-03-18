@@ -1272,10 +1272,11 @@ export default function App() {
         return;
       }
     // FTUE: seeds in free mode – don't advance progress.
-    // Allow normal recharge during FTUE 9.5 (recharge_pre_upgrade) and beyond.
+    // Allow normal recharge during FTUE 9.5 (recharge_pre_upgrade), FTUE 10 (first_upgrade), and beyond.
     if (
       activeFtueStage != null &&
       activeFtueStage !== 'recharge_pre_upgrade' &&
+      activeFtueStage !== 'first_upgrade' &&
       activeFtueStage !== 'recharge_intro'
     ) {
         rafId = requestAnimationFrame(tick);
