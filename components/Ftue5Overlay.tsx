@@ -104,7 +104,7 @@ export const Ftue5Overlay: React.FC<Ftue5OverlayProps> = ({ buttonRect, isActive
             />
           </div>
           <p className="text-center m-0 font-medium italic leading-snug" style={{ ...FTUE_TEXTBOX_TEXT, paddingLeft: '20px', paddingRight: '20px' }}>
-            Tap the Harvest button until the order is completed
+            Tap the Harvest button until the customers order is completed
           </p>
         </div>
       )}
