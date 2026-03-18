@@ -84,7 +84,8 @@ export const PlantPanel: React.FC<PlantPanelProps> = ({
   const trailOnlyStartRef = useRef<number>(0);
   const rafRef = useRef<number>(0);
 
-  const scaleMult = data.visualScale ?? 1;
+  /** Normal harvest: 1.5x panel size; FTUE can override via visualScale (e.g. 2). */
+  const scaleMult = data.visualScale !== undefined ? data.visualScale : 1.5;
   const panelHeight = 28 * SIZE_SCALE * scaleMult;
   const panelMinWidth = 56 * SIZE_SCALE * scaleMult;
   const panelWidth = Math.max(panelMinWidth, (44 + 10) * SIZE_SCALE * scaleMult); // value always 1

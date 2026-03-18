@@ -478,7 +478,7 @@ export const createInitialSeedsState = (): SeedsState => ({
 /** Initial crops state: all upgrades start at level 0 */
 export const createInitialCropsState = (): Record<string, UpgradeState> => ({
   harvest_speed: { level: 0, progress: 0 },
-  plot_expansion: { level: 1, progress: 0 },
+  plot_expansion: { level: 0, progress: 0 },
   crop_value: { level: 0, progress: 0 },
   fertile_soil: { level: 0, progress: 0 },
   merge_harvest: { level: 0, progress: 0 },

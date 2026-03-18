@@ -37,6 +37,9 @@ export interface DragState {
   pointerY: number;
   originX: number;
   originY: number;
+  /** Pointer at drag start (container space); plant center = origin + (pointer - grab) while holding */
+  grabPointerX: number;
+  grabPointerY: number;
   liftProgress: number;
   scaleProgress: number;
   flyProgress?: number;

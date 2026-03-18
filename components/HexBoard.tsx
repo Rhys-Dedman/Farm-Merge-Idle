@@ -144,14 +144,36 @@ export const HexBoard: React.FC<HexBoardProps> = ({
     };
   }, [containerRef, appScale]);
 
-  const getCellIndexUnderPoint = useCallback((clientX: number, clientY: number): number | null => {
-    const el = document.elementFromPoint(clientX, clientY);
-    if (!el) return null;
-    const hex = el.closest('[id^="hex-"]');
-    if (!hex || !hex.id) return null;
-    const match = hex.id.match(/^hex-(\d+)$/);
-    return match ? parseInt(match[1], 10) : null;
-  }, []);
+  /** Closest hex cell by distance from point (container coords); null if too far (drop = cancel / delete). Uses pointer position so selection matches where the finger/plant is. */
+  const getClosestHexIndexToPlantCenter = useCallback(
+    (plantCx: number, plantCy: number): number | null => {
+      const container = containerRef.current;
+      if (!container || grid.length === 0) return null;
+      const sampleHex = document.getElementById('hex-0');
+      let maxDist = 56;
+      if (sampleHex) {
+        const r = sampleHex.getBoundingClientRect();
+        const w = r.width / appScale;
+        const h = r.height / appScale;
+        maxDist = Math.max(w, h) * 0.72;
+      }
+      let bestIdx: number | null = null;
+      let bestD2 = Infinity;
+      for (let i = 0; i < grid.length; i++) {
+        const c = getHexCenterInContainer(i);
+        const dx = plantCx - c.x;
+        const dy = plantCy - c.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < bestD2) {
+          bestD2 = d2;
+          bestIdx = i;
+        }
+      }
+      if (bestIdx == null) return null;
+      return Math.sqrt(bestD2) <= maxDist ? bestIdx : null;
+    },
+    [grid.length, getHexCenterInContainer, containerRef, appScale]
+  );
 
   const startDrag = useCallback((cellIdx: number, clientX: number, clientY: number) => {
     const cell = grid[cellIdx];
@@ -170,6 +192,8 @@ export const HexBoard: React.FC<HexBoardProps> = ({
       pointerY,
       originX: origin.x,
       originY: origin.y,
+      grabPointerX: pointerX,
+      grabPointerY: pointerY,
       liftProgress: 0,
       scaleProgress: 0,
     });
@@ -242,7 +266,8 @@ export const HexBoard: React.FC<HexBoardProps> = ({
         const contRect = container.getBoundingClientRect();
         const pointerX = (e.clientX - contRect.left) / appScale;
         const pointerY = (e.clientY - contRect.top) / appScale;
-        const underIdx = getCellIndexUnderPoint(e.clientX, e.clientY);
+        // Use pointer (finger) position as plant center — dragged plant visually follows the finger
+        const underIdx = getClosestHexIndexToPlantCenter(dragState.pointerX, dragState.pointerY);
         const targetCell = underIdx != null ? grid[underIdx] : null;
         // Locked cells cannot be hovered as drop targets
         const isLocked = targetCell?.locked === true;
@@ -259,13 +284,13 @@ export const HexBoard: React.FC<HexBoardProps> = ({
     };
     const onUp = (e: PointerEvent) => {
       if (dragState?.phase === 'holding') {
-        const targetIdx = getCellIndexUnderPoint(e.clientX, e.clientY);
         const container = containerRef.current;
         if (!container) return;
         const contRect = container.getBoundingClientRect();
         const dropX = (e.clientX - contRect.left) / appScale;
         const dropY = (e.clientY - contRect.top) / appScale;
         const releaseState = { ...dragState, pointerX: dropX, pointerY: dropY };
+        const targetIdx = getClosestHexIndexToPlantCenter(dropX, dropY);
         const inBounds = contRect.left <= e.clientX && e.clientX <= contRect.right && contRect.top <= e.clientY && e.clientY <= contRect.bottom;
         const targetCell = targetIdx != null ? grid[targetIdx] : null;
         // Locked cells cannot be drop targets
@@ -318,7 +343,7 @@ export const HexBoard: React.FC<HexBoardProps> = ({
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onCancel);
     };
-  }, [dragState, getCellIndexUnderPoint, grid, startFlyBack, containerRef, ftue3OnlyMerge4To13]);
+  }, [dragState, getClosestHexIndexToPlantCenter, grid, startFlyBack, containerRef, ftue3OnlyMerge4To13, appScale]);
 
   // Lift + scale-up: scale 0→1 over SCALE_UP_MS (fast), lift 0→1 over LIFT_MS
   useEffect(() => {
@@ -652,7 +677,7 @@ export const HexBoard: React.FC<HexBoardProps> = ({
           const isHoveredMatch = dragState?.phase === 'holding' && dragState.hoveredMatchCellIdx === i;
           const isNewCellImpact = newCellImpactIdx === i;
           const staticOpacity =
-            isDragSource ? 0.5 : isHoveredMatch ? 0.75 : isHoveredEmpty ? 0.25 : undefined;
+            isDragSource ? 0.5 : isHoveredMatch ? 0.75 : isHoveredEmpty ? 0.5 : undefined;
           const animClass = isNewCellImpact
             ? 'hexcell-new-land-flash'
             : isSourceFadeOut
