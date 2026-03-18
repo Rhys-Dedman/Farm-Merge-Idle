@@ -867,6 +867,7 @@ export default function App() {
   const [viewportWidth, setViewportWidth] = useState(typeof window !== 'undefined' ? getViewportSize().width : 420);
   const [viewportHeight, setViewportHeight] = useState(typeof window !== 'undefined' ? getViewportSize().height : 800);
   const [viewportOffsetTop, setViewportOffsetTop] = useState(typeof window !== 'undefined' ? getViewportSize().offsetTop : 0);
+  const viewportWrapperRef = useRef<HTMLDivElement | null>(null);
   
   useEffect(() => {
     const update = () => {
@@ -874,6 +875,8 @@ export default function App() {
       setViewportWidth(width);
       setViewportHeight(height);
       setViewportOffsetTop(offsetTop);
+      // Prevent scroll accumulation causing apparent vertical drift while resizing.
+      if (viewportWrapperRef.current) viewportWrapperRef.current.scrollTop = 0;
     };
     update();
     window.addEventListener('resize', update);
@@ -2784,17 +2787,27 @@ export default function App() {
       {isLoading && (
         <LoadingScreen onLoadComplete={handleLoadComplete} />
       )}
-<div
-        className={`flex justify-center bg-[#050608] w-screen ${viewportWidth < mobileBreakpoint ? 'min-h-[100dvh] overflow-y-auto overflow-x-hidden h-[100dvh]' : 'h-screen items-center'}`}
+      <div
+        ref={viewportWrapperRef}
+        className={`fixed inset-0 flex justify-center bg-[#050608] items-center overflow-hidden`}
         style={{
           opacity: gameOpacity,
+          // Keep layout height aligned with appScale (which is based on visualViewport when available).
+          // This prevents the whole game from drifting up/down when CSS vh and visualViewport diverge.
+          height: viewportHeight,
+          minHeight: viewportHeight,
           paddingTop: viewportWidth < mobileBreakpoint ? Math.max(viewportOffsetTop, 50) : 0,
+          boxSizing: 'border-box',
         }}
       >
       <div
+        className="relative"
         style={{
+          // IMPORTANT: transforms don't affect layout size. We size this wrapper to the *scaled* size
+          // and absolutely-position the unscaled game inside it, so the page never gets accidental overflow
+          // that can cause the "drift up" while resizing.
           width: 448 * appScale,
-          minHeight: 796 * appScale,
+          height: 796 * appScale,
           flexShrink: 0,
           overflow: 'hidden',
         }}
@@ -2802,7 +2815,7 @@ export default function App() {
       <div
         ref={containerRef}
         id="game-container"
-        className="relative shadow-[0_0_100px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col select-none font-['Inter'] bg-[#0c0d12]"
+        className="absolute left-0 top-0 shadow-[0_0_100px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col select-none font-['Inter'] bg-[#0c0d12]"
         style={{
           width: '448px',
           height: '796px',
