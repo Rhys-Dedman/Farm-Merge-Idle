@@ -78,8 +78,8 @@ export const SideAction: React.FC<SideActionProps> = ({
       }
       const raw = progressRef.current;
       const pct = Math.max(0, Math.min(100, raw));
-      // Green progress bar: always show actual progress (hide only at 100%)
-      const greenShow = pct >= 100 ? 0 : pct / 100;
+      // Green progress bar: show actual progress (including 100% as a full ring)
+      const greenShow = pct / 100;
       const whiteHeadLead = 0.02;
       const whiteHeadShow = greenShow > 0 ? Math.min(1, greenShow + whiteHeadLead) : 0;
       // White progress bar always tracks actual progress (visibility controlled by opacity)
@@ -114,7 +114,7 @@ export const SideAction: React.FC<SideActionProps> = ({
 
   // Clamp progress to 0–1 so the ring never shows negative or >100%; in free mode always show 0
   const clampedProgress = freeMode ? 0 : Math.max(0, Math.min(1, progress));
-  const displayProgress = clampedProgress >= 1 ? 0 : clampedProgress;
+  const displayProgress = clampedProgress;
   const whiteHeadLead = 0.02;
   const whiteHeadProgress = displayProgress > 0 ? Math.min(1, displayProgress + whiteHeadLead) : 0;
   const strokeDashoffset = circumference - (displayProgress * circumference);
@@ -290,7 +290,7 @@ export const SideAction: React.FC<SideActionProps> = ({
               transition: useRefDrive ? 'none' : transitionStyle,
               transform: 'rotate(90deg)',
               transformOrigin: '50% 50%',
-              opacity: clampedProgress >= 1 ? 0 : 1
+              opacity: 1
             }}
           />
 
@@ -310,7 +310,7 @@ export const SideAction: React.FC<SideActionProps> = ({
               transition: useRefDrive ? 'stroke 0.3s ease' : `${transitionStyle}, stroke 0.3s ease`,
               transform: 'rotate(90deg)',
               transformOrigin: '50% 50%',
-              opacity: (clampedProgress >= 1 && !isFlashing) ? 0 : 1
+              opacity: 1
             }}
           />
 
