@@ -59,9 +59,9 @@ const formatGoalCoin = (amount: number): string => {
   return amount.toString();
 };
 
-/** Max plant goal slots: 3 until level 5, then 4. Slot 4 (5th) is reserved for coin goal only. */
+/** Max plant goal slots: 3 until level 4, then 4. Slot 4 (5th) is reserved for coin goal only. */
 const getMaxGoalSlots = (playerLevel: number): number =>
-  playerLevel >= 5 ? 4 : 3;
+  playerLevel >= 4 ? 4 : 3;
 
 /** Goals required to level up. Level 1→2: 7; then each level = round(previous × 1.35) */
 const getGoalsRequiredForLevel = (level: number): number => {
@@ -506,6 +506,7 @@ export default function App() {
   const [ftue10GreenFlashUpgradeId, setFtue10GreenFlashUpgradeId] = useState<string | null>(null);
   const [ftue10FadingOut, setFtue10FadingOut] = useState(false);
   const [ftueSeedSurplusActivated, setFtueSeedSurplusActivated] = useState(false);
+  const [ftueHarvestSurplusActivated, setFtueHarvestSurplusActivated] = useState(false);
   const [ftue10PostClosePending, setFtue10PostClosePending] = useState(false);
   const [ftue11StartQueued, setFtue11StartQueued] = useState(false);
   const [ftue10BigBounceActive, setFtue10BigBounceActive] = useState(false);
@@ -535,6 +536,7 @@ export default function App() {
     // upgrade panel closes -> immediately set progress -> immediately show FTUE11 textbox
     if (ftue10PostClosePending) {
       setFtueSeedSurplusActivated(true);
+      setFtueHarvestSurplusActivated(true);
       seedProgressRef.current = 75;
       setSeedProgress(75);
       harvestProgressRef.current = 75;
@@ -638,6 +640,7 @@ export default function App() {
 
     // Enable the recharge/surplus behavior now, and move bars to 75% to demonstrate quickly.
     setFtueSeedSurplusActivated(true);
+    setFtueHarvestSurplusActivated(true);
     seedProgressRef.current = 75;
     setSeedProgress(75);
     harvestProgressRef.current = 75;
@@ -1535,7 +1538,9 @@ export default function App() {
     setSeedProgress(0);
     setTimeout(() => setIsSeedFlashing(false), 300);
 
-    const seedsToAdd = 1;
+    const doubleSeedsLevel = seedsState?.double_seeds?.level ?? 0;
+    const doubleChance = Math.min(0.5, doubleSeedsLevel * 0.05);
+    const seedsToAdd = Math.random() < doubleChance ? 2 : 1;
     const surplusValue = getSeedSurplusValue(
       ftueSeedSurplusActivated
         ? ({ ...seedsState, seed_surplus: { level: Math.max(1, seedsState?.seed_surplus?.level ?? 0), progress: 0 } } as any)
@@ -1580,6 +1585,49 @@ export default function App() {
     }
   }, [seedProgress, isSeedFlashing, seedsInStorage, seedsState, seedStorageMax, ftueSeedSurplusActivated]);
 
+  // Harvest surplus coin panels: when harvest charges overflow at 100% capacity, turn the overflow into coins.
+  const spawnHarvestSurplusCoinPanels = (overflowCycles: number) => {
+    if (overflowCycles <= 0) return;
+    // Harvest surplus uses the same multiplier as Seed Surplus (seed_surplus upgrade).
+    const surplusValue = getSeedSurplusValue(
+      ftueSeedSurplusActivated
+        ? ({ ...seedsState, seed_surplus: { level: Math.max(1, seedsState?.seed_surplus?.level ?? 0), progress: 0 } } as any)
+        : seedsState
+    );
+    if (surplusValue <= 0) return;
+
+    const container = containerRef.current;
+    const harvestBtn = harvestButtonRef.current;
+    const walletIcon = walletIconRef.current;
+    const wallet = walletRef.current;
+    const walletEl = walletIcon || wallet;
+
+    if (!container || !harvestBtn || !walletEl) return;
+
+    const scale = appScaleRef.current;
+    const containerRect = container.getBoundingClientRect();
+    const btnRect = harvestBtn.getBoundingClientRect();
+    const startX = (btnRect.left + btnRect.width / 2 - containerRect.left) / scale;
+    const startY = (btnRect.top + btnRect.height / 2 - containerRect.top) / scale;
+    const hoverX = startX;
+    const panelHeightPx = 14;
+    const offsetUp = (panelHeightPx / 2 + 4) * 1.2;
+    const hoverY = (btnRect.top - containerRect.top) / scale - offsetUp;
+
+    const panelsToAdd = Array.from({ length: overflowCycles }, (_, i) => ({
+      id: `harvest-surplus-${Date.now()}-${i}-${Math.random().toString(36).slice(2)}`,
+      value: surplusValue,
+      startX,
+      startY,
+      hoverX,
+      hoverY,
+      moveToWalletDelayMs: 0,
+      scale: 1.5,
+    }));
+
+    setActiveCoinPanels((p) => [...p, ...panelsToAdd]);
+  };
+
   const harvestProgressRef = useRef<number>(0);
   const harvestTapZoomRef = useRef<{ start: number; end: number; startTime: number; duration: number } | null>(null);
   const [harvestTapZoomTrigger, setHarvestTapZoomTrigger] = useState(0);
@@ -1614,19 +1662,30 @@ export default function App() {
       const deltaMs = Math.min(n * TARGET_FRAME_MS, 50);
       let next = harvestProgressRef.current + deltaMs * percentPerMs;
       let cycled = false;
+      let overflowCycles = 0;
+      let c = harvestChargesRef.current;
       while (next >= 100) {
         next -= 100;
         cycled = true;
-        setHarvestCharges((c) => (c < HARVEST_CHARGES_MAX ? c + 1 : c));
+        if (c < HARVEST_CHARGES_MAX) {
+          c++;
+        } else {
+          overflowCycles++;
+        }
         setHarvestBounceTrigger((t) => t + 1);
       }
       harvestProgressRef.current = next;
       if (cycled) setHarvestProgress(next);
+      if (cycled) {
+        harvestChargesRef.current = c;
+        setHarvestCharges(c);
+      }
+      if (overflowCycles > 0) spawnHarvestSurplusCoinPanels(overflowCycles);
       rafId = scheduleNextFrame(tick);
     };
     rafId = scheduleNextFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [harvestSpeedLevel, isLoading, activeBoosts, activeFtueStage, ftue7Scheduled]);
+  }, [harvestSpeedLevel, isLoading, activeBoosts, activeFtueStage, ftue7Scheduled, ftueHarvestSurplusActivated, ftueSeedSurplusActivated, seedsState]);
 
   // Harvest tap zoom: TAP_BAR_PERCENT per tap when no charges (fast smooth zoom)
   useEffect(() => {
@@ -1649,14 +1708,20 @@ export default function App() {
         if (zoom.end >= 100) {
           let p = zoom.end;
           let c = harvestChargesRef.current;
+          let overflowCycles = 0;
           while (p >= 100) {
             p -= 100;
             if (c < HARVEST_CHARGES_MAX) c++;
+            else overflowCycles++;
           }
           harvestProgressRef.current = p;
           setHarvestProgress(p);
+          harvestChargesRef.current = c;
           setHarvestCharges(c);
           setHarvestBounceTrigger((t) => t + 1);
+          if (overflowCycles > 0) {
+            spawnHarvestSurplusCoinPanels(overflowCycles);
+          }
         }
         return;
       }
@@ -1664,7 +1729,7 @@ export default function App() {
     };
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [harvestTapZoomTrigger]);
+  }, [harvestTapZoomTrigger, ftueHarvestSurplusActivated, ftueSeedSurplusActivated, seedsState]);
 
   // Leaf burst when harvest gains first charge (button turns white)
   const prevHarvestChargesRef = useRef(harvestCharges);
@@ -2796,7 +2861,7 @@ export default function App() {
                         if (!levelUpGuardRef.current) {
                           levelUpGuardRef.current = true;
                           const nextLevel = playerLevel + 1;
-                          if (nextLevel <= 12) {
+                          if (nextLevel <= 10) {
                             setLevelUpPopup({ isVisible: true, level: nextLevel });
                           } else {
                             setPlayerLevel((l) => l + 1);
@@ -2907,7 +2972,7 @@ export default function App() {
                           if (!levelUpGuardRef.current) {
                             levelUpGuardRef.current = true;
                             const nextLevel = playerLevel + 1;
-                            if (nextLevel <= 12) {
+                            if (nextLevel <= 10) {
                               setLevelUpPopup({ isVisible: true, level: nextLevel });
                             } else {
                               setPlayerLevel((l) => l + 1);
@@ -3712,7 +3777,7 @@ export default function App() {
           document.body
         )}
 
-        {/* Popups: portal to body with higher z-index than particles */}
+        {/* FTUE overlays: below surplus coin VFX (110) but above farm particles */}
         {createPortal(
           <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 100 }}>
             {/* FTUE: Welcome (FTUE_1) - only "Lets go!" is clickable */}
@@ -3919,6 +3984,12 @@ export default function App() {
                 }}
               />
             )}
+          </div>,
+          document.body
+        )}
+        {/* Modals (level up, discovery, offers, pause): above surplus coin panels */}
+        {createPortal(
+          <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 220 }}>
             {/* Level Up Popup */}
             {levelUpPopup && (() => {
               const unlockInfo = getLevelUnlockInfo(levelUpPopup.level);
@@ -3941,7 +4012,9 @@ export default function App() {
                   description={unlockInfo.description}
                   icon={unlockInfo.icon}
                   onUnlockNow={() => {
-                    setPlayerLevel((l) => l + 1);
+                    // Settings "Level Up" already advances `playerLevel` before showing the popup.
+                    // Only increment here if the player is still below the popup level.
+                    setPlayerLevel((l) => (l < levelUpPopup.level ? l + 1 : l));
                     setPlayerLevelProgress(0);
                     if (unlockInfo.upgradeId === 'seed_surplus') {
                       setSeedsState((prev) => ({
@@ -4218,7 +4291,7 @@ export default function App() {
                 setPlayerLevel(nextLevel);
                 setPlayerLevelProgress(0);
                 setPlayerLevelFlashTrigger((t) => t + 1);
-                if (nextLevel <= 12) {
+                if (nextLevel <= 10) {
                   setLevelUpPopupQueue((q) => [...q, nextLevel]);
                 }
               }}
@@ -4232,6 +4305,7 @@ export default function App() {
                 lastMergeDiscoveryLevelRef.current = newLevel;
                 discoveryLevelAfterPauseCloseRef.current = newLevel; // latest only; popup when pause closes
               }}
+              onAddMoney={(amount) => setMoney((prev) => prev + amount)}
               closeOnBackdropClick
               appScale={appScale}
             />
@@ -4322,7 +4396,9 @@ export default function App() {
                   height: coinPanelPortalRect.height,
                   transform: `scale(${coinPanelPortalRect.scale})`,
                   transformOrigin: 'top left',
-                  zIndex: 220,
+                  zIndex: 110,
+                  // When on shed/market, still run animations (surplus fires & credits) but hide so user doesn't see particles
+                  visibility: activeScreen === 'FARM' ? 'visible' : 'hidden',
                 }}
               >
                 {activeCoinPanels.map((coin) => (
@@ -4336,29 +4412,29 @@ export default function App() {
                     activePanelCount={activeCoinPanels.length}
                     onImpact={(value) => {
                       pendingCoinImpactRef.current.total += value;
-                      if (!pendingCoinImpactRef.current.scheduled) {
-                        pendingCoinImpactRef.current.scheduled = true;
-                        walletImpactFlushRafRef.current = requestAnimationFrame(() => {
-                          const total = pendingCoinImpactRef.current.total;
-                          pendingCoinImpactRef.current = { total: 0, scheduled: false };
-                          walletImpactFlushRafRef.current = 0;
-                          setMoney((prev) => prev + total);
-                          setWalletBounceTrigger((t) => t + 1);
-                          setWalletFlashActive(true);
-                          if (walletFlashTimeoutRef.current) clearTimeout(walletFlashTimeoutRef.current);
-                          walletFlashTimeoutRef.current = setTimeout(() => setWalletFlashActive(false), 120);
-                        });
-                      }
-                    }}
-                    onComplete={() => setActiveCoinPanels(prev => prev.filter((c) => c.id !== coin.id))}
-                  />
-                ))}
-              </div>
-            ) : (
-              <></>
-            ),
-            document.body
-          )}
+                        if (!pendingCoinImpactRef.current.scheduled) {
+                          pendingCoinImpactRef.current.scheduled = true;
+                          walletImpactFlushRafRef.current = requestAnimationFrame(() => {
+                            const total = pendingCoinImpactRef.current.total;
+                            pendingCoinImpactRef.current = { total: 0, scheduled: false };
+                            walletImpactFlushRafRef.current = 0;
+                            setMoney((prev) => prev + total);
+                            setWalletBounceTrigger((t) => t + 1);
+                            setWalletFlashActive(true);
+                            if (walletFlashTimeoutRef.current) clearTimeout(walletFlashTimeoutRef.current);
+                            walletFlashTimeoutRef.current = setTimeout(() => setWalletFlashActive(false), 120);
+                          });
+                        }
+                      }}
+                      onComplete={() => setActiveCoinPanels(prev => prev.filter((c) => c.id !== coin.id))}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <></>
+              ),
+              document.body
+            )}
           {activePlantPanels.map((panel) => (
             <PlantPanel
               key={panel.id}

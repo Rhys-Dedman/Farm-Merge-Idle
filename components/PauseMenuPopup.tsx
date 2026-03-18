@@ -1,8 +1,8 @@
 /**
- * Pause Menu Popup - Same look as discovery popup but no header, no leaf burst.
- * Title, stacked buttons. X and backdrop to close.
+ * Settings (Pause) Popup - Debugger menu. Title/divider/description match discovery popup style.
  */
 import React, { useState, useEffect } from 'react';
+import { assetPath } from '../utils/assetPath';
 import { getPerformanceMode, setPerformanceMode } from '../utils/performanceMode';
 
 interface PauseMenuPopupProps {
@@ -14,6 +14,8 @@ interface PauseMenuPopupProps {
   onLevelUpClick: () => void;
   /** Dev/cheat: unlock next plant in background; pause stays open. Discovery shows on pause close (latest only). */
   onUnlockPlantClick?: () => void;
+  /** Dev/cheat: add coins (e.g. +100k). Does not close pause menu. */
+  onAddMoney?: (amount: number) => void;
   /** When false, Unlock Plant button is disabled (all plants unlocked) */
   canUnlockPlant?: boolean;
   closeOnBackdropClick?: boolean;
@@ -32,6 +34,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   onRewardedAdClick,
   onLevelUpClick,
   onUnlockPlantClick,
+  onAddMoney,
   canUnlockPlant = true,
   closeOnBackdropClick = true,
   appScale = 1,
@@ -40,6 +43,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   const [rewardedPressed, setRewardedPressed] = useState(false);
   const [levelUpPressed, setLevelUpPressed] = useState(false);
   const [unlockPlantPressed, setUnlockPlantPressed] = useState(false);
+  const [addCoinsPressed, setAddCoinsPressed] = useState(false);
   const [performanceMode, setPerformanceModeLocal] = useState(false);
 
   useEffect(() => {
@@ -127,71 +131,80 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
               position: 'relative',
               width: '260px',
               borderRadius: '24px',
-              background: 'linear-gradient(180deg, #f8f2e4 0%, #f0e8d8 100%)',
-              boxShadow: '0 16px 48px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.5)',
+              backgroundColor: '#fcf0c6',
+              boxShadow: '0 1px 14px rgba(0,0,0,0.96), inset 0 0 0 1.5px #e9dcaf',
               border: '2px solid rgba(180, 165, 130, 0.4)',
               padding: '36px 20px 32px',
             }}
           >
             <div className="flex flex-col items-center">
+              {/* Title - same styling as Discovery "Wild Fern" subtitle: dark brown, extra bold */}
               <h2
-                className="font-normal text-center"
+                className="font-black tracking-tight text-center"
                 style={{
-                  color: titleColor,
+                  color: '#5c4a32',
                   fontFamily: 'Inter, sans-serif',
-                  letterSpacing: '-0.02em',
-                  fontSize: '2rem',
+                  fontSize: '2.25rem',
                 }}
               >
-                Pause
+                Settings
               </h2>
 
-              {/* Performance mode toggle */}
-              <div
-                className="flex items-center justify-between w-full mt-4 px-1"
-                style={{ maxWidth: '200px' }}
+              {/* Green divider - same as discovery popup */}
+              <div className="w-full flex items-center justify-center" style={{ marginTop: '8px', marginBottom: '12px' }}>
+                <img
+                  src={assetPath('/assets/popups/popup_divider.png')}
+                  alt=""
+                  className="h-auto object-contain"
+                  style={{ width: '100%', maxWidth: '220px' }}
+                />
+              </div>
+
+              {/* Description - same size/color/italics as discovery popup description */}
+              <p
+                className="font-medium text-center leading-relaxed italic w-full"
+                style={{
+                  color: '#c2b280',
+                  fontFamily: 'Inter, sans-serif',
+                  fontSize: '0.875rem',
+                  paddingLeft: '12px',
+                  paddingRight: '12px',
+                  marginBottom: '16px',
+                }}
               >
-                <span
-                  className="font-semibold"
-                  style={{
-                    color: titleColor,
-                    fontFamily: 'Inter, sans-serif',
-                    fontSize: '0.875rem',
-                  }}
-                >
-                  Performance mode
-                </span>
+                This is a debugger menu for Rhys only! Don&apos;t even think about using these cheats...
+              </p>
+
+              <div className="flex flex-col items-center gap-3 w-full" style={{ maxWidth: '200px' }}>
+                {/* Performance Mode - green button, OFF by default, tap toggles ON */}
                 <button
                   type="button"
-                  role="switch"
-                  aria-checked={performanceMode}
                   onClick={() => {
                     const next = !performanceMode;
                     setPerformanceModeLocal(next);
                     setPerformanceMode(next);
                   }}
-                  className="relative rounded-full transition-colors shrink-0"
+                  className="relative flex items-center justify-center rounded-lg transition-all w-full"
                   style={{
-                    width: '44px',
-                    height: '24px',
-                    backgroundColor: performanceMode ? buttonBorderColor : 'rgba(0,0,0,0.2)',
-                    border: 'none',
+                    height: '40px',
+                    backgroundColor: buttonBgColor,
+                    border: `3px solid ${buttonBorderColor}`,
+                    borderRadius: '16px',
+                    boxShadow: `0 6px 0 ${buttonBorderColor}, 0 8px 16px rgba(0,0,0,0.15)`,
                   }}
                 >
                   <span
-                    className="absolute top-1 rounded-full bg-white shadow transition-transform"
+                    className="font-bold tracking-tight"
                     style={{
-                      left: performanceMode ? '22px' : '4px',
-                      width: '18px',
-                      height: '18px',
-                      transform: 'translateY(-50%)',
-                      top: '50%',
+                      color: buttonTextColor,
+                      fontFamily: 'Inter, sans-serif',
+                      textShadow: '0 1px 0 rgba(255,255,255,0.3)',
+                      fontSize: '0.875rem',
                     }}
-                  />
+                  >
+                    Performance Mode {performanceMode ? 'ON' : 'OFF'}
+                  </span>
                 </button>
-              </div>
-
-              <div className="flex flex-col items-center gap-3 w-full mt-6" style={{ maxWidth: '200px' }}>
                 <button
                   type="button"
                   onMouseDown={() => setRewardedPressed(true)}
@@ -288,6 +301,38 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                       }}
                     >
                       Unlock plant
+                    </span>
+                  </button>
+                ) : null}
+                {onAddMoney ? (
+                  <button
+                    type="button"
+                    onMouseDown={() => setAddCoinsPressed(true)}
+                    onMouseUp={() => setAddCoinsPressed(false)}
+                    onMouseLeave={() => setAddCoinsPressed(false)}
+                    onClick={() => onAddMoney(100000)}
+                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                    style={{
+                      height: '40px',
+                      backgroundColor: addCoinsPressed ? buttonPressedBg : buttonBgColor,
+                      border: `3px solid ${buttonBorderColor}`,
+                      borderRadius: '16px',
+                      boxShadow: addCoinsPressed
+                        ? 'inset 0 3px 6px rgba(0,0,0,0.15)'
+                        : `0 6px 0 ${buttonBorderColor}, 0 8px 16px rgba(0,0,0,0.15)`,
+                      transform: addCoinsPressed ? 'translateY(3px)' : 'translateY(0)',
+                    }}
+                  >
+                    <span
+                      className="font-bold tracking-tight"
+                      style={{
+                        color: buttonTextColor,
+                        fontFamily: 'Inter, sans-serif',
+                        textShadow: '0 1px 0 rgba(255,255,255,0.3)',
+                        fontSize: '0.875rem',
+                      }}
+                    >
+                      +100k Coins
                     </span>
                   </button>
                 ) : null}

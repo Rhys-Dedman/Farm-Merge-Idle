@@ -24,7 +24,7 @@ const TAB_ICONS: Record<TabType, string> = {
 const TAB_LABELS: Record<TabType, string> = {
   SEEDS: 'SEEDS',
   CROPS: 'GARDEN',
-  HARVEST: 'ORDERS',
+  HARVEST: 'MARKET',
 };
 
 const NOTIFICATION_COLOR = '#e6803a';
