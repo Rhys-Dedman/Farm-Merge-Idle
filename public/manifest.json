@@ -1,6 +1,6 @@
 {
-  "name": "Farm Merge Idle",
-  "short_name": "FarmMerge",
+  "name": "Pocket Garden",
+  "short_name": "Pocket Garden",
   "description": "A relaxing merge game where you grow and combine plants",
   "start_url": "./",
   "display": "standalone",
