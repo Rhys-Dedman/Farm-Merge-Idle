@@ -151,7 +151,7 @@ export const SideAction: React.FC<SideActionProps> = ({
     : 'stroke-dashoffset 0.08s cubic-bezier(0.25, 0.1, 0.25, 1)';
 
   const progressBgColor = isFlashing ? '#475c3b' : '#394a28';
-  const completedProgressColor = '#80aa16';
+  const completedProgressColor = isFlashing ? '#87a62f' : '#7a9f20';
   // White version progress bar colors: upgrade button green for completed, storage text dark green for incomplete
   const whiteProgressCompletedColor = '#9db546'; // light green for completed progress
   const whiteProgressIncompleteColor = '#475c3b'; // storage text dark green

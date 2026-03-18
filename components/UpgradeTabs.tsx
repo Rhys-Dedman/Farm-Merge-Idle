@@ -1,6 +1,6 @@
-
 import React, { useRef, useImperativeHandle, forwardRef } from 'react';
 import { TabType } from '../types';
+import { assetPath } from '../utils/assetPath';
 
 interface UpgradeTabsProps {
   activeTab: TabType;
@@ -16,9 +16,9 @@ export interface UpgradeTabsRef {
 }
 
 const TAB_ICONS: Record<TabType, string> = {
-  SEEDS: '🌱',
-  CROPS: '🌻',
-  HARVEST: '🪙',
+  SEEDS: assetPath('/assets/icons/emoji_seed.png'),
+  CROPS: assetPath('/assets/icons/emoji_sunflower.png'),
+  HARVEST: assetPath('/assets/icons/emoji_coin.png'),
 };
 
 const TAB_LABELS: Record<TabType, string> = {
@@ -84,9 +84,11 @@ export const UpgradeTabs = forwardRef<UpgradeTabsRef, UpgradeTabsProps>(({ activ
             className={`flex-1 flex flex-row items-center justify-center space-x-1.5 transition-all duration-300 active:scale-95 h-full relative z-10`}
             style={{ touchAction: 'manipulation' }}
           >
-            <span className={`text-[9px] filter saturate-[0.8] ${isActive ? 'opacity-100' : 'opacity-40 grayscale'}`}>
-              {TAB_ICONS[tab]}
-            </span>
+            <img
+              src={TAB_ICONS[tab]}
+              alt=""
+              className={`w-[12px] h-[12px] object-contain flex-shrink-0 filter saturate-[0.8] transition-all duration-300 -mt-[1px] ${isActive ? 'opacity-100' : 'opacity-40 grayscale'}`}
+            />
             <span 
               ref={(el) => { tabRefs.current[tab] = el; }}
               className="text-[11px] font-black tracking-[0.1em] transition-colors duration-300"
@@ -110,7 +112,7 @@ export const UpgradeTabs = forwardRef<UpgradeTabsRef, UpgradeTabsProps>(({ activ
         }}
       >
         <div 
-          className="absolute top-[-4px] left-1/2 -translate-x-1/2 transition-colors duration-300"
+          className="absolute top-[-3px] left-1/2 -translate-x-1/2 transition-colors duration-300"
           style={{
             width: 0,
             height: 0,
