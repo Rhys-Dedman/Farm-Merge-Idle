@@ -3942,6 +3942,9 @@ export default function App() {
                   setFtue10BigBounceActive(false);
 
                   // FTUE 10: reveal upgrade panel (closed on Seeds), then user opens it manually (finger 1).
+                  // Ensure seed progress is visible during FTUE 10 (white button state can otherwise sit at 0%).
+                  seedProgressRef.current = 75;
+                  setSeedProgress(75);
                   setFtueUpgradePanelVisible(true);
                   setActiveTab('SEEDS');
                   setIsExpanded(false);
