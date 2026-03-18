@@ -521,7 +521,7 @@ export default function App() {
   const ftue95EnterTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ftue95StartOnceRef = useRef(false);
 
-  // FTUE 10 → 11: wait until upgrade panel is fully closed before setting progress to 80% + enabling surplus, then show FTUE 11
+  // FTUE 10 → 11: wait until upgrade panel is fully closed, enable surplus, then show FTUE 11.
   useEffect(() => {
     if (!ftue11StartQueued) return;
     // Panel closed height target is 50 (see useAnimatedPanelHeight). Wait until we reach it.
@@ -538,10 +538,6 @@ export default function App() {
     if (ftue10PostClosePending) {
       setFtueSeedSurplusActivated(true);
       setFtueHarvestSurplusActivated(true);
-      seedProgressRef.current = 75;
-      setSeedProgress(75);
-      harvestProgressRef.current = 75;
-      setHarvestProgress(75);
       setHarvestCharges(HARVEST_CHARGES_MAX);
       harvestChargesRef.current = HARVEST_CHARGES_MAX;
       setFtue10PostClosePending(false);
