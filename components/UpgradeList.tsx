@@ -356,7 +356,7 @@ const getCropsUpgradeValue = (upgradeId: string, level: number): string | null =
 const getHarvestUpgradeValue = (upgradeId: string, level: number): string | null => {
   switch (upgradeId) {
     case 'customer_speed':
-      return `${Math.max(0, 15 - 2 * level)}s`;
+      return `${Math.max(0, 10 - 1 * level)}s`;
     case 'market_value':
       return `${(1 + 0.5 * Math.min(5, level)).toFixed(1)}x`;
     case 'seed_surplus':
