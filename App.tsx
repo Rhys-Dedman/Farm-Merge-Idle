@@ -1494,7 +1494,7 @@ export default function App() {
     setCoinGoalTimeRemaining(30);
   }, [coinGoalVisible, coinGoalTimeRemaining]);
 
-  // When seed level increases: auto-complete goals below seed level (give full coin value), auto-level plants below seed level (with beam VFX)
+  // When seed level increases: auto-level plants below seed level (with beam VFX) and bump any lower-level goals up to the new seed level.
   useEffect(() => {
     const newSeedLevel = getSeedLevelFromHighestPlant(highestPlantEver);
     if (newSeedLevel <= prevSeedLevelRef.current) return;
@@ -1535,22 +1535,19 @@ export default function App() {
       return newGrid;
     });
 
-    // 2. Auto-complete goals below seed level: transition to 'completed' (coin) state with bounce; player taps to collect
-    const slotsToComplete: number[] = [];
+    // 2. Upgrade any lower-level goals to the new seed level so they never become impossible.
+    const slotsToUpgrade: number[] = [];
     goalSlots.forEach((s, i) => {
-      if (s === 'green' && (goalPlantTypes[i] ?? 0) < newSeedLevel) slotsToComplete.push(i);
+      if (s === 'green' && (goalPlantTypes[i] ?? 0) < newSeedLevel) slotsToUpgrade.push(i);
     });
-    if (slotsToComplete.length > 0) {
-      slotsToComplete.forEach((slotIdx) => {
-        const plantLevel = goalPlantTypes[slotIdx] ?? slotIdx + 1;
-        const plantValue = getCoinValueForLevel(plantLevel);
-        const amountRequired = goalAmountsRequired[slotIdx] ?? 3;
-        const marketMultiplier = getMarketValueMultiplier(harvestState);
-        const rawValue = plantValue * amountRequired * 1.5 * marketMultiplier;
-        const roundedValue = Math.round(rawValue / 5) * 5;
-        setGoalCompletedValues((v) => { const n = [...v]; n[slotIdx] = roundedValue; return n; });
-        setGoalCounts((c) => { const n = [...c]; n[slotIdx] = 0; return n; });
-        setGoalSlots((s) => { const n = [...s]; n[slotIdx] = 'completed'; return n; });
+    if (slotsToUpgrade.length > 0) {
+      // Swap the goal icon/type but keep the required amount + remaining count the same.
+      setGoalPlantTypes((prev) => {
+        const next = [...prev];
+        slotsToUpgrade.forEach((slotIdx) => { next[slotIdx] = newSeedLevel; });
+        return next;
+      });
+      slotsToUpgrade.forEach((slotIdx) => {
         setGoalBounceSlots((prev) => prev.includes(slotIdx) ? prev : [...prev, slotIdx]);
         setTimeout(() => setGoalBounceSlots((b) => b.filter((i) => i !== slotIdx)), 400);
       });
