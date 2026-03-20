@@ -16,6 +16,8 @@ interface PauseMenuPopupProps {
   onUnlockPlantClick?: () => void;
   /** Dev/cheat: add coins (e.g. +100k). Does not close pause menu. */
   onAddMoney?: (amount: number) => void;
+  /** Clear save and reload (fresh FTUE). */
+  onResetProgress?: () => void;
   /** When false, Unlock Plant button is disabled (all plants unlocked) */
   canUnlockPlant?: boolean;
   closeOnBackdropClick?: boolean;
@@ -35,6 +37,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   onLevelUpClick,
   onUnlockPlantClick,
   onAddMoney,
+  onResetProgress,
   canUnlockPlant = true,
   closeOnBackdropClick = true,
   appScale = 1,
@@ -44,6 +47,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   const [levelUpPressed, setLevelUpPressed] = useState(false);
   const [unlockPlantPressed, setUnlockPlantPressed] = useState(false);
   const [addCoinsPressed, setAddCoinsPressed] = useState(false);
+  const [resetPressed, setResetPressed] = useState(false);
   const [performanceMode, setPerformanceModeLocal] = useState(false);
 
   useEffect(() => {
@@ -310,7 +314,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                     onMouseDown={() => setAddCoinsPressed(true)}
                     onMouseUp={() => setAddCoinsPressed(false)}
                     onMouseLeave={() => setAddCoinsPressed(false)}
-                    onClick={() => onAddMoney(100000)}
+                    onClick={() => onAddMoney(1000000)}
                     className="relative flex items-center justify-center rounded-lg transition-all w-full"
                     style={{
                       height: '40px',
@@ -322,7 +326,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                         : `0 6px 0 ${buttonBorderColor}, 0 8px 16px rgba(0,0,0,0.15)`,
                       transform: addCoinsPressed ? 'translateY(3px)' : 'translateY(0)',
                     }}
-                  >
+                    >
                     <span
                       className="font-bold tracking-tight"
                       style={{
@@ -332,7 +336,40 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                         fontSize: '0.875rem',
                       }}
                     >
-                      +100k Coins
+                      +1Mil Coins
+                    </span>
+                  </button>
+                ) : null}
+                {onResetProgress ? (
+                  <button
+                    type="button"
+                    onMouseDown={() => setResetPressed(true)}
+                    onMouseUp={() => setResetPressed(false)}
+                    onMouseLeave={() => setResetPressed(false)}
+                    onClick={() => onResetProgress()}
+                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                    style={{
+                      height: '40px',
+                      marginTop: '4px',
+                      backgroundColor: resetPressed ? '#8b4040' : '#a84848',
+                      border: '3px solid #6b2a2a',
+                      borderRadius: '16px',
+                      boxShadow: resetPressed
+                        ? 'inset 0 3px 6px rgba(0,0,0,0.2)'
+                        : '0 6px 0 #6b2a2a, 0 8px 16px rgba(0,0,0,0.15)',
+                      transform: resetPressed ? 'translateY(3px)' : 'translateY(0)',
+                    }}
+                  >
+                    <span
+                      className="font-bold tracking-tight"
+                      style={{
+                        color: '#fce8e8',
+                        fontFamily: 'Inter, sans-serif',
+                        textShadow: '0 1px 0 rgba(0,0,0,0.25)',
+                        fontSize: '0.875rem',
+                      }}
+                    >
+                      Reset Progress
                     </span>
                   </button>
                 ) : null}

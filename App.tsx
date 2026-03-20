@@ -45,6 +45,15 @@ import { assetPath } from './utils/assetPath';
 import { getTickCount60, TARGET_FRAME_MS, scheduleNextFrame } from './utils/raf60';
 import { getPerformanceMode } from './utils/performanceMode';
 import { LIMITED_OFFERS, getOfferById } from './offers';
+import {
+  loadGameSave,
+  persistGameSave,
+  clearGameSave,
+  type GameSaveV1,
+  GAME_SAVE_VERSION,
+} from './utils/gameSave';
+import { isOfflineCoinEarningsBlockedByFtue, simulateOfflineSeedHarvest } from './utils/offlineSimulate';
+import { OfflineEarningsPopup } from './components/OfflineEarningsPopup';
 
 /** Coin per plant level: level 1 = 5, level 2 = 10, level 3 = 20, ... */
 export function getCoinValueForLevel(level: number): number {
@@ -311,16 +320,44 @@ export interface ProjectileData {
   isSpecialDelivery?: boolean;
 }
 
+/** First mount after "Reset progress": strip stray save + skip quick resume. Also used for normal quick-resume detection. */
+function getInitialQuickResumeLoad(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    if (sessionStorage.getItem('pocket-garden-reset-v1') === '1') {
+      sessionStorage.removeItem('pocket-garden-reset-v1');
+      clearGameSave();
+      return false;
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const s = loadGameSave();
+    return !!(s && s.v === GAME_SAVE_VERSION);
+  } catch {
+    return false;
+  }
+}
+
 export default function App() {
   // Loading screen state
   const [isLoading, setIsLoading] = useState(true);
   const [gameOpacity, setGameOpacity] = useState(0);
+  /** Skip splash when a valid save exists at first paint (quick black fade instead). */
+  const [useQuickResumeLoad] = useState(getInitialQuickResumeLoad);
+  const pendingQuickLoadFinishRef = useRef(false);
   
   const [activeTab, setActiveTab] = useState<TabType>('SEEDS');
   const [activeScreen, setActiveScreen] = useState<ScreenType>('FARM');
   const [isExpanded, setIsExpanded] = useState(false);
   const panelHeight = useAnimatedPanelHeight(isExpanded);
   const [money, setMoney] = useState(0);
+  // Used for synchronous updates during pagehide/unload so persisted snapshots are correct.
+  const moneyRef = useRef<number>(money);
+  useEffect(() => {
+    moneyRef.current = money;
+  }, [money]);
 
   const [grid, setGrid] = useState<BoardCell[]>(generateInitialGrid());
   const [seedProgress, setSeedProgress] = useState(0);
@@ -369,6 +406,29 @@ export default function App() {
   const [pendingOfferHighlightId, setPendingOfferHighlightId] = useState<string | null>(null);
   // Pause menu (opened from settings/gear button)
   const [pauseMenuOpen, setPauseMenuOpen] = useState(false);
+  /** Uncollected offline surplus (persistent); also drives save version for popup. */
+  const pendingOfflineEarningsRef = useRef(0);
+  /** Synced to offline earnings popup display amount (for reliable collect payout). */
+  const offlinePopupAmountRef = useRef(0);
+  const [offlineEarningsUi, setOfflineEarningsUi] = useState<{
+    open: boolean;
+    amount: number;
+    showDoubleButton: boolean;
+    rewardBounceKey: number;
+  } | null>(null);
+  /** After offline earnings closes, block limited/rewarded offer popups for 10s (auto + manual). */
+  const lastOfflineEarningsClosedAtRef = useRef<number>(0);
+  const prevOfflineEarningsOpenRef = useRef(false);
+  /** Ref so pagehide/visibility flush can safely detect the popup state without stale closures. */
+  const offlineEarningsOpenRef = useRef(false);
+  /** Per-popup guard so we only auto-credit once per offline earnings popup open. */
+  const offlineEarningsAutoCollectedRef = useRef(false);
+  /** Latest save closure for interval / pagehide (updated every render). */
+  const persistGameSnapshotRef = useRef<() => void>(() => {});
+  /** When true, skip all persists (prevents pagehide flush from re-saving after clearGameSave + reload). */
+  const suppressGameSaveRef = useRef(false);
+  /** Only allow writing progress to localStorage after FTUE 11 is fully closed. */
+  const ftue11PersistenceEnabledRef = useRef(false);
   /** After spamming Unlock plant, show discovery only for this level when pause closes */
   const discoveryLevelAfterPauseCloseRef = useRef<number | null>(null);
   // Fake ad popup: show full-screen "ad", on Complete ad run callback then close
@@ -420,7 +480,7 @@ export default function App() {
   const coinGoalIconRef = useRef<HTMLImageElement>(null);
   const lastCoinGoalHiddenAtRef = useRef<number>(Date.now());
   const nextCoinGoalDelayRef = useRef<number>(30000 + Math.random() * 30000); // 30–60s until next spawn, new random each hide
-  const pendingAdSourceRef = useRef<'limitedOffer' | 'upgradeList' | 'coinGoal' | null>(null);
+  const pendingAdSourceRef = useRef<'limitedOffer' | 'upgradeList' | 'coinGoal' | 'offlineEarnings' | null>(null);
   const pendingOfferIdRef = useRef<string | null>(null); // for boost particle: only shoot if offer has duration
   const [activePlantPanels, setActivePlantPanels] = useState<PlantPanelData[]>([]);
   const [fertilizingCellIndices, setFertilizingCellIndices] = useState<number[]>([]); // Cells currently playing fertilize animation
@@ -913,6 +973,37 @@ export default function App() {
     return () => clearInterval(interval);
   }, [rewardedOffers.length > 0, protectedOfferId]);
 
+  useEffect(() => {
+    const open = offlineEarningsUi?.open === true;
+    offlineEarningsOpenRef.current = open;
+    if (open && !prevOfflineEarningsOpenRef.current) {
+      offlineEarningsAutoCollectedRef.current = false;
+    }
+    if (prevOfflineEarningsOpenRef.current && !open) {
+      lastOfflineEarningsClosedAtRef.current = Date.now();
+    }
+    prevOfflineEarningsOpenRef.current = open;
+  }, [offlineEarningsUi?.open]);
+
+  /** Dismiss limited offer if offline earnings takes priority (no double popup). */
+  useEffect(() => {
+    if (!offlineEarningsUi?.open) return;
+    setLimitedOfferPopup((prev) => {
+      if (!prev?.isVisible) return prev;
+      const now = Date.now();
+      lastLimitedOfferClosedAtRef.current = now;
+      lastLimitedOfferShownAtRef.current = now;
+      return null;
+    });
+  }, [offlineEarningsUi?.open]);
+
+  const canOpenLimitedOfferRewardPopup = useCallback(() => {
+    if (offlineEarningsUi?.open) return false;
+    const t = lastOfflineEarningsClosedAtRef.current;
+    if (t > 0 && Date.now() - t < 10000) return false;
+    return true;
+  }, [offlineEarningsUi?.open]);
+
   // Auto-trigger limited offer popup: Rule 1 max 1 per 90s, Rule 2 never same twice in a row, Rule 3 after 90s pick best trigger else at 120s random, Rule 4 level >= 2 only
   useEffect(() => {
     if (playerLevel < 2 || LIMITED_OFFERS.length === 0) return;
@@ -924,6 +1015,8 @@ export default function App() {
       if (limitedOfferPopup?.isVisible) return;
       if (showFakeAdRef.current) return; // never show limited offer while fake ad is on screen
       // Don't show limited offer while another popup is on screen
+      if (offlineEarningsUi?.open) return;
+      if (lastOfflineEarningsClosedAtRef.current > 0 && Date.now() - lastOfflineEarningsClosedAtRef.current < 10000) return;
       if (levelUpPopup?.isVisible) return;
       if (discoveryPopup?.isVisible) return;
       if (seedProgressionPopup) return;
@@ -985,7 +1078,7 @@ export default function App() {
       }
     }, 2000);
     return () => clearInterval(interval);
-  }, [playerLevel, grid, money, limitedOfferPopup?.isVisible, goalSlots, harvestState, highestPlantEver, levelUpPopup?.isVisible, discoveryPopup?.isVisible, seedProgressionPopup, plantInfoPopup?.isVisible]);
+  }, [playerLevel, grid, money, limitedOfferPopup?.isVisible, goalSlots, harvestState, highestPlantEver, levelUpPopup?.isVisible, discoveryPopup?.isVisible, seedProgressionPopup, plantInfoPopup?.isVisible, offlineEarningsUi?.open]);
 
   // Derive which tabs have offers (for tab notification coloring)
   const tabsWithOffers = new Set(rewardedOffers.map(o => o.tab));
@@ -2744,28 +2837,352 @@ export default function App() {
 
   const screenTranslateX = `translateX(-${(getScreenIndex() * 100) / 3}%)`;
 
-  // Handle loading complete - fade in the game
+  /** Apply saved game + offline sim; returns total offline coin payout pending (not wallet). */
+  const hydrateFromSave = useCallback((save: GameSaveV1) => {
+    setMoney(save.money);
+    setGrid(save.grid);
+    setSeedsState(save.seedsState);
+    setHarvestState(save.harvestState);
+    setCropsState(save.cropsState);
+    setSeedsInStorage(save.seedsInStorage);
+    setHighestPlantEver(save.highestPlantEver);
+    highestPlantEverRef.current = save.highestPlantEver;
+    setPlayerLevel(save.playerLevel);
+    setPlayerLevelProgress(save.playerLevelProgress);
+    setActiveTab(save.activeTab);
+    setRewardedOffers(save.rewardedOffers);
+    setBarnNotification(save.barnNotification);
+    setGoalSlots(save.goalSlots);
+    setGoalPlantTypes(save.goalPlantTypes);
+    setGoalLoadingSeconds(save.goalLoadingSeconds);
+    setGoalCounts(save.goalCounts);
+    setGoalAmountsRequired(save.goalAmountsRequired);
+    setGoalCompletedValues(save.goalCompletedValues);
+    setGoalDisplayOrder(save.goalDisplayOrder);
+    setCoinGoalVisible(save.coinGoalVisible);
+    setCoinGoalValue(save.coinGoalValue);
+    setCoinGoalTimeRemaining(save.coinGoalTimeRemaining);
+    newGoalsSinceDiscoveryRef.current = save.newGoalsSinceDiscovery;
+    lastMergeDiscoveryLevelRef.current = save.lastMergeDiscoveryLevel;
+    lastSpawnedGoalLevelsRef.current = [...save.lastSpawnedGoalLevels] as [number, number];
+    setActiveFtueStage(save.activeFtueStage);
+    setFtue2SeedFireCount(save.ftue2SeedFireCount);
+    setFtue2FadingOut(save.ftue2FadingOut);
+    setFtue3FadingOut(save.ftue3FadingOut);
+    setFtue4Pending(save.ftue4Pending);
+    setFtue4FadingOut(save.ftue4FadingOut);
+    setFtue7Scheduled(save.ftue7Scheduled);
+    setFtue7UnrevealedSlots(save.ftue7UnrevealedSlots);
+    setFtue7RevealMode(save.ftue7RevealMode);
+    setFtue7SeedFireCount(save.ftue7SeedFireCount);
+    setFtue7FadingOut(save.ftue7FadingOut);
+    setFtue8FadingOut(save.ftue8FadingOut);
+    setFtue9CollectedCount(save.ftue9CollectedCount);
+    setFtue9FadingOut(save.ftue9FadingOut);
+    setFtue10Phase(save.ftue10Phase);
+    setFtue10GreenFlashUpgradeId(save.ftue10GreenFlashUpgradeId);
+    setFtue10FadingOut(save.ftue10FadingOut);
+    setFtueSeedSurplusActivated(save.ftueSeedSurplusActivated);
+    setFtueHarvestSurplusActivated(save.ftueHarvestSurplusActivated);
+    setFtue10PostClosePending(save.ftue10PostClosePending);
+    setFtue10ButtonsNormalEarly(save.ftue10ButtonsNormalEarly);
+    setFtue11StartQueued(save.ftue11StartQueued);
+    setFtueUpgradePanelVisible(save.ftueUpgradePanelVisible);
+    setFtuePlayerLevelVisible(save.ftuePlayerLevelVisible);
+    if (save.hasShownSeedProgression) hasShownSeedProgressionRef.current = true;
+    const now = Date.now();
+    setActiveBoosts(save.activeBoosts.filter((b) => b.endTime > now));
+    setPendingUnlockUpgradeId(save.pendingUnlockUpgradeId);
+    setLevelUpPopupQueue(save.levelUpPopupQueue);
+
+    seedProgressRef.current = save.seedProgress;
+    setSeedProgress(save.seedProgress);
+    harvestProgressRef.current = save.harvestProgress;
+    setHarvestProgress(save.harvestProgress);
+    harvestChargesRef.current = save.harvestCharges;
+    setHarvestCharges(save.harvestCharges);
+
+    const elapsed = Math.max(0, Date.now() - save.savedAt);
+    const ftueBlocksOffline = isOfflineCoinEarningsBlockedByFtue(save);
+    const sim = simulateOfflineSeedHarvest({
+      savedAt: save.savedAt,
+      deltaMs: elapsed,
+      seedProgress: save.seedProgress,
+      harvestProgress: save.harvestProgress,
+      harvestCharges: save.harvestCharges,
+      seedsInStorage: save.seedsInStorage,
+      seedsState: save.seedsState,
+      cropsState: save.cropsState,
+      activeBoosts: save.activeBoosts.map((b) => ({ offerId: b.offerId, endTime: b.endTime })),
+      activeFtueStage: save.activeFtueStage,
+      ftue7Scheduled: save.ftue7Scheduled,
+      ftueSeedSurplusActivated: save.ftueSeedSurplusActivated,
+      ftueHarvestSurplusActivated: save.ftueHarvestSurplusActivated,
+      earnOfflineCoins: !ftueBlocksOffline,
+    });
+    seedProgressRef.current = sim.seedProgress;
+    setSeedProgress(sim.seedProgress);
+    harvestProgressRef.current = sim.harvestProgress;
+    setHarvestProgress(sim.harvestProgress);
+    harvestChargesRef.current = sim.harvestCharges;
+    setHarvestCharges(sim.harvestCharges);
+    setSeedsInStorage(sim.seedsInStorage);
+
+    const pendingBank = ftueBlocksOffline ? 0 : (save.pendingOfflineEarnings ?? 0);
+    const totalOffline = pendingBank + sim.offlineSurplusCoins;
+    pendingOfflineEarningsRef.current = totalOffline;
+    return totalOffline;
+  }, []);
+
+  const handleQuickResumeHydrate = useCallback(() => {
+    const save = loadGameSave();
+    if (!save || save.v !== GAME_SAVE_VERSION) return;
+    pendingQuickLoadFinishRef.current = true;
+    const ftue11Completed =
+      save.activeFtueStage === null &&
+      save.ftueSeedSurplusActivated === true &&
+      save.ftueHarvestSurplusActivated === true;
+
+    // If FTUE 11 wasn't completed, treat this as a fresh run:
+    // clear any partial progress save so the user restarts from splash/FTUE welcome.
+    if (!ftue11Completed) {
+      suppressGameSaveRef.current = true;
+      clearGameSave();
+      suppressGameSaveRef.current = false;
+
+      ftue11PersistenceEnabledRef.current = false;
+      pendingOfflineEarningsRef.current = 0;
+      setOfflineEarningsUi(null);
+      setActiveFtueStage('welcome');
+      setIsExpanded(false);
+      setActiveScreen('FARM');
+      return;
+    }
+
+    ftue11PersistenceEnabledRef.current = true;
+    const totalOffline = hydrateFromSave(save);
+    setIsExpanded(false);
+    setActiveScreen('FARM');
+    if (totalOffline > 0) {
+      setOfflineEarningsUi(null);
+      setTimeout(() => {
+        setOfflineEarningsUi({
+          open: true,
+          amount: totalOffline,
+          showDoubleButton: true,
+          rewardBounceKey: 0,
+        });
+      }, 610);
+    } else {
+      setOfflineEarningsUi(null);
+    }
+  }, [hydrateFromSave]);
+
+  // Splash complete OR quick resume black fade complete — fade in gameplay
   const handleLoadComplete = useCallback(() => {
+    if (pendingQuickLoadFinishRef.current) {
+      pendingQuickLoadFinishRef.current = false;
+      setIsLoading(false);
+      const fadeInDuration = 340;
+      const startTime = Date.now();
+      const animate = () => {
+        const elapsed = Date.now() - startTime;
+        const newOpacity = Math.min(1, elapsed / fadeInDuration);
+        setGameOpacity(newOpacity);
+        if (elapsed < fadeInDuration) requestAnimationFrame(animate);
+        else setGameOpacity(1);
+      };
+      requestAnimationFrame(animate);
+      return;
+    }
+
+    const save = loadGameSave();
+    if (save && save.v === GAME_SAVE_VERSION) {
+      const ftue11Completed =
+        save.activeFtueStage === null &&
+        save.ftueSeedSurplusActivated === true &&
+        save.ftueHarvestSurplusActivated === true;
+
+      if (!ftue11Completed) {
+        suppressGameSaveRef.current = true;
+        clearGameSave();
+        suppressGameSaveRef.current = false;
+
+        ftue11PersistenceEnabledRef.current = false;
+        setActiveFtueStage('welcome');
+        pendingOfflineEarningsRef.current = 0;
+        setOfflineEarningsUi(null);
+        setIsExpanded(false);
+        setActiveScreen('FARM');
+      } else {
+        ftue11PersistenceEnabledRef.current = true;
+        const totalOffline = hydrateFromSave(save);
+        setIsExpanded(false);
+        setActiveScreen('FARM');
+        if (totalOffline > 0) {
+          setOfflineEarningsUi(null);
+          setTimeout(() => {
+            setOfflineEarningsUi({
+              open: true,
+              amount: totalOffline,
+              showDoubleButton: true,
+              rewardBounceKey: 0,
+            });
+          }, 770);
+        } else {
+          setOfflineEarningsUi(null);
+        }
+      }
+    } else {
+      ftue11PersistenceEnabledRef.current = false;
+      setActiveFtueStage('welcome');
+      pendingOfflineEarningsRef.current = 0;
+      setOfflineEarningsUi(null);
+    }
+
     setIsLoading(false);
-    setActiveFtueStage('welcome'); // FTUE_1: Welcome Message right after splash
-    // Animate game opacity from 0 to 1
     const fadeInDuration = 500;
     const startTime = Date.now();
-    
     const animate = () => {
       const elapsed = Date.now() - startTime;
       const newOpacity = Math.min(1, elapsed / fadeInDuration);
       setGameOpacity(newOpacity);
-      
       if (elapsed < fadeInDuration) {
         requestAnimationFrame(animate);
       } else {
         setGameOpacity(1);
       }
     };
-    
     requestAnimationFrame(animate);
-  }, []);
+  }, [hydrateFromSave]);
+
+  persistGameSnapshotRef.current = () => {
+    if (suppressGameSaveRef.current) return;
+    if (!ftue11PersistenceEnabledRef.current) return;
+    if (isLoading) return;
+    const payload: GameSaveV1 = {
+      v: GAME_SAVE_VERSION,
+      savedAt: Date.now(),
+      pendingOfflineEarnings: pendingOfflineEarningsRef.current,
+      money: moneyRef.current,
+      grid,
+      seedProgress: seedProgressRef.current,
+      harvestProgress: harvestProgressRef.current,
+      harvestCharges: harvestChargesRef.current,
+      seedsState,
+      harvestState,
+      cropsState,
+      seedsInStorage,
+      highestPlantEver,
+      playerLevel,
+      playerLevelProgress,
+      activeTab,
+      activeScreen,
+      isExpanded,
+      rewardedOffers,
+      barnNotification,
+      goalSlots,
+      goalPlantTypes,
+      goalLoadingSeconds,
+      goalCounts,
+      goalAmountsRequired,
+      goalCompletedValues,
+      goalDisplayOrder,
+      coinGoalVisible,
+      coinGoalValue,
+      coinGoalTimeRemaining,
+      newGoalsSinceDiscovery: newGoalsSinceDiscoveryRef.current,
+      lastMergeDiscoveryLevel: lastMergeDiscoveryLevelRef.current,
+      lastSpawnedGoalLevels: [...lastSpawnedGoalLevelsRef.current] as [number, number],
+      activeFtueStage,
+      ftue2SeedFireCount,
+      ftue2FadingOut,
+      ftue3FadingOut,
+      ftue4Pending,
+      ftue4FadingOut,
+      ftue7Scheduled,
+      ftue7UnrevealedSlots,
+      ftue7RevealMode,
+      ftue7SeedFireCount,
+      ftue7FadingOut,
+      ftue8FadingOut,
+      ftue9CollectedCount,
+      ftue9FadingOut,
+      ftue10Phase,
+      ftue10GreenFlashUpgradeId,
+      ftue10FadingOut,
+      ftueSeedSurplusActivated,
+      ftueHarvestSurplusActivated,
+      ftue10PostClosePending,
+      ftue10ButtonsNormalEarly,
+      ftue11StartQueued,
+      ftueUpgradePanelVisible,
+      ftuePlayerLevelVisible,
+      hasShownSeedProgression: hasShownSeedProgressionRef.current,
+      activeBoosts,
+      pendingUnlockUpgradeId,
+      levelUpPopupQueue,
+    };
+    persistGameSave(payload);
+  };
+
+  const autoCollectOfflineEarningsForUnload = () => {
+    if (!offlineEarningsOpenRef.current) return;
+    if (offlineEarningsAutoCollectedRef.current) return;
+
+    // Only trust the pending bank value: collect button immediately sets this to 0.
+    // That prevents any chance of double-credit if pagehide happens right after Collect.
+    const amtToCollect = pendingOfflineEarningsRef.current;
+    if (amtToCollect <= 0) {
+      pendingOfflineEarningsRef.current = 0;
+      offlinePopupAmountRef.current = 0;
+      offlineEarningsAutoCollectedRef.current = true;
+      setOfflineEarningsUi(null);
+      lastOfflineEarningsClosedAtRef.current = Date.now();
+      return;
+    }
+
+    pendingOfflineEarningsRef.current = 0;
+    offlinePopupAmountRef.current = 0;
+    offlineEarningsAutoCollectedRef.current = true;
+
+    // Synchronous update for persistence (pagehide may happen before React re-renders).
+    moneyRef.current += amtToCollect;
+    setMoney((prev) => prev + amtToCollect);
+
+    // Prevent "welcome back" popup on next launch.
+    setOfflineEarningsUi(null);
+    lastOfflineEarningsClosedAtRef.current = Date.now();
+  };
+
+  useEffect(() => {
+    offlinePopupAmountRef.current = offlineEarningsUi?.amount ?? 0;
+  }, [offlineEarningsUi?.amount]);
+
+  /** Persist once when leaving loading screen so quick refresh doesn’t lose a new session. */
+  useEffect(() => {
+    if (isLoading) return;
+    persistGameSnapshotRef.current();
+  }, [isLoading]);
+
+  useEffect(() => {
+    if (isLoading) return;
+    const id = window.setInterval(() => persistGameSnapshotRef.current(), 5000);
+    const flush = () => {
+      autoCollectOfflineEarningsForUnload();
+      persistGameSnapshotRef.current();
+    };
+    window.addEventListener('pagehide', flush);
+    const vis = () => {
+      if (document.visibilityState === 'hidden') flush();
+    };
+    document.addEventListener('visibilitychange', vis);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', vis);
+    };
+  }, [isLoading]);
 
   return (
     <ErrorBoundary>
@@ -2785,7 +3202,11 @@ export default function App() {
         `}</style>
       {/* Loading Screen */}
       {isLoading && (
-        <LoadingScreen onLoadComplete={handleLoadComplete} />
+        <LoadingScreen
+          variant={useQuickResumeLoad ? 'quick' : 'splash'}
+          onQuickResumeHydrate={useQuickResumeLoad ? handleQuickResumeHydrate : undefined}
+          onLoadComplete={handleLoadComplete}
+        />
       )}
       <div
         ref={viewportWrapperRef}
@@ -2915,6 +3336,7 @@ export default function App() {
                     setPlayerLevelFlashTrigger((t) => t + 1);
                   }}
                   onGiftClick={() => {
+                    if (!canOpenLimitedOfferRewardPopup()) return;
                     const state = buildLimitedOfferPopupState('seed_storm');
                     if (state) setLimitedOfferPopup(state);
                   }}
@@ -2939,6 +3361,7 @@ export default function App() {
                   }}
                   onBoostClick={(boost) => {
                     if (!boost.offerId) return;
+                    if (!canOpenLimitedOfferRewardPopup()) return;
                     const state = buildLimitedOfferPopupState(boost.offerId, { activeBoostEndTime: boost.endTime, highestPlantEver });
                     if (state) setLimitedOfferPopup(state);
                   }}
@@ -3528,6 +3951,7 @@ export default function App() {
                       }
                     }}
                     onRewardedOfferPanelClick={(offerId) => {
+                      if (!canOpenLimitedOfferRewardPopup()) return;
                       const state = buildLimitedOfferPopupState(offerId, { highestPlantEver });
                       if (state) setLimitedOfferPopup(state);
                     }}
@@ -3972,6 +4396,9 @@ export default function App() {
                 seedButtonRect={seedButtonRect}
                 harvestButtonRect={harvestButtonRect}
                 onConfirm={() => {
+                  // FTUE 11 is fully closed: from now on we save progress + allow offline earnings.
+                  ftue11PersistenceEnabledRef.current = true;
+                  persistGameSnapshotRef.current();
                   setActiveFtueStage(null);
 
                   // Spawn 3 starter goals (plant 1/2/3) with 0.5s stagger and bounce.
@@ -4011,6 +4438,8 @@ export default function App() {
                       setTimeout(() => {
                         setGoalSpawnBounceSlots((prev) => prev.filter((s) => s !== slotIdx));
                       }, 500);
+                      // Quitting mid-stagger should still retain goals created so far.
+                      persistGameSnapshotRef.current();
                     }, index * 500);
                   });
                 }}
@@ -4287,6 +4716,7 @@ export default function App() {
               isVisible={showFakeAd}
               appScale={appScale}
               onActivateRewardClick={(buttonRect) => {
+                if (pendingAdSourceRef.current === 'offlineEarnings') return;
                 if (pendingAdSourceRef.current === 'coinGoal') return;
                 const offerId = pendingOfferIdRef.current;
                 const offer = offerId ? getOfferById(offerId) : null;
@@ -4320,6 +4750,7 @@ export default function App() {
                 const applyReward = pendingAdComplete;
                 setPendingAdComplete(null);
                 setShowFakeAd(false);
+                pendingAdSourceRef.current = null;
                 setTimeout(() => applyReward?.(), 250);
               }}
             />
@@ -4343,6 +4774,7 @@ export default function App() {
                 });
               }}
               onRewardedAdClick={() => {
+                if (!canOpenLimitedOfferRewardPopup()) return;
                 const offer = LIMITED_OFFERS[nextRewardedAdOfferIndexRef.current];
                 nextRewardedAdOfferIndexRef.current = (nextRewardedAdOfferIndexRef.current + 1) % LIMITED_OFFERS.length;
                 const state = buildLimitedOfferPopupState(offer.id, { highestPlantEver });
@@ -4368,9 +4800,67 @@ export default function App() {
                 discoveryLevelAfterPauseCloseRef.current = newLevel; // latest only; popup when pause closes
               }}
               onAddMoney={(amount) => setMoney((prev) => prev + amount)}
+              onResetProgress={() => {
+                if (!window.confirm('Reset all progress and restart from the beginning? This cannot be undone.')) return;
+                suppressGameSaveRef.current = true;
+                clearGameSave();
+                try {
+                  sessionStorage.setItem('pocket-garden-reset-v1', '1');
+                } catch {
+                  /* ignore */
+                }
+                window.location.reload();
+              }}
               closeOnBackdropClick
               appScale={appScale}
             />
+
+            {offlineEarningsUi?.open ? (
+              <OfflineEarningsPopup
+                isVisible={offlineEarningsUi.open}
+                onClose={() => {}}
+                rewardAmount={offlineEarningsUi.amount}
+                rewardBounceKey={offlineEarningsUi.rewardBounceKey}
+                showDoubleButton={offlineEarningsUi.showDoubleButton}
+                onDoubleCoinsClick={() => {
+                  setOfflineEarningsUi((prev) => (prev ? { ...prev, showDoubleButton: false } : prev));
+                  pendingAdSourceRef.current = 'offlineEarnings';
+                  setPendingAdComplete(() => () => {
+                    setOfflineEarningsUi((prev) => {
+                      if (!prev) return prev;
+                      const nextAmount = prev.amount * 2;
+                      pendingOfflineEarningsRef.current = nextAmount;
+                      return {
+                        ...prev,
+                        amount: nextAmount,
+                        showDoubleButton: false,
+                        rewardBounceKey: prev.rewardBounceKey + 1,
+                      };
+                    });
+                  });
+                  setShowFakeAd(true);
+                }}
+                onCollectClick={(startPoint) => {
+                  const amt = offlinePopupAmountRef.current;
+                  pendingOfflineEarningsRef.current = 0;
+                  setOfflineEarningsUi(null);
+                  const layer = discoveryRewardFxLayerRef.current;
+                  if (layer) {
+                    const lr = layer.getBoundingClientRect();
+                    setActiveDiscoveryCoinParticles((prev) => [
+                      ...prev,
+                      {
+                        id: `offline-earnings-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                        startX: startPoint.x - lr.left,
+                        startY: startPoint.y - lr.top,
+                        value: amt,
+                      },
+                    ]);
+                  }
+                }}
+                appScale={appScale}
+              />
+            ) : null}
 
             {/* Discovery reward coin VFX: viewport space (appScale 1) so spawn aligns with reward icon in modal */}
             <div
@@ -4386,8 +4876,8 @@ export default function App() {
                   walletRef={walletRef}
                   walletIconRef={walletIconRef}
                   appScale={1}
-                  pathPreset="leftUp"
-                  visualScale={1.5}
+                  variant="popupReward"
+                  popupVisualScale={1.5}
                   activeCount={activeDiscoveryCoinParticles.length}
                   onImpact={(value) => {
                     setMoney((prev) => prev + value);
@@ -4589,6 +5079,7 @@ export default function App() {
               walletRef={walletRef}
               walletIconRef={walletIconRef}
               appScale={appScale}
+              variant="goal"
               activeCount={activeGoalCoinParticles.length}
               onImpact={(value) => {
                 const happiestCustomersActive = activeBoosts.some(b => b.offerId === 'happiest_customers');

@@ -1,7 +1,7 @@
 /**
- * Goal coin particle: flies from completed goal icon to wallet.
- * Default path uses a shallow trough (down then up); `pathPreset="leftUp"` goes left then up with no dip.
- * Fast start, slow middle, fast impact.
+ * Goal coin particle: flies from completed goal icon or popup reward to wallet.
+ * - `variant="goal"` — classic orders/goals: trough arc + original ease/speed/size (unchanged from pre–popup work).
+ * - `variant="popupReward"` — discovery / offline: left-then-up path + punchier end ease + larger VFX.
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { assetPath } from '../utils/assetPath';
@@ -16,6 +16,25 @@ const TRAIL_COLOR = '#dfbb38';
 const TRAIL_STROKE_WIDTH = 32;
 /** When more than this many particles are active, skip trail entirely to keep FPS up. */
 const SKIP_TRAIL_WHEN_ACTIVE_ABOVE = 4;
+
+/** Time remap for goal/order coins (legacy — symmetric slow-middle feel). */
+function easePathProgressGoal(t: number): number {
+  const p = 0.7;
+  return t < 0.5 ? 0.5 * Math.pow(t * 2, p) : 1 - 0.5 * Math.pow((1 - t) * 2, p);
+}
+
+/**
+ * Time remap for popup reward coins — accelerating into the wallet (slow path progress early,
+ * steep late so it hits at high speed; no ease-out at the end).
+ */
+function easePathProgressPopupReward(t: number): number {
+  // Shape: fast initial movement, then still accelerating into the wallet.
+  // (We intentionally keep the end "no ease-out" behavior.)
+  if (t <= 0.14) return (t / 0.14) * 0.10;
+  const u = (t - 0.14) / 0.86;
+  // Higher exponent = stronger late acceleration (faster end speed).
+  return 0.10 + 0.90 * Math.pow(u, 1.7);
+}
 
 interface Point {
   x: number;
@@ -40,12 +59,12 @@ interface GoalCoinParticleProps {
   /** When > SKIP_TRAIL_WHEN_ACTIVE_ABOVE, trail is disabled to reduce cost (e.g. 5+ coins at once). */
   activeCount?: number;
   /**
-   * `trough` — default goal path (dips down then up toward wallet).
-   * `leftUp` — move left first, then up; no downward bend (e.g. discovery reward).
+   * `goal` — coin goals / plant orders → wallet (classic trough + easing).
+   * `popupReward` — discovery & offline earnings (left-up path + punchier easing + scale).
    */
-  pathPreset?: 'trough' | 'leftUp';
-  /** Multiplier for coin graphic and trail stroke (e.g. 1.5 for discovery). */
-  visualScale?: number;
+  variant?: 'goal' | 'popupReward';
+  /** Only for `popupReward`; default 1.5. Ignored for `goal` (always 1×). */
+  popupVisualScale?: number;
 }
 
 export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
@@ -57,11 +76,16 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
   onComplete,
   appScale = 1,
   activeCount = 1,
-  pathPreset = 'trough',
-  visualScale = 1,
+  variant = 'goal',
+  popupVisualScale = 1.5,
 }) => {
-  const particleSize = PARTICLE_SIZE * visualScale;
-  const trailStrokeWidth = TRAIL_STROKE_WIDTH * visualScale;
+  const isPopupReward = variant === 'popupReward';
+  const durationMul = isPopupReward ? 0.75 : 1; // 25% faster for popup coins only
+  const visualMul = isPopupReward ? popupVisualScale : 1;
+  const particleSize = PARTICLE_SIZE * visualMul;
+  const trailStrokeWidth = TRAIL_STROKE_WIDTH * visualMul;
+  const moveDurationMs = MOVE_DURATION_MS * durationMul;
+  const trailFadeAfterHitMs = TRAIL_FADE_AFTER_HIT_MS * durationMul;
   const trailLimit = getPerformanceMode() ? 2 : SKIP_TRAIL_WHEN_ACTIVE_ABOVE;
   const useTrail = activeCount <= trailLimit;
   const [frame, setFrame] = useState<{
@@ -111,11 +135,8 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
       const elapsed = now - startTimeRef.current;
 
       if (phaseRef.current === 'moving') {
-        const t = Math.min(elapsed / MOVE_DURATION_MS, 1);
-        const p = 0.7;
-        const tt = t < 0.5
-          ? 0.5 * Math.pow(t * 2, p)
-          : 1 - 0.5 * Math.pow((1 - t) * 2, p);
+        const t = Math.min(elapsed / moveDurationMs, 1);
+        const tt = isPopupReward ? easePathProgressPopupReward(t) : easePathProgressGoal(t);
 
         const start = { x: data.startX, y: data.startY };
         const target = getWalletPos();
@@ -124,8 +145,7 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
 
         let cp1: Point;
         let cp2: Point;
-        if (pathPreset === 'leftUp') {
-          // Horizontal-first, then rise toward wallet — control Y never pulls below start (no screen “dip”).
+        if (isPopupReward) {
           cp1 = { x: start.x + dx * 0.45, y: start.y };
           cp2 = { x: target.x - dx * 0.05, y: start.y + dy * 0.55 };
         } else {
@@ -179,7 +199,7 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
 
       if (phaseRef.current === 'trailOnly') {
         const trailElapsed = now - trailOnlyStartRef.current;
-        const fade = Math.max(0, 1 - trailElapsed / TRAIL_FADE_AFTER_HIT_MS);
+        const fade = Math.max(0, 1 - trailElapsed / trailFadeAfterHitMs);
         if (fade <= 0) {
           onComplete();
           return;
@@ -194,7 +214,7 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
 
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [data, containerRef, walletRef, walletIconRef, appScale, onImpact, onComplete, useTrail, pathPreset]);
+  }, [data, containerRef, walletRef, walletIconRef, appScale, onImpact, onComplete, useTrail, isPopupReward]);
 
   const { phase, pos, scale, trail, trailOpacity } = frame;
 

@@ -77,12 +77,12 @@ export const isFertileSoilMaxed = (fertilizableCellCount: number): boolean => {
 /** Get the surplus coin value for both seeds + harvest recharges.
  * - Level 0 => 0 (upgrade locked / not purchased)
  * - Level 1 => 10
- * - Each level adds +10 up to a cap of 150
+ * - Each level adds +10 up to a cap of 100
  */
 export const getSeedSurplusValue = (seedsState: SeedsState): number => {
   const level = seedsState.seed_surplus?.level ?? 0;
   if (level === 0) return 0;
-  return Math.min(150, 10 * level);
+  return Math.min(100, 10 * level);
 };
 
 export type HarvestState = Record<string, UpgradeState>;
@@ -327,8 +327,8 @@ const getSeedsUpgradeValue = (upgradeId: string, level: number, seedsState?: See
     case 'bonus_seeds':
       return `${level * 5}%`;
     case 'seed_surplus':
-      // UI expectation: show 10 even when locked/unpurchased, then +10 per level up to 150.
-      return `${Math.min(150, 10 * Math.max(1, level))}`;
+      // UI expectation: show 10 even when locked/unpurchased, then +10 per level up to 100.
+      return `${Math.min(100, 10 * Math.max(1, level))}`;
     default:
       return null;
   }
@@ -358,10 +358,10 @@ const getHarvestUpgradeValue = (upgradeId: string, level: number): string | null
     case 'customer_speed':
       return `${Math.max(0, 10 - 1 * level)}s`;
     case 'market_value':
-      return `${(1 + 0.5 * Math.min(5, level)).toFixed(1)}x`;
+      return `${(1 + 0.8 * Math.min(5, level)).toFixed(1)}x`;
     case 'seed_surplus':
-      // UI expectation: show 10 even when locked/unpurchased, then +10 per level up to 150.
-      return `${Math.min(150, 10 * Math.max(1, level))}`;
+      // UI expectation: show 10 even when locked/unpurchased, then +10 per level up to 100.
+      return `${Math.min(100, 10 * Math.max(1, level))}`;
     case 'happy_customer':
       return `${Math.min(50, level * 5)}%`;
     default:
@@ -392,10 +392,10 @@ export const isCustomerSpeedMaxed = (harvestState: Record<string, UpgradeState>)
   return level >= 10; // 10 - 1*10 = 0s
 };
 
-/** Market Value: multiplier for goal completion coins (1.0 + 0.5 per level). Capped at level 5 (3.5x). */
+/** Market Value: multiplier for goal completion coins (1.0 + 0.8 per level). Capped at level 5 (5.0x). */
 export const getMarketValueMultiplier = (harvestState: HarvestState): number => {
   const level = harvestState?.market_value?.level ?? 0;
-  return 1 + 0.5 * Math.min(5, level);
+  return 1 + 0.8 * Math.min(5, level);
 };
 
 export const isMarketValueMaxed = (harvestState: Record<string, UpgradeState>): boolean => {
@@ -985,6 +985,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
         // Check if this upgrade is maxed
         const isMaxed = 
           (upgrade.id === 'seed_production' && state.level >= 7) || // 3+7=10/min max
+          (upgrade.id === 'seed_surplus' && state.level >= 10) || // 10 * 10 = cap (100)
           (upgrade.id === 'seed_storage' && isSeedStorageMaxed(stateMap as SeedsState)) ||
           (upgrade.id === 'double_seeds' && isDoubleSeedsMaxed(stateMap as SeedsState)) ||
           (upgrade.id === 'harvest_speed' && state.level >= 7) || // 3+7=10/min max
@@ -1119,22 +1120,37 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
                     </span>
                   </span>
                 ) : (
-                  <span className="flex items-center gap-0.5 -translate-x-1 relative shrink-0">
-                    <img
-                      src={ICON_COIN_SMALL}
-                      alt=""
-                      className="shrink-0 object-contain"
-                      style={{ width: 16, height: 16, minWidth: 16, maxWidth: 16, minHeight: 16, maxHeight: 16, display: 'block', position: 'relative', zIndex: 1, flexShrink: 0 }}
-                    />
-                    <span
-                      className="text-[13px] font-black tracking-tighter"
-                      style={{
-                        color: isPressed ? buttonActiveFontColor : (isMaxed || !canAfford ? buttonDisabledFontColor : buttonFontColor),
-                      }}
-                    >
-                      {isMaxed ? 'MAX' : currentCostDisplay}
-                    </span>
-                  </span>
+                  <>
+                    {isMaxed ? (
+                      <span
+                        className="text-[13px] font-black tracking-tighter"
+                        style={{
+                          color: buttonDisabledFontColor,
+                          display: 'inline-block',
+                          textAlign: 'center',
+                        }}
+                      >
+                        MAX
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-[1px] -translate-x-1 relative shrink-0">
+                        <img
+                          src={ICON_COIN_SMALL}
+                          alt=""
+                          className="shrink-0 object-contain"
+                          style={{ width: 16, height: 16, minWidth: 16, maxWidth: 16, minHeight: 16, maxHeight: 16, display: 'block', position: 'relative', zIndex: 1, flexShrink: 0 }}
+                        />
+                        <span
+                          className="text-[13px] font-black tracking-tighter"
+                          style={{
+                            color: isPressed ? buttonActiveFontColor : (!canAfford ? buttonDisabledFontColor : buttonFontColor),
+                          }}
+                        >
+                          {currentCostDisplay}
+                        </span>
+                      </span>
+                    )}
+                  </>
                 )}
               </button>
             </div>

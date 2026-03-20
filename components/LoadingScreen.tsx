@@ -1,8 +1,12 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
 
 interface LoadingScreenProps {
   onLoadComplete: () => void;
+  /** Returning player: skip splash, black screen while preloading then fade out. */
+  variant?: 'splash' | 'quick';
+  /** Called when quick preload finishes, before black fades (hydrate game under overlay). */
+  onQuickResumeHydrate?: () => void;
 }
 
 const DESIGN_WIDTH = 448;
@@ -88,9 +92,15 @@ const ASSETS_TO_PRELOAD = [
   '/assets/vfx/particle_leaf_6.png',
 ];
 
-export const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadComplete }) => {
+export const LoadingScreen: React.FC<LoadingScreenProps> = ({
+  onLoadComplete,
+  variant = 'splash',
+  onQuickResumeHydrate,
+}) => {
   const [progress, setProgress] = useState(0);
-  const [phase, setPhase] = useState<'fadeIn' | 'loading' | 'ready' | 'fadeOut' | 'done'>('fadeIn');
+  const [phase, setPhase] = useState<'fadeIn' | 'loading' | 'ready' | 'fadeOut' | 'quickFade' | 'done'>(() =>
+    variant === 'quick' ? 'loading' : 'fadeIn'
+  );
   const [blackOpacity, setBlackOpacity] = useState(1);
   const [viewportSize, setViewportSize] = useState({ width: window.innerWidth, height: window.innerHeight });
 
@@ -132,10 +142,15 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadComplete }) 
     };
 
     await Promise.all(ASSETS_TO_PRELOAD.map(loadImage));
-    setPhase('ready');
-  }, []);
+    if (variant === 'quick') {
+      setPhase('quickFade');
+    } else {
+      setPhase('ready');
+    }
+  }, [variant]);
 
   useEffect(() => {
+    if (variant === 'quick') return;
     if (phase === 'fadeIn') {
       const fadeInDuration = 500;
       const startTime = Date.now();
@@ -155,7 +170,32 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadComplete }) 
       
       requestAnimationFrame(animate);
     }
-  }, [phase]);
+  }, [phase, variant]);
+
+  const quickFadeStartedRef = useRef(false);
+  // Quick resume: fade black out then hand off to App (dismiss loading + fade game in)
+  useEffect(() => {
+    if (phase !== 'quickFade') return;
+    if (quickFadeStartedRef.current) return;
+    quickFadeStartedRef.current = true;
+    setBlackOpacity(1);
+    onQuickResumeHydrate?.();
+    const fadeMs = 340;
+    const startTime = Date.now();
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const newOpacity = Math.max(0, 1 - elapsed / fadeMs);
+      setBlackOpacity(newOpacity);
+      if (elapsed < fadeMs) {
+        requestAnimationFrame(animate);
+      } else {
+        setBlackOpacity(0);
+        setPhase('done');
+        onLoadComplete();
+      }
+    };
+    requestAnimationFrame(animate);
+  }, [phase, onLoadComplete, onQuickResumeHydrate]);
 
   useEffect(() => {
     if (phase === 'loading') {
@@ -187,12 +227,24 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadComplete }) 
   }, [phase, onLoadComplete]);
 
   const handleTap = () => {
+    if (variant === 'quick') return;
     if (phase === 'ready') {
       setPhase('fadeOut');
     }
   };
 
   if (phase === 'done') return null;
+
+  if (variant === 'quick') {
+    return (
+      <div
+        className="fixed inset-0 z-[1000] flex items-center justify-center bg-[#050608]"
+        style={{ cursor: 'default', pointerEvents: 'auto' }}
+      >
+        <div className="absolute inset-0 bg-black pointer-events-none" style={{ opacity: blackOpacity }} />
+      </div>
+    );
+  }
 
   return (
     <div 
