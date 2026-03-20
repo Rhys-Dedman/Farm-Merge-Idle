@@ -41,6 +41,12 @@ interface PageHeaderProps {
   playerLevelFlashTrigger?: number;
   /** If true, hide the top bar background (e.g. for shed screen - keeps plant wallet + settings only) */
   hideTopBarBg?: boolean;
+  /** If true, hide the small FPS button (useful for Store screen). */
+  hideFps?: boolean;
+  /** If true, hide/collapse the player level block so it doesn't reserve width. */
+  collapsePlayerLevel?: boolean;
+  /** Optional centered title rendered above the 9-slice top bar background. */
+  centerTitle?: string;
   /** When provided, shows a + button that grants 1 goal worth of XP on tap */
   onXpBoostClick?: () => void;
   /** When provided, settings (gear) button opens pause menu */
@@ -81,6 +87,9 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   playerLevelFlashTrigger = 0,
   playerLevelGoalsRequired = 2,
   hideTopBarBg = false,
+  hideFps = false,
+  collapsePlayerLevel = false,
+  centerTitle,
   onXpBoostClick,
   onPauseClick,
   activeBoosts = [],
@@ -209,6 +218,23 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
         )}
         {/* Content on top */}
         <div className="relative z-10 flex justify-between items-center w-full min-h-[44px] px-3 py-2">
+          {centerTitle && (
+            <div
+              aria-hidden
+              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+              style={{
+                color: '#5c4a32',
+                fontFamily: 'Inter, sans-serif',
+                letterSpacing: '-0.02em',
+                fontWeight: 900,
+                fontSize: '1.15rem',
+                lineHeight: 1,
+                zIndex: 20,
+              }}
+            >
+              {centerTitle}
+            </div>
+          )}
       <div
         ref={headerLeftWrapperRef}
         className="relative flex items-center min-w-0 flex-shrink-0 overflow-visible"
@@ -271,6 +297,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                 backgroundColor: '#775041',
                 borderWidth: 1,
                 borderColor: '#e9dcaf',
+                display: collapsePlayerLevel && hidePlayerLevel ? 'none' : 'inline-flex',
                 opacity: hidePlayerLevel ? 0 : 1,
                 transition: 'opacity 400ms ease-out',
                 ...(hidePlayerLevel && { pointerEvents: 'none' as const }),
@@ -413,19 +440,21 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
       </div>
 
       <div className="flex items-center gap-2 flex-shrink-0">
-        <button
-          type="button"
-          className="tabular-nums text-[10px] font-semibold select-none cursor-pointer hover:underline focus:outline-none"
-          style={{ color: '#c4a574', background: 'none', border: 'none', padding: 0 }}
-          aria-label={`${fps} FPS (click to simulate hitch)`}
-          title="Click to simulate a hitch — FPS should drop briefly if the counter is working"
-          onClick={() => {
-            const end = performance.now() + 250;
-            while (performance.now() < end) {}
-          }}
-        >
-          {fps} FPS
-        </button>
+        {!hideFps && (
+          <button
+            type="button"
+            className="tabular-nums text-[10px] font-semibold select-none cursor-pointer hover:underline focus:outline-none"
+            style={{ color: '#c4a574', background: 'none', border: 'none', padding: 0 }}
+            aria-label={`${fps} FPS (click to simulate hitch)`}
+            title="Click to simulate a hitch — FPS should drop briefly if the counter is working"
+            onClick={() => {
+              const end = performance.now() + 250;
+              while (performance.now() < end) {}
+            }}
+          >
+            {fps} FPS
+          </button>
+        )}
         <button
           onClick={onPauseClick}
           className="flex items-center justify-center rounded-full transition-all active:scale-95 flex-shrink-0"

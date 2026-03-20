@@ -3256,8 +3256,13 @@ export default function App() {
             className="absolute inset-0 flex transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]"
             style={{ transform: screenTranslateX, width: '300%' }}
           >
-            <div className="w-1/3 h-full bg-[#0c0d12]">
-              <StoreScreen money={money} walletFlashActive={walletFlashActive} onAddMoney={(amt) => setMoney(prev => prev + amt)} />
+            <div className="w-1/3 h-full bg-[#5b433c]">
+              <StoreScreen
+                money={money}
+                walletFlashActive={walletFlashActive}
+                onAddMoney={(amt) => setMoney(prev => prev + amt)}
+                onSettingsClick={() => setPauseMenuOpen(true)}
+              />
             </div>
 
             <div ref={farmColumnRef} className="w-1/3 h-full flex flex-col relative overflow-hidden grass-texture">
