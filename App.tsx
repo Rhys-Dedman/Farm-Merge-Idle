@@ -1014,6 +1014,8 @@ export default function App() {
     const interval = setInterval(() => {
       if (limitedOfferPopup?.isVisible) return;
       if (showFakeAdRef.current) return; // never show limited offer while fake ad is on screen
+      // Only auto-show rewarded / limited offers on the garden screen (not Store or Barn)
+      if (activeScreen !== 'FARM') return;
       // Don't show limited offer while another popup is on screen
       if (offlineEarningsUi?.open) return;
       if (lastOfflineEarningsClosedAtRef.current > 0 && Date.now() - lastOfflineEarningsClosedAtRef.current < 10000) return;
@@ -1078,7 +1080,7 @@ export default function App() {
       }
     }, 2000);
     return () => clearInterval(interval);
-  }, [playerLevel, grid, money, limitedOfferPopup?.isVisible, goalSlots, harvestState, highestPlantEver, levelUpPopup?.isVisible, discoveryPopup?.isVisible, seedProgressionPopup, plantInfoPopup?.isVisible, offlineEarningsUi?.open]);
+  }, [playerLevel, grid, money, limitedOfferPopup?.isVisible, goalSlots, harvestState, highestPlantEver, levelUpPopup?.isVisible, discoveryPopup?.isVisible, seedProgressionPopup, plantInfoPopup?.isVisible, offlineEarningsUi?.open, activeScreen]);
 
   // Derive which tabs have offers (for tab notification coloring)
   const tabsWithOffers = new Set(rewardedOffers.map(o => o.tab));
