@@ -30,7 +30,8 @@ interface DiscoveryPopupProps {
   subtitle: string;
   description: string;
   buttonText: string;
-  onButtonClick?: (buttonRect: DOMRect) => void;
+  rewardAmount?: number;
+  onButtonClick?: (startPoint: { x: number; y: number }) => void;
   showCloseButton?: boolean;
   imageLevel?: number;
   closeOnBackdropClick?: boolean;
@@ -145,6 +146,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
   subtitle,
   description,
   buttonText,
+  rewardAmount = 1000,
   onButtonClick,
   showCloseButton = true,
   imageLevel,
@@ -268,12 +270,19 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
 
   const [isClosing, setIsClosing] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const rewardCoinRef = useRef<HTMLImageElement>(null);
 
   const handleButtonClick = () => {
     if (isClosing) return;
     setIsClosing(true);
-    if (onButtonClick && buttonRef.current) {
-      onButtonClick(buttonRef.current.getBoundingClientRect());
+    if (onButtonClick) {
+      if (rewardCoinRef.current) {
+        const r = rewardCoinRef.current.getBoundingClientRect();
+        onButtonClick({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
+      } else if (buttonRef.current) {
+        const r = buttonRef.current.getBoundingClientRect();
+        onButtonClick({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
+      }
     }
     // Trigger leave animation
     setAnimState('leaving');
@@ -525,8 +534,43 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
             {description}
           </p>
 
+          {/* Discovery coin cost row */}
+          <div
+            className="flex items-center justify-center"
+            style={{ marginTop: '20px' }}
+          >
+            <div
+              className="inline-flex items-center justify-center"
+              style={{
+                backgroundColor: '#c3b381',
+                borderRadius: '999px',
+                padding: '10px 18px',
+                gap: '6px',
+              }}
+            >
+              <img
+                ref={rewardCoinRef}
+                src={assetPath('/assets/icons/icon_coin_small.png')}
+                alt=""
+                className="object-contain"
+                style={{ width: '40px', height: '40px' }}
+              />
+              <span
+                className="font-medium tracking-tight"
+                style={{
+                  color: '#fcf0c7',
+                  fontFamily: 'Inter, sans-serif',
+                  fontSize: '2rem',
+                  lineHeight: 1,
+                }}
+              >
+                {rewardAmount}
+              </span>
+            </div>
+          </div>
+
           {/* Spacer */}
-          <div className="flex-grow min-h-[48px]" />
+          <div className="flex-grow min-h-[40px]" />
 
           {/* Action Button */}
           <button

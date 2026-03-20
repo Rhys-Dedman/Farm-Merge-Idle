@@ -1,6 +1,6 @@
 /**
  * Goal coin particle: flies from completed goal icon to wallet.
- * Same timing/curve as seed particle (Projectile) but inverted: down → left → up.
+ * Default path uses a shallow trough (down then up); `pathPreset="leftUp"` goes left then up with no dip.
  * Fast start, slow middle, fast impact.
  */
 import React, { useEffect, useRef, useState } from 'react';
@@ -39,6 +39,13 @@ interface GoalCoinParticleProps {
   appScale?: number;
   /** When > SKIP_TRAIL_WHEN_ACTIVE_ABOVE, trail is disabled to reduce cost (e.g. 5+ coins at once). */
   activeCount?: number;
+  /**
+   * `trough` — default goal path (dips down then up toward wallet).
+   * `leftUp` — move left first, then up; no downward bend (e.g. discovery reward).
+   */
+  pathPreset?: 'trough' | 'leftUp';
+  /** Multiplier for coin graphic and trail stroke (e.g. 1.5 for discovery). */
+  visualScale?: number;
 }
 
 export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
@@ -50,7 +57,11 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
   onComplete,
   appScale = 1,
   activeCount = 1,
+  pathPreset = 'trough',
+  visualScale = 1,
 }) => {
+  const particleSize = PARTICLE_SIZE * visualScale;
+  const trailStrokeWidth = TRAIL_STROKE_WIDTH * visualScale;
   const trailLimit = getPerformanceMode() ? 2 : SKIP_TRAIL_WHEN_ACTIVE_ABOVE;
   const useTrail = activeCount <= trailLimit;
   const [frame, setFrame] = useState<{
@@ -111,12 +122,20 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
         const dx = target.x - start.x;
         const dy = target.y - start.y;
 
-        const safetyMargin = containerHeight * 0.12;
-        const troughDepth = 200;
-        const troughY = Math.min(containerHeight - safetyMargin, Math.max(start.y, target.y) + troughDepth);
-        const leanFactor = 0.45;
-        const cp1 = { x: start.x + dx * leanFactor, y: troughY };
-        const cp2 = { x: target.x - dx * 0.1, y: troughY };
+        let cp1: Point;
+        let cp2: Point;
+        if (pathPreset === 'leftUp') {
+          // Horizontal-first, then rise toward wallet — control Y never pulls below start (no screen “dip”).
+          cp1 = { x: start.x + dx * 0.45, y: start.y };
+          cp2 = { x: target.x - dx * 0.05, y: start.y + dy * 0.55 };
+        } else {
+          const safetyMargin = containerHeight * 0.12;
+          const troughDepth = 200;
+          const troughY = Math.min(containerHeight - safetyMargin, Math.max(start.y, target.y) + troughDepth);
+          const leanFactor = 0.45;
+          cp1 = { x: start.x + dx * leanFactor, y: troughY };
+          cp2 = { x: target.x - dx * 0.1, y: troughY };
+        }
 
         const x = Math.pow(1 - tt, 3) * start.x +
                  3 * Math.pow(1 - tt, 2) * tt * cp1.x +
@@ -175,7 +194,7 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
 
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [data, containerRef, walletRef, walletIconRef, appScale, onImpact, onComplete, useTrail]);
+  }, [data, containerRef, walletRef, walletIconRef, appScale, onImpact, onComplete, useTrail, pathPreset]);
 
   const { phase, pos, scale, trail, trailOpacity } = frame;
 
@@ -202,7 +221,7 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
                   x2={curr.p.x}
                   y2={curr.p.y}
                   stroke={curr.color}
-                  strokeWidth={TRAIL_STROKE_WIDTH * widthScale}
+                  strokeWidth={trailStrokeWidth * widthScale}
                   strokeLinecap="round"
                   strokeOpacity={opacityScale}
                 />
@@ -218,8 +237,8 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
           style={{
             left: pos.x,
             top: pos.y,
-            width: PARTICLE_SIZE,
-            height: PARTICLE_SIZE,
+            width: particleSize,
+            height: particleSize,
             transform: `translate(-50%, -50%) scale(${scale})`,
           }}
         >

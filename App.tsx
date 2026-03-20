@@ -22,7 +22,6 @@ import { PlantInfoPopup } from './components/PlantInfoPopup';
 import { LimitedOfferPopup } from './components/LimitedOfferPopup';
 import { FakeAdPopup } from './components/FakeAdPopup';
 import { PauseMenuPopup } from './components/PauseMenuPopup';
-import { BarnParticle, BarnParticleData } from './components/BarnParticle';
 import { BoostParticle, BoostParticleData } from './components/BoostParticle';
 import { ActiveBoostData, ACTIVE_BOOST_INDICATOR_SIZE_PX } from './components/ActiveBoostIndicator';
 import { UpgradeTabsRef } from './components/UpgradeTabs';
@@ -358,8 +357,8 @@ export default function App() {
   const limitedOfferCooldownInitializedRef = useRef(false);
   // Rewarded offers shown in upgrade list (when player declines popup)
   const [rewardedOffers, setRewardedOffers] = useState<RewardedOffer[]>([]);
-  // Barn particles for "Add to Barn" button
-  const [barnParticles, setBarnParticles] = useState<BarnParticleData[]>([]);
+  // Discovery reward particles: fly from discovery popup reward icon to wallet.
+  const [activeDiscoveryCoinParticles, setActiveDiscoveryCoinParticles] = useState<GoalCoinParticleData[]>([]);
   // Active rewarded-ad boosts (max 5); each has endTime and duration for radial countdown
   const [activeBoosts, setActiveBoosts] = useState<ActiveBoostData[]>([]);
   const [boostParticles, setBoostParticles] = useState<BoostParticleData[]>([]);
@@ -596,6 +595,8 @@ export default function App() {
   const plantButtonRef = useRef<HTMLDivElement>(null);
   const harvestButtonRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  /** Full-viewport layer for discovery reward coin VFX — same CSS space as modal popups so spawn matches getBoundingClientRect. */
+  const discoveryRewardFxLayerRef = useRef<HTMLDivElement>(null);
   // Coin panel portal: compute the scaled game-container position so coin panels can render above FTUE overlays.
   useEffect(() => {
     const update = () => {
@@ -4105,32 +4106,41 @@ export default function App() {
                 subtitle={getPlantData(discoveryPopup.level).name}
                 description={getPlantData(discoveryPopup.level).description}
                 buttonText={discoveryPopup.level === 2 ? 'Excellent!' : 'Add to Shed'}
+                rewardAmount={getCoinValueForLevel(discoveryPopup.level) * 3}
                 showCloseButton={false}
                 closeOnBackdropClick={false}
                 appScale={appScale}
-                onButtonClick={discoveryPopup.level === 2
-                  ? () => {
-                      if (ftue4Pending) {
-                        setFtue4Pending(false);
-                        setActiveFtueStage('first_goal');
-                        setGoalSlots(['green', 'empty', 'empty', 'empty', 'empty']);
-                        setGoalPlantTypes([2, 0, 0, 0, 0]);
-                        setGoalCounts([3, 0, 0, 0, 0]);
-                        setGoalAmountsRequired([3, 0, 0, 0, 0]);
-                        setGoalDisplayOrder([0]);
-                      }
-                    }
-                  : (buttonRect) => {
-                      const container = containerRef.current;
-                      if (!container) return;
-                      const scale = appScaleRef.current;
-                      const containerRect = container.getBoundingClientRect();
-                      setBarnParticles(prev => [...prev, {
-                        id: `barn-${Date.now()}`,
-                        startX: (buttonRect.left + buttonRect.width / 2 - containerRect.left) / scale,
-                        startY: (buttonRect.top + buttonRect.height / 2 - containerRect.top) / scale,
-                      }]);
-                    }}
+                onButtonClick={(startPoint) => {
+                  const rewardValue = getCoinValueForLevel(discoveryPopup.level) * 3;
+                  // Render particles in a fixed full-viewport layer (portaled with modals) so coords match
+                  // the popup's viewport getBoundingClientRect — avoids scaled #game-container transform mismatch.
+                  const layer = discoveryRewardFxLayerRef.current;
+                  if (layer) {
+                    const lr = layer.getBoundingClientRect();
+                    const startX = startPoint.x - lr.left;
+                    const startY = startPoint.y - lr.top;
+                    setActiveDiscoveryCoinParticles((prev) => [...prev, {
+                      id: `discovery-reward-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                      startX,
+                      startY,
+                      value: rewardValue,
+                    }]);
+                  }
+
+                  // Keep shed notification behavior even though discovery particle no longer flies to shed.
+                  setBarnNotification(true);
+
+                  // FTUE 4 progression from first plant-2 discovery still happens on confirm.
+                  if (discoveryPopup.level === 2 && ftue4Pending) {
+                    setFtue4Pending(false);
+                    setActiveFtueStage('first_goal');
+                    setGoalSlots(['green', 'empty', 'empty', 'empty', 'empty']);
+                    setGoalPlantTypes([2, 0, 0, 0, 0]);
+                    setGoalCounts([3, 0, 0, 0, 0]);
+                    setGoalAmountsRequired([3, 0, 0, 0, 0]);
+                    setGoalDisplayOrder([0]);
+                  }
+                }}
               />
             )}
 
@@ -4361,6 +4371,35 @@ export default function App() {
               closeOnBackdropClick
               appScale={appScale}
             />
+
+            {/* Discovery reward coin VFX: viewport space (appScale 1) so spawn aligns with reward icon in modal */}
+            <div
+              ref={discoveryRewardFxLayerRef}
+              className="pointer-events-none overflow-visible"
+              style={{ position: 'fixed', inset: 0, zIndex: 230 }}
+            >
+              {activeDiscoveryCoinParticles.map((p) => (
+                <GoalCoinParticle
+                  key={p.id}
+                  data={p}
+                  containerRef={discoveryRewardFxLayerRef}
+                  walletRef={walletRef}
+                  walletIconRef={walletIconRef}
+                  appScale={1}
+                  pathPreset="leftUp"
+                  visualScale={1.5}
+                  activeCount={activeDiscoveryCoinParticles.length}
+                  onImpact={(value) => {
+                    setMoney((prev) => prev + value);
+                    setWalletFlashActive(true);
+                    setWalletBounceTrigger((t) => t + 1);
+                    if (walletFlashTimeoutRef.current) clearTimeout(walletFlashTimeoutRef.current);
+                    walletFlashTimeoutRef.current = setTimeout(() => setWalletFlashActive(false), 120);
+                  }}
+                  onComplete={() => setActiveDiscoveryCoinParticles((prev) => prev.filter((x) => x.id !== p.id))}
+                />
+              ))}
+            </div>
           </div>,
           document.body
         )}
@@ -4565,19 +4604,6 @@ export default function App() {
                 walletFlashTimeoutRef.current = setTimeout(() => setWalletFlashActive(false), 120);
               }}
               onComplete={() => setActiveGoalCoinParticles((prev) => prev.filter((x) => x.id !== p.id))}
-            />
-          ))}
-          
-          {/* Barn Particles */}
-          {barnParticles.map((particle) => (
-            <BarnParticle
-              key={particle.id}
-              data={particle}
-              containerRef={containerRef}
-              barnButtonRef={barnButtonRef}
-              appScale={appScale}
-              onImpact={() => setBarnNotification(true)}
-              onComplete={() => setBarnParticles(prev => prev.filter(p => p.id !== particle.id))}
             />
           ))}
 
