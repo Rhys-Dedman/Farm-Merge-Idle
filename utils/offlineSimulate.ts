@@ -43,6 +43,8 @@ export interface OfflineSimInput {
   ftue7Scheduled: boolean;
   ftueSeedSurplusActivated: boolean;
   ftueHarvestSurplusActivated: boolean;
+  /** Used with seed tier so surplus coin base matches live play (auto-scales with discoveries). */
+  highestPlantEver: number;
   /**
    * When false (e.g. FTUE not finished), seed/harvest still simulate but surplus is not banked as offline coins.
    */
@@ -97,7 +99,7 @@ export function simulateOfflineSeedHarvest(input: OfflineSimInput): OfflineSimRe
         },
       } as SeedsState)
     : input.seedsState;
-  const surplusValue = getSeedSurplusValue(surplusSeedsState);
+  const surplusValue = getSeedSurplusValue(surplusSeedsState, Math.max(1, input.highestPlantEver));
   const maxCap = getSeedStorageMax(input.seedsState);
 
   const seedProdLevel = input.seedsState?.seed_production?.level ?? 0;

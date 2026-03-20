@@ -15,7 +15,8 @@ const BOOST_GAP_PX = 2;
 const BOOST_SLOT_WIDTH = ACTIVE_BOOST_INDICATOR_SIZE_PX + BOOST_GAP_PX;
 
 interface PageHeaderProps {
-  money: number;
+  /** Coin balance; null/undefined coerced to 0 for display (bad saves / edge cases). */
+  money: number | null | undefined;
   walletRef?: React.RefObject<HTMLButtonElement | null>;
   walletIconRef?: React.RefObject<HTMLElement | null>;
   walletFlashActive?: boolean;
@@ -58,10 +59,11 @@ interface PageHeaderProps {
   headerLeftWrapperRef?: React.RefObject<HTMLDivElement | null>;
 }
 
-const formatMoney = (amount: number): string => {
-  if (amount >= 1000000) return (amount / 1000000).toFixed(1) + 'M';
-  if (amount >= 1000) return (amount / 1000).toFixed(1) + 'K';
-  return amount.toString();
+const formatMoney = (amount: number | null | undefined): string => {
+  const n = amount != null && typeof amount === 'number' && Number.isFinite(amount) ? amount : 0;
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+  return String(n);
 };
 
 export const PageHeader: React.FC<PageHeaderProps> = ({ 

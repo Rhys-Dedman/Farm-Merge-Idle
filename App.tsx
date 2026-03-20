@@ -1663,7 +1663,8 @@ export default function App() {
     const surplusValue = getSeedSurplusValue(
       ftueSeedSurplusActivated
         ? ({ ...seedsState, seed_surplus: { level: Math.max(1, seedsState?.seed_surplus?.level ?? 0), progress: 0 } } as any)
-        : seedsState
+        : seedsState,
+      highestPlantEver
     );
     const maxCap = getSeedStorageMax(seedsState);
 
@@ -1702,7 +1703,7 @@ export default function App() {
         setActiveCoinPanels((p) => [...p, ...panelsToAdd]);
       }
     }
-  }, [seedProgress, isSeedFlashing, seedsInStorage, seedsState, seedStorageMax, ftueSeedSurplusActivated]);
+  }, [seedProgress, isSeedFlashing, seedsInStorage, seedsState, seedStorageMax, ftueSeedSurplusActivated, highestPlantEver]);
 
   // Harvest surplus coin panels: when harvest charges overflow at 100% capacity, turn the overflow into coins.
   const spawnHarvestSurplusCoinPanels = (overflowCycles: number) => {
@@ -1711,7 +1712,8 @@ export default function App() {
     const surplusValue = getSeedSurplusValue(
       ftueSeedSurplusActivated
         ? ({ ...seedsState, seed_surplus: { level: Math.max(1, seedsState?.seed_surplus?.level ?? 0), progress: 0 } } as any)
-        : seedsState
+        : seedsState,
+      highestPlantEverRef.current
     );
     if (surplusValue <= 0) return;
 
@@ -2146,7 +2148,8 @@ export default function App() {
       const surplusValue = getSeedSurplusValue(
         ftueSeedSurplusActivated
           ? ({ ...seedsState, seed_surplus: { level: Math.max(1, seedsState?.seed_surplus?.level ?? 0), progress: 0 } } as any)
-          : seedsState
+          : seedsState,
+        highestPlantEverRef.current
       );
       if (seedsInStorage >= seedStorageMax && surplusValue > 0) {
         const container = containerRef.current;
@@ -2750,7 +2753,8 @@ export default function App() {
           const surplusValue = getSeedSurplusValue(
             ftueSeedSurplusActivated
               ? ({ ...seedsState, seed_surplus: { level: Math.max(1, seedsState?.seed_surplus?.level ?? 0), progress: 0 } } as any)
-              : seedsState
+              : seedsState,
+            highestPlantEverRef.current
           );
           const maxCap = getSeedStorageMax(seedsState);
           setSeedsInStorage((prev) => {
@@ -2918,6 +2922,7 @@ export default function App() {
       ftue7Scheduled: save.ftue7Scheduled,
       ftueSeedSurplusActivated: save.ftueSeedSurplusActivated,
       ftueHarvestSurplusActivated: save.ftueHarvestSurplusActivated,
+      highestPlantEver: save.highestPlantEver,
       earnOfflineCoins: !ftueBlocksOffline,
     });
     seedProgressRef.current = sim.seedProgress;

@@ -74,15 +74,43 @@ export const isFertileSoilMaxed = (fertilizableCellCount: number): boolean => {
   return fertilizableCellCount <= 0;
 };
 
-/** Get the surplus coin value for both seeds + harvest recharges.
- * - Level 0 => 0 (upgrade locked / not purchased)
- * - Level 1 => 10
- * - Each level adds +10 up to a cap of 100
+/** Coin value for a plant goal tier — matches economy `5 × 2^(level-1)` (same as order coin base per plant level). */
+export const getCoinValueForPlantLevel = (plantLevel: number): number => {
+  return 5 * Math.pow(2, Math.max(0, plantLevel - 1));
+};
+
+/**
+ * Surplus Recharges upgrade multiplier.
+ * - Level 0 => 0 (no surplus coins from overflow)
+ * - Level 1 => 1.0x, each extra level +0.5x, max 5.0x (caps at level 9)
  */
-export const getSeedSurplusValue = (seedsState: SeedsState): number => {
+export const getSurplusRechargesMultiplier = (seedsState: SeedsState): number => {
   const level = seedsState.seed_surplus?.level ?? 0;
-  if (level === 0) return 0;
-  return Math.min(100, 10 * level);
+  if (level <= 0) return 0;
+  return Math.min(5, 1 + 0.5 * (level - 1));
+};
+
+export const isSurplusRechargesMaxed = (seedsState: SeedsState): boolean => {
+  return (seedsState.seed_surplus?.level ?? 0) >= 9;
+};
+
+/** Base coin per surplus event from seed tier (auto-scales with plant discoveries every 3 highest plants). */
+export const getSurplusRechargeBaseFromHighestPlant = (highestPlantEver: number): number => {
+  const tier = getSeedLevelFromHighestPlant(highestPlantEver);
+  return getCoinValueForPlantLevel(tier);
+};
+
+/**
+ * Coins per seed/harvest surplus event (seed storage overflow or harvest charge overflow).
+ * = (coin value for current seed tier) × (Surplus Recharges multiplier)
+ */
+export const getSeedSurplusValue = (seedsState: SeedsState, highestPlantEver: number): number => {
+  const mult = getSurplusRechargesMultiplier(seedsState);
+  if (mult <= 0) return 0;
+  const base = getSurplusRechargeBaseFromHighestPlant(highestPlantEver);
+  const raw = base * mult;
+  /** Always round up to nearest 5 (e.g. 7 → 10). */
+  return Math.ceil(raw / 5) * 5;
 };
 
 export type HarvestState = Record<string, UpgradeState>;
@@ -327,8 +355,7 @@ const getSeedsUpgradeValue = (upgradeId: string, level: number, seedsState?: See
     case 'bonus_seeds':
       return `${level * 5}%`;
     case 'seed_surplus':
-      // UI expectation: show 10 even when locked/unpurchased, then +10 per level up to 100.
-      return `${Math.min(100, 10 * Math.max(1, level))}`;
+      return level <= 0 ? '1.0x' : `${Math.min(5, 1 + 0.5 * (level - 1)).toFixed(1)}x`;
     default:
       return null;
   }
@@ -360,8 +387,7 @@ const getHarvestUpgradeValue = (upgradeId: string, level: number): string | null
     case 'market_value':
       return `${(1 + 0.8 * Math.min(5, level)).toFixed(1)}x`;
     case 'seed_surplus':
-      // UI expectation: show 10 even when locked/unpurchased, then +10 per level up to 100.
-      return `${Math.min(100, 10 * Math.max(1, level))}`;
+      return level <= 0 ? '1.0x' : `${Math.min(5, 1 + 0.5 * (level - 1)).toFixed(1)}x`;
     case 'happy_customer':
       return `${Math.min(50, level * 5)}%`;
     default:
@@ -985,7 +1011,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
         // Check if this upgrade is maxed
         const isMaxed = 
           (upgrade.id === 'seed_production' && state.level >= 7) || // 3+7=10/min max
-          (upgrade.id === 'seed_surplus' && state.level >= 10) || // 10 * 10 = cap (100)
+          (upgrade.id === 'seed_surplus' && isSurplusRechargesMaxed(seedsState as SeedsState)) ||
           (upgrade.id === 'seed_storage' && isSeedStorageMaxed(stateMap as SeedsState)) ||
           (upgrade.id === 'double_seeds' && isDoubleSeedsMaxed(stateMap as SeedsState)) ||
           (upgrade.id === 'harvest_speed' && state.level >= 7) || // 3+7=10/min max

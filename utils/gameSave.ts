@@ -91,6 +91,9 @@ export function loadGameSave(): GameSaveV1 | null {
     if (typeof data.pendingOfflineEarnings !== 'number' || Number.isNaN(data.pendingOfflineEarnings)) {
       data.pendingOfflineEarnings = 0;
     }
+    if (typeof data.money !== 'number' || !Number.isFinite(data.money)) {
+      data.money = 0;
+    }
     if (!Array.isArray(data.activeBoosts)) data.activeBoosts = [];
     return data;
   } catch {
