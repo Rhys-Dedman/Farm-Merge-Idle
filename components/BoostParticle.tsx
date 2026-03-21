@@ -28,6 +28,8 @@ export interface BoostParticleData {
   offerId?: string;
   durationMs?: number;
   icon?: string;
+  /** When 'store', particle renders in Store's header; when 'farm' or absent, Farm's header */
+  sourceScreen?: 'farm' | 'store';
 }
 
 interface BoostParticleProps {

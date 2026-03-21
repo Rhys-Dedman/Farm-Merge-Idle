@@ -1,16 +1,241 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { PageHeader } from './PageHeader';
 import { assetPath } from '../utils/assetPath';
+import type { ActiveBoostData } from './ActiveBoostIndicator';
+import { ACTIVE_BOOST_INDICATOR_SIZE_PX } from './ActiveBoostIndicator';
+import { getOfferById } from '../offers';
+
+/** Matches upgrade panel MAX / disabled purchase button (UpgradeList). */
+const UPGRADE_MAX_BUTTON_BG = '#e3c28c';
+const UPGRADE_MAX_BUTTON_DEPTH = '#c7a36e';
+const UPGRADE_MAX_BUTTON_FONT = '#a68e64';
+
+/** Store free offer — tiny version of rewarded ad. Rotates to a new pool offer after cooldown (with bounce). */
+const StoreFreeOffer: React.FC<{
+  slotIndex: number;
+  offerId: string;
+  onFreeClick?: () => void;
+  cooldownEndMs?: number;
+  onSlotCooldownEnded?: (slotIndex: number) => void;
+}> = ({ slotIndex, offerId, onFreeClick, cooldownEndMs = 0, onSlotCooldownEnded }) => {
+  const [pressed, setPressed] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const [bounceActive, setBounceActive] = useState(false);
+  const prevOnCooldownRef = useRef(false);
+  const cooldownEndHandledRef = useRef(false);
+  const offer = getOfferById(offerId);
+  if (!offer) return null;
+
+  const isOnCooldown = cooldownEndMs > now;
+  const remainingMs = Math.max(0, cooldownEndMs - now);
+  const remainingMins = Math.floor(remainingMs / 60000);
+  const remainingSecs = Math.floor((remainingMs % 60000) / 1000);
+  const timerLabel = `${remainingMins.toString().padStart(2, '0')}:${remainingSecs.toString().padStart(2, '0')}`;
+
+  const durationSeconds = offer.durationSeconds ?? (offer.durationMinutes != null ? offer.durationMinutes * 60 : 0);
+  const durationLabel = durationSeconds <= 0 ? 'Instant' : `${durationSeconds}s`;
+
+  // Tick every second when on cooldown
+  useEffect(() => {
+    if (!isOnCooldown) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [isOnCooldown, cooldownEndMs]);
+
+  useEffect(() => {
+    if (isOnCooldown) cooldownEndHandledRef.current = false;
+  }, [isOnCooldown]);
+
+  // When slot cooldown ends: bounce, swap offer mid-animation, then FREE again
+  useEffect(() => {
+    const justEnded = prevOnCooldownRef.current && !isOnCooldown && cooldownEndMs > 0;
+    prevOnCooldownRef.current = isOnCooldown;
+    if (!justEnded || cooldownEndHandledRef.current) return;
+    cooldownEndHandledRef.current = true;
+    setBounceActive(true);
+    const swapId = window.setTimeout(() => {
+      onSlotCooldownEnded?.(slotIndex);
+    }, 200);
+    const clearBounceId = window.setTimeout(() => setBounceActive(false), 480);
+    return () => {
+      window.clearTimeout(swapId);
+      window.clearTimeout(clearBounceId);
+    };
+  }, [isOnCooldown, cooldownEndMs, slotIndex, onSlotCooldownEnded]);
+
+  const rowBandStyle: React.CSSProperties = {
+    position: 'relative',
+    width: '100%',
+    height: 28,
+    marginTop: 9,
+  };
+  const yMid: React.CSSProperties = { position: 'absolute', top: '50%', transform: 'translateY(-50%)' };
+
+  return (
+    <div className={`relative w-[214px] flex-shrink-0 ${bounceActive ? 'store-free-offer-bounce' : ''}`}>
+      <img
+        src={assetPath('/assets/topui/ui_store_medium.png')}
+        alt=""
+        className="w-full h-auto block pointer-events-none select-none"
+      />
+      <div className="absolute inset-0 flex flex-col pointer-events-none select-none">
+        {/* Large offer icon — top center */}
+        <div className="flex justify-center shrink-0 pt-6 pb-1">
+          {/* Reserve 108px height like the original icon so title/duration band stays aligned to the art */}
+          <div className="flex items-center justify-center shrink-0" style={{ height: 108, width: '100%' }}>
+            <img
+              src={assetPath(offer.headerIcon)}
+              alt=""
+              className="object-contain"
+              style={{ width: 102.6, height: 102.6, transform: 'translateY(2px)' }}
+            />
+          </div>
+        </div>
+
+        {/* Title box (centered text); duration fixed at left:152 (may overlap) */}
+        <div className="flex-1 flex items-start justify-center min-h-0 w-full">
+          <div style={rowBandStyle}>
+            <div
+              className="flex items-center justify-center rounded-[4px] px-1"
+              style={{
+                position: 'absolute',
+                left: 30,
+                top: 0,
+                width: 110,
+                height: 28,
+                backgroundColor: 'transparent',
+              }}
+            >
+              <span
+                className="font-black leading-none whitespace-nowrap text-center"
+                style={{ color: '#6c5851', fontSize: '13px' }}
+              >
+                {offer.title}
+              </span>
+            </div>
+            <span
+              className="font-black leading-none whitespace-nowrap"
+              style={{ ...yMid, left: 152, color: '#d3b07b', fontSize: '13px' }}
+            >
+              {durationLabel}
+            </span>
+          </div>
+        </div>
+
+        {/* Button: yellow FREE (available) or MAX-style tan timer (cooldown) — ~0.9× scale */}
+        <div
+          className="absolute left-1/2 z-[2] flex justify-center"
+          style={{
+            bottom: 24,
+            transform: 'translateX(-50%) scale(0.9)',
+            transformOrigin: 'center bottom',
+            pointerEvents: 'none',
+          }}
+        >
+          <button
+            type="button"
+            disabled={isOnCooldown}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              if (!isOnCooldown) setPressed(true);
+            }}
+            onPointerUp={() => setPressed(false)}
+            onPointerLeave={() => setPressed(false)}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!isOnCooldown) onFreeClick?.();
+            }}
+            className="flex items-center justify-center px-[10px] rounded-[9px] transition-all border outline outline-1 pointer-events-auto"
+            style={{
+              height: 36,
+              backgroundColor: isOnCooldown ? UPGRADE_MAX_BUTTON_BG : pressed ? '#f0c840' : '#ffd856',
+              borderColor: isOnCooldown ? UPGRADE_MAX_BUTTON_DEPTH : '#f59d42',
+              borderBottomWidth: pressed && !isOnCooldown ? 0 : 4,
+              marginBottom: pressed && !isOnCooldown ? 4 : 0,
+              outlineColor: isOnCooldown ? UPGRADE_MAX_BUTTON_DEPTH : '#f59d42',
+              minWidth: '114px',
+              transform: pressed && !isOnCooldown ? 'translateY(2px)' : 'translateY(0)',
+              boxShadow: isOnCooldown
+                ? 'inset 0 1px 2px rgba(0,0,0,0.12)'
+                : pressed
+                  ? 'inset 0 2px 4px rgba(0,0,0,0.15)'
+                  : 'inset 0 1px 1px rgba(255,255,255,0.4)',
+              cursor: isOnCooldown ? 'default' : 'pointer',
+            }}
+          >
+            {isOnCooldown ? (
+              <span
+                className="text-[15px] font-black tracking-tight leading-none tabular-nums"
+                style={{ color: UPGRADE_MAX_BUTTON_FONT }}
+              >
+                {timerLabel}
+              </span>
+            ) : (
+              <>
+                <img
+                  src={assetPath('/assets/icons/icon_watchad.png')}
+                  alt=""
+                  className="object-contain flex-shrink-0"
+                  style={{
+                    width: '23px',
+                    height: '23px',
+                    filter:
+                      'brightness(0) saturate(100%) invert(56%) sepia(67%) saturate(1000%) hue-rotate(346deg) brightness(97%) contrast(88%)',
+                    marginRight: 5,
+                  }}
+                />
+                <span
+                  className="text-[15px] font-black tracking-tight leading-none"
+                  style={{ color: '#e6803a' }}
+                >
+                  FREE
+                </span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 interface StoreScreenProps {
   money: number;
   walletFlashActive?: boolean;
   onAddMoney?: (amount: number) => void;
   onSettingsClick?: () => void;
+  onFreeOfferClick?: (offerId: string, slotIndex: number) => void;
+  activeBoosts?: ActiveBoostData[];
+  activeBoostAreaRef?: React.RefObject<HTMLDivElement | null>;
+  headerLeftWrapperRef?: React.RefObject<HTMLDivElement | null>;
+  headerRightSectionRef?: React.RefObject<HTMLDivElement | null>;
+  onBoostComplete?: (id: string, rect?: DOMRect) => void;
+  onBoostClick?: (boost: ActiveBoostData) => void;
+  walletRef?: React.RefObject<HTMLButtonElement | null>;
+  /** Current offer id per slot (duration-only pool). */
+  storeFreeOfferSlots?: [string, string];
+  /** Per-slot 15m cooldown end (ms); 0 = ready for FREE. */
+  storeSlotCooldownEnds?: [number, number];
+  /** After cooldown + bounce: pick new offer for this slot. */
+  onStoreSlotCooldownEnded?: (slotIndex: number) => void;
 }
 
-export const StoreScreen: React.FC<StoreScreenProps> = ({ money, walletFlashActive, onSettingsClick }) => {
+export const StoreScreen: React.FC<StoreScreenProps> = ({
+  money,
+  walletFlashActive,
+  onSettingsClick,
+  onFreeOfferClick,
+  activeBoosts = [],
+  activeBoostAreaRef,
+  headerLeftWrapperRef,
+  headerRightSectionRef,
+  onBoostComplete,
+  onBoostClick,
+  walletRef,
+  storeFreeOfferSlots = ['double_harvest', 'rapid_seeds'],
+  storeSlotCooldownEnds = [0, 0],
+  onStoreSlotCooldownEnded,
+}) => {
   // Store scroll: reuse Shed/Barn-style momentum drag, but move the store top-ui list with transforms.
   // This avoids relying on native scroll (which isn't responding correctly on mobile in this screen).
   const storeScrollRef = useRef<HTMLDivElement | null>(null);
@@ -146,12 +371,21 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({ money, walletFlashActi
     <div className="h-full w-full flex flex-col overflow-x-visible">
       <PageHeader
         money={money}
+        walletRef={walletRef}
         walletFlashActive={walletFlashActive}
         collapsePlayerLevel
         hidePlayerLevel
         hideFps
         centerTitle="Store"
         onPauseClick={onSettingsClick}
+        activeBoosts={activeBoosts}
+        activeBoostAreaRef={activeBoostAreaRef}
+        activeBoostMinWidthPx={ACTIVE_BOOST_INDICATOR_SIZE_PX}
+        headerLeftWrapperRef={headerLeftWrapperRef}
+        onBoostComplete={onBoostComplete}
+        onBoostClick={onBoostClick}
+        boostAreaPosition="rightOfCenter"
+        headerRightSectionRef={headerRightSectionRef}
       />
 
       {/* Store top-ui viewport (sprites + pattern clipped). */}
@@ -215,16 +449,41 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({ money, walletFlashActi
               zIndex: 1,
             }}
           >
-            {/* Large at top */}
+            {/* Two store free offers side by side */}
+            <div className="flex flex-row items-start justify-center gap-2 w-full mt-[10px]">
+              <StoreFreeOffer
+                slotIndex={0}
+                offerId={storeFreeOfferSlots[0]}
+                onFreeClick={() => onFreeOfferClick?.(storeFreeOfferSlots[0], 0)}
+                cooldownEndMs={storeSlotCooldownEnds[0]}
+                onSlotCooldownEnded={onStoreSlotCooldownEnded}
+              />
+              <StoreFreeOffer
+                slotIndex={1}
+                offerId={storeFreeOfferSlots[1]}
+                onFreeClick={() => onFreeOfferClick?.(storeFreeOfferSlots[1], 1)}
+                cooldownEndMs={storeSlotCooldownEnds[1]}
+                onSlotCooldownEnded={onStoreSlotCooldownEnded}
+              />
+            </div>
+
+            {/* Blue divider between mediums and large */}
+            <img
+              src={assetPath('/assets/popups/popup_divider_blue.png')}
+              alt=""
+              className="w-[300px] max-w-none h-auto mt-1 mb-1"
+            />
+
+            {/* Large */}
             <img
               src={assetPath('/assets/topui/ui_store_large.png')}
               alt=""
-              className="w-[440px] max-w-none h-auto mt-[10px]"
+              className="w-[440px] max-w-none h-auto"
             />
 
-            {/* Yellow divider between large and small */}
+            {/* Divider between large and small */}
             <img
-              src={assetPath('/assets/popups/popup_divider_yellow.png')}
+              src={assetPath('/assets/popups/popup_divider.png')}
               alt=""
               className="w-[300px] max-w-none h-auto mt-1 mb-1"
             />

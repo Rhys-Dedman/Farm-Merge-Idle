@@ -44,7 +44,7 @@ import type { FtueStageId } from './ftue/ftueConfig';
 import { assetPath } from './utils/assetPath';
 import { getTickCount60, TARGET_FRAME_MS, scheduleNextFrame } from './utils/raf60';
 import { getPerformanceMode } from './utils/performanceMode';
-import { LIMITED_OFFERS, getOfferById } from './offers';
+import { LIMITED_OFFERS, getOfferById, pickInitialStoreFreeOfferSlots, pickStoreDurationOfferId } from './offers';
 import {
   loadGameSave,
   persistGameSave,
@@ -398,10 +398,35 @@ export default function App() {
   const [activeDiscoveryCoinParticles, setActiveDiscoveryCoinParticles] = useState<GoalCoinParticleData[]>([]);
   // Active rewarded-ad boosts (max 5); each has endTime and duration for radial countdown
   const [activeBoosts, setActiveBoosts] = useState<ActiveBoostData[]>([]);
+  /** Two store slots: current duration-boost offer id each (rotates after 15m cooldown). */
+  const [storeFreeOfferSlots, setStoreFreeOfferSlots] = useState<[string, string]>(() => pickInitialStoreFreeOfferSlots());
+  /** Per-slot cooldown end (ms); 0 = FREE available. */
+  const [storeSlotCooldownEnds, setStoreSlotCooldownEnds] = useState<[number, number]>([0, 0]);
+
+  const handleStoreSlotCooldownEnded = useCallback((slotIndex: number) => {
+    setStoreFreeOfferSlots((slots) => {
+      const prevThis = slots[slotIndex];
+      const other = slots[1 - slotIndex];
+      const nextId = pickStoreDurationOfferId(new Set([prevThis, other]));
+      const next: [string, string] = [...slots] as [string, string];
+      next[slotIndex] = nextId;
+      return next;
+    });
+    setStoreSlotCooldownEnds((ends) => {
+      const next: [number, number] = [...ends] as [number, number];
+      next[slotIndex] = 0;
+      return next;
+    });
+  }, []);
+
   const [boostParticles, setBoostParticles] = useState<BoostParticleData[]>([]);
   const [boostBursts, setBoostBursts] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
   const activeBoostAreaRef = useRef<HTMLDivElement>(null);
   const headerLeftWrapperRef = useRef<HTMLDivElement>(null);
+  const storeActiveBoostAreaRef = useRef<HTMLDivElement>(null);
+  const storeHeaderLeftWrapperRef = useRef<HTMLDivElement>(null);
+  const storeHeaderRightSectionRef = useRef<HTMLDivElement>(null);
+  const storeWalletRef = useRef<HTMLButtonElement>(null);
   // When user closes limited offer (X): open panel, scroll to offer, flash yellow then return to light yellow
   const [pendingOfferHighlightId, setPendingOfferHighlightId] = useState<string | null>(null);
   // Pause menu (opened from settings/gear button)
@@ -480,7 +505,7 @@ export default function App() {
   const coinGoalIconRef = useRef<HTMLImageElement>(null);
   const lastCoinGoalHiddenAtRef = useRef<number>(Date.now());
   const nextCoinGoalDelayRef = useRef<number>(30000 + Math.random() * 30000); // 30–60s until next spawn, new random each hide
-  const pendingAdSourceRef = useRef<'limitedOffer' | 'upgradeList' | 'coinGoal' | 'offlineEarnings' | null>(null);
+  const pendingAdSourceRef = useRef<'limitedOffer' | 'upgradeList' | 'coinGoal' | 'offlineEarnings' | 'storeFreeOffer' | null>(null);
   const pendingOfferIdRef = useRef<string | null>(null); // for boost particle: only shoot if offer has duration
   const [activePlantPanels, setActivePlantPanels] = useState<PlantPanelData[]>([]);
   const [fertilizingCellIndices, setFertilizingCellIndices] = useState<number[]>([]); // Cells currently playing fertilize animation
@@ -3262,6 +3287,47 @@ export default function App() {
                 walletFlashActive={walletFlashActive}
                 onAddMoney={(amt) => setMoney(prev => prev + amt)}
                 onSettingsClick={() => setPauseMenuOpen(true)}
+                onFreeOfferClick={(offerId, slotIndex) => {
+                  pendingAdSourceRef.current = 'storeFreeOffer';
+                  pendingOfferIdRef.current = offerId;
+                  setShowFakeAd(true);
+                  setPendingAdComplete(() => () => {
+                    setShowFakeAd(false);
+                    setStoreSlotCooldownEnds((ends) => {
+                      const next: [number, number] = [...ends] as [number, number];
+                      next[slotIndex] = Date.now() + 15 * 60 * 1000;
+                      return next;
+                    });
+                  });
+                }}
+                activeBoosts={activeBoosts}
+                activeBoostAreaRef={storeActiveBoostAreaRef}
+                headerLeftWrapperRef={storeHeaderLeftWrapperRef}
+                headerRightSectionRef={storeHeaderRightSectionRef}
+                onBoostComplete={(id, rect) => {
+                  setActiveBoosts((prev) => prev.filter((b) => b.id !== id));
+                  if (rect) {
+                    setBoostBursts((prev) => [
+                      ...prev,
+                      {
+                        id: `boost-burst-${Date.now()}`,
+                        x: rect.left + rect.width / 2,
+                        y: rect.top + rect.height / 2,
+                        startTime: Date.now(),
+                      },
+                    ]);
+                  }
+                }}
+                onBoostClick={(boost) => {
+                  if (!boost.offerId) return;
+                  if (!canOpenLimitedOfferRewardPopup()) return;
+                  const state = buildLimitedOfferPopupState(boost.offerId, { activeBoostEndTime: boost.endTime, highestPlantEver });
+                  if (state) setLimitedOfferPopup(state);
+                }}
+                walletRef={storeWalletRef}
+                storeFreeOfferSlots={storeFreeOfferSlots}
+                storeSlotCooldownEnds={storeSlotCooldownEnds}
+                onStoreSlotCooldownEnded={handleStoreSlotCooldownEnded}
               />
             </div>
 
@@ -4734,7 +4800,8 @@ export default function App() {
                 const offer = offerId ? getOfferById(offerId) : null;
                 const hasDuration = offer && (offer.durationMinutes != null || (offer.durationSeconds != null && offer.durationSeconds > 0));
                 if (!hasDuration) return;
-                const wrapper = headerLeftWrapperRef.current;
+                const isFromStore = pendingAdSourceRef.current === 'storeFreeOffer';
+                const wrapper = isFromStore ? storeHeaderRightSectionRef.current : headerLeftWrapperRef.current;
                 if (!wrapper) return;
                 const wr = wrapper.getBoundingClientRect();
                 const scale = wr.width / wrapper.offsetWidth;
@@ -4754,6 +4821,7 @@ export default function App() {
                     offerId: offer?.id,
                     durationMs,
                     icon: offer?.headerIcon,
+                    sourceScreen: isFromStore ? 'store' as const : 'farm' as const,
                   },
                 ]);
               }}
@@ -5110,54 +5178,108 @@ export default function App() {
             />
           ))}
 
-          {/* Boost particles: rendered inside header left wrapper via portal so they use the same coordinate system and always hit the slot */}
+          {/* Boost particles: farm → Farm header; store → Store header (so particle flies to visible boost area) */}
           {headerLeftWrapperRef.current &&
+            boostParticles.filter((p) => p.sourceScreen !== 'store').length > 0 &&
             createPortal(
-              boostParticles.map((particle) => (
-                <BoostParticle
-                  key={particle.id}
-                  data={particle}
-                  containerRef={headerLeftWrapperRef}
-                  boostAreaRef={activeBoostAreaRef}
-                  onImpact={(data) => {
-                    const wrapper = headerLeftWrapperRef.current;
-                    const el = activeBoostAreaRef.current;
-                    if (wrapper && el) {
-                      const wr = wrapper.getBoundingClientRect();
-                      const scale = wr.width / wrapper.offsetWidth;
-                      const slotIndex = data.targetSlotIndex ?? 0;
-                      const tx = el.offsetLeft + slotIndex * 28 + 13;
-                      const ty = el.offsetTop + 11;
-                      setBoostBursts((prev) => [
-                        ...prev,
-                        {
-                          id: `boost-impact-${Date.now()}`,
-                          x: wr.left + tx * scale,
-                          y: wr.top + ty * scale,
-                          startTime: Date.now(),
-                        },
-                      ]);
-                    }
-                    const durationMs = data.durationMs ?? 60000;
-                    const icon = data.icon ?? '/assets/icons/icon_seedproduction.png';
-                    setActiveBoosts((prev) => {
-                      if (prev.length >= 5) return prev;
-                      return [
-                        ...prev,
-                        {
-                          id: `boost-${Date.now()}`,
-                          endTime: Date.now() + durationMs,
-                          durationMs,
-                          icon,
-                          offerId: data.offerId,
-                        },
-                      ];
-                    });
-                  }}
-                  onComplete={() => setBoostParticles((prev) => prev.filter((p) => p.id !== particle.id))}
-                />
-              )),
+              boostParticles
+                .filter((p) => p.sourceScreen !== 'store')
+                .map((particle) => (
+                  <BoostParticle
+                    key={particle.id}
+                    data={particle}
+                    containerRef={headerLeftWrapperRef}
+                    boostAreaRef={activeBoostAreaRef}
+                    onImpact={(data) => {
+                      const wrapper = headerLeftWrapperRef.current;
+                      const el = activeBoostAreaRef.current;
+                      if (wrapper && el) {
+                        const wr = wrapper.getBoundingClientRect();
+                        const scale = wr.width / wrapper.offsetWidth;
+                        const slotIndex = data.targetSlotIndex ?? 0;
+                        const tx = el.offsetLeft + slotIndex * 28 + 13;
+                        const ty = el.offsetTop + 11;
+                        setBoostBursts((prev) => [
+                          ...prev,
+                          {
+                            id: `boost-impact-${Date.now()}`,
+                            x: wr.left + tx * scale,
+                            y: wr.top + ty * scale,
+                            startTime: Date.now(),
+                          },
+                        ]);
+                      }
+                      const durationMs = data.durationMs ?? 60000;
+                      const icon = data.icon ?? '/assets/icons/icon_seedproduction.png';
+                      setActiveBoosts((prev) => {
+                        if (prev.length >= 5) return prev;
+                        return [
+                          ...prev,
+                          {
+                            id: `boost-${Date.now()}`,
+                            endTime: Date.now() + durationMs,
+                            durationMs,
+                            icon,
+                            offerId: data.offerId,
+                          },
+                        ];
+                      });
+                    }}
+                    onComplete={() => setBoostParticles((prev) => prev.filter((p) => p.id !== particle.id))}
+                  />
+                )),
               headerLeftWrapperRef.current
+            )}
+          {storeHeaderRightSectionRef.current &&
+            boostParticles.filter((p) => p.sourceScreen === 'store').length > 0 &&
+            createPortal(
+              boostParticles
+                .filter((p) => p.sourceScreen === 'store')
+                .map((particle) => (
+                  <BoostParticle
+                    key={particle.id}
+                    data={particle}
+                    containerRef={storeHeaderRightSectionRef}
+                    boostAreaRef={storeActiveBoostAreaRef}
+                    onImpact={(data) => {
+                      const wrapper = storeHeaderRightSectionRef.current;
+                      const el = storeActiveBoostAreaRef.current;
+                      if (wrapper && el) {
+                        const wr = wrapper.getBoundingClientRect();
+                        const scale = wr.width / wrapper.offsetWidth;
+                        const slotIndex = data.targetSlotIndex ?? 0;
+                        const tx = el.offsetLeft + slotIndex * 28 + 13;
+                        const ty = el.offsetTop + 11;
+                        setBoostBursts((prev) => [
+                          ...prev,
+                          {
+                            id: `boost-impact-${Date.now()}`,
+                            x: wr.left + tx * scale,
+                            y: wr.top + ty * scale,
+                            startTime: Date.now(),
+                          },
+                        ]);
+                      }
+                      const durationMs = data.durationMs ?? 60000;
+                      const icon = data.icon ?? '/assets/icons/icon_seedproduction.png';
+                      setActiveBoosts((prev) => {
+                        if (prev.length >= 5) return prev;
+                        return [
+                          ...prev,
+                          {
+                            id: `boost-${Date.now()}`,
+                            endTime: Date.now() + durationMs,
+                            durationMs,
+                            icon,
+                            offerId: data.offerId,
+                          },
+                        ];
+                      });
+                    }}
+                    onComplete={() => setBoostParticles((prev) => prev.filter((p) => p.id !== particle.id))}
+                  />
+                )),
+              storeHeaderRightSectionRef.current
             )}
 
         </div>

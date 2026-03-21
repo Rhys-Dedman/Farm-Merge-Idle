@@ -102,3 +102,32 @@ export const LIMITED_OFFERS: LimitedOfferConfig[] = [
 export function getOfferById(id: string): LimitedOfferConfig | undefined {
   return LIMITED_OFFERS.find((o) => o.id === id);
 }
+
+/** Store free-offer pool: only rewarded ads with a timed boost (durationSeconds or durationMinutes). */
+export const STORE_DURATION_FREE_OFFER_IDS = [
+  'rapid_seeds',
+  'double_harvest',
+  'rapid_harvest',
+  'rush_orders',
+  'happiest_customers',
+] as const;
+
+export type StoreDurationFreeOfferId = (typeof STORE_DURATION_FREE_OFFER_IDS)[number];
+
+export function isStoreDurationFreeOfferId(id: string): id is StoreDurationFreeOfferId {
+  return (STORE_DURATION_FREE_OFFER_IDS as readonly string[]).includes(id);
+}
+
+/** Random pick from pool, excluding any id in `exclude` (e.g. this slot’s last offer + other slot’s current). */
+export function pickStoreDurationOfferId(exclude: ReadonlySet<string>): string {
+  const pool = STORE_DURATION_FREE_OFFER_IDS.filter((oid) => !exclude.has(oid));
+  if (pool.length === 0) return STORE_DURATION_FREE_OFFER_IDS[0];
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+/** Two different offers for the two store slots on first load. */
+export function pickInitialStoreFreeOfferSlots(): [string, string] {
+  const a = pickStoreDurationOfferId(new Set());
+  const b = pickStoreDurationOfferId(new Set([a]));
+  return [a, b];
+}

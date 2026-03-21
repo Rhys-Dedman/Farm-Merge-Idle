@@ -63,6 +63,12 @@ interface PageHeaderProps {
   onBoostClick?: (boost: ActiveBoostData) => void;
   /** Ref for the left section wrapper (scale 0.88); used so boost particle can render inside it and hit the correct slot */
   headerLeftWrapperRef?: React.RefObject<HTMLDivElement | null>;
+  /** Add this to boost area marginLeft (e.g. 20 on Store to push boosts right) */
+  boostAreaMarginLeftOffset?: number;
+  /** When 'rightOfCenter', boosts render to the right of center title (e.g. Store); requires headerRightSectionRef */
+  boostAreaPosition?: 'left' | 'rightOfCenter';
+  /** Ref for right section when boostAreaPosition is rightOfCenter (particle container) */
+  headerRightSectionRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 const formatMoney = (amount: number | null | undefined): string => {
@@ -98,6 +104,9 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   onBoostComplete,
   onBoostClick,
   headerLeftWrapperRef,
+  boostAreaMarginLeftOffset = 0,
+  boostAreaPosition = 'left',
+  headerRightSectionRef,
 }) => {
   const isInteractive = !!walletRef;
   const boostRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -353,12 +362,13 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                 </div>
               </div>
             </div>
-            {/* Active boosts: tight to player level (overlap -10px); fixed height so adding/removing boost doesn't shift wallet/level; absolute positioning so removal slides */}
+            {/* Active boosts: tight to player level (overlap -10px); only when boostAreaPosition is left */}
+            {boostAreaPosition !== 'rightOfCenter' && (
             <div
               ref={activeBoostAreaRef}
               className="relative flex items-center flex-shrink-0 overflow-visible boost-slide-container"
               style={{
-                marginLeft: -10,
+                marginLeft: -10 + boostAreaMarginLeftOffset,
                 height: 22,
                 minHeight: 22,
                 width: activeBoosts.length > 0 ? activeBoosts.length * ACTIVE_BOOST_INDICATOR_SIZE_PX + (activeBoosts.length - 1) * BOOST_GAP_PX : (activeBoostMinWidthPx ?? ACTIVE_BOOST_INDICATOR_SIZE_PX),
@@ -392,6 +402,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                 </div>
               ))}
             </div>
+            )}
           </>
         ) : plantWallet ? (
           <div className="relative flex items-center gap-1 bg-black/50 backdrop-blur-md pl-1 pr-2 py-1 rounded-full border-0 shadow-2xl overflow-hidden -ml-4">
@@ -439,7 +450,51 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
         )}
       </div>
 
-      <div className="flex items-center gap-2 flex-shrink-0">
+      <div
+        ref={boostAreaPosition === 'rightOfCenter' ? headerRightSectionRef : undefined}
+        className="flex items-center gap-2 flex-shrink-0"
+      >
+        {/* Boosts to the right of center title (e.g. Store) */}
+        {boostAreaPosition === 'rightOfCenter' && (
+          <div
+            ref={activeBoostAreaRef}
+            className="relative flex items-center flex-shrink-0 overflow-visible boost-slide-container"
+            style={{
+              marginRight: 8,
+              height: 22,
+              minHeight: 22,
+              width: activeBoosts.length > 0 ? activeBoosts.length * ACTIVE_BOOST_INDICATOR_SIZE_PX + (activeBoosts.length - 1) * BOOST_GAP_PX : (activeBoostMinWidthPx ?? ACTIVE_BOOST_INDICATOR_SIZE_PX),
+              ...(activeBoostMinWidthPx != null && activeBoosts.length === 0 && { minWidth: activeBoostMinWidthPx }),
+            }}
+          >
+            {activeBoosts.map((boost, index) => (
+              <div
+                key={boost.id}
+                ref={(el) => { boostRefs.current[boost.id] = el; }}
+                role="button"
+                tabIndex={0}
+                onClick={() => onBoostClick?.(boost)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onBoostClick?.(boost); } }}
+                className="absolute flex items-center justify-center boost-slide cursor-pointer"
+                style={{
+                  left: index * BOOST_SLOT_WIDTH,
+                  top: 0,
+                  width: ACTIVE_BOOST_INDICATOR_SIZE_PX,
+                  height: 22,
+                  transform: 'translateZ(0)',
+                }}
+              >
+                <ActiveBoostIndicator
+                  data={boost}
+                  onComplete={(id) => {
+                    const rect = boostRefs.current[id]?.getBoundingClientRect?.();
+                    onBoostComplete?.(id, rect);
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+        )}
         {!hideFps && (
           <button
             type="button"
