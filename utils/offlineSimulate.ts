@@ -8,6 +8,7 @@ import {
   type SeedsState,
   type UpgradeState,
 } from '../components/UpgradeList';
+import { hasActiveDoubleCoinsBoostAt } from '../offers';
 import type { FtueStageId } from '../ftue/ftueConfig';
 import type { GameSaveV1 } from './gameSave';
 
@@ -38,7 +39,8 @@ export interface OfflineSimInput {
   seedsInStorage: number;
   seedsState: SeedsState;
   cropsState: Record<string, UpgradeState>;
-  activeBoosts: { offerId?: string; endTime: number }[];
+  /** Pass `icon` when present on save so Double Coins matches even if `offerId` was omitted. */
+  activeBoosts: { offerId?: string; endTime: number; icon?: string }[];
   activeFtueStage: FtueStageId | null;
   ftue7Scheduled: boolean;
   ftueSeedSurplusActivated: boolean;
@@ -120,6 +122,8 @@ export function simulateOfflineSeedHarvest(input: OfflineSimInput): OfflineSimRe
   };
 
   const processSeedComplete = () => {
+    const wallTime = input.savedAt + elapsed;
+    const doubleCoinsMult = hasActiveDoubleCoinsBoostAt(input.activeBoosts, wallTime) ? 2 : 1;
     const doubleLevel = input.seedsState.double_seeds?.level ?? 0;
     const doubleChance = Math.min(0.5, doubleLevel * 0.05);
     const seedsToAdd = Math.random() < doubleChance ? 2 : 1;
@@ -128,16 +132,19 @@ export function simulateOfflineSeedHarvest(input: OfflineSimInput): OfflineSimRe
     const excess = total - capped;
     seedsInStorage = capped;
     if (earnCoins && excess > 0 && surplusValue > 0 && input.ftueSeedSurplusActivated) {
-      offlineSurplusCoins += excess * surplusValue;
+      const base = excess * surplusValue;
+      offlineSurplusCoins += doubleCoinsMult === 2 ? Math.round(base * 2) : base;
     }
     seedProgress = 0;
   };
 
   const processHarvestComplete = () => {
+    const wallTime = input.savedAt + elapsed;
+    const doubleCoinsMult = hasActiveDoubleCoinsBoostAt(input.activeBoosts, wallTime) ? 2 : 1;
     if (harvestCharges < HARVEST_CHARGES_MAX) {
       harvestCharges++;
     } else if (earnCoins && surplusValue > 0 && input.ftueHarvestSurplusActivated) {
-      offlineSurplusCoins += surplusValue;
+      offlineSurplusCoins += doubleCoinsMult === 2 ? Math.round(surplusValue * 2) : surplusValue;
     }
     harvestProgress = 0;
   };

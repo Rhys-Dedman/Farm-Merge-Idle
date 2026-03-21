@@ -129,11 +129,67 @@ export function getOfferById(id: string): LimitedOfferConfig | undefined {
   return LIMITED_OFFERS.find((o) => o.id === id);
 }
 
-export function hasActiveDoubleCoinsBoost(activeBoosts: ReadonlyArray<{ offerId?: string; endTime?: number }>): boolean {
-  const now = Date.now();
-  return activeBoosts.some(
-    (b) => b.offerId && isCoinMultiplierBoostId(b.offerId) && (b.endTime ?? 0) > now
-  );
+/**
+ * Double Coins is active at a specific moment (for offline sim: `atTimeMs` = wall clock when a surplus fired).
+ */
+export function hasActiveDoubleCoinsBoostAt(
+  activeBoosts: ReadonlyArray<{ offerId?: string; endTime?: number; icon?: string }>,
+  atTimeMs: number
+): boolean {
+  const headerNorm = DOUBLE_COINS_HEADER_ICON.replace(/\\/g, '/').toLowerCase();
+  return activeBoosts.some((b) => {
+    const endMs = typeof b.endTime === 'number' && Number.isFinite(b.endTime) ? b.endTime : Number(b.endTime);
+    if (!Number.isFinite(endMs) || endMs <= atTimeMs) return false;
+
+    const oid = String(b.offerId ?? '').trim();
+    if (oid) {
+      const oidLower = oid.toLowerCase();
+      if (isCoinMultiplierBoostId(oid) || isCoinMultiplierBoostId(oidLower)) return true;
+    }
+
+    const icon = String(b.icon ?? '')
+      .replace(/\\/g, '/')
+      .toLowerCase();
+    if (!icon) return false;
+    return (
+      icon.includes('coinmultiplier') ||
+      icon.includes('coin_multiplier') ||
+      icon === headerNorm ||
+      icon.endsWith('icon_coinmultiplier_1.png') ||
+      icon.endsWith('icon_coinmultiplier_2.png') ||
+      icon.endsWith('icon_coinmultiplier_3.png')
+    );
+  });
+}
+
+/**
+ * Double Coins is active if a non-expired boost matches by `offerId` **or** by coin-multiplier art
+ * (some paths historically stored the row without `offerId`, so wallet multipliers never ran).
+ */
+export function hasActiveDoubleCoinsBoost(
+  activeBoosts: ReadonlyArray<{ offerId?: string; endTime?: number; icon?: string }>
+): boolean {
+  return hasActiveDoubleCoinsBoostAt(activeBoosts, Date.now());
+}
+
+/** Wallet / payout multiplier while Double Coins boost is active (IAP / ad-granted bar). */
+export function getDoubleCoinsPayoutMultiplier(
+  activeBoosts: ReadonlyArray<{ offerId?: string; endTime?: number; icon?: string }>
+): 1 | 2 {
+  return hasActiveDoubleCoinsBoost(activeBoosts) ? 2 : 1;
+}
+
+/**
+ * Use for **displayed** coin amounts and flying-coin `value` so players see 2× while Double Coins is on.
+ * Wallet impact should add this number as-is (no second multiply).
+ */
+export function applyDoubleCoinsVisualAmount(
+  baseCoins: number,
+  activeBoosts: ReadonlyArray<{ offerId?: string; endTime?: number; icon?: string }>
+): number {
+  const m = getDoubleCoinsPayoutMultiplier(activeBoosts);
+  if (m === 1 || !Number.isFinite(baseCoins)) return baseCoins;
+  return Math.round(baseCoins * m);
 }
 
 /** Exclude Double Coins from auto / rewarded-ad offer rotation. */

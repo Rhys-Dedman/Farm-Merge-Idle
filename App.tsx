@@ -1,6 +1,6 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { createPortal } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 import { HexBoard } from './components/HexBoard';
 import { UpgradeTabs } from './components/UpgradeTabs';
 import { UpgradeList, createInitialSeedsState, createInitialHarvestState, createInitialCropsState, getSeedLevelFromHighestPlant, getBonusSeedChance, getSeedSurplusValue, getSeedStorageMax, getCropYieldPerHarvest, getHarvestSpeedLevel, getMergeHarvestChance, getGoalLoadingSeconds, getMarketValueMultiplier, getPremiumOrdersMinLevel, getSurplusSalesMultiplier, isSurplusSalesUnlocked, getHappyCustomerChance, HarvestState, UpgradeState, RewardedOffer, getLevelUnlockInfo, isCustomerSpeedMaxed } from './components/UpgradeList';
@@ -52,7 +52,7 @@ import {
   LIMITED_OFFERS_AD_POOL,
   STORE_COIN_OFFERS,
   getOfferById,
-  hasActiveDoubleCoinsBoost,
+  applyDoubleCoinsVisualAmount,
   isCoinMultiplierBoostId,
   isLegacyCoinMultiplierOfferId,
   pickInitialStoreFreeOfferSlots,
@@ -96,6 +96,9 @@ const getGoalsRequiredForLevel = (level: number): number => {
 
 /** Goal difficulty scaling: 0.9 = easier, 1.0 = normal, 1.1 = harder, 1.2 = much harder */
 const GOAL_DIFFICULTY_SCALING = 1.0;
+
+/** Double Coins duration when granted from a limited-offer / upgrade-panel rewarded ad (offer has no duration in config). */
+const REWARDED_DOUBLE_COINS_AD_DURATION_MS = 30 * 60 * 1000;
 
 /** Build limited offer popup state from offer id (uses offers.ts config). */
 function buildLimitedOfferPopupState(offerId: string, overrides?: { activeBoostEndTime?: number; highestPlantEver?: number }): { isVisible: boolean; title: string; imageSrc: string; subtitle: string; description: string; buttonText: string; offerId: string; tab: TabType; durationMinutes: number | null; durationSeconds?: number | null; activeBoostEndTime?: number; subtitleSettingsStyle?: boolean; hideOfferDurationBlock?: boolean } | null {
@@ -143,9 +146,14 @@ function predictBoostParticleTargetSlot(prev: ActiveBoostData[], offerId: string
 
 /** Same-offer boosts stack (one entry, time added). Distinct offers can exceed 5; bar shows first N visible. */
 function applyBoostParticleImpact(prev: ActiveBoostData[], data: BoostParticleData): ActiveBoostData[] {
-  const oid = normalizeBoostOfferIdForMerge(data.offerId ?? '');
+  let oid = normalizeBoostOfferIdForMerge(data.offerId ?? '');
+  const iconPath = data.icon ?? '';
+  if (!oid && (iconPath.includes('coinmultiplier') || iconPath.includes('coin_multiplier'))) {
+    oid = DOUBLE_COINS_OFFER_ID;
+  }
   const now = Date.now();
-  const added = Math.max(0, data.durationMs ?? 60000);
+  /** Min 1ms: duration 0 used to make boosts instantly expired and broke wallet multipliers + indicator. */
+  const added = Math.max(1, data.durationMs ?? 60000);
 
   if (!oid) {
     return [
@@ -199,11 +207,18 @@ function normalizeActiveBoostsAfterLoad(boosts: ActiveBoostData[]): ActiveBoostD
   const list = boosts
     .filter((b) => b.endTime > now)
     .map((b) => {
-      const oid = normalizeBoostOfferIdForMerge(b.offerId) ?? b.offerId;
+      let oid = normalizeBoostOfferIdForMerge(b.offerId) ?? b.offerId;
+      const ic = b.icon ?? '';
+      if (!oid && (ic.includes('coinmultiplier') || ic.includes('coin_multiplier'))) {
+        oid = DOUBLE_COINS_OFFER_ID;
+      }
+      const remaining = Math.max(0, b.endTime - now);
+      const durationMs = b.durationMs > 0 ? b.durationMs : Math.max(1, remaining);
       return {
         ...b,
         offerId: oid,
         icon: boostIconForOfferId(oid ?? '', b.icon),
+        durationMs,
       };
     });
 
@@ -231,15 +246,6 @@ function normalizeActiveBoostsAfterLoad(boosts: ActiveBoostData[]): ActiveBoostD
     });
   }
   return merged;
-}
-
-/** Double Coins (IAP) — multiply earned payouts; not used for dev/cheat `onAddMoney`. */
-function applyDoubleCoinsMultiplier(
-  amount: number,
-  boosts: ReadonlyArray<{ offerId?: string; endTime?: number }>
-): number {
-  if (!hasActiveDoubleCoinsBoost(boosts)) return amount;
-  return Math.round(amount * 2);
 }
 
 /** Number of NEW goals that must spawn after "discovering a plant" (merge) before we may show one +1 discovery goal. Only reset when player discovers by merge. */
@@ -553,7 +559,27 @@ export default function App() {
   // Discovery reward particles: fly from discovery popup reward icon to wallet.
   const [activeDiscoveryCoinParticles, setActiveDiscoveryCoinParticles] = useState<GoalCoinParticleData[]>([]);
   // Active rewarded-ad boosts (max 5); each has endTime and duration for radial countdown
-  const [activeBoosts, setActiveBoosts] = useState<ActiveBoostData[]>([]);
+  const [activeBoosts, setActiveBoostsState] = useState<ActiveBoostData[]>([]);
+  /** Keep in sync with `activeBoosts` on every commit *inside* the setter so rAF / timers see boosts immediately (before the next render). */
+  const activeBoostsRef = useRef<ActiveBoostData[]>(activeBoosts);
+  /**
+   * Flush synchronously so `activeBoostsRef` matches committed boosts before any other work in this
+   * tick (e.g. another rAF batching wallet credits). React 18 otherwise may defer updaters past rAF.
+   */
+  const setActiveBoosts = useCallback((action: React.SetStateAction<ActiveBoostData[]>) => {
+    flushSync(() => {
+      if (typeof action === 'function') {
+        setActiveBoostsState((prev) => {
+          const next = action(prev);
+          activeBoostsRef.current = next;
+          return next;
+        });
+      } else {
+        activeBoostsRef.current = action;
+        setActiveBoostsState(action);
+      }
+    });
+  }, []);
   /** Two store slots: current duration-boost offer id each (rotates after 15m cooldown). */
   const [storeFreeOfferSlots, setStoreFreeOfferSlots] = useState<[string, string]>(() => pickInitialStoreFreeOfferSlots());
   /** Per-slot cooldown end (ms); 0 = FREE available. */
@@ -913,7 +939,6 @@ export default function App() {
   /** Crop amount already flying to each goal slot (mid-air panels); subtract on impact so rapid harvest taps can't over-commit */
   const goalInFlightHarvestBySlotRef = useRef<Record<number, number>>({});
   const nextRewardedAdOfferIndexRef = useRef(0);
-  const activeBoostsRef = useRef(activeBoosts);
   activeBoostsRef.current = activeBoosts;
 
   useEffect(() => {
@@ -1877,7 +1902,7 @@ export default function App() {
         const hoverY = (btnRect.top - containerRect.top) / scale - offsetUp;
         const panelsToAdd = Array.from({ length: excess }, (_, i) => ({
           id: `seed-surplus-${Date.now()}-${i}-${Math.random().toString(36).slice(2)}`,
-          value: surplusValue,
+          value: applyDoubleCoinsVisualAmount(surplusValue, activeBoostsRef.current),
           startX,
           startY,
           hoverX,
@@ -1922,7 +1947,7 @@ export default function App() {
 
     const panelsToAdd = Array.from({ length: overflowCycles }, (_, i) => ({
       id: `harvest-surplus-${Date.now()}-${i}-${Math.random().toString(36).slice(2)}`,
-      value: surplusValue,
+      value: applyDoubleCoinsVisualAmount(surplusValue, activeBoostsRef.current),
       startX,
       startY,
       hoverX,
@@ -2351,7 +2376,7 @@ export default function App() {
           const panelHeightPx = 14;
           const offsetUp = (panelHeightPx / 2 + 4) * 1.2;
           const hoverY = (btnRect.top - containerRect.top) / scale - offsetUp;
-          setActiveCoinPanels((p) => [...p, { id: `seed-surplus-tap-${Date.now()}`, value: surplusValue, startX, startY, hoverX: startX, hoverY, moveToWalletDelayMs: 0, scale: 1.5 }]);
+          setActiveCoinPanels((p) => [...p, { id: `seed-surplus-tap-${Date.now()}`, value: applyDoubleCoinsVisualAmount(surplusValue, activeBoostsRef.current), startX, startY, hoverX: startX, hoverY, moveToWalletDelayMs: 0, scale: 1.5 }]);
         }
       }
       setSeedsInStorage((prev) => Math.min(seedStorageMax, prev + 1));
@@ -2590,6 +2615,7 @@ export default function App() {
           if (cell.fertile) value *= 2;
           value = Math.floor(value * surplusMultiplier);
           if (hasDoubleHarvestBoost) value *= 2;
+          value = applyDoubleCoinsVisualAmount(value, activeBoostsRef.current);
           const dist = Math.hypot(hoverX - walletCenterX, hoverY - walletCenterY);
           coinPanelsWithDist.push({
             dist,
@@ -2664,7 +2690,7 @@ export default function App() {
         }
       }, delayMs);
     }
-  }, [grid, cropsState, goalSlots, goalCounts, goalPlantTypes, harvestState, playerLevel, activeFtueStage]);
+  }, [grid, cropsState, goalSlots, goalCounts, goalPlantTypes, harvestState, playerLevel, activeFtueStage, activeBoosts]);
 
   // Perform merge harvest: roll chance per adjacent cell to harvest (spawn coin or plant panel) without removing plant
   const performMergeHarvest = useCallback((centerCellIdx: number, chancePercent: number, excludeCellIdx?: number) => {
@@ -2779,6 +2805,7 @@ export default function App() {
         if (cell.fertile) value *= 2;
         value = Math.floor(value * surplusMultiplier);
         /* no double_harvest ad on chain harvest */
+        value = applyDoubleCoinsVisualAmount(value, activeBoostsRef.current);
         const dist = Math.hypot(hoverX - walletCenterX, hoverY - walletCenterY);
         coinPanelsWithDist.push({
           dist,
@@ -2965,7 +2992,7 @@ export default function App() {
                     ...p,
                     {
                       id: `seed-surplus-merge-${Date.now()}`,
-                      value: surplusValue,
+                      value: applyDoubleCoinsVisualAmount(surplusValue, activeBoostsRef.current),
                       startX,
                       startY,
                       hoverX: startX,
@@ -3102,7 +3129,7 @@ export default function App() {
       seedsInStorage: save.seedsInStorage,
       seedsState: save.seedsState,
       cropsState: save.cropsState,
-      activeBoosts: save.activeBoosts.map((b) => ({ offerId: b.offerId, endTime: b.endTime })),
+      activeBoosts: save.activeBoosts.map((b) => ({ offerId: b.offerId, endTime: b.endTime, icon: b.icon })),
       activeFtueStage: save.activeFtueStage,
       ftue7Scheduled: save.ftue7Scheduled,
       ftueSeedSurplusActivated: save.ftueSeedSurplusActivated,
@@ -3337,7 +3364,8 @@ export default function App() {
     offlineEarningsAutoCollectedRef.current = true;
 
     // Synchronous update for persistence (pagehide may happen before React re-renders).
-    const credit = applyDoubleCoinsMultiplier(amtToCollect, activeBoostsRef.current);
+    // Offline bank already reflects boosted surplus etc. from sim — no shop Double Coins here.
+    const credit = amtToCollect;
     moneyRef.current += credit;
     setMoney((prev) => prev + credit);
 
@@ -3679,7 +3707,8 @@ export default function App() {
                       const startX = (r.left + r.width / 2 - cr.left) / appScale;
                       const startY = (r.top + r.height / 2 - cr.top) / appScale;
                       const baseValue = goalCompletedValues[slotIdx] ?? 0;
-                      const value = baseValue * (activeBoosts.some(b => b.offerId === 'happiest_customers') ? 2 : 1);
+                      const preDouble = baseValue * (activeBoosts.some(b => b.offerId === 'happiest_customers') ? 2 : 1);
+                      const value = applyDoubleCoinsVisualAmount(preDouble, activeBoostsRef.current);
                       setActiveGoalCoinParticles((prev) => [...prev, { id: `goal-coin-${slotIdx}-${Date.now()}`, startX, startY, value }]);
                       // Player level: +1 progress on tap (not when coins hit wallet). Goals required = 2^level (2, 4, 8, ...)
                       setPlayerLevelProgress((prev) => {
@@ -3796,7 +3825,7 @@ export default function App() {
                           {showCompletedContent && (
                             <>
                               <img ref={goalIconRefs[slotIdx]} src={assetPath('/assets/icons/icon_coin.png')} alt="" className={`absolute left-1/2 object-contain pointer-events-none ${isBouncing ? 'goal-icon-bounce' : ''}`} style={{ zIndex: 6, bottom: '71%', width: 40, height: 40, transform: 'translate(-50%, -2px)' }} />
-                              <span className="absolute left-1/2 font-bold pointer-events-none" style={{ zIndex: 6, bottom: '62%', color: '#c99959', fontSize: '15px', transform: 'translate(-50%, -1px)' }}>{formatGoalCoin((goalCompletedValues[slotIdx] ?? 0) * (activeBoosts.some(b => b.offerId === 'happiest_customers') ? 2 : 1))}</span>
+                              <span className="absolute left-1/2 font-bold pointer-events-none" style={{ zIndex: 6, bottom: '62%', color: '#c99959', fontSize: '15px', transform: 'translate(-50%, -1px)' }}>{formatGoalCoin(applyDoubleCoinsVisualAmount((goalCompletedValues[slotIdx] ?? 0) * (activeBoosts.some(b => b.offerId === 'happiest_customers') ? 2 : 1), activeBoosts))}</span>
                             </>
                           )}
                           {showLoadingText && (
@@ -3842,7 +3871,17 @@ export default function App() {
                               startTime: Date.now(),
                             }]);
                           }
-                          setActiveGoalCoinParticles((prev) => [...prev, { id: `coin-goal-${Date.now()}`, startX, startY, value: effectiveValue }]);
+                          setActiveGoalCoinParticles((prev) => [
+                            ...prev,
+                            {
+                              id: `coin-goal-${Date.now()}`,
+                              startX,
+                              startY,
+                              value: effectiveValue,
+                              skipHappyCustomerRoll: true,
+                              skipDoubleCoinsMultiplier: true,
+                            },
+                          ]);
                         }
                         lastCoinGoalHiddenAtRef.current = Date.now();
                         nextCoinGoalDelayRef.current = 30000 + Math.random() * 30000;
@@ -3870,7 +3909,7 @@ export default function App() {
                       </svg>
                       <img ref={coinGoalIconRef} src={assetPath('/assets/icons/icon_coin_watchad.png')} alt="" className="object-contain absolute z-[1]" style={{ left: 1, top: 1, width: 40, height: 40, pointerEvents: 'none' }} />
                     </div>
-                    <span className="absolute left-1/2 font-bold pointer-events-none" style={{ zIndex: 6, bottom: '62%', color: '#c77d34', fontSize: '13px', transform: 'translate(-50%, -1px)' }}>{formatGoalCoin(applyDoubleCoinsMultiplier(coinGoalValue * (activeBoosts.some(b => b.offerId === 'happiest_customers') ? 2 : 1), activeBoosts))}</span>
+                    <span className="absolute left-1/2 font-bold pointer-events-none" style={{ zIndex: 6, bottom: '62%', color: '#c77d34', fontSize: '13px', transform: 'translate(-50%, -1px)' }}>{formatGoalCoin(coinGoalValue * (activeBoosts.some(b => b.offerId === 'happiest_customers') ? 2 : 1))}</span>
                   </div>
                 )}
                 </div>
@@ -4068,6 +4107,7 @@ export default function App() {
                           const surplusMultiplier = getSurplusSalesMultiplier(harvestState);
                           let value = Math.floor(baseValue * surplusMultiplier);
                           /* no double_harvest ad on merge-impact surplus */
+                          value = applyDoubleCoinsVisualAmount(value, activeBoostsRef.current);
                           setActiveCoinPanels((prev) => [
                             ...prev,
                             {
@@ -4246,6 +4286,18 @@ export default function App() {
                             targetIdx = withPlants[0].idx;
                           }
                           spawnProjectile(targetIdx, plantLevel, true);
+                        }
+                        if (offerId && isCoinMultiplierBoostId(offerId)) {
+                          setActiveBoosts((prev) =>
+                            applyBoostParticleImpact(prev, {
+                              id: `boost-ad-${DOUBLE_COINS_OFFER_ID}-${Date.now()}`,
+                              startX: 0,
+                              startY: 0,
+                              offerId: DOUBLE_COINS_OFFER_ID,
+                              durationMs: REWARDED_DOUBLE_COINS_AD_DURATION_MS,
+                              icon: DOUBLE_COINS_HEADER_ICON,
+                            })
+                          );
                         }
                       });
                     }}
@@ -4791,12 +4843,18 @@ export default function App() {
                 subtitle={getPlantData(discoveryPopup.level).name}
                 description={getPlantData(discoveryPopup.level).description}
                 buttonText={discoveryPopup.level === 2 ? 'Excellent!' : 'Add to Shed'}
-                rewardAmount={getCoinValueForLevel(discoveryPopup.level) * 3}
+                rewardAmount={applyDoubleCoinsVisualAmount(
+                  getCoinValueForLevel(discoveryPopup.level) * 3,
+                  activeBoosts
+                )}
                 showCloseButton={false}
                 closeOnBackdropClick={false}
                 appScale={appScale}
                 onButtonClick={(startPoint) => {
-                  const rewardValue = getCoinValueForLevel(discoveryPopup.level) * 3;
+                  const rewardValue = applyDoubleCoinsVisualAmount(
+                    getCoinValueForLevel(discoveryPopup.level) * 3,
+                    activeBoostsRef.current
+                  );
                   // Render particles in a fixed full-viewport layer (portaled with modals) so coords match
                   // the popup's viewport getBoundingClientRect — avoids scaled #game-container transform mismatch.
                   const layer = discoveryRewardFxLayerRef.current;
@@ -5009,6 +5067,19 @@ export default function App() {
                       }
                       spawnProjectile(targetIdx, plantLevel, true);
                     }
+                    // Double Coins from rewarded ad: config has no duration so boost particle path is skipped — grant timed boost here.
+                    if (offerId && isCoinMultiplierBoostId(offerId)) {
+                      setActiveBoosts((prev) =>
+                        applyBoostParticleImpact(prev, {
+                          id: `boost-ad-${DOUBLE_COINS_OFFER_ID}-${Date.now()}`,
+                          startX: 0,
+                          startY: 0,
+                          offerId: DOUBLE_COINS_OFFER_ID,
+                          durationMs: REWARDED_DOUBLE_COINS_AD_DURATION_MS,
+                          icon: DOUBLE_COINS_HEADER_ICON,
+                        })
+                      );
+                    }
                   });
                 }}
               />
@@ -5148,6 +5219,7 @@ export default function App() {
                 }}
                 onCollectClick={(startPoint) => {
                   const amt = offlinePopupAmountRef.current;
+                  const payout = amt;
                   pendingOfflineEarningsRef.current = 0;
                   setOfflineEarningsUi(null);
                   const layer = discoveryRewardFxLayerRef.current;
@@ -5159,7 +5231,7 @@ export default function App() {
                         id: `offline-earnings-${Date.now()}-${Math.random().toString(36).slice(2)}`,
                         startX: startPoint.x - lr.left,
                         startY: startPoint.y - lr.top,
-                        value: amt,
+                        value: payout,
                       },
                     ]);
                   }
@@ -5186,8 +5258,7 @@ export default function App() {
                   popupVisualScale={1.5}
                   activeCount={activeDiscoveryCoinParticles.length}
                   onImpact={(value) => {
-                    const credit = applyDoubleCoinsMultiplier(value, activeBoostsRef.current);
-                    setMoney((prev) => prev + credit);
+                    setMoney((prev) => prev + value);
                     setWalletFlashActive(true);
                     setWalletBounceTrigger((t) => t + 1);
                     if (walletFlashTimeoutRef.current) clearTimeout(walletFlashTimeoutRef.current);
@@ -5306,8 +5377,7 @@ export default function App() {
                             const total = pendingCoinImpactRef.current.total;
                             pendingCoinImpactRef.current = { total: 0, scheduled: false };
                             walletImpactFlushRafRef.current = 0;
-                            const credit = applyDoubleCoinsMultiplier(total, activeBoostsRef.current);
-                            setMoney((prev) => prev + credit);
+                            setMoney((prev) => prev + total);
                             setWalletBounceTrigger((t) => t + 1);
                             setWalletFlashActive(true);
                             if (walletFlashTimeoutRef.current) clearTimeout(walletFlashTimeoutRef.current);
@@ -5390,13 +5460,14 @@ export default function App() {
               variant="goal"
               activeCount={activeGoalCoinParticles.length}
               onImpact={(value) => {
-                const happiestCustomersActive = activeBoosts.some(b => b.offerId === 'happiest_customers');
                 let finalValue = value;
-                if (!happiestCustomersActive) {
-                  const happyChance = getHappyCustomerChance(harvestState);
-                  if (happyChance > 0 && Math.random() * 100 < happyChance) finalValue *= 2;
+                if (!p.skipHappyCustomerRoll) {
+                  const happiestCustomersActive = activeBoosts.some(b => b.offerId === 'happiest_customers');
+                  if (!happiestCustomersActive) {
+                    const happyChance = getHappyCustomerChance(harvestState);
+                    if (happyChance > 0 && Math.random() * 100 < happyChance) finalValue *= 2;
+                  }
                 }
-                finalValue = applyDoubleCoinsMultiplier(finalValue, activeBoostsRef.current);
                 setMoney((prev) => prev + finalValue);
                 setWalletFlashActive(true);
                 setWalletBounceTrigger((t) => t + 1);

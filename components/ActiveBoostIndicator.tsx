@@ -48,7 +48,9 @@ export const ActiveBoostIndicator: React.FC<ActiveBoostIndicatorProps> = ({ data
     const tick = () => {
       const now = Date.now();
       const remaining = Math.max(0, data.endTime - now);
-      const pct = data.durationMs > 0 ? (remaining / data.durationMs) * 100 : 0;
+      // If durationMs was 0 on disk, still show a valid ring until endTime (avoid instant onComplete + empty bar).
+      const denom = data.durationMs > 0 ? data.durationMs : Math.max(remaining, 1);
+      const pct = denom > 0 ? (remaining / denom) * 100 : 0;
 
       if (pct <= 0 && !completedRef.current) {
         completedRef.current = true;

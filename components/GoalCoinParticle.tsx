@@ -46,6 +46,10 @@ export interface GoalCoinParticleData {
   startX: number;
   startY: number;
   value: number;
+  /** Set for rewarded coin-goal ad: value already includes happiest multiplier; skip random happy roll. */
+  skipHappyCustomerRoll?: boolean;
+  /** Coin-goal ad reward: spawn `value` without shop Double Coins (no visual 2× on this tile). */
+  skipDoubleCoinsMultiplier?: boolean;
 }
 
 interface GoalCoinParticleProps {
