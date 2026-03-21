@@ -1,13 +1,12 @@
 /**
- * Limited Offer Popup - Reusable popup component for rewarded ads and limited time offers.
- * Exact copy of DiscoveryPopup with different default title.
- * Features mobile game style show/hide animations with leaf burst VFX.
- * Uses 9-slice sprite scaling for the background.
+ * Purchase Successful Popup — same look/feel as Discovery (leaves, panel, header ring)
+ * but dedicated to post–IAP / paid store purchases. Collect activates pending rewards.
  */
 import React, { useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { Reward, REWARD_INLINE_WIDTH_PX } from './Reward';
 
-const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_3.png'), assetPath('/assets/vfx/particle_leaf_4.png')];
+const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_1.png'), assetPath('/assets/vfx/particle_leaf_2.png')];
 
 interface LeafParticle {
   id: number;
@@ -23,45 +22,24 @@ interface LeafParticle {
   lifetime: number;
 }
 
-interface LimitedOfferPopupProps {
-  isVisible: boolean;
-  onClose: () => void;
-  title?: string;
-  imageSrc: string;
-  subtitle: string;
-  description: string;
-  buttonText: string;
-  onButtonClick?: (buttonRect: DOMRect) => void;
-  /** If false, button click only calls onButtonClick and does not close the popup (e.g. parent shows fake ad then closes) */
-  closeOnButtonClick?: boolean;
-  /** Called when X close button is clicked, with the accept button rect for particle origin */
-  onCloseButtonClick?: (acceptButtonRect: DOMRect) => void;
-  showCloseButton?: boolean;
-  imageLevel?: number;
-  closeOnBackdropClick?: boolean;
-  appScale?: number;
-  /** When set, show "active boost" view: brown disabled-style button with "Active: XXs" countdown; button does nothing */
-  activeBoostEndTime?: number;
-  /** When set (and not null), show "Duration: X min" below description, above button. Null = hide duration section. */
-  durationMinutes?: number | null;
-  /** When set (and not null), show "Duration: Xs" (e.g. "90s"). Takes precedence over durationMinutes for display. */
-  durationSeconds?: number | null;
-  /** Double Coins: subtitle uses Settings popup title style (dark brown, 2.25rem black). */
-  subtitleSettingsStyle?: boolean;
-  /** Hide "Duration: …" block (e.g. Double Coins IAP). */
-  hideOfferDurationBlock?: boolean;
+/** One reward strip — same props as store `Reward` (pill + icon + text + divider + duration). */
+export interface PurchaseSuccessfulRewardRow {
+  offerLineText: string;
+  durationText: string;
+  coinIconPath?: string;
 }
 
-/** Human-readable remaining time for active boost button (hours / minutes / seconds). */
-function formatBoostTimeRemaining(totalSeconds: number): string {
-  const s = Math.max(0, Math.floor(totalSeconds));
-  if (s <= 0) return '0s';
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
-  if (m > 0) return sec > 0 ? `${m}m ${sec}s` : `${m}m`;
-  return `${sec}s`;
+export interface PurchaseSuccessfulPopupProps {
+  isVisible: boolean;
+  onClose: () => void;
+  /** Main product icon in header (same ~94px treatment as Discovery) */
+  headerImageSrc: string;
+  /** Default: Thank you for your purchase */
+  description?: string;
+  rewards: PurchaseSuccessfulRewardRow[];
+  /** Fired with the Collect button’s screen rect; App spawns boost particles from the button’s right edge. */
+  onCollect?: (buttonRect: DOMRect) => void;
+  appScale?: number;
 }
 
 const POPUP_LEAF_COUNT = 40;
@@ -120,26 +98,14 @@ function createPopupLeaves(): LeafParticle[] {
   });
 }
 
-export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
+export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = ({
   isVisible,
   onClose,
-  title = 'Limited Offer',
-  imageSrc,
-  subtitle,
-  description,
-  buttonText,
-  onButtonClick,
-  closeOnButtonClick = true,
-  onCloseButtonClick,
-  showCloseButton = true,
-  imageLevel,
-  closeOnBackdropClick = true,
+  headerImageSrc,
+  description = 'Thank you for your purchase',
+  rewards,
+  onCollect,
   appScale = 1,
-  activeBoostEndTime,
-  durationMinutes,
-  durationSeconds,
-  subtitleSettingsStyle = false,
-  hideOfferDurationBlock = false,
 }) => {
   const [animState, setAnimState] = useState<'hidden' | 'entering' | 'visible' | 'leaving'>('hidden');
   const [assetsReady, setAssetsReady] = useState(false);
@@ -147,20 +113,6 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
   const [leafPositions, setLeafPositions] = useState<{ x: number; y: number; opacity: number; rotation: number; scale: number }[]>([]);
   const [imgFailed, setImgFailed] = useState<Record<number, boolean>>({});
   const [buttonPressed, setButtonPressed] = useState(false);
-  const [activeSecondsLeft, setActiveSecondsLeft] = useState<number>(0);
-  const isActiveBoostView = activeBoostEndTime != null;
-
-  // Countdown for active boost view (same as radial progress)
-  useEffect(() => {
-    if (!isActiveBoostView || !isVisible) return;
-    const tick = () => {
-      const remaining = Math.max(0, Math.ceil((activeBoostEndTime - Date.now()) / 1000));
-      setActiveSecondsLeft(remaining);
-    };
-    tick();
-    const id = setInterval(tick, 500);
-    return () => clearInterval(id);
-  }, [isActiveBoostView, isVisible, activeBoostEndTime]);
   const leafRafRef = useRef<number>(0);
   const leafStartTimeRef = useRef<number>(0);
   const leafPosRef = useRef<{ x: number; y: number; vx: number; vy: number; opacity: number; rotation: number; scale: number; started: boolean }[]>([]);
@@ -273,20 +225,17 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
   const [isClosing, setIsClosing] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  const handleButtonClick = () => {
+  const handleCollectClick = () => {
     if (isClosing) return;
-    if (isActiveBoostView) return; // Active boost view: button does nothing
-    if (onButtonClick && buttonRef.current) {
-      onButtonClick(buttonRef.current.getBoundingClientRect());
+    setIsClosing(true);
+    if (onCollect && buttonRef.current) {
+      onCollect(buttonRef.current.getBoundingClientRect());
     }
-    if (closeOnButtonClick) {
-      setIsClosing(true);
-      setAnimState('leaving');
-      setTimeout(() => {
-        setAnimState('hidden');
-        onClose();
-      }, 150);
-    }
+    setAnimState('leaving');
+    setTimeout(() => {
+      setAnimState('hidden');
+      onClose();
+    }, 150);
   };
 
   if (animState === 'hidden') return null;
@@ -294,19 +243,15 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
   const isEntering = animState === 'entering';
   const isLeaving = animState === 'leaving';
 
-  // Colors for Limited Offer theme (orange/yellow)
-  const subtitleColor = '#5c4a32'; // Dark brown for subtitle
-  const descriptionColor = '#f59d42'; // Orange for description
-  const buttonBgColor = isActiveBoostView ? '#e3c28c' : '#ffd856'; // Brown when active (same as upgrade "can't afford")
-  const buttonBorderColor = isActiveBoostView ? '#c4a574' : '#f59d42';
-  const buttonTextColor = isActiveBoostView ? '#a58854' : '#e6803a';
-  const buttonPressedBg = isActiveBoostView ? '#e3c28c' : '#f0c840';
-  // Header circle gradient: top #ffd856, bottom #f17d3f, outline #bd792c
+  const buttonBgColor = '#b8d458'; // Bright lime green
+  const buttonBorderColor = '#8fb33a'; // Darker green border
+  const buttonTextColor = '#4a6b1e'; // Dark green text
+  const buttonPressedBg = '#9fc044';
 
   return (
     <div 
       className="fixed inset-0 flex items-center justify-center pointer-events-auto"
-      style={{ zIndex: 100, overflow: 'hidden' }}
+      style={{ zIndex: 115, overflow: 'hidden' }}
     >
 {/* Backdrop - not scaled, covers full screen */}
       <div
@@ -319,12 +264,7 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
           backgroundColor: 'rgba(0, 0, 0, 0.7)',
           opacity: isLeaving ? 0 : 1,
         }}
-        onClick={closeOnBackdropClick ? () => {
-          if (onCloseButtonClick && buttonRef.current) {
-            onCloseButtonClick(buttonRef.current.getBoundingClientRect());
-          }
-          onClose();
-        } : undefined}
+        aria-hidden
       />
 
       {/* Scaled content wrapper */}
@@ -425,10 +365,10 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
             }
           }
         `}</style>
-{/* Header Circle - positioned to overlap top of popup */}
-        <div
+        {/* Header Circle - positioned to overlap top of popup */}
+        <div 
           className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center"
-          style={{
+          style={{ 
             width: '120px',
             height: '120px',
             top: '-20px',
@@ -436,20 +376,20 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
           }}
         >
           {/* Header background sprite */}
-          <img
-            src={assetPath('/assets/popups/popup_header_yellow.png')}
-            alt=""
+          <img 
+            src={assetPath('/assets/popups/popup_header.png')} 
+            alt="" 
             className="absolute inset-0 w-full h-full object-contain"
             style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.25))' }}
           />
-          {/* Plant / offer icon — Double Coins +15% vs default 75px (matches boost art emphasis) */}
-          <img
-            src={imageSrc}
-            alt=""
+          {/* Plant image inside header */}
+          <img 
+            src={headerImageSrc} 
+            alt="" 
             className="relative object-contain"
-            style={{
-              width: subtitleSettingsStyle ? `${75 * 1.15}px` : '75px',
-              height: subtitleSettingsStyle ? `${75 * 1.15}px` : '75px',
+            style={{ 
+              width: '94px',  /* 85px * 1.1 = ~94px (10% larger) */
+              height: '94px',
               filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
               marginTop: '-4px',
             }}
@@ -481,64 +421,35 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
             <div
               className="flex flex-col items-center"
             >
-          {/* Title - "Limited Offer" */}
-          <h2 
-            className="font-normal text-center"
-            style={{ 
-              color: '#c2b280',
+          {/* Title — match Settings visual size: inner panel uses scale(0.5), so 2× rem vs Settings’ 2.25rem */}
+          <h2
+            className="font-black tracking-tight text-center"
+            style={{
+              color: '#5c4a32',
               fontFamily: 'Inter, sans-serif',
-              letterSpacing: '-0.02em',
-              fontSize: '2.25rem',
+              fontSize: '4.5rem',
             }}
           >
-            {title}
+            Successful
           </h2>
 
-          {/* Subtitle — plant / offer name (Double Coins uses Settings title styling when flagged) */}
-          {subtitle.trim().length > 0 && (
-            <h3
-              className="font-black tracking-tight text-center"
-              style={
-                subtitleSettingsStyle
-                  ? {
-                      color: '#5c4a32',
-                      fontFamily: 'Inter, sans-serif',
-                      marginTop: '-10px',
-                      /* Inner panel uses scale(0.5); 4.5rem × 0.5 = Settings’ 2.25rem visually */
-                      fontSize: '4.5rem',
-                    }
-                  : {
-                      color: subtitleColor,
-                      fontFamily: 'Inter, sans-serif',
-                      marginTop: '-8px',
-                      whiteSpace: 'nowrap',
-                      width: 'fit-content',
-                      maxWidth: '580px',
-                      fontSize: `min(4.375rem, ${580 / Math.max(1, subtitle.length * 0.6)}px)`,
-                    }
-              }
-            >
-              {subtitle}
-            </h3>
-          )}
-
-{/* Divider */}
+          {/* Divider */}
           <div className="w-full flex items-center justify-center" style={{ marginTop: '8px', marginBottom: '24px' }}>
-            <img
-              src={assetPath('/assets/popups/popup_divider_yellow.png')}
-              alt=""
+            <img 
+              src={assetPath('/assets/popups/popup_divider.png')} 
+              alt="" 
               className="h-auto object-contain"
-              style={{
+              style={{ 
                 width: '520px',
               }}
             />
           </div>
 
           {/* Description */}
-          <p
+          <p 
             className="font-medium text-center leading-relaxed italic w-full"
-            style={{
-              color: descriptionColor,
+            style={{ 
+              color: '#c2b280',
               fontFamily: 'Inter, sans-serif',
               paddingLeft: '24px',
               paddingRight: '24px',
@@ -548,50 +459,60 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
             {description}
           </p>
 
-          {/* Duration: only before activation (active view uses button countdown only). */}
-          {!isActiveBoostView && !hideOfferDurationBlock && (durationSeconds != null && durationSeconds > 0) && (
-            <p
-              className="font-semibold text-center w-full"
-              style={{
-                color: '#c2b280',
-                fontFamily: 'Inter, sans-serif',
-                paddingLeft: '24px',
-                paddingRight: '24px',
-                marginTop: '20px',
-                fontSize: '1.75rem',
-              }}
-            >
-              Duration: {durationSeconds}s
-            </p>
-          )}
-          {!isActiveBoostView && !hideOfferDurationBlock && (durationSeconds == null || durationSeconds <= 0) && durationMinutes != null && durationMinutes > 0 && (
-            <p
-              className="font-semibold text-center w-full"
-              style={{
-                color: '#c2b280',
-                fontFamily: 'Inter, sans-serif',
-                paddingLeft: '24px',
-                paddingRight: '24px',
-                marginTop: '20px',
-                fontSize: '1.75rem',
-              }}
-            >
-              Duration: {durationMinutes} min
-            </p>
-          )}
+          {/* Rewards — 2× visual; centered in panel (440px strip centered in full inner width) */}
+          <div
+            className="flex flex-col w-full"
+            style={{ marginTop: '28px', width: '100%', alignItems: 'center' }}
+          >
+            {rewards.map((row, idx) => (
+              <div
+                key={idx}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'flex-start',
+                  minHeight: '88px',
+                  marginBottom: idx < rewards.length - 1 ? '16px' : 0,
+                }}
+              >
+                <div
+                  style={{
+                    width: REWARD_INLINE_WIDTH_PX,
+                    flexShrink: 0,
+                    display: 'flex',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <div
+                    style={{
+                      transform: 'scale(2)',
+                      transformOrigin: 'top center',
+                    }}
+                  >
+                    <Reward
+                      layout="inline"
+                      offerLineText={row.offerLineText}
+                      durationText={row.durationText}
+                      coinIconPath={row.coinIconPath}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
 
-          {/* Spacer */}
-          <div className="flex-grow min-h-[48px]" />
+          {/* Tight gap above Collect */}
+          <div className="flex-grow" style={{ minHeight: '12px' }} />
 
-{/* Action Button - normal "Watch Ad" or active boost "Active: XXs" (non-clickable) */}
+          {/* Action Button */}
           <button
             ref={buttonRef}
-            type="button"
-            onMouseDown={() => !isActiveBoostView && setButtonPressed(true)}
+            onMouseDown={() => setButtonPressed(true)}
             onMouseUp={() => setButtonPressed(false)}
             onMouseLeave={() => setButtonPressed(false)}
-            onClick={handleButtonClick}
-            className="relative flex items-center justify-center gap-3 rounded-xl transition-all"
+            onClick={handleCollectClick}
+            className="relative flex items-center justify-center rounded-xl transition-all"
             style={{
               width: '360px',
               height: '88px',
@@ -599,64 +520,27 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
               backgroundColor: buttonPressed ? buttonPressedBg : buttonBgColor,
               border: `4px solid ${buttonBorderColor}`,
               borderRadius: '24px',
-              boxShadow: buttonPressed
-                ? 'inset 0 4px 8px rgba(0,0,0,0.15)'
+              boxShadow: buttonPressed 
+                ? 'inset 0 4px 8px rgba(0,0,0,0.15)' 
                 : '0 8px 0 ' + buttonBorderColor + ', 0 12px 24px rgba(0,0,0,0.15)',
               transform: buttonPressed ? 'translateY(4px)' : 'translateY(0)',
-              cursor: isActiveBoostView ? 'default' : 'pointer',
             }}
           >
-            {!isActiveBoostView && (
-              <img
-                src={assetPath('/assets/icons/icon_watchad.png')}
-                alt=""
-                style={{
-                  width: '60px',
-                  height: '60px',
-                  objectFit: 'contain',
-                  marginLeft: '-8px',
-                  filter: 'brightness(0) saturate(100%) invert(56%) sepia(67%) saturate(1000%) hue-rotate(346deg) brightness(97%) contrast(88%)',
-                }}
-              />
-            )}
-            <span
+            <span 
               className="font-bold tracking-tight"
-              style={{
+              style={{ 
                 color: buttonTextColor,
                 fontFamily: 'Inter, sans-serif',
-                textShadow: isActiveBoostView ? 'none' : '0 2px 0 rgba(255,255,255,0.3)',
+                textShadow: '0 2px 0 rgba(255,255,255,0.3)',
                 fontSize: '2rem',
               }}
             >
-              {isActiveBoostView ? `Active: ${formatBoostTimeRemaining(activeSecondsLeft)}` : buttonText}
+              Collect
             </span>
           </button>
             </div>
           </div>
         </div>
-
-{/* Close Button */}
-        {showCloseButton && (
-          <button
-            onClick={() => {
-              if (onCloseButtonClick && buttonRef.current) {
-                onCloseButtonClick(buttonRef.current.getBoundingClientRect());
-              }
-              onClose();
-            }}
-            className="absolute top-[56px] right-6 w-8 h-8 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
-            style={{
-              backgroundColor: 'transparent',
-              border: 'none',
-              color: '#c2b280',
-              zIndex: 105,
-            }}
-          >
-            <svg width="16" height="16" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <path d="M2 2L12 12M12 2L2 12" />
-            </svg>
-          </button>
-        )}
       </div>
       </div>
     </div>

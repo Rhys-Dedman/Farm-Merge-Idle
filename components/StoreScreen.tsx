@@ -1,14 +1,18 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { PageHeader } from './PageHeader';
 import { assetPath } from '../utils/assetPath';
 import type { ActiveBoostData } from './ActiveBoostIndicator';
 import { ACTIVE_BOOST_INDICATOR_SIZE_PX } from './ActiveBoostIndicator';
-import { getOfferById } from '../offers';
+import { getOfferById, STORE_COIN_OFFERS, STORE_FREE_OFFER_HEADER_ICON_PX } from '../offers';
+import { StoreCoinOffer } from './StoreCoinOffer';
 
 /** Matches upgrade panel MAX / disabled purchase button (UpgradeList). */
 const UPGRADE_MAX_BUTTON_BG = '#e3c28c';
 const UPGRADE_MAX_BUTTON_DEPTH = '#c7a36e';
 const UPGRADE_MAX_BUTTON_FONT = '#a68e64';
+
+const FREE_OFFER_TITLE_FONT_MAX_PX = 13;
+const FREE_OFFER_TITLE_FONT_MIN_PX = 7;
 
 /** Store free offer — tiny version of rewarded ad. Rotates to a new pool offer after cooldown (with bounce). */
 const StoreFreeOffer: React.FC<{
@@ -23,8 +27,10 @@ const StoreFreeOffer: React.FC<{
   const [bounceActive, setBounceActive] = useState(false);
   const prevOnCooldownRef = useRef(false);
   const cooldownEndHandledRef = useRef(false);
+  const freeOfferTitleBoxRef = useRef<HTMLDivElement>(null);
+  const freeOfferTitleTextRef = useRef<HTMLSpanElement>(null);
+  const [freeOfferTitleFontPx, setFreeOfferTitleFontPx] = useState(FREE_OFFER_TITLE_FONT_MAX_PX);
   const offer = getOfferById(offerId);
-  if (!offer) return null;
 
   const isOnCooldown = cooldownEndMs > now;
   const remainingMs = Math.max(0, cooldownEndMs - now);
@@ -32,7 +38,8 @@ const StoreFreeOffer: React.FC<{
   const remainingSecs = Math.floor((remainingMs % 60000) / 1000);
   const timerLabel = `${remainingMins.toString().padStart(2, '0')}:${remainingSecs.toString().padStart(2, '0')}`;
 
-  const durationSeconds = offer.durationSeconds ?? (offer.durationMinutes != null ? offer.durationMinutes * 60 : 0);
+  const durationSeconds =
+    offer?.durationSeconds ?? (offer?.durationMinutes != null ? offer.durationMinutes * 60 : 0);
   const durationLabel = durationSeconds <= 0 ? 'Instant' : `${durationSeconds}s`;
 
   // Tick every second when on cooldown
@@ -63,6 +70,27 @@ const StoreFreeOffer: React.FC<{
     };
   }, [isOnCooldown, cooldownEndMs, slotIndex, onSlotCooldownEnded]);
 
+  // Title: never above 13px; shrink only until text fits in the title box
+  useLayoutEffect(() => {
+    const box = freeOfferTitleBoxRef.current;
+    const text = freeOfferTitleTextRef.current;
+    if (!offer || !box || !text) return;
+
+    const cs = getComputedStyle(box);
+    const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+    const padY = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+    const availW = Math.max(1, box.clientWidth - padX);
+    const availH = Math.max(1, box.clientHeight - padY);
+
+    let px = FREE_OFFER_TITLE_FONT_MAX_PX;
+    text.style.fontSize = `${px}px`;
+    while (px > FREE_OFFER_TITLE_FONT_MIN_PX && (text.scrollWidth > availW || text.scrollHeight > availH)) {
+      px -= 0.5;
+      text.style.fontSize = `${px}px`;
+    }
+    setFreeOfferTitleFontPx(px);
+  }, [offerId, offer?.title]);
+
   const rowBandStyle: React.CSSProperties = {
     position: 'relative',
     width: '100%',
@@ -70,6 +98,8 @@ const StoreFreeOffer: React.FC<{
     marginTop: 9,
   };
   const yMid: React.CSSProperties = { position: 'absolute', top: '50%', transform: 'translateY(-50%)' };
+
+  if (!offer) return null;
 
   return (
     <div className={`relative w-[214px] flex-shrink-0 ${bounceActive ? 'store-free-offer-bounce' : ''}`}>
@@ -87,7 +117,7 @@ const StoreFreeOffer: React.FC<{
               src={assetPath(offer.headerIcon)}
               alt=""
               className="object-contain"
-              style={{ width: 102.6, height: 102.6, transform: 'translateY(2px)' }}
+              style={{ width: STORE_FREE_OFFER_HEADER_ICON_PX, height: STORE_FREE_OFFER_HEADER_ICON_PX, transform: 'translateY(2px)' }}
             />
           </div>
         </div>
@@ -96,7 +126,8 @@ const StoreFreeOffer: React.FC<{
         <div className="flex-1 flex items-start justify-center min-h-0 w-full">
           <div style={rowBandStyle}>
             <div
-              className="flex items-center justify-center rounded-[4px] px-1"
+              ref={freeOfferTitleBoxRef}
+              className="flex min-w-0 items-center justify-center overflow-hidden rounded-[4px] px-1"
               style={{
                 position: 'absolute',
                 left: 30,
@@ -107,8 +138,9 @@ const StoreFreeOffer: React.FC<{
               }}
             >
               <span
-                className="font-black leading-none whitespace-nowrap text-center"
-                style={{ color: '#6c5851', fontSize: '13px' }}
+                ref={freeOfferTitleTextRef}
+                className="min-w-0 max-w-full font-black leading-none whitespace-nowrap text-center"
+                style={{ color: '#6c5851', fontSize: `${freeOfferTitleFontPx}px` }}
               >
                 {offer.title}
               </span>
@@ -208,7 +240,6 @@ interface StoreScreenProps {
   activeBoosts?: ActiveBoostData[];
   activeBoostAreaRef?: React.RefObject<HTMLDivElement | null>;
   headerLeftWrapperRef?: React.RefObject<HTMLDivElement | null>;
-  headerRightSectionRef?: React.RefObject<HTMLDivElement | null>;
   onBoostComplete?: (id: string, rect?: DOMRect) => void;
   onBoostClick?: (boost: ActiveBoostData) => void;
   walletRef?: React.RefObject<HTMLButtonElement | null>;
@@ -218,6 +249,8 @@ interface StoreScreenProps {
   storeSlotCooldownEnds?: [number, number];
   /** After cooldown + bounce: pick new offer for this slot. */
   onStoreSlotCooldownEnded?: (slotIndex: number) => void;
+  /** Real-money coin pack row (IAP placeholder). */
+  onStoreCoinPurchase?: (offerId: string) => void;
 }
 
 export const StoreScreen: React.FC<StoreScreenProps> = ({
@@ -228,13 +261,13 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
   activeBoosts = [],
   activeBoostAreaRef,
   headerLeftWrapperRef,
-  headerRightSectionRef,
   onBoostComplete,
   onBoostClick,
   walletRef,
   storeFreeOfferSlots = ['double_harvest', 'rapid_seeds'],
   storeSlotCooldownEnds = [0, 0],
   onStoreSlotCooldownEnded,
+  onStoreCoinPurchase,
 }) => {
   // Store scroll: reuse Shed/Barn-style momentum drag, but move the store top-ui list with transforms.
   // This avoids relying on native scroll (which isn't responding correctly on mobile in this screen).
@@ -384,8 +417,6 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
         headerLeftWrapperRef={headerLeftWrapperRef}
         onBoostComplete={onBoostComplete}
         onBoostClick={onBoostClick}
-        boostAreaPosition="rightOfCenter"
-        headerRightSectionRef={headerRightSectionRef}
       />
 
       {/* Store top-ui viewport (sprites + pattern clipped). */}
@@ -488,15 +519,10 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
               className="w-[300px] max-w-none h-auto mt-1 mb-1"
             />
 
-            {/* 5x small items */}
+            {/* Coin IAP rows — order = `STORE_COIN_OFFERS` in offers.ts (shuffle freely). */}
             <div className="flex flex-col items-center gap-0 w-full mt-0">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <img
-                  key={i}
-                  src={assetPath('/assets/topui/ui_store_small.png')}
-                  alt=""
-                  className="w-[440px] max-w-none h-auto"
-                />
+              {STORE_COIN_OFFERS.map((config) => (
+                <StoreCoinOffer key={config.id} config={config} onPurchase={onStoreCoinPurchase} />
               ))}
             </div>
           </div>

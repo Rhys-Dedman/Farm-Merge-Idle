@@ -15,8 +15,9 @@ import { CoinPanel, CoinPanelData } from './components/CoinPanel';
 import { PlantPanel, PlantPanelData } from './components/PlantPanel';
 import { GoalCoinParticle, GoalCoinParticleData } from './components/GoalCoinParticle';
 import { WalletImpactBurst } from './components/WalletImpactBurst';
-import { PageHeader } from './components/PageHeader';
+import { PageHeader, MAX_VISIBLE_BOOST_SLOTS } from './components/PageHeader';
 import { DiscoveryPopup } from './components/DiscoveryPopup';
+import { PurchaseSuccessfulPopup, type PurchaseSuccessfulRewardRow } from './components/PurchaseSuccessfulPopup';
 import { LevelUpPopup } from './components/LevelUpPopup';
 import { PlantInfoPopup } from './components/PlantInfoPopup';
 import { LimitedOfferPopup } from './components/LimitedOfferPopup';
@@ -44,7 +45,19 @@ import type { FtueStageId } from './ftue/ftueConfig';
 import { assetPath } from './utils/assetPath';
 import { getTickCount60, TARGET_FRAME_MS, scheduleNextFrame } from './utils/raf60';
 import { getPerformanceMode } from './utils/performanceMode';
-import { LIMITED_OFFERS, getOfferById, pickInitialStoreFreeOfferSlots, pickStoreDurationOfferId } from './offers';
+import {
+  DOUBLE_COINS_HEADER_ICON,
+  DOUBLE_COINS_OFFER_ID,
+  LIMITED_OFFERS,
+  LIMITED_OFFERS_AD_POOL,
+  STORE_COIN_OFFERS,
+  getOfferById,
+  hasActiveDoubleCoinsBoost,
+  isCoinMultiplierBoostId,
+  isLegacyCoinMultiplierOfferId,
+  pickInitialStoreFreeOfferSlots,
+  pickStoreDurationOfferId,
+} from './offers';
 import {
   loadGameSave,
   persistGameSave,
@@ -85,25 +98,148 @@ const getGoalsRequiredForLevel = (level: number): number => {
 const GOAL_DIFFICULTY_SCALING = 1.0;
 
 /** Build limited offer popup state from offer id (uses offers.ts config). */
-function buildLimitedOfferPopupState(offerId: string, overrides?: { activeBoostEndTime?: number; highestPlantEver?: number }): { isVisible: boolean; title: string; imageSrc: string; subtitle: string; description: string; buttonText: string; offerId: string; tab: TabType; durationMinutes: number | null; durationSeconds?: number | null; activeBoostEndTime?: number } | null {
-  const offer = getOfferById(offerId);
+function buildLimitedOfferPopupState(offerId: string, overrides?: { activeBoostEndTime?: number; highestPlantEver?: number }): { isVisible: boolean; title: string; imageSrc: string; subtitle: string; description: string; buttonText: string; offerId: string; tab: TabType; durationMinutes: number | null; durationSeconds?: number | null; activeBoostEndTime?: number; subtitleSettingsStyle?: boolean; hideOfferDurationBlock?: boolean } | null {
+  const resolvedOfferId = isLegacyCoinMultiplierOfferId(offerId) ? DOUBLE_COINS_OFFER_ID : offerId;
+  const offer = getOfferById(resolvedOfferId);
   if (!offer) return null;
   const imageSrc = offer.id === 'special_delivery' && overrides?.highestPlantEver != null
     ? assetPath(`/assets/plants/plant_${Math.max(1, Math.min(24, overrides.highestPlantEver - 1))}.png`)
     : assetPath(offer.headerIcon);
+  const isCoinMult = isCoinMultiplierBoostId(resolvedOfferId);
   return {
     isVisible: true,
     title: 'Limited Offer',
     imageSrc,
-    subtitle: offer.title,
+    subtitle: isCoinMult ? 'Double Coins' : offer.title,
     description: offer.description,
     buttonText: 'Accept Offer',
     offerId: offer.id,
     tab: offer.upgradeTab,
-    durationMinutes: offer.durationMinutes,
-    durationSeconds: offer.durationSeconds ?? null,
+    durationMinutes: isCoinMult ? null : offer.durationMinutes,
+    durationSeconds: isCoinMult ? null : offer.durationSeconds ?? null,
+    subtitleSettingsStyle: isCoinMult,
     ...overrides,
   };
+}
+
+function normalizeBoostOfferIdForMerge(offerId: string | undefined): string | undefined {
+  if (!offerId) return undefined;
+  return isLegacyCoinMultiplierOfferId(offerId) ? DOUBLE_COINS_OFFER_ID : offerId;
+}
+
+function boostIconForOfferId(offerId: string, fallbackIcon?: string): string {
+  if (isCoinMultiplierBoostId(offerId)) return DOUBLE_COINS_HEADER_ICON;
+  const o = getOfferById(offerId);
+  return o?.headerIcon ?? fallbackIcon ?? '/assets/icons/icon_seedproduction.png';
+}
+
+function predictBoostParticleTargetSlot(prev: ActiveBoostData[], offerId: string | undefined): number {
+  const oid = normalizeBoostOfferIdForMerge(offerId);
+  if (!oid) return Math.min(Math.max(0, prev.length), MAX_VISIBLE_BOOST_SLOTS - 1);
+  const idx = prev.findIndex((b) => normalizeBoostOfferIdForMerge(b.offerId) === oid);
+  const raw = idx >= 0 ? idx : prev.length;
+  return Math.min(raw, MAX_VISIBLE_BOOST_SLOTS - 1);
+}
+
+/** Same-offer boosts stack (one entry, time added). Distinct offers can exceed 5; bar shows first N visible. */
+function applyBoostParticleImpact(prev: ActiveBoostData[], data: BoostParticleData): ActiveBoostData[] {
+  const oid = normalizeBoostOfferIdForMerge(data.offerId ?? '');
+  const now = Date.now();
+  const added = Math.max(0, data.durationMs ?? 60000);
+
+  if (!oid) {
+    return [
+      ...prev,
+      {
+        id: `boost-${now}`,
+        endTime: now + added,
+        durationMs: added,
+        icon: data.icon ?? '/assets/icons/icon_seedproduction.png',
+        offerId: data.offerId,
+      },
+    ];
+  }
+
+  const matchIndex = prev.findIndex((b) => normalizeBoostOfferIdForMerge(b.offerId) === oid);
+
+  if (matchIndex < 0) {
+    const icon = boostIconForOfferId(oid, data.icon);
+    return [
+      ...prev,
+      {
+        id: `boost-${oid}-${now}`,
+        endTime: now + added,
+        durationMs: added,
+        icon,
+        offerId: oid,
+      },
+    ];
+  }
+
+  const existing = prev[matchIndex];
+  const remaining = Math.max(0, existing.endTime - now);
+  const newRemaining = remaining + added;
+  const icon = boostIconForOfferId(oid, existing.icon || data.icon);
+
+  return prev.map((b, i) =>
+    i === matchIndex
+      ? {
+          ...b,
+          endTime: now + newRemaining,
+          durationMs: newRemaining,
+          icon,
+          offerId: oid,
+        }
+      : b
+  );
+}
+
+function normalizeActiveBoostsAfterLoad(boosts: ActiveBoostData[]): ActiveBoostData[] {
+  const now = Date.now();
+  const list = boosts
+    .filter((b) => b.endTime > now)
+    .map((b) => {
+      const oid = normalizeBoostOfferIdForMerge(b.offerId) ?? b.offerId;
+      return {
+        ...b,
+        offerId: oid,
+        icon: boostIconForOfferId(oid ?? '', b.icon),
+      };
+    });
+
+  const byOffer = new Map<string, ActiveBoostData[]>();
+  for (const b of list) {
+    const key = b.offerId ?? '';
+    if (!byOffer.has(key)) byOffer.set(key, []);
+    byOffer.get(key)!.push(b);
+  }
+
+  const merged: ActiveBoostData[] = [];
+  for (const [oid, group] of byOffer) {
+    if (group.length === 1) {
+      merged.push(group[0]);
+      continue;
+    }
+    const totalRemain = group.reduce((s, b) => s + Math.max(0, b.endTime - now), 0);
+    const first = group[0];
+    merged.push({
+      ...first,
+      offerId: oid,
+      icon: boostIconForOfferId(oid, first.icon),
+      endTime: now + totalRemain,
+      durationMs: totalRemain,
+    });
+  }
+  return merged;
+}
+
+/** Double Coins (IAP) — multiply earned payouts; not used for dev/cheat `onAddMoney`. */
+function applyDoubleCoinsMultiplier(
+  amount: number,
+  boosts: ReadonlyArray<{ offerId?: string; endTime?: number }>
+): number {
+  if (!hasActiveDoubleCoinsBoost(boosts)) return amount;
+  return Math.round(amount * 2);
 }
 
 /** Number of NEW goals that must spawn after "discovering a plant" (merge) before we may show one +1 discovery goal. Only reset when player discovers by merge. */
@@ -377,13 +513,33 @@ export default function App() {
   
   // Discovery popup state
   const [discoveryPopup, setDiscoveryPopup] = useState<{ isVisible: boolean; level: number } | null>(null);
+  /** Paid store purchase confirmation (IAP stub); Collect fires boost particles + activation. */
+  const [purchaseSuccessfulUi, setPurchaseSuccessfulUi] = useState<{
+    headerImageSrc: string;
+    rewards: PurchaseSuccessfulRewardRow[];
+  } | null>(null);
+  const pendingPurchaseBoostsRef = useRef<{ offerId: string; durationMs: number; icon: string }[]>([]);
   // Seed progression popup - shown first time seed level increases (in front of discovery)
   const [seedProgressionPopup, setSeedProgressionPopup] = useState<boolean>(false);
   const hasShownSeedProgressionRef = useRef(false);
   // Plant info popup state (for barn)
   const [plantInfoPopup, setPlantInfoPopup] = useState<{ isVisible: boolean; level: number } | null>(null);
   // Limited offer popup state
-  const [limitedOfferPopup, setLimitedOfferPopup] = useState<{ isVisible: boolean; title?: string; imageSrc: string; subtitle: string; description: string; buttonText: string; offerId?: string; tab?: TabType; durationMinutes?: number | null; durationSeconds?: number | null; activeBoostEndTime?: number } | null>(null);
+  const [limitedOfferPopup, setLimitedOfferPopup] = useState<{
+    isVisible: boolean;
+    title?: string;
+    imageSrc: string;
+    subtitle: string;
+    description: string;
+    buttonText: string;
+    offerId?: string;
+    tab?: TabType;
+    durationMinutes?: number | null;
+    durationSeconds?: number | null;
+    activeBoostEndTime?: number;
+    subtitleSettingsStyle?: boolean;
+    hideOfferDurationBlock?: boolean;
+  } | null>(null);
   const lastLimitedOfferShownAtRef = useRef<number>(0);
   const lastShownOfferIdRef = useRef<string | null>(null);
   const lastShownOfferTabRef = useRef<TabType | null>(null);
@@ -425,7 +581,6 @@ export default function App() {
   const headerLeftWrapperRef = useRef<HTMLDivElement>(null);
   const storeActiveBoostAreaRef = useRef<HTMLDivElement>(null);
   const storeHeaderLeftWrapperRef = useRef<HTMLDivElement>(null);
-  const storeHeaderRightSectionRef = useRef<HTMLDivElement>(null);
   const storeWalletRef = useRef<HTMLButtonElement>(null);
   // When user closes limited offer (X): open panel, scroll to offer, flash yellow then return to light yellow
   const [pendingOfferHighlightId, setPendingOfferHighlightId] = useState<string | null>(null);
@@ -1046,6 +1201,7 @@ export default function App() {
       if (lastOfflineEarningsClosedAtRef.current > 0 && Date.now() - lastOfflineEarningsClosedAtRef.current < 10000) return;
       if (levelUpPopup?.isVisible) return;
       if (discoveryPopup?.isVisible) return;
+      if (purchaseSuccessfulUi) return;
       if (seedProgressionPopup) return;
       if (plantInfoPopup?.isVisible) return;
       const now = Date.now();
@@ -1064,6 +1220,7 @@ export default function App() {
       // Eligible: trigger matches and not same as last
       const hasGoalAvailable = goalSlots.some(s => s === 'green' || s === 'loading');
       const eligible = LIMITED_OFFERS.filter(o => {
+        if (isCoinMultiplierBoostId(o.id)) return false;
         if (o.id === lastId) return false;
         if (o.trigger === 'garden_fill_max_50') return gardenFillPercent <= 0.5;
         if (o.trigger === 'wallet_empty') return money === 0;
@@ -1084,6 +1241,7 @@ export default function App() {
         offerToShow = pickFrom(eligible);
       } else if (elapsed >= 120000) {
         const other = LIMITED_OFFERS.filter(o => {
+          if (isCoinMultiplierBoostId(o.id)) return false;
           if (o.id === lastId) return false;
           if (o.trigger === 'garden_fill_max_50') return gardenFillPercent <= 0.5;
           if (o.trigger === 'wallet_empty') return money === 0;
@@ -1105,7 +1263,7 @@ export default function App() {
       }
     }, 2000);
     return () => clearInterval(interval);
-  }, [playerLevel, grid, money, limitedOfferPopup?.isVisible, goalSlots, harvestState, highestPlantEver, levelUpPopup?.isVisible, discoveryPopup?.isVisible, seedProgressionPopup, plantInfoPopup?.isVisible, offlineEarningsUi?.open, activeScreen]);
+  }, [playerLevel, grid, money, limitedOfferPopup?.isVisible, goalSlots, harvestState, highestPlantEver, levelUpPopup?.isVisible, discoveryPopup?.isVisible, purchaseSuccessfulUi, seedProgressionPopup, plantInfoPopup?.isVisible, offlineEarningsUi?.open, activeScreen]);
 
   // Derive which tabs have offers (for tab notification coloring)
   const tabsWithOffers = new Set(rewardedOffers.map(o => o.tab));
@@ -2922,7 +3080,7 @@ export default function App() {
     setFtuePlayerLevelVisible(save.ftuePlayerLevelVisible);
     if (save.hasShownSeedProgression) hasShownSeedProgressionRef.current = true;
     const now = Date.now();
-    setActiveBoosts(save.activeBoosts.filter((b) => b.endTime > now));
+    setActiveBoosts(normalizeActiveBoostsAfterLoad(save.activeBoosts.filter((b) => b.endTime > now)));
     setPendingUnlockUpgradeId(save.pendingUnlockUpgradeId);
     setLevelUpPopupQueue(save.levelUpPopupQueue);
 
@@ -3179,8 +3337,9 @@ export default function App() {
     offlineEarningsAutoCollectedRef.current = true;
 
     // Synchronous update for persistence (pagehide may happen before React re-renders).
-    moneyRef.current += amtToCollect;
-    setMoney((prev) => prev + amtToCollect);
+    const credit = applyDoubleCoinsMultiplier(amtToCollect, activeBoostsRef.current);
+    moneyRef.current += credit;
+    setMoney((prev) => prev + credit);
 
     // Prevent "welcome back" popup on next launch.
     setOfflineEarningsUi(null);
@@ -3303,7 +3462,6 @@ export default function App() {
                 activeBoosts={activeBoosts}
                 activeBoostAreaRef={storeActiveBoostAreaRef}
                 headerLeftWrapperRef={storeHeaderLeftWrapperRef}
-                headerRightSectionRef={storeHeaderRightSectionRef}
                 onBoostComplete={(id, rect) => {
                   setActiveBoosts((prev) => prev.filter((b) => b.id !== id));
                   if (rect) {
@@ -3328,6 +3486,26 @@ export default function App() {
                 storeFreeOfferSlots={storeFreeOfferSlots}
                 storeSlotCooldownEnds={storeSlotCooldownEnds}
                 onStoreSlotCooldownEnded={handleStoreSlotCooldownEnded}
+                onStoreCoinPurchase={(offerId) => {
+                  const config = STORE_COIN_OFFERS.find((c) => c.id === offerId);
+                  if (!config) return;
+                  pendingPurchaseBoostsRef.current = [
+                    {
+                      offerId: DOUBLE_COINS_OFFER_ID,
+                      durationMs: config.durationMs,
+                      icon: DOUBLE_COINS_HEADER_ICON,
+                    },
+                  ];
+                  setPurchaseSuccessfulUi({
+                    headerImageSrc: assetPath(config.headerIcon),
+                    rewards: [
+                      {
+                        offerLineText: config.offerLineText,
+                        durationText: config.durationText,
+                      },
+                    ],
+                  });
+                }}
               />
             </div>
 
@@ -3692,7 +3870,7 @@ export default function App() {
                       </svg>
                       <img ref={coinGoalIconRef} src={assetPath('/assets/icons/icon_coin_watchad.png')} alt="" className="object-contain absolute z-[1]" style={{ left: 1, top: 1, width: 40, height: 40, pointerEvents: 'none' }} />
                     </div>
-                    <span className="absolute left-1/2 font-bold pointer-events-none" style={{ zIndex: 6, bottom: '62%', color: '#c77d34', fontSize: '13px', transform: 'translate(-50%, -1px)' }}>{formatGoalCoin(coinGoalValue * (activeBoosts.some(b => b.offerId === 'happiest_customers') ? 2 : 1))}</span>
+                    <span className="absolute left-1/2 font-bold pointer-events-none" style={{ zIndex: 6, bottom: '62%', color: '#c77d34', fontSize: '13px', transform: 'translate(-50%, -1px)' }}>{formatGoalCoin(applyDoubleCoinsMultiplier(coinGoalValue * (activeBoosts.some(b => b.offerId === 'happiest_customers') ? 2 : 1), activeBoosts))}</span>
                   </div>
                 )}
                 </div>
@@ -4651,6 +4829,51 @@ export default function App() {
               />
             )}
 
+            {purchaseSuccessfulUi && (
+              <PurchaseSuccessfulPopup
+                isVisible
+                headerImageSrc={purchaseSuccessfulUi.headerImageSrc}
+                rewards={purchaseSuccessfulUi.rewards}
+                appScale={appScale}
+                onClose={() => {
+                  lastOtherPopupClosedAtRef.current = Date.now();
+                  pendingPurchaseBoostsRef.current = [];
+                  setPurchaseSuccessfulUi(null);
+                }}
+                onCollect={(buttonRect) => {
+                  const boosts = [...pendingPurchaseBoostsRef.current];
+                  pendingPurchaseBoostsRef.current = [];
+                  const isFromStore = activeScreen === 'STORE';
+                  const wrapper = isFromStore ? storeHeaderLeftWrapperRef.current : headerLeftWrapperRef.current;
+                  if (!wrapper || boosts.length === 0) return;
+                  const wr = wrapper.getBoundingClientRect();
+                  const scale = wr.width / wrapper.offsetWidth;
+                  /** Premium Collect: spawn from right side of green button, then arc to boosts. */
+                  const collectOriginX = buttonRect.right - 12;
+                  const collectOriginY = buttonRect.top + buttonRect.height / 2;
+                  const staggerMs = 175;
+                  boosts.forEach((b, i) => {
+                    window.setTimeout(() => {
+                      const slot = predictBoostParticleTargetSlot(activeBoostsRef.current, b.offerId);
+                      setBoostParticles((prev) => [
+                        ...prev,
+                        {
+                          id: `boost-iap-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 9)}`,
+                          startX: (collectOriginX - wr.left) / scale,
+                          startY: (collectOriginY - wr.top) / scale,
+                          targetSlotIndex: slot,
+                          offerId: b.offerId,
+                          durationMs: b.durationMs,
+                          icon: b.icon,
+                          sourceScreen: isFromStore ? 'store' : 'farm',
+                        },
+                      ]);
+                    }, i * staggerMs);
+                  });
+                }}
+              />
+            )}
+
             {/* Seed Progression Popup - shown first time seed level increases, in front of discovery (blue theme) */}
             {seedProgressionPopup && (
               <div className="absolute inset-0" style={{ zIndex: 110 }}>
@@ -4740,6 +4963,8 @@ export default function App() {
                 activeBoostEndTime={limitedOfferPopup.activeBoostEndTime}
                 durationMinutes={limitedOfferPopup.durationMinutes}
                 durationSeconds={limitedOfferPopup.durationSeconds}
+                subtitleSettingsStyle={limitedOfferPopup.subtitleSettingsStyle}
+                hideOfferDurationBlock={limitedOfferPopup.hideOfferDurationBlock}
                 onButtonClick={() => {
                   // Show fake ad; when user taps "Complete ad", grant reward. Close limited offer popup now so it's gone when fake ad closes.
                   const offerId = limitedOfferPopup.offerId;
@@ -4801,11 +5026,11 @@ export default function App() {
                 const hasDuration = offer && (offer.durationMinutes != null || (offer.durationSeconds != null && offer.durationSeconds > 0));
                 if (!hasDuration) return;
                 const isFromStore = pendingAdSourceRef.current === 'storeFreeOffer';
-                const wrapper = isFromStore ? storeHeaderRightSectionRef.current : headerLeftWrapperRef.current;
+                const wrapper = isFromStore ? storeHeaderLeftWrapperRef.current : headerLeftWrapperRef.current;
                 if (!wrapper) return;
                 const wr = wrapper.getBoundingClientRect();
                 const scale = wr.width / wrapper.offsetWidth;
-                const targetSlotIndex = activeBoosts.length;
+                const targetSlotIndex = predictBoostParticleTargetSlot(activeBoostsRef.current, offer?.id);
                 const durationMs = offer?.durationSeconds != null
                   ? offer.durationSeconds * 1000
                   : offer?.durationMinutes != null
@@ -4855,8 +5080,9 @@ export default function App() {
               }}
               onRewardedAdClick={() => {
                 if (!canOpenLimitedOfferRewardPopup()) return;
-                const offer = LIMITED_OFFERS[nextRewardedAdOfferIndexRef.current];
-                nextRewardedAdOfferIndexRef.current = (nextRewardedAdOfferIndexRef.current + 1) % LIMITED_OFFERS.length;
+                if (LIMITED_OFFERS_AD_POOL.length === 0) return;
+                const offer = LIMITED_OFFERS_AD_POOL[nextRewardedAdOfferIndexRef.current % LIMITED_OFFERS_AD_POOL.length];
+                nextRewardedAdOfferIndexRef.current = (nextRewardedAdOfferIndexRef.current + 1) % LIMITED_OFFERS_AD_POOL.length;
                 const state = buildLimitedOfferPopupState(offer.id, { highestPlantEver });
                 if (state) setLimitedOfferPopup(state);
               }}
@@ -4960,7 +5186,8 @@ export default function App() {
                   popupVisualScale={1.5}
                   activeCount={activeDiscoveryCoinParticles.length}
                   onImpact={(value) => {
-                    setMoney((prev) => prev + value);
+                    const credit = applyDoubleCoinsMultiplier(value, activeBoostsRef.current);
+                    setMoney((prev) => prev + credit);
                     setWalletFlashActive(true);
                     setWalletBounceTrigger((t) => t + 1);
                     if (walletFlashTimeoutRef.current) clearTimeout(walletFlashTimeoutRef.current);
@@ -5079,7 +5306,8 @@ export default function App() {
                             const total = pendingCoinImpactRef.current.total;
                             pendingCoinImpactRef.current = { total: 0, scheduled: false };
                             walletImpactFlushRafRef.current = 0;
-                            setMoney((prev) => prev + total);
+                            const credit = applyDoubleCoinsMultiplier(total, activeBoostsRef.current);
+                            setMoney((prev) => prev + credit);
                             setWalletBounceTrigger((t) => t + 1);
                             setWalletFlashActive(true);
                             if (walletFlashTimeoutRef.current) clearTimeout(walletFlashTimeoutRef.current);
@@ -5168,6 +5396,7 @@ export default function App() {
                   const happyChance = getHappyCustomerChance(harvestState);
                   if (happyChance > 0 && Math.random() * 100 < happyChance) finalValue *= 2;
                 }
+                finalValue = applyDoubleCoinsMultiplier(finalValue, activeBoostsRef.current);
                 setMoney((prev) => prev + finalValue);
                 setWalletFlashActive(true);
                 setWalletBounceTrigger((t) => t + 1);
@@ -5209,28 +5438,14 @@ export default function App() {
                           },
                         ]);
                       }
-                      const durationMs = data.durationMs ?? 60000;
-                      const icon = data.icon ?? '/assets/icons/icon_seedproduction.png';
-                      setActiveBoosts((prev) => {
-                        if (prev.length >= 5) return prev;
-                        return [
-                          ...prev,
-                          {
-                            id: `boost-${Date.now()}`,
-                            endTime: Date.now() + durationMs,
-                            durationMs,
-                            icon,
-                            offerId: data.offerId,
-                          },
-                        ];
-                      });
+                      setActiveBoosts((prev) => applyBoostParticleImpact(prev, data));
                     }}
                     onComplete={() => setBoostParticles((prev) => prev.filter((p) => p.id !== particle.id))}
                   />
                 )),
               headerLeftWrapperRef.current
             )}
-          {storeHeaderRightSectionRef.current &&
+          {storeHeaderLeftWrapperRef.current &&
             boostParticles.filter((p) => p.sourceScreen === 'store').length > 0 &&
             createPortal(
               boostParticles
@@ -5239,10 +5454,10 @@ export default function App() {
                   <BoostParticle
                     key={particle.id}
                     data={particle}
-                    containerRef={storeHeaderRightSectionRef}
+                    containerRef={storeHeaderLeftWrapperRef}
                     boostAreaRef={storeActiveBoostAreaRef}
                     onImpact={(data) => {
-                      const wrapper = storeHeaderRightSectionRef.current;
+                      const wrapper = storeHeaderLeftWrapperRef.current;
                       const el = storeActiveBoostAreaRef.current;
                       if (wrapper && el) {
                         const wr = wrapper.getBoundingClientRect();
@@ -5260,26 +5475,12 @@ export default function App() {
                           },
                         ]);
                       }
-                      const durationMs = data.durationMs ?? 60000;
-                      const icon = data.icon ?? '/assets/icons/icon_seedproduction.png';
-                      setActiveBoosts((prev) => {
-                        if (prev.length >= 5) return prev;
-                        return [
-                          ...prev,
-                          {
-                            id: `boost-${Date.now()}`,
-                            endTime: Date.now() + durationMs,
-                            durationMs,
-                            icon,
-                            offerId: data.offerId,
-                          },
-                        ];
-                      });
+                      setActiveBoosts((prev) => applyBoostParticleImpact(prev, data));
                     }}
                     onComplete={() => setBoostParticles((prev) => prev.filter((p) => p.id !== particle.id))}
                   />
                 )),
-              storeHeaderRightSectionRef.current
+              storeHeaderLeftWrapperRef.current
             )}
 
         </div>

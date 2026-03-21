@@ -14,6 +14,25 @@ import { ActiveBoostIndicator, ActiveBoostData, ACTIVE_BOOST_INDICATOR_SIZE_PX }
 const BOOST_GAP_PX = 2;
 const BOOST_SLOT_WIDTH = ACTIVE_BOOST_INDICATOR_SIZE_PX + BOOST_GAP_PX;
 
+/** Max boost icons in the strip; extras stay active off-screen until a slot frees. */
+export const MAX_VISIBLE_BOOST_SLOTS = 5;
+
+/** Player level pill width (must match level bar + spacer below). */
+const PLAYER_LEVEL_SLOT_WIDTH_PX = 155;
+/** Coin wallet button width. */
+const WALLET_WIDTH_PX = 85;
+/** Gap between wallet, level, and boost strip inside the scaled cluster (`gap: 18`). */
+const HEADER_CLUSTER_GAP_PX = 18;
+/** Boost strip pulls left 10px under the level bar (`marginLeft: -10`). */
+const BOOST_STRIP_MARGIN_LEFT_PX = -10;
+/** Reserve space at the right of the bar for FPS + settings (absolute dock); tuned so gear never clips. */
+const RIGHT_DOCK_RESERVE_PX_WITH_FPS = 84;
+const RIGHT_DOCK_RESERVE_PX_NO_FPS = 44;
+/** Settings gear size + gap so FPS can sit to its left (`right-3` is 12px). */
+const SETTINGS_GEAR_PX = 22;
+const DOCK_GAP_PX = 8;
+const FPS_RIGHT_OFFSET_PX = 12 + SETTINGS_GEAR_PX + DOCK_GAP_PX; // 42
+
 interface PageHeaderProps {
   /** Coin balance; null/undefined coerced to 0 for display (bad saves / edge cases). */
   money: number | null | undefined;
@@ -65,10 +84,6 @@ interface PageHeaderProps {
   headerLeftWrapperRef?: React.RefObject<HTMLDivElement | null>;
   /** Add this to boost area marginLeft (e.g. 20 on Store to push boosts right) */
   boostAreaMarginLeftOffset?: number;
-  /** When 'rightOfCenter', boosts render to the right of center title (e.g. Store); requires headerRightSectionRef */
-  boostAreaPosition?: 'left' | 'rightOfCenter';
-  /** Ref for right section when boostAreaPosition is rightOfCenter (particle container) */
-  headerRightSectionRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 const formatMoney = (amount: number | null | undefined): string => {
@@ -105,11 +120,11 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   onBoostClick,
   headerLeftWrapperRef,
   boostAreaMarginLeftOffset = 0,
-  boostAreaPosition = 'left',
-  headerRightSectionRef,
 }) => {
   const isInteractive = !!walletRef;
   const boostRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
+  const fpsButtonRef = useRef<HTMLButtonElement>(null);
   const prevBurstRef = useRef(walletBurstCount);
   const prevFlashRef = useRef(playerLevelFlashTrigger);
   const [bounceKey, setBounceKey] = useState(0);
@@ -166,6 +181,11 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
       return () => clearTimeout(t);
     }
   }, [playerLevelFlashTrigger]);
+
+  /** Up to 5 visible slots; 6+ stay in hidden timers until a slot frees (see hiddenBoostSlice). */
+  const displayBoostCount = Math.min(activeBoosts.length, MAX_VISIBLE_BOOST_SLOTS);
+  const visibleBoostSlice = activeBoosts.slice(0, displayBoostCount);
+  const hiddenBoostSlice = activeBoosts.slice(displayBoostCount);
 
   const bgUrl = assetPath('/assets/topui/topui_bg.png');
 
@@ -225,8 +245,14 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
           />
         </div>
         )}
-        {/* Content on top */}
-        <div className="relative z-10 flex justify-between items-center w-full min-h-[44px] px-3 py-2">
+        {/* Content on top — left cluster flexes; FPS + settings are absolutely docked so boosts never push them off-screen */}
+        <div
+          className="relative z-10 flex w-full min-w-0 min-h-[44px] items-center px-3 py-2"
+          style={{
+            /* Reserve space for absolute FPS + settings dock — do not shrink the cluster with max-width/clip (that hid boosts 3–5 and clipped the coin icon). */
+            paddingRight: hideFps ? RIGHT_DOCK_RESERVE_PX_NO_FPS : RIGHT_DOCK_RESERVE_PX_WITH_FPS,
+          }}
+        >
           {centerTitle && (
             <div
               aria-hidden
@@ -246,10 +272,10 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
           )}
       <div
         ref={headerLeftWrapperRef}
-        className="relative flex items-center min-w-0 flex-shrink-0 overflow-visible"
+        className="relative z-30 flex min-w-0 flex-1 items-center overflow-visible"
         style={{
           marginLeft: 10,
-          gap: 18,
+          gap: HEADER_CLUSTER_GAP_PX,
           transform: 'scale(0.88)',
           transformOrigin: 'left center',
         }}
@@ -295,18 +321,29 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                 {formatMoney(money)}
               </span>
             </button>
-            {/* Player level: 155px wide, icon + progress bar (overflow-visible so icon isn't masked) - fixed size; hidden when hidePlayerLevel (FTUE) */}
+            {/* Store: invisible spacer same width as level bar so boost strip matches Farm X position. Farm: real level (opacity 0 during FTUE but still reserves width). */}
+            {collapsePlayerLevel && hidePlayerLevel ? (
+              <div
+                aria-hidden
+                className="flex-shrink-0 pointer-events-none"
+                style={{
+                  width: PLAYER_LEVEL_SLOT_WIDTH_PX,
+                  minWidth: PLAYER_LEVEL_SLOT_WIDTH_PX,
+                  height: 22,
+                }}
+              />
+            ) : (
             <div
               className="relative inline-flex items-center rounded-full border flex-shrink-0 overflow-visible"
               style={{
-                width: 155,
-                minWidth: 155,
-                maxWidth: 155,
+                width: PLAYER_LEVEL_SLOT_WIDTH_PX,
+                minWidth: PLAYER_LEVEL_SLOT_WIDTH_PX,
+                maxWidth: PLAYER_LEVEL_SLOT_WIDTH_PX,
                 height: 22,
                 backgroundColor: '#775041',
                 borderWidth: 1,
                 borderColor: '#e9dcaf',
-                display: collapsePlayerLevel && hidePlayerLevel ? 'none' : 'inline-flex',
+                display: 'inline-flex',
                 opacity: hidePlayerLevel ? 0 : 1,
                 transition: 'opacity 400ms ease-out',
                 ...(hidePlayerLevel && { pointerEvents: 'none' as const }),
@@ -362,20 +399,23 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                 </div>
               </div>
             </div>
-            {/* Active boosts: tight to player level (overlap -10px); only when boostAreaPosition is left */}
-            {boostAreaPosition !== 'rightOfCenter' && (
+            )}
+            {/* Active boosts: wallet/level sit outside this box so coin -ml-3 is never clipped; up to 5 icons (6+ use hidden timers). */}
             <div
               ref={activeBoostAreaRef}
-              className="relative flex items-center flex-shrink-0 overflow-visible boost-slide-container"
+              className="relative flex flex-shrink-0 items-center overflow-visible boost-slide-container"
               style={{
                 marginLeft: -10 + boostAreaMarginLeftOffset,
                 height: 22,
                 minHeight: 22,
-                width: activeBoosts.length > 0 ? activeBoosts.length * ACTIVE_BOOST_INDICATOR_SIZE_PX + (activeBoosts.length - 1) * BOOST_GAP_PX : (activeBoostMinWidthPx ?? ACTIVE_BOOST_INDICATOR_SIZE_PX),
-                ...(activeBoostMinWidthPx != null && activeBoosts.length === 0 && { minWidth: activeBoostMinWidthPx }),
+                width:
+                  displayBoostCount > 0
+                    ? displayBoostCount * ACTIVE_BOOST_INDICATOR_SIZE_PX + (displayBoostCount - 1) * BOOST_GAP_PX
+                    : activeBoostMinWidthPx ?? ACTIVE_BOOST_INDICATOR_SIZE_PX,
+                ...(activeBoostMinWidthPx != null && displayBoostCount === 0 && { minWidth: activeBoostMinWidthPx }),
               }}
             >
-              {activeBoosts.map((boost, index) => (
+              {visibleBoostSlice.map((boost, index) => (
                 <div
                   key={boost.id}
                   ref={(el) => { boostRefs.current[boost.id] = el; }}
@@ -402,7 +442,6 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                 </div>
               ))}
             </div>
-            )}
           </>
         ) : plantWallet ? (
           <div className="relative flex items-center gap-1 bg-black/50 backdrop-blur-md pl-1 pr-2 py-1 rounded-full border-0 shadow-2xl overflow-hidden -ml-4">
@@ -450,55 +489,16 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
         )}
       </div>
 
-      <div
-        ref={boostAreaPosition === 'rightOfCenter' ? headerRightSectionRef : undefined}
-        className="flex items-center gap-2 flex-shrink-0"
-      >
-        {/* Boosts to the right of center title (e.g. Store) */}
-        {boostAreaPosition === 'rightOfCenter' && (
-          <div
-            ref={activeBoostAreaRef}
-            className="relative flex items-center flex-shrink-0 overflow-visible boost-slide-container"
-            style={{
-              marginRight: 8,
-              height: 22,
-              minHeight: 22,
-              width: activeBoosts.length > 0 ? activeBoosts.length * ACTIVE_BOOST_INDICATOR_SIZE_PX + (activeBoosts.length - 1) * BOOST_GAP_PX : (activeBoostMinWidthPx ?? ACTIVE_BOOST_INDICATOR_SIZE_PX),
-              ...(activeBoostMinWidthPx != null && activeBoosts.length === 0 && { minWidth: activeBoostMinWidthPx }),
-            }}
-          >
-            {activeBoosts.map((boost, index) => (
-              <div
-                key={boost.id}
-                ref={(el) => { boostRefs.current[boost.id] = el; }}
-                role="button"
-                tabIndex={0}
-                onClick={() => onBoostClick?.(boost)}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onBoostClick?.(boost); } }}
-                className="absolute flex items-center justify-center boost-slide cursor-pointer"
-                style={{
-                  left: index * BOOST_SLOT_WIDTH,
-                  top: 0,
-                  width: ACTIVE_BOOST_INDICATOR_SIZE_PX,
-                  height: 22,
-                  transform: 'translateZ(0)',
-                }}
-              >
-                <ActiveBoostIndicator
-                  data={boost}
-                  onComplete={(id) => {
-                    const rect = boostRefs.current[id]?.getBoundingClientRect?.();
-                    onBoostComplete?.(id, rect);
-                  }}
-                />
-              </div>
-            ))}
-          </div>
-        )}
-        {!hideFps && (
+      {/* FPS below boosts (z-20 < z-30); settings stays on top for taps */}
+      {!hideFps && (
+        <div
+          className="pointer-events-none absolute top-1/2 z-20 flex -translate-y-1/2 items-center"
+          style={{ right: FPS_RIGHT_OFFSET_PX }}
+        >
           <button
+            ref={fpsButtonRef}
             type="button"
-            className="tabular-nums text-[10px] font-semibold select-none cursor-pointer hover:underline focus:outline-none"
+            className="pointer-events-auto tabular-nums text-[10px] font-semibold select-none cursor-pointer hover:underline focus:outline-none"
             style={{ color: '#c4a574', background: 'none', border: 'none', padding: 0 }}
             aria-label={`${fps} FPS (click to simulate hitch)`}
             title="Click to simulate a hitch — FPS should drop briefly if the counter is working"
@@ -509,13 +509,17 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
           >
             {fps} FPS
           </button>
-        )}
+        </div>
+      )}
+      <div className="absolute right-3 top-1/2 z-40 flex -translate-y-1/2 items-center">
         <button
+          ref={settingsButtonRef}
+          type="button"
           onClick={onPauseClick}
           className="flex items-center justify-center rounded-full transition-all active:scale-95 flex-shrink-0"
           style={{
-            width: '22px',
-            height: '22px',
+            width: SETTINGS_GEAR_PX,
+            height: SETTINGS_GEAR_PX,
             backgroundColor: '#775041',
             borderWidth: 1,
             borderColor: '#e9dcaf',
@@ -529,6 +533,24 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
       </div>
         </div>
       </div>
+
+      {/* Timers for boosts past the visible cap (still active, no icon until a slot frees) */}
+      {hiddenBoostSlice.map((boost) => (
+        <div
+          key={`hidden-boost-${boost.id}`}
+          className="pointer-events-none fixed overflow-hidden opacity-0"
+          style={{ left: -9999, top: 0, width: ACTIVE_BOOST_INDICATOR_SIZE_PX, height: 22 }}
+          aria-hidden
+        >
+          <ActiveBoostIndicator
+            data={boost}
+            onComplete={(id) => {
+              const rect = boostRefs.current[id]?.getBoundingClientRect?.();
+              onBoostComplete?.(id, rect);
+            }}
+          />
+        </div>
+      ))}
     </header>
   );
 };
