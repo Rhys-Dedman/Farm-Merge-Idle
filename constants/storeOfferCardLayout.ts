@@ -8,6 +8,13 @@ import { STORE_COIN_OFFER_HEADER_ICON_PX } from '../offers';
 /** Main product art — same formula as coin rows. */
 export const STORE_OFFER_CARD_HEADER_ICON_PX = STORE_COIN_OFFER_HEADER_ICON_PX * 1.25;
 
+/** Bundle header: two icons stacked; each drawn at 95% of main header icon slot. */
+export const STORE_BUNDLE_STACKED_ICON_GAP_PX = 6;
+export const STORE_BUNDLE_STACKED_HEADER_ICON_PX = Math.round(STORE_OFFER_CARD_HEADER_ICON_PX * 0.95);
+/** Per-icon vertical nudge (transform only; flex layout unchanged). */
+export const STORE_BUNDLE_STACKED_TOP_ICON_TRANSLATE_Y_PX = -8;
+export const STORE_BUNDLE_STACKED_BOTTOM_ICON_TRANSLATE_Y_PX = -1;
+
 /** Bundle / shared title look (unscaled). Coin row applies `STORE_COIN_OFFER_ROW_SCALE` to the whole card. */
 export const STORE_OFFER_CARD_TITLE_STYLE: CSSProperties = {
   fontFamily: 'Inter, sans-serif',
@@ -51,16 +58,16 @@ export const STORE_OFFER_CARD_TITLE_BAND = {
   minHeight: 44,
 } as const;
 
-/** Main icon cluster — negative Y moves art up on the card (coin packs). */
+/** Main icon cluster — coin / no-ads small store rows (`StoreCoinOffer`). */
 export const STORE_OFFER_CARD_ICON_WRAP: Pick<CSSProperties, 'paddingLeft' | 'transform'> = {
   paddingLeft: 52,
-  transform: 'translate(-24px, -24px)',
+  transform: 'translate(-22px, -22px)',
 };
 
-/** Bundle main icon — +20px down vs coin row (`-24` → `-4` on Y). */
+/** Bundle main icon — +20px down vs coin row baseline; tweak X/Y to nudge cluster. */
 export const STORE_BUNDLE_CARD_ICON_WRAP: Pick<CSSProperties, 'paddingLeft' | 'transform'> = {
   paddingLeft: 52,
-  transform: 'translate(-24px, -4px)',
+  transform: 'translate(-22px, -10px)',
 };
 
 /** Nudge the `<Reward />` strip upward (px) — coin rows. */

@@ -32,6 +32,14 @@ export interface LimitedOfferConfig {
 export const DOUBLE_COINS_OFFER_ID = 'double_coins';
 export const DOUBLE_COINS_HEADER_ICON = '/assets/icons/icon_coinmultiplier_1.png';
 
+/** Store IAP no-ads row — stacks on boost bar (timer only; ad removal is game feature TBD). */
+export const REMOVE_ADS_OFFER_ID = 'remove_ads';
+export const REMOVE_ADS_HEADER_ICON = '/assets/icons/icon_noads.png';
+/** Bundle main-column art (top of stacked pair). */
+export const STARTER_PACK_HEADER_ICON = '/assets/icons/icon_starterpack.png';
+export const HARVESTER_PACK_HEADER_ICON = '/assets/icons/icon_harvesterpack.png';
+export const STORE_NO_ADS_ROW_BACKGROUND = '/assets/topui/ui_store_noads.png';
+
 /** Old save / particle ids — treated as `double_coins` for stacking + UI. */
 export const LEGACY_COIN_MULTIPLIER_OFFER_IDS = ['coin_multiplier_30m', 'coin_multiplier_2h', 'coin_multiplier_24h'] as const;
 
@@ -123,6 +131,17 @@ export const LIMITED_OFFERS: LimitedOfferConfig[] = [
     upgradeTab: 'HARVEST',
     trigger: 'anytime',
   },
+  /** Store IAP only — not in rewarded-ad rotation or auto limited-offer flow (`isStorePremiumOnlyOfferId`). */
+  {
+    id: REMOVE_ADS_OFFER_ID,
+    title: 'Remove Ads',
+    description: 'Remove all forced ads',
+    headerIcon: REMOVE_ADS_HEADER_ICON,
+    durationMinutes: null,
+    durationSeconds: null,
+    upgradeTab: 'HARVEST',
+    trigger: 'anytime',
+  },
 ];
 
 export function getOfferById(id: string): LimitedOfferConfig | undefined {
@@ -192,8 +211,17 @@ export function applyDoubleCoinsVisualAmount(
   return Math.round(baseCoins * m);
 }
 
-/** Exclude Double Coins from auto / rewarded-ad offer rotation. */
-export const LIMITED_OFFERS_AD_POOL = LIMITED_OFFERS.filter((o) => o.id !== DOUBLE_COINS_OFFER_ID);
+/** Exclude IAP-only rows from rewarded-ad offer rotation. */
+export const LIMITED_OFFERS_AD_POOL = LIMITED_OFFERS.filter(
+  (o) => o.id !== DOUBLE_COINS_OFFER_ID && o.id !== REMOVE_ADS_OFFER_ID
+);
+
+const STORE_PREMIUM_ONLY_OFFER_IDS: ReadonlySet<string> = new Set([REMOVE_ADS_OFFER_ID]);
+
+/** Store-only IAP — never auto limited popup, upgrade “decline” rewarded row, or free store rotation. */
+export function isStorePremiumOnlyOfferId(id: string): boolean {
+  return STORE_PREMIUM_ONLY_OFFER_IDS.has(id);
+}
 
 /** Store free-offer pool: only rewarded ads with a timed boost (durationSeconds or durationMinutes). */
 export const STORE_DURATION_FREE_OFFER_IDS = [
@@ -212,7 +240,7 @@ export function isStoreDurationFreeOfferId(id: string): id is StoreDurationFreeO
 
 /** Random pick from pool, excluding any id in `exclude` (e.g. this slot’s last offer + other slot’s current). */
 export function pickStoreDurationOfferId(exclude: ReadonlySet<string>): string {
-  const pool = STORE_DURATION_FREE_OFFER_IDS.filter((oid) => !exclude.has(oid));
+  const pool = STORE_DURATION_FREE_OFFER_IDS.filter((oid) => !exclude.has(oid) && !isStorePremiumOnlyOfferId(oid));
   if (pool.length === 0) return STORE_DURATION_FREE_OFFER_IDS[0];
   return pool[Math.floor(Math.random() * pool.length)];
 }
@@ -242,10 +270,16 @@ export interface StoreCoinOfferConfig {
   durationText: string;
   /** e.g. "$9.99" */
   priceLabel: string;
-  /** Always stacks into the single `double_coins` boost bar entry. */
-  boostOfferId: typeof DOUBLE_COINS_OFFER_ID;
+  /** Stacks into one boost-bar slot per logical offer id (e.g. `double_coins`, `remove_ads`). */
+  boostOfferId: typeof DOUBLE_COINS_OFFER_ID | typeof REMOVE_ADS_OFFER_ID;
   /** Boost length in ms (Collect applies this duration). */
   durationMs: number;
+  /** Row chrome; default `ui_store_small`. */
+  rowBackgroundAsset?: string;
+  /** Reward strip icon (left of pill); default coin. */
+  rewardStripIconPath?: string;
+  /** Optional title color (default green from layout constants). */
+  titleColor?: string;
 }
 
 export const STORE_COIN_OFFERS: StoreCoinOfferConfig[] = [
@@ -279,21 +313,134 @@ export const STORE_COIN_OFFERS: StoreCoinOfferConfig[] = [
     boostOfferId: DOUBLE_COINS_OFFER_ID,
     durationMs: 24 * 60 * 60 * 1000,
   },
+  {
+    id: 'store_no_ads',
+    title: 'Remove Ads',
+    titleColor: '#bc2b44',
+    headerIcon: REMOVE_ADS_HEADER_ICON,
+    offerLineText: 'Remove Ads',
+    durationText: '7d',
+    priceLabel: '$5.99',
+    boostOfferId: REMOVE_ADS_OFFER_ID,
+    durationMs: 7 * 24 * 60 * 60 * 1000,
+    rowBackgroundAsset: STORE_NO_ADS_ROW_BACKGROUND,
+    rewardStripIconPath: REMOVE_ADS_HEADER_ICON,
+  },
 ];
 
 /** Bundle cards (`ui_store_large`): coin row fields + optional extra reward lines below the primary strip. */
+export interface StoreBundleExtraRewardRow {
+  offerLineText: string;
+  durationText: string;
+  /** Reward strip icon; omit for default coin (e.g. Double Coins). */
+  coinIconPath?: string;
+  /** Optional scale for strip icon only (e.g. 0.95). */
+  coinIconScale?: number;
+}
+
+/** One boost bar grant from a bundle IAP — each entry spawns its own Collect → boost particle. */
+export interface StoreBundleIapBoostGrant {
+  offerId: string;
+  durationMs: number;
+  icon: string;
+}
+
 export interface StoreBundleOfferConfig extends StoreCoinOfferConfig {
-  extraRewardRows?: ReadonlyArray<{ offerLineText: string; durationText: string }>;
+  /**
+   * When set (top, bottom), main column shows two vertically stacked icons.
+   * Keep `headerIcon` equal to `[0]` so purchase success and other `headerIcon` reads stay correct.
+   */
+  headerIconStack?: readonly [string, string];
+  extraRewardRows?: ReadonlyArray<StoreBundleExtraRewardRow>;
+  /** When set, overrides single `boostOfferId` for Collect: one particle + stack per grant (order = display rows). */
+  iapBoostGrants?: readonly StoreBundleIapBoostGrant[];
+  /** Optional “was” price above the purchase button (strikethrough, same typography as button). */
+  originalPriceLabel?: string;
+  /** Short label above the price stack (e.g. “Best Value”), right-aligned vs. centered prices. */
+  valueCalloutText?: string;
+  /**
+   * With `limitedOfferCountdownDurationMs`, shows a wall-clock countdown **instead of** `originalPriceLabel`.
+   * Deadline persisted in `localStorage` under this key; at 0 the line is removed (card + price stay).
+   */
+  limitedOfferCountdownStorageKey?: string;
+  limitedOfferCountdownDurationMs?: number;
+}
+
+/** Collect → boost particles: one entry per grant (bundle uses `iapBoostGrants`, else single coin-row boost). */
+export function getStorePurchaseBoostGrants(config: StoreCoinOfferConfig): { offerId: string; durationMs: number; icon: string }[] {
+  const bundle = config as StoreBundleOfferConfig;
+  if (bundle.iapBoostGrants?.length) {
+    return bundle.iapBoostGrants.map((g) => ({
+      offerId: g.offerId,
+      durationMs: g.durationMs,
+      icon: g.icon,
+    }));
+  }
+  return [{ offerId: config.boostOfferId, durationMs: config.durationMs, icon: config.headerIcon }];
 }
 
 export const STORE_BUNDLE_OFFERS: StoreBundleOfferConfig[] = [
   {
     ...STORE_COIN_OFFERS[0],
-    id: 'store_bundle_coin_boost',
-    title: 'Coin Boost',
+    id: 'store_bundle_starter_pack',
+    title: 'Starter Pack',
+    headerIcon: STARTER_PACK_HEADER_ICON,
+    headerIconStack: [STARTER_PACK_HEADER_ICON, REMOVE_ADS_HEADER_ICON],
+    offerLineText: 'Remove Ads',
+    durationText: '24hr',
+    rewardStripIconPath: REMOVE_ADS_HEADER_ICON,
     extraRewardRows: [
-      { offerLineText: 'Double Coins', durationText: '30m' },
-      { offerLineText: 'Double Coins', durationText: '30m' },
+      { offerLineText: 'Double Coins', durationText: '2hr' },
+      {
+        offerLineText: 'Rapid Seeds',
+        durationText: '30m',
+        coinIconPath: '/assets/icons/icon_seedproduction.png',
+        coinIconScale: 0.95,
+      },
     ],
+    iapBoostGrants: [
+      { offerId: REMOVE_ADS_OFFER_ID, durationMs: 24 * 60 * 60 * 1000, icon: REMOVE_ADS_HEADER_ICON },
+      { offerId: DOUBLE_COINS_OFFER_ID, durationMs: 2 * 60 * 60 * 1000, icon: DOUBLE_COINS_HEADER_ICON },
+      {
+        offerId: 'rapid_seeds',
+        durationMs: 30 * 60 * 1000,
+        icon: '/assets/icons/icon_seedproduction.png',
+      },
+    ],
+    priceLabel: '$9.99',
+    valueCalloutText: 'Limited Offer',
+    limitedOfferCountdownStorageKey: 'store_bundle_starter_pack_countdown_end_ms',
+    limitedOfferCountdownDurationMs: 24 * 60 * 60 * 1000,
+  },
+  {
+    ...STORE_COIN_OFFERS[1],
+    id: 'store_bundle_harvesters_pack',
+    title: 'Harvester Pack',
+    headerIcon: HARVESTER_PACK_HEADER_ICON,
+    headerIconStack: [HARVESTER_PACK_HEADER_ICON, REMOVE_ADS_HEADER_ICON],
+    offerLineText: 'Remove Ads',
+    durationText: '7d',
+    rewardStripIconPath: REMOVE_ADS_HEADER_ICON,
+    extraRewardRows: [
+      { offerLineText: 'Double Coins', durationText: '24hr' },
+      {
+        offerLineText: 'Rapid Harvest',
+        durationText: '2hr',
+        coinIconPath: '/assets/icons/icon_harvestspeed.png',
+        coinIconScale: 0.95,
+      },
+    ],
+    iapBoostGrants: [
+      { offerId: REMOVE_ADS_OFFER_ID, durationMs: 7 * 24 * 60 * 60 * 1000, icon: REMOVE_ADS_HEADER_ICON },
+      { offerId: DOUBLE_COINS_OFFER_ID, durationMs: 24 * 60 * 60 * 1000, icon: DOUBLE_COINS_HEADER_ICON },
+      {
+        offerId: 'rapid_harvest',
+        durationMs: 2 * 60 * 60 * 1000,
+        icon: '/assets/icons/icon_harvestspeed.png',
+      },
+    ],
+    priceLabel: '$29.99',
+    originalPriceLabel: '$99.99',
+    valueCalloutText: 'Best Value',
   },
 ];

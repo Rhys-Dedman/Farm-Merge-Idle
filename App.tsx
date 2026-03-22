@@ -53,11 +53,14 @@ import {
   STORE_BUNDLE_OFFERS,
   STORE_COIN_OFFERS,
   getOfferById,
+  isStorePremiumOnlyOfferId,
   applyDoubleCoinsVisualAmount,
   isCoinMultiplierBoostId,
   isLegacyCoinMultiplierOfferId,
   pickInitialStoreFreeOfferSlots,
   pickStoreDurationOfferId,
+  getStorePurchaseBoostGrants,
+  type StoreCoinOfferConfig,
 } from './offers';
 import {
   loadGameSave,
@@ -100,6 +103,27 @@ const GOAL_DIFFICULTY_SCALING = 1.0;
 
 /** Double Coins duration when granted from a limited-offer / upgrade-panel rewarded ad (offer has no duration in config). */
 const REWARDED_DOUBLE_COINS_AD_DURATION_MS = 30 * 60 * 1000;
+
+function buildPurchaseSuccessRewards(config: StoreCoinOfferConfig): PurchaseSuccessfulRewardRow[] {
+  const rows: PurchaseSuccessfulRewardRow[] = [
+    {
+      offerLineText: config.offerLineText,
+      durationText: config.durationText,
+      ...(config.rewardStripIconPath ? { coinIconPath: config.rewardStripIconPath } : {}),
+    },
+  ];
+  if ('extraRewardRows' in config && config.extraRewardRows?.length) {
+    for (const r of config.extraRewardRows) {
+      rows.push({
+        offerLineText: r.offerLineText,
+        durationText: r.durationText,
+        ...(r.coinIconPath ? { coinIconPath: r.coinIconPath } : {}),
+        ...(r.coinIconScale != null ? { coinIconScale: r.coinIconScale } : {}),
+      });
+    }
+  }
+  return rows;
+}
 
 /** Build limited offer popup state from offer id (uses offers.ts config). */
 function buildLimitedOfferPopupState(offerId: string, overrides?: { activeBoostEndTime?: number; highestPlantEver?: number }): { isVisible: boolean; title: string; imageSrc: string; subtitle: string; description: string; buttonText: string; offerId: string; tab: TabType; durationMinutes: number | null; durationSeconds?: number | null; activeBoostEndTime?: number; subtitleSettingsStyle?: boolean; hideOfferDurationBlock?: boolean } | null {
@@ -1246,6 +1270,7 @@ export default function App() {
       // Eligible: trigger matches and not same as last
       const hasGoalAvailable = goalSlots.some(s => s === 'green' || s === 'loading');
       const eligible = LIMITED_OFFERS.filter(o => {
+        if (isStorePremiumOnlyOfferId(o.id)) return false;
         if (isCoinMultiplierBoostId(o.id)) return false;
         if (o.id === lastId) return false;
         if (o.trigger === 'garden_fill_max_50') return gardenFillPercent <= 0.5;
@@ -1267,6 +1292,7 @@ export default function App() {
         offerToShow = pickFrom(eligible);
       } else if (elapsed >= 120000) {
         const other = LIMITED_OFFERS.filter(o => {
+          if (isStorePremiumOnlyOfferId(o.id)) return false;
           if (isCoinMultiplierBoostId(o.id)) return false;
           if (o.id === lastId) return false;
           if (o.trigger === 'garden_fill_max_50') return gardenFillPercent <= 0.5;
@@ -3067,7 +3093,7 @@ export default function App() {
     setPlayerLevel(save.playerLevel);
     setPlayerLevelProgress(save.playerLevelProgress);
     setActiveTab(save.activeTab);
-    setRewardedOffers(save.rewardedOffers);
+    setRewardedOffers(save.rewardedOffers.filter((o) => !isStorePremiumOnlyOfferId(o.id)));
     setBarnNotification(save.barnNotification);
     setGoalSlots(save.goalSlots);
     setGoalPlantTypes(save.goalPlantTypes);
@@ -3520,21 +3546,10 @@ export default function App() {
                     STORE_COIN_OFFERS.find((c) => c.id === offerId) ??
                     STORE_BUNDLE_OFFERS.find((c) => c.id === offerId);
                   if (!config) return;
-                  pendingPurchaseBoostsRef.current = [
-                    {
-                      offerId: DOUBLE_COINS_OFFER_ID,
-                      durationMs: config.durationMs,
-                      icon: DOUBLE_COINS_HEADER_ICON,
-                    },
-                  ];
+                  pendingPurchaseBoostsRef.current = getStorePurchaseBoostGrants(config);
                   setPurchaseSuccessfulUi({
                     headerImageSrc: assetPath(config.headerIcon),
-                    rewards: [
-                      {
-                        offerLineText: config.offerLineText,
-                        durationText: config.durationText,
-                      },
-                    ],
+                    rewards: buildPurchaseSuccessRewards(config),
                   });
                 }}
               />
@@ -4912,7 +4927,8 @@ export default function App() {
                   /** Premium Collect: spawn from right side of green button, then arc to boosts. */
                   const collectOriginX = buttonRect.right - 12;
                   const collectOriginY = buttonRect.top + buttonRect.height / 2;
-                  const staggerMs = 175;
+                  /** Space impacts so each particle lands before the next slot prediction (~500ms flight). */
+                  const staggerMs = boosts.length > 1 ? 560 : 175;
                   boosts.forEach((b, i) => {
                     window.setTimeout(() => {
                       const slot = predictBoostParticleTargetSlot(activeBoostsRef.current, b.offerId);
@@ -4990,7 +5006,7 @@ export default function App() {
                   if (limitedOfferPopup.offerId) {
                     const offerId = limitedOfferPopup.offerId;
                     const offerConfig = getOfferById(offerId);
-                    if (offerConfig) {
+                    if (offerConfig && !isStorePremiumOnlyOfferId(offerId)) {
                       setRewardedOffers(prev => {
                         if (prev.some(o => o.id === offerId)) return prev;
                         return [...prev, {
@@ -5180,6 +5196,12 @@ export default function App() {
                 discoveryLevelAfterPauseCloseRef.current = newLevel; // latest only; popup when pause closes
               }}
               onAddMoney={(amount) => setMoney((prev) => prev + amount)}
+              onClearBoosts={() => {
+                setBoostParticles([]);
+                setActiveBoosts([]);
+                setStoreFreeOfferSlots(pickInitialStoreFreeOfferSlots());
+                setStoreSlotCooldownEnds([0, 0]);
+              }}
               onResetProgress={() => {
                 if (!window.confirm('Reset all progress and restart from the beginning? This cannot be undone.')) return;
                 suppressGameSaveRef.current = true;

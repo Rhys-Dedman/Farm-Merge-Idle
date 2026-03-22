@@ -52,16 +52,32 @@ interface LimitedOfferPopupProps {
   hideOfferDurationBlock?: boolean;
 }
 
-/** Human-readable remaining time for active boost button (hours / minutes / seconds). */
+/**
+ * Active boost button countdown — at most two units:
+ * ≥24h → day + hour; ≥1h → hour + min; ≥1m → min + sec; else seconds.
+ */
 function formatBoostTimeRemaining(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds));
   if (s <= 0) return '0s';
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
-  if (m > 0) return sec > 0 ? `${m}m ${sec}s` : `${m}m`;
-  return `${sec}s`;
+  const DAY = 86400;
+  const HOUR = 3600;
+  const MIN = 60;
+  if (s >= DAY) {
+    const d = Math.floor(s / DAY);
+    const h = Math.floor((s % DAY) / HOUR);
+    return `${d}d ${h}h`;
+  }
+  if (s >= HOUR) {
+    const h = Math.floor(s / HOUR);
+    const m = Math.floor((s % HOUR) / MIN);
+    return `${h}h ${m}m`;
+  }
+  if (s >= MIN) {
+    const m = Math.floor(s / MIN);
+    const sec = s % MIN;
+    return `${m}m ${sec}s`;
+  }
+  return `${s}s`;
 }
 
 const POPUP_LEAF_COUNT = 40;

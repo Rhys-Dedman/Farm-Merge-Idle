@@ -5,8 +5,18 @@
  */
 import React, { useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
+import {
+  REWARD_OFFER_LINE_TEXT_COLOR,
+  REWARD_PILL_FILL_COLOR,
+  REWARD_PILL_HEIGHT_PX,
+  REWARD_PILL_STROKE_COLOR,
+  REWARD_PILL_STROKE_WIDTH_PX,
+} from './Reward';
 
 const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_1.png'), assetPath('/assets/vfx/particle_leaf_2.png')];
+
+/** Coin icon in scaled panel — 15% larger than prior 40px (pre-scale coords). */
+const DISCOVERY_COIN_REWARD_ICON_PX = Math.round(40 * 1.15);
 
 interface LeafParticle {
   id: number;
@@ -540,25 +550,29 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
             style={{ marginTop: '20px' }}
           >
             <div
-              className="inline-flex items-center justify-center"
+              className="inline-flex items-center justify-center box-border rounded-full"
               style={{
-                backgroundColor: '#c3b381',
-                borderRadius: '999px',
-                padding: '10px 18px',
-                gap: '6px',
+                backgroundColor: REWARD_PILL_FILL_COLOR,
+                border: `${REWARD_PILL_STROKE_WIDTH_PX * 2}px solid ${REWARD_PILL_STROKE_COLOR}`,
+                minHeight: `${REWARD_PILL_HEIGHT_PX * 2}px`,
+                paddingTop: 12,
+                paddingBottom: 12,
+                paddingLeft: 20,
+                paddingRight: 31,
+                gap: '10px',
               }}
             >
               <img
                 ref={rewardCoinRef}
                 src={assetPath('/assets/icons/icon_coin_small.png')}
                 alt=""
-                className="object-contain"
-                style={{ width: '40px', height: '40px' }}
+                className="object-contain shrink-0"
+                style={{ width: `${DISCOVERY_COIN_REWARD_ICON_PX}px`, height: `${DISCOVERY_COIN_REWARD_ICON_PX}px` }}
               />
               <span
-                className="font-medium tracking-tight"
+                className="font-black tracking-tight"
                 style={{
-                  color: '#fcf0c7',
+                  color: REWARD_OFFER_LINE_TEXT_COLOR,
                   fontFamily: 'Inter, sans-serif',
                   fontSize: '2rem',
                   lineHeight: 1,

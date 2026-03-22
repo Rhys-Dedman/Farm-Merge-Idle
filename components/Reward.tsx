@@ -35,26 +35,36 @@ const OFFER_DURATION_DIVIDER_TOP_ADJ_PX = 0;
 
 const COIN_ROW_PILL_LEFT_PX = 110;
 const COIN_ROW_PILL_WIDTH_PX = 206;
-const COIN_ROW_PILL_HEIGHT_PX = 34;
+/** Pill bar height — used by purchase popup stacking. */
+export const REWARD_PILL_HEIGHT_PX = 34;
+const COIN_ROW_PILL_HEIGHT_PX = REWARD_PILL_HEIGHT_PX;
+
+/** Store reward strip pill — shared with Discovery coin row etc. */
+export const REWARD_PILL_FILL_COLOR = '#f4e6b9';
+export const REWARD_PILL_STROKE_COLOR = '#fff7d5';
+export const REWARD_PILL_STROKE_WIDTH_PX = 2;
+/** Offer line label on reward strip (brown). */
+export const REWARD_OFFER_LINE_TEXT_COLOR = '#6c5851';
 
 /** Inline box width — must match `layout="inline"` root width below. */
 export const REWARD_INLINE_WIDTH_PX = 440;
+/** Inline root height (must match `layout="inline"` style height below). */
+export const REWARD_INLINE_LAYOUT_HEIGHT_PX = 44;
 
 /** Shift whole strip so pill center lines up with inline box center (for popup centering). */
 export const REWARD_INLINE_PILL_ALIGN_TRANSLATE_X_PX =
   REWARD_INLINE_WIDTH_PX / 2 - (COIN_ROW_PILL_LEFT_PX + COIN_ROW_PILL_WIDTH_PX / 2);
-const COIN_ROW_PILL_FILL = '#f4e6b9';
-const COIN_ROW_PILL_STROKE = '#fff7d5';
-const COIN_ROW_PILL_STROKE_PX = 2;
-
 const REWARD_LINE_TEXT_STYLE: React.CSSProperties = {
   fontFamily: 'Inter, sans-serif',
   fontSize: 13,
-  color: '#6c5851',
+  color: REWARD_OFFER_LINE_TEXT_COLOR,
 };
 
+/** Matches duration labels on store reward strips (bundle “was” price uses this too). */
+export const REWARD_DURATION_TEXT_COLOR = '#d3b07b';
+
 const DURATION_TEXT_STYLE: React.CSSProperties = {
-  color: '#d3b07b',
+  color: REWARD_DURATION_TEXT_COLOR,
   fontSize: 13,
 };
 
@@ -74,6 +84,8 @@ export interface RewardProps {
   durationText: string;
   /** Optional coin / currency icon path (passed to `assetPath`). */
   coinIconPath?: string;
+  /** Multiplier for strip icon size (default 1). */
+  coinIconScale?: number;
   className?: string;
   /**
    * `storeCard` — absolute overlay on full store row (default).
@@ -86,10 +98,12 @@ export const Reward: React.FC<RewardProps> = ({
   offerLineText,
   durationText,
   coinIconPath = '/assets/icons/icon_coin.png',
+  coinIconScale = 1,
   className = '',
   layout = 'storeCard',
 }) => {
   const isInline = layout === 'inline';
+  const iconPx = COIN_ROW_ICON_PX * coinIconScale;
   return (
     <div
       className={`reward pointer-events-none select-none ${isInline ? 'relative' : 'absolute inset-0'} ${className}`.trim()}
@@ -98,7 +112,9 @@ export const Reward: React.FC<RewardProps> = ({
         transform: isInline
           ? `translateX(${REWARD_INLINE_PILL_ALIGN_TRANSLATE_X_PX}px)`
           : `translateX(${REWARD_SECTION_OFFSET_X_PX}px)`,
-        ...(isInline ? { width: REWARD_INLINE_WIDTH_PX, height: 44, marginLeft: 'auto', marginRight: 'auto' } : {}),
+        ...(isInline
+          ? { width: REWARD_INLINE_WIDTH_PX, height: REWARD_INLINE_LAYOUT_HEIGHT_PX, marginLeft: 'auto', marginRight: 'auto' }
+          : {}),
       }}
     >
       {/* Pill — behind text row */}
@@ -109,8 +125,8 @@ export const Reward: React.FC<RewardProps> = ({
           left: COIN_ROW_PILL_LEFT_PX,
           width: COIN_ROW_PILL_WIDTH_PX,
           height: COIN_ROW_PILL_HEIGHT_PX,
-          backgroundColor: COIN_ROW_PILL_FILL,
-          border: `${COIN_ROW_PILL_STROKE_PX}px solid ${COIN_ROW_PILL_STROKE}`,
+          backgroundColor: REWARD_PILL_FILL_COLOR,
+          border: `${REWARD_PILL_STROKE_WIDTH_PX}px solid ${REWARD_PILL_STROKE_COLOR}`,
           ...rowItemTransform(0),
         }}
       />
@@ -123,7 +139,7 @@ export const Reward: React.FC<RewardProps> = ({
           src={assetPath(coinIconPath)}
           alt=""
           className="object-contain flex-shrink-0 pointer-events-none"
-          style={{ width: COIN_ROW_ICON_PX, height: COIN_ROW_ICON_PX }}
+          style={{ width: iconPx, height: iconPx }}
         />
       </div>
 

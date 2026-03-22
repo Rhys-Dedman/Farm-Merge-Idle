@@ -18,6 +18,8 @@ interface PauseMenuPopupProps {
   onAddMoney?: (amount: number) => void;
   /** Clear save and reload (fresh FTUE). */
   onResetProgress?: () => void;
+  /** Remove all active boosts (bar + timers + gameplay effects). */
+  onClearBoosts?: () => void;
   /** When false, Unlock Plant button is disabled (all plants unlocked) */
   canUnlockPlant?: boolean;
   closeOnBackdropClick?: boolean;
@@ -38,6 +40,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   onUnlockPlantClick,
   onAddMoney,
   onResetProgress,
+  onClearBoosts,
   canUnlockPlant = true,
   closeOnBackdropClick = true,
   appScale = 1,
@@ -48,6 +51,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   const [unlockPlantPressed, setUnlockPlantPressed] = useState(false);
   const [addCoinsPressed, setAddCoinsPressed] = useState(false);
   const [resetPressed, setResetPressed] = useState(false);
+  const [clearBoostsPressed, setClearBoostsPressed] = useState(false);
   const [performanceMode, setPerformanceModeLocal] = useState(false);
 
   useEffect(() => {
@@ -209,6 +213,38 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                     Performance Mode {performanceMode ? 'ON' : 'OFF'}
                   </span>
                 </button>
+                {onClearBoosts ? (
+                  <button
+                    type="button"
+                    onMouseDown={() => setClearBoostsPressed(true)}
+                    onMouseUp={() => setClearBoostsPressed(false)}
+                    onMouseLeave={() => setClearBoostsPressed(false)}
+                    onClick={() => onClearBoosts()}
+                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                    style={{
+                      height: '40px',
+                      backgroundColor: clearBoostsPressed ? buttonPressedBg : buttonBgColor,
+                      border: `3px solid ${buttonBorderColor}`,
+                      borderRadius: '16px',
+                      boxShadow: clearBoostsPressed
+                        ? 'inset 0 3px 6px rgba(0,0,0,0.15)'
+                        : `0 6px 0 ${buttonBorderColor}, 0 8px 16px rgba(0,0,0,0.15)`,
+                      transform: clearBoostsPressed ? 'translateY(3px)' : 'translateY(0)',
+                    }}
+                  >
+                    <span
+                      className="font-bold tracking-tight"
+                      style={{
+                        color: buttonTextColor,
+                        fontFamily: 'Inter, sans-serif',
+                        textShadow: '0 1px 0 rgba(255,255,255,0.3)',
+                        fontSize: '0.875rem',
+                      }}
+                    >
+                      Clear Boosts
+                    </span>
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onMouseDown={() => setRewardedPressed(true)}

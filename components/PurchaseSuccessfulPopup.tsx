@@ -4,7 +4,22 @@
  */
 import React, { useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
-import { Reward, REWARD_INLINE_WIDTH_PX } from './Reward';
+import { Reward, REWARD_INLINE_LAYOUT_HEIGHT_PX, REWARD_INLINE_WIDTH_PX, REWARD_PILL_HEIGHT_PX } from './Reward';
+
+/** Inner header product art — 85% of prior 94px treatment. */
+const PURCHASE_SUCCESS_HEADER_ICON_PX = Math.round(94 * 0.85);
+
+/** Matches existing popup `Reward` `scale(2)`. */
+const PURCHASE_POPUP_REWARD_SCALE = 2;
+/** Scaled strip layout box (440×44 → 880×88 visual). */
+const PURCHASE_POPUP_REWARD_STRIP_SCALED_H_PX = REWARD_INLINE_LAYOUT_HEIGHT_PX * PURCHASE_POPUP_REWARD_SCALE;
+/**
+ * Gap from bottom of one pill to top of next (inner panel px). With `transformOrigin: top center`,
+ * pill spans ~Y −4…64 in each strip → step (64 + gap − (−4)) = 68 + gap per row anchor.
+ */
+const PURCHASE_POPUP_REWARD_PILL_GAP_PX = 4;
+const PURCHASE_POPUP_REWARD_STACK_STEP_PX =
+  REWARD_PILL_HEIGHT_PX * PURCHASE_POPUP_REWARD_SCALE + PURCHASE_POPUP_REWARD_PILL_GAP_PX;
 
 const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_1.png'), assetPath('/assets/vfx/particle_leaf_2.png')];
 
@@ -27,12 +42,13 @@ export interface PurchaseSuccessfulRewardRow {
   offerLineText: string;
   durationText: string;
   coinIconPath?: string;
+  coinIconScale?: number;
 }
 
 export interface PurchaseSuccessfulPopupProps {
   isVisible: boolean;
   onClose: () => void;
-  /** Main product icon in header (same ~94px treatment as Discovery) */
+  /** Main product icon in header (see `PURCHASE_SUCCESS_HEADER_ICON_PX`). */
   headerImageSrc: string;
   /** Default: Thank you for your purchase */
   description?: string;
@@ -387,9 +403,9 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
             src={headerImageSrc} 
             alt="" 
             className="relative object-contain"
-            style={{ 
-              width: '94px',  /* 85px * 1.1 = ~94px (10% larger) */
-              height: '94px',
+            style={{
+              width: `${PURCHASE_SUCCESS_HEADER_ICON_PX}px`,
+              height: `${PURCHASE_SUCCESS_HEADER_ICON_PX}px`,
               filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
               marginTop: '-4px',
             }}
@@ -414,7 +430,7 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
               backgroundPosition: 'center',
               backgroundRepeat: 'no-repeat',
               filter: 'drop-shadow(0 16px 48px rgba(0,0,0,0.3))',
-              padding: '150px 40px 60px 40px',
+              padding: '150px 40px 80px 40px',
             }}
           >
             {/* Content - doubled sizes since container is scaled 0.5x */}
@@ -459,21 +475,23 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
             {description}
           </p>
 
-          {/* Rewards — 2× visual; centered in panel (440px strip centered in full inner width) */}
+          {/* Rewards — stacked so pill bottom → next pill top = PURCHASE_POPUP_REWARD_PILL_GAP_PX */}
           <div
-            className="flex flex-col w-full"
-            style={{ marginTop: '28px', width: '100%', alignItems: 'center' }}
+            className="relative w-full overflow-visible flex justify-center"
+            style={{
+              marginTop: '28px',
+              minHeight:
+                rewards.length === 0
+                  ? 0
+                  : (rewards.length - 1) * PURCHASE_POPUP_REWARD_STACK_STEP_PX + PURCHASE_POPUP_REWARD_STRIP_SCALED_H_PX,
+            }}
           >
             {rewards.map((row, idx) => (
               <div
                 key={idx}
+                className="absolute left-0 right-0 flex justify-center overflow-visible"
                 style={{
-                  width: '100%',
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'flex-start',
-                  minHeight: '88px',
-                  marginBottom: idx < rewards.length - 1 ? '16px' : 0,
+                  top: idx * PURCHASE_POPUP_REWARD_STACK_STEP_PX,
                 }}
               >
                 <div
@@ -486,7 +504,7 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
                 >
                   <div
                     style={{
-                      transform: 'scale(2)',
+                      transform: `scale(${PURCHASE_POPUP_REWARD_SCALE})`,
                       transformOrigin: 'top center',
                     }}
                   >
@@ -495,6 +513,7 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
                       offerLineText={row.offerLineText}
                       durationText={row.durationText}
                       coinIconPath={row.coinIconPath}
+                      coinIconScale={row.coinIconScale}
                     />
                   </div>
                 </div>

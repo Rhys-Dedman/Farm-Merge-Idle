@@ -25,6 +25,8 @@ const STORE_PAGE_HEADER_HEIGHT_PX = 68;
 const STORE_TOP_CHROME_BELOW_HEADER_PX = 10;
 /** Horizontal rule inset above the scroll clip (gap between line bottom and scroll top). */
 const STORE_MASK_LINE_ABOVE_SCROLL_PX = 3;
+/** Extra space below the last store row when scrolled to the end. */
+const STORE_SCROLL_CONTENT_PADDING_BOTTOM_PX = 10;
 const STORE_TOP_CHROME_BROWN = '#432f2a';
 const STORE_MASK_LINE_COLOR = '#775041';
 
@@ -558,6 +560,7 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
               // Keep children from affecting layout above the pinned top ui.
               pointerEvents: 'auto',
               zIndex: 1,
+              paddingBottom: STORE_SCROLL_CONTENT_PADDING_BOTTOM_PX,
             }}
           >
             {/* Two store free offers side by side (scaled 1.05×; layout width stays 214 each) */}

@@ -22,6 +22,8 @@ import {
 /** Space below each row in the layout flow. */
 const STORE_SMALL_ROW_MARGIN_BOTTOM_PX = 0;
 
+const STORE_COIN_ROW_BACKGROUND_DEFAULT = '/assets/topui/ui_store_small.png';
+
 export interface StoreCoinOfferProps {
   config: StoreCoinOfferConfig;
   onPurchase?: (id: string) => void;
@@ -30,7 +32,17 @@ export interface StoreCoinOfferProps {
 
 export const StoreCoinOffer: React.FC<StoreCoinOfferProps> = ({ config, onPurchase, className = '' }) => {
   const [pressed, setPressed] = useState(false);
-  const { id, title, headerIcon, offerLineText, durationText, priceLabel } = config;
+  const {
+    id,
+    title,
+    titleColor,
+    headerIcon,
+    offerLineText,
+    durationText,
+    priceLabel,
+    rowBackgroundAsset = STORE_COIN_ROW_BACKGROUND_DEFAULT,
+    rewardStripIconPath,
+  } = config;
 
   return (
     <div
@@ -46,7 +58,7 @@ export const StoreCoinOffer: React.FC<StoreCoinOfferProps> = ({ config, onPurcha
       >
         <div className="relative w-[440px] max-w-full flex-shrink-0">
           <img
-            src={assetPath('/assets/topui/ui_store_small.png')}
+            src={assetPath(rowBackgroundAsset)}
             alt=""
             className="w-full h-auto block pointer-events-none select-none"
           />
@@ -57,6 +69,7 @@ export const StoreCoinOffer: React.FC<StoreCoinOfferProps> = ({ config, onPurcha
                 className="text-left leading-tight"
                 style={{
                   ...STORE_COIN_PACK_TITLE_STYLE,
+                  ...(titleColor ? { color: titleColor } : {}),
                   transform: `translateY(${STORE_COIN_PACK_TITLE_TRANSLATE_Y_PX}px)`,
                 }}
               >
@@ -87,7 +100,11 @@ export const StoreCoinOffer: React.FC<StoreCoinOfferProps> = ({ config, onPurcha
                 className="pointer-events-none absolute inset-0"
                 style={{ transform: `translateY(${STORE_OFFER_CARD_REWARD_STRIP_TRANSLATE_Y_PX}px)` }}
               >
-                <Reward offerLineText={offerLineText} durationText={durationText} />
+                <Reward
+                  offerLineText={offerLineText}
+                  durationText={durationText}
+                  coinIconPath={rewardStripIconPath}
+                />
               </div>
             </div>
 
