@@ -14,6 +14,19 @@ const UPGRADE_MAX_BUTTON_FONT = '#a68e64';
 const FREE_OFFER_TITLE_FONT_MAX_PX = 13;
 const FREE_OFFER_TITLE_FONT_MIN_PX = 7;
 
+/** Visual scale for `ui_store_medium` free-offer cards (layout width fixed below). */
+const STORE_FREE_OFFER_SCALE = 1.05;
+const STORE_FREE_OFFER_LAYOUT_W_PX = 214;
+
+/** Match `PageHeader` total block height (pt-4 + bar + pb-2) so brown can sit flush under the bar art. */
+const STORE_PAGE_HEADER_HEIGHT_PX = 68;
+/** Brown band below the header (above scroll); 0 = scroll sits flush under header bar. */
+const STORE_TOP_CHROME_BELOW_HEADER_PX = 10;
+/** Horizontal rule inset above the scroll clip (gap between line bottom and scroll top). */
+const STORE_MASK_LINE_ABOVE_SCROLL_PX = 3;
+const STORE_TOP_CHROME_BROWN = '#432f2a';
+const STORE_MASK_LINE_COLOR = '#775041';
+
 /** Store free offer — tiny version of rewarded ad. Rotates to a new pool offer after cooldown (with bounce). */
 const StoreFreeOffer: React.FC<{
   slotIndex: number;
@@ -102,129 +115,149 @@ const StoreFreeOffer: React.FC<{
   if (!offer) return null;
 
   return (
-    <div className={`relative w-[214px] flex-shrink-0 ${bounceActive ? 'store-free-offer-bounce' : ''}`}>
-      <img
-        src={assetPath('/assets/topui/ui_store_medium.png')}
-        alt=""
-        className="w-full h-auto block pointer-events-none select-none"
-      />
-      <div className="absolute inset-0 flex flex-col pointer-events-none select-none">
-        {/* Large offer icon — top center */}
-        <div className="flex justify-center shrink-0 pt-6 pb-1">
-          {/* Reserve 108px height like the original icon so title/duration band stays aligned to the art */}
-          <div className="flex items-center justify-center shrink-0" style={{ height: 108, width: '100%' }}>
-            <img
-              src={assetPath(offer.headerIcon)}
-              alt=""
-              className="object-contain"
-              style={{ width: STORE_FREE_OFFER_HEADER_ICON_PX, height: STORE_FREE_OFFER_HEADER_ICON_PX, transform: 'translateY(2px)' }}
-            />
-          </div>
-        </div>
-
-        {/* Title box (centered text); duration fixed at left:152 (may overlap) */}
-        <div className="flex-1 flex items-start justify-center min-h-0 w-full">
-          <div style={rowBandStyle}>
-            <div
-              ref={freeOfferTitleBoxRef}
-              className="flex min-w-0 items-center justify-center overflow-hidden rounded-[4px] px-1"
-              style={{
-                position: 'absolute',
-                left: 30,
-                top: 0,
-                width: 110,
-                height: 28,
-                backgroundColor: 'transparent',
-              }}
-            >
-              <span
-                ref={freeOfferTitleTextRef}
-                className="min-w-0 max-w-full font-black leading-none whitespace-nowrap text-center"
-                style={{ color: '#6c5851', fontSize: `${freeOfferTitleFontPx}px` }}
-              >
-                {offer.title}
-              </span>
-            </div>
-            <span
-              className="font-black leading-none whitespace-nowrap"
-              style={{ ...yMid, left: 152, color: '#d3b07b', fontSize: '13px' }}
-            >
-              {durationLabel}
-            </span>
-          </div>
-        </div>
-
-        {/* Button: yellow FREE (available) or MAX-style tan timer (cooldown) — ~0.9× scale */}
+    <div
+      className={`flex justify-center flex-shrink-0 ${bounceActive ? 'store-free-offer-bounce' : ''}`}
+      style={{ width: STORE_FREE_OFFER_LAYOUT_W_PX }}
+    >
+      <div
+        style={{
+          width: STORE_FREE_OFFER_LAYOUT_W_PX,
+          transform: `scale(${STORE_FREE_OFFER_SCALE})`,
+          transformOrigin: 'top center',
+        }}
+      >
         <div
-          className="absolute left-1/2 z-[2] flex justify-center"
-          style={{
-            bottom: 24,
-            transform: 'translateX(-50%) scale(0.9)',
-            transformOrigin: 'center bottom',
-            pointerEvents: 'none',
-          }}
+          className="relative max-w-full flex-shrink-0"
+          style={{ width: STORE_FREE_OFFER_LAYOUT_W_PX }}
         >
-          <button
-            type="button"
-            disabled={isOnCooldown}
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              if (!isOnCooldown) setPressed(true);
-            }}
-            onPointerUp={() => setPressed(false)}
-            onPointerLeave={() => setPressed(false)}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!isOnCooldown) onFreeClick?.();
-            }}
-            className="flex items-center justify-center px-[10px] rounded-[9px] transition-all border outline outline-1 pointer-events-auto"
-            style={{
-              height: 36,
-              backgroundColor: isOnCooldown ? UPGRADE_MAX_BUTTON_BG : pressed ? '#f0c840' : '#ffd856',
-              borderColor: isOnCooldown ? UPGRADE_MAX_BUTTON_DEPTH : '#f59d42',
-              borderBottomWidth: pressed && !isOnCooldown ? 0 : 4,
-              marginBottom: pressed && !isOnCooldown ? 4 : 0,
-              outlineColor: isOnCooldown ? UPGRADE_MAX_BUTTON_DEPTH : '#f59d42',
-              minWidth: '114px',
-              transform: pressed && !isOnCooldown ? 'translateY(2px)' : 'translateY(0)',
-              boxShadow: isOnCooldown
-                ? 'inset 0 1px 2px rgba(0,0,0,0.12)'
-                : pressed
-                  ? 'inset 0 2px 4px rgba(0,0,0,0.15)'
-                  : 'inset 0 1px 1px rgba(255,255,255,0.4)',
-              cursor: isOnCooldown ? 'default' : 'pointer',
-            }}
-          >
-            {isOnCooldown ? (
-              <span
-                className="text-[15px] font-black tracking-tight leading-none tabular-nums"
-                style={{ color: UPGRADE_MAX_BUTTON_FONT }}
-              >
-                {timerLabel}
-              </span>
-            ) : (
-              <>
+          <img
+            src={assetPath('/assets/topui/ui_store_medium.png')}
+            alt=""
+            className="w-full h-auto block pointer-events-none select-none"
+          />
+          <div className="absolute inset-0 flex flex-col pointer-events-none select-none">
+            {/* Large offer icon — top center */}
+            <div className="flex justify-center shrink-0 pt-6 pb-1">
+              {/* Reserve 108px height like the original icon so title/duration band stays aligned to the art */}
+              <div className="flex items-center justify-center shrink-0" style={{ height: 108, width: '100%' }}>
                 <img
-                  src={assetPath('/assets/icons/icon_watchad.png')}
+                  src={assetPath(offer.headerIcon)}
                   alt=""
-                  className="object-contain flex-shrink-0"
+                  className="object-contain"
                   style={{
-                    width: '23px',
-                    height: '23px',
-                    filter:
-                      'brightness(0) saturate(100%) invert(56%) sepia(67%) saturate(1000%) hue-rotate(346deg) brightness(97%) contrast(88%)',
-                    marginRight: 5,
+                    width: STORE_FREE_OFFER_HEADER_ICON_PX,
+                    height: STORE_FREE_OFFER_HEADER_ICON_PX,
+                    transform: 'translateY(2px)',
                   }}
                 />
-                <span
-                  className="text-[15px] font-black tracking-tight leading-none"
-                  style={{ color: '#e6803a' }}
+              </div>
+            </div>
+
+            {/* Title box (centered text); duration fixed at left:152 (may overlap) */}
+            <div className="flex-1 flex items-start justify-center min-h-0 w-full">
+              <div style={rowBandStyle}>
+                <div
+                  ref={freeOfferTitleBoxRef}
+                  className="flex min-w-0 items-center justify-center overflow-hidden rounded-[4px] px-1"
+                  style={{
+                    position: 'absolute',
+                    left: 30,
+                    top: 0,
+                    width: 110,
+                    height: 28,
+                    backgroundColor: 'transparent',
+                  }}
                 >
-                  FREE
+                  <span
+                    ref={freeOfferTitleTextRef}
+                    className="min-w-0 max-w-full font-black leading-none whitespace-nowrap text-center"
+                    style={{ color: '#6c5851', fontSize: `${freeOfferTitleFontPx}px` }}
+                  >
+                    {offer.title}
+                  </span>
+                </div>
+                <span
+                  className="font-black leading-none whitespace-nowrap"
+                  style={{ ...yMid, left: 152, color: '#d3b07b', fontSize: '13px' }}
+                >
+                  {durationLabel}
                 </span>
-              </>
-            )}
-          </button>
+              </div>
+            </div>
+
+            {/* Button: yellow FREE (available) or MAX-style tan timer (cooldown) — ~0.9× scale */}
+            <div
+              className="absolute left-1/2 z-[2] flex justify-center"
+              style={{
+                bottom: 24,
+                transform: 'translateX(-50%) scale(0.9)',
+                transformOrigin: 'center bottom',
+                pointerEvents: 'none',
+              }}
+            >
+              <button
+                type="button"
+                disabled={isOnCooldown}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  if (!isOnCooldown) setPressed(true);
+                }}
+                onPointerUp={() => setPressed(false)}
+                onPointerLeave={() => setPressed(false)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!isOnCooldown) onFreeClick?.();
+                }}
+                className="flex items-center justify-center px-[10px] rounded-[9px] transition-all border outline outline-1 pointer-events-auto"
+                style={{
+                  height: 36,
+                  backgroundColor: isOnCooldown ? UPGRADE_MAX_BUTTON_BG : pressed ? '#f0c840' : '#ffd856',
+                  borderColor: isOnCooldown ? UPGRADE_MAX_BUTTON_DEPTH : '#f59d42',
+                  borderBottomWidth: pressed && !isOnCooldown ? 0 : 4,
+                  marginBottom: pressed && !isOnCooldown ? 4 : 0,
+                  outlineColor: isOnCooldown ? UPGRADE_MAX_BUTTON_DEPTH : '#f59d42',
+                  minWidth: '114px',
+                  transform: pressed && !isOnCooldown ? 'translateY(2px)' : 'translateY(0)',
+                  boxShadow: isOnCooldown
+                    ? 'inset 0 1px 2px rgba(0,0,0,0.12)'
+                    : pressed
+                      ? 'inset 0 2px 4px rgba(0,0,0,0.15)'
+                      : 'inset 0 1px 1px rgba(255,255,255,0.4)',
+                  cursor: isOnCooldown ? 'default' : 'pointer',
+                }}
+              >
+                {isOnCooldown ? (
+                  <span
+                    className="text-[15px] font-black tracking-tight leading-none tabular-nums"
+                    style={{ color: UPGRADE_MAX_BUTTON_FONT }}
+                  >
+                    {timerLabel}
+                  </span>
+                ) : (
+                  <>
+                    <img
+                      src={assetPath('/assets/icons/icon_watchad.png')}
+                      alt=""
+                      className="object-contain flex-shrink-0"
+                      style={{
+                        width: '23px',
+                        height: '23px',
+                        filter:
+                          'brightness(0) saturate(100%) invert(56%) sepia(67%) saturate(1000%) hue-rotate(346deg) brightness(97%) contrast(88%)',
+                        marginRight: 5,
+                      }}
+                    />
+                    <span
+                      className="text-[15px] font-black tracking-tight leading-none"
+                      style={{ color: '#e6803a' }}
+                    >
+                      FREE
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -401,7 +434,17 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
   }, []);
 
   return (
-    <div className="h-full w-full flex flex-col overflow-x-visible">
+    <div className="relative h-full w-full flex flex-col overflow-x-visible">
+      {/* Brown to top of store column, behind PageHeader (same color as band below). */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute left-0 right-0 top-0 z-0"
+        style={{
+          height: STORE_PAGE_HEADER_HEIGHT_PX,
+          backgroundColor: STORE_TOP_CHROME_BROWN,
+        }}
+      />
+
       <PageHeader
         money={money}
         walletRef={walletRef}
@@ -418,6 +461,30 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
         onBoostComplete={onBoostComplete}
         onBoostClick={onBoostClick}
       />
+
+      {/* Brown below header (optional height); line lives here when height > 0. */}
+      {STORE_TOP_CHROME_BELOW_HEADER_PX > 0 ? (
+        <div
+          aria-hidden
+          className="relative z-0 w-full shrink-0 pointer-events-none"
+          style={{
+            height: STORE_TOP_CHROME_BELOW_HEADER_PX,
+            backgroundColor: STORE_TOP_CHROME_BROWN,
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              height: 2,
+              bottom: STORE_MASK_LINE_ABOVE_SCROLL_PX,
+              backgroundColor: STORE_MASK_LINE_COLOR,
+              zIndex: 2,
+            }}
+          />
+        </div>
+      ) : null}
 
       {/* Store top-ui viewport (sprites + pattern clipped). */}
       <div className="flex-grow overflow-hidden overflow-x-visible min-h-0 relative">
@@ -448,20 +515,31 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
             }}
           />
 
-          {/* 4px divider at the clipping boundary */}
-          <div
-            aria-hidden
-            style={{
-              position: 'absolute',
-              left: 0,
-              right: 0,
-              top: 0,
-              height: 2,
-              backgroundColor: '#422e29',
-              zIndex: 2,
-              pointerEvents: 'none',
-            }}
-          />
+          {STORE_TOP_CHROME_BELOW_HEADER_PX === 0 && (
+            <div
+              aria-hidden
+              className="pointer-events-none"
+              style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                top: 0,
+                height: STORE_MASK_LINE_ABOVE_SCROLL_PX + 2,
+                zIndex: 2,
+              }}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: 2,
+                  backgroundColor: STORE_MASK_LINE_COLOR,
+                }}
+              />
+            </div>
+          )}
 
           <div
             ref={storeContentRef}
@@ -471,7 +549,8 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
               top: 0,
               transform: `translateX(-50%) translateY(${-storeScrollY}px)`,
               transformOrigin: 'top center',
-              width: 440,
+              /* Fits coin rows at 440×1.03 and two free offers at 214×1.05 (+ gap) without clipping. */
+              width: 453,
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
@@ -480,8 +559,8 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
               zIndex: 1,
             }}
           >
-            {/* Two store free offers side by side */}
-            <div className="flex flex-row items-start justify-center gap-2 w-full mt-[10px]">
+            {/* Two store free offers side by side (scaled 1.05×; layout width stays 214 each) */}
+            <div className="flex flex-row items-start justify-center gap-2 w-full mt-[10px] mb-2">
               <StoreFreeOffer
                 slotIndex={0}
                 offerId={storeFreeOfferSlots[0]}
