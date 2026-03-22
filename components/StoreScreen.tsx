@@ -3,7 +3,8 @@ import { PageHeader } from './PageHeader';
 import { assetPath } from '../utils/assetPath';
 import type { ActiveBoostData } from './ActiveBoostIndicator';
 import { ACTIVE_BOOST_INDICATOR_SIZE_PX } from './ActiveBoostIndicator';
-import { getOfferById, STORE_COIN_OFFERS, STORE_FREE_OFFER_HEADER_ICON_PX } from '../offers';
+import { getOfferById, STORE_BUNDLE_OFFERS, STORE_COIN_OFFERS, STORE_FREE_OFFER_HEADER_ICON_PX } from '../offers';
+import { StoreBundleOffer } from './StoreBundleOffer';
 import { StoreCoinOffer } from './StoreCoinOffer';
 
 /** Matches upgrade panel MAX / disabled purchase button (UpgradeList). */
@@ -549,7 +550,7 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
               top: 0,
               transform: `translateX(-50%) translateY(${-storeScrollY}px)`,
               transformOrigin: 'top center',
-              /* Fits coin rows at 440×1.03 and two free offers at 214×1.05 (+ gap) without clipping. */
+              /* Fits coin rows at 440×1.03 (widest product row) and two free offers at 214×1.05 (+ gap). */
               width: 453,
               display: 'flex',
               flexDirection: 'column',
@@ -584,12 +585,12 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
               className="w-[300px] max-w-none h-auto mt-1 mb-1"
             />
 
-            {/* Large */}
-            <img
-              src={assetPath('/assets/topui/ui_store_large.png')}
-              alt=""
-              className="w-[440px] max-w-none h-auto"
-            />
+            {/* Store bundles (`ui_store_large`) — overlay layout matches coin booster rows. */}
+            <div className="flex flex-col items-center gap-0 w-full mt-0">
+              {STORE_BUNDLE_OFFERS.map((config) => (
+                <StoreBundleOffer key={config.id} config={config} onPurchase={onStoreCoinPurchase} />
+              ))}
+            </div>
 
             {/* Divider between large and small */}
             <img

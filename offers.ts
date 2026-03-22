@@ -280,3 +280,20 @@ export const STORE_COIN_OFFERS: StoreCoinOfferConfig[] = [
     durationMs: 24 * 60 * 60 * 1000,
   },
 ];
+
+/** Bundle cards (`ui_store_large`): coin row fields + optional extra reward lines below the primary strip. */
+export interface StoreBundleOfferConfig extends StoreCoinOfferConfig {
+  extraRewardRows?: ReadonlyArray<{ offerLineText: string; durationText: string }>;
+}
+
+export const STORE_BUNDLE_OFFERS: StoreBundleOfferConfig[] = [
+  {
+    ...STORE_COIN_OFFERS[0],
+    id: 'store_bundle_coin_boost',
+    title: 'Coin Boost',
+    extraRewardRows: [
+      { offerLineText: 'Double Coins', durationText: '30m' },
+      { offerLineText: 'Double Coins', durationText: '30m' },
+    ],
+  },
+];

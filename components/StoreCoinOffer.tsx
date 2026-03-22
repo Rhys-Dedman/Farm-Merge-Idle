@@ -3,27 +3,22 @@
  */
 import React, { useState } from 'react';
 import { assetPath } from '../utils/assetPath';
-import { STORE_COIN_OFFER_HEADER_ICON_PX, type StoreCoinOfferConfig } from '../offers';
+import type { StoreCoinOfferConfig } from '../offers';
 import { Reward } from './Reward';
-
-/** Base = half of free-offer icon; +25% per store layout. */
-const HEADER_ICON_PX = STORE_COIN_OFFER_HEADER_ICON_PX * 1.25;
-
-/** Settings popup title: font-black + Inter + tracking-tight; these are the coin-offer overrides. */
-const TITLE_STYLE: React.CSSProperties = {
-  fontFamily: 'Inter, sans-serif',
-  fontSize: 16,
-  color: '#62873b',
-};
-
-/** Green fill; border/outline/depth match StoreFreeOffer FREE button (orange → green). */
-const PURCHASE_BG = '#b8d458';
-const PURCHASE_BORDER = '#8fb33a';
-const PURCHASE_TEXT = '#4a6b1e';
-const PURCHASE_PRESSED_BG = '#9fc044';
-
-/** Visual scale for `ui_store_small` rows (layout stays 440px wide; see StoreScreen column width). */
-const STORE_SMALL_ROW_SCALE = 1.03;
+import {
+  STORE_COIN_OFFER_ROW_SCALE,
+  STORE_COIN_PACK_TITLE_STYLE,
+  STORE_COIN_PACK_TITLE_TRANSLATE_Y_PX,
+  STORE_OFFER_CARD_HEADER_ICON_PX,
+  STORE_OFFER_CARD_ICON_WRAP,
+  STORE_OFFER_CARD_PURCHASE_ANCHOR,
+  STORE_OFFER_CARD_PURCHASE_BG,
+  STORE_OFFER_CARD_PURCHASE_BORDER,
+  STORE_OFFER_CARD_PURCHASE_PRESSED_BG,
+  STORE_OFFER_CARD_PURCHASE_TEXT,
+  STORE_OFFER_CARD_REWARD_STRIP_TRANSLATE_Y_PX,
+  STORE_OFFER_CARD_TITLE_BAND,
+} from '../constants/storeOfferCardLayout';
 /** Space below each row in the layout flow. */
 const STORE_SMALL_ROW_MARGIN_BOTTOM_PX = 0;
 
@@ -45,7 +40,7 @@ export const StoreCoinOffer: React.FC<StoreCoinOfferProps> = ({ config, onPurcha
       <div
         style={{
           width: 440,
-          transform: `scale(${STORE_SMALL_ROW_SCALE})`,
+          transform: `scale(${STORE_COIN_OFFER_ROW_SCALE})`,
           transformOrigin: 'top center',
         }}
       >
@@ -57,19 +52,13 @@ export const StoreCoinOffer: React.FC<StoreCoinOfferProps> = ({ config, onPurcha
           />
           <div className="absolute inset-0 flex flex-col pointer-events-none select-none">
             {/* Title — left, heavy left padding (independent band) */}
-            <div
-              className="shrink-0 w-full flex items-start justify-start box-border"
-              style={{
-                paddingTop: 16,
-                paddingBottom: 3,
-                paddingLeft: 110,
-                paddingRight: 16,
-                minHeight: 44,
-              }}
-            >
+            <div className="shrink-0 w-full flex items-start justify-start box-border" style={{ ...STORE_OFFER_CARD_TITLE_BAND }}>
               <h2
-                className="font-black tracking-tight text-left leading-tight"
-                style={{ ...TITLE_STYLE, transform: 'translateY(1px)' }}
+                className="text-left leading-tight"
+                style={{
+                  ...STORE_COIN_PACK_TITLE_STYLE,
+                  transform: `translateY(${STORE_COIN_PACK_TITLE_TRANSLATE_Y_PX}px)`,
+                }}
               >
                 {title}
               </h2>
@@ -79,36 +68,47 @@ export const StoreCoinOffer: React.FC<StoreCoinOfferProps> = ({ config, onPurcha
             <div className="flex-1 min-h-0 w-full relative flex flex-row items-center">
               <div
                 className="relative z-[2] flex items-center justify-center shrink-0 self-center box-border"
-                style={{ paddingLeft: 52, transform: 'translate(-24px, -20px)' }}
+                style={{ ...STORE_OFFER_CARD_ICON_WRAP }}
               >
                 <div
                   className="flex items-center justify-center shrink-0"
-                  style={{ width: HEADER_ICON_PX, height: HEADER_ICON_PX }}
+                  style={{ width: STORE_OFFER_CARD_HEADER_ICON_PX, height: STORE_OFFER_CARD_HEADER_ICON_PX }}
                 >
                   <img
                     src={assetPath(headerIcon)}
                     alt=""
                     className="object-contain block max-w-none max-h-none"
-                    style={{ width: HEADER_ICON_PX, height: HEADER_ICON_PX }}
+                    style={{ width: STORE_OFFER_CARD_HEADER_ICON_PX, height: STORE_OFFER_CARD_HEADER_ICON_PX }}
                   />
                 </div>
               </div>
 
-              <Reward offerLineText={offerLineText} durationText={durationText} />
+              <div
+                className="pointer-events-none absolute inset-0"
+                style={{ transform: `translateY(${STORE_OFFER_CARD_REWARD_STRIP_TRANSLATE_Y_PX}px)` }}
+              >
+                <Reward offerLineText={offerLineText} durationText={durationText} />
+              </div>
             </div>
 
             {/* Purchase — bottom right */}
-            <div className="absolute z-[2] pointer-events-none" style={{ bottom: 26, right: 27 }}>
+            <div
+              className="absolute z-[2] pointer-events-none"
+              style={{
+                bottom: STORE_OFFER_CARD_PURCHASE_ANCHOR.bottom,
+                right: STORE_OFFER_CARD_PURCHASE_ANCHOR.right,
+              }}
+            >
               <button
                 type="button"
                 className="pointer-events-auto flex items-center justify-center px-[8px] rounded-[9px] transition-all border outline outline-1"
                 style={{
                   height: 36,
-                  backgroundColor: pressed ? PURCHASE_PRESSED_BG : PURCHASE_BG,
-                  borderColor: PURCHASE_BORDER,
+                  backgroundColor: pressed ? STORE_OFFER_CARD_PURCHASE_PRESSED_BG : STORE_OFFER_CARD_PURCHASE_BG,
+                  borderColor: STORE_OFFER_CARD_PURCHASE_BORDER,
                   borderBottomWidth: pressed ? 0 : 4,
                   marginBottom: pressed ? 4 : 0,
-                  outlineColor: PURCHASE_BORDER,
+                  outlineColor: STORE_OFFER_CARD_PURCHASE_BORDER,
                   minWidth: '86px',
                   transform: pressed ? 'translateY(2px)' : 'translateY(0)',
                   boxShadow: pressed
@@ -127,7 +127,10 @@ export const StoreCoinOffer: React.FC<StoreCoinOfferProps> = ({ config, onPurcha
                   onPurchase?.(id);
                 }}
               >
-                <span className="text-[15px] font-black tracking-tight leading-none" style={{ color: PURCHASE_TEXT }}>
+                <span
+                  className="text-[15px] font-black tracking-tight leading-none"
+                  style={{ color: STORE_OFFER_CARD_PURCHASE_TEXT }}
+                >
                   {priceLabel}
                 </span>
               </button>

@@ -50,6 +50,7 @@ import {
   DOUBLE_COINS_OFFER_ID,
   LIMITED_OFFERS,
   LIMITED_OFFERS_AD_POOL,
+  STORE_BUNDLE_OFFERS,
   STORE_COIN_OFFERS,
   getOfferById,
   applyDoubleCoinsVisualAmount,
@@ -3515,7 +3516,9 @@ export default function App() {
                 storeSlotCooldownEnds={storeSlotCooldownEnds}
                 onStoreSlotCooldownEnded={handleStoreSlotCooldownEnded}
                 onStoreCoinPurchase={(offerId) => {
-                  const config = STORE_COIN_OFFERS.find((c) => c.id === offerId);
+                  const config =
+                    STORE_COIN_OFFERS.find((c) => c.id === offerId) ??
+                    STORE_BUNDLE_OFFERS.find((c) => c.id === offerId);
                   if (!config) return;
                   pendingPurchaseBoostsRef.current = [
                     {
