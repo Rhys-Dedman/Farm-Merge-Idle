@@ -76,7 +76,6 @@ const ASSETS_TO_PRELOAD = [
   '/assets/goals/goal_cream.png',
   '/assets/goals/goal_white.png',
   // Popups
-  '/assets/popups/popup_background.png',
   '/assets/popups/popup_header.png',
   '/assets/popups/popup_header_yellow.png',
   '/assets/popups/popup_header_blue.png',

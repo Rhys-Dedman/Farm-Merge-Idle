@@ -4,6 +4,7 @@
  */
 import React, { useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { PopupVectorBackground } from './PopupVectorBackground';
 
 const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_5.png'), assetPath('/assets/vfx/particle_leaf_6.png')];
 
@@ -48,6 +49,7 @@ const POPUP_LEAF_MIN_LIFETIME_MS = 250;
 const POPUP_LEAF_MAX_LIFETIME_MS = 1000;
 const POPUP_WIDTH = 260;
 const POPUP_HEIGHT = 320;
+const POPUP_CLOSE_MS = 200;
 
 function createPopupLeaves(): LeafParticle[] {
   return Array.from({ length: POPUP_LEAF_COUNT }, (_, i) => {
@@ -121,14 +123,7 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
       setAssetsReady(false);
       return;
     }
-    const bgImg = new Image();
-    bgImg.src = assetPath('/assets/popups/popup_background.png?v=2');
-    if (bgImg.complete) {
-      setAssetsReady(true);
-    } else {
-      bgImg.onload = () => setAssetsReady(true);
-      bgImg.onerror = () => setAssetsReady(true);
-    }
+    setAssetsReady(true);
   }, [isVisible]);
 
   useEffect(() => {
@@ -212,7 +207,7 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
       setTimeout(() => {
         setAnimState('hidden');
         onClose();
-      }, 150);
+      }, POPUP_CLOSE_MS);
     }
   }, [isVisible, assetsReady, animState, onClose]);
 
@@ -224,7 +219,7 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
       setAnimState('hidden');
       onUnlockNow?.();
       onClose();
-    }, 150);
+    }, POPUP_CLOSE_MS);
   };
 
   if (animState === 'hidden') return null;
@@ -252,7 +247,7 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
           bottom: '-10px',
           backgroundColor: 'rgba(0, 0, 0, 0.7)',
           opacity: isLeaving ? 0 : 1,
-          transition: 'opacity 0.3s',
+          transition: 'opacity 0.2s',
         }}
       />
 
@@ -320,7 +315,7 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
             animation: isEntering
               ? 'popupEnter 250ms ease-out forwards'
               : isLeaving
-                ? 'popupLeave 150ms ease-in forwards'
+                ? `popupLeave ${POPUP_CLOSE_MS}ms ease-in forwards`
                 : 'none',
             transform: animState === 'visible' ? 'scale(1)' : undefined,
             opacity: animState === 'visible' ? 1 : undefined,
@@ -380,15 +375,13 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
           >
             <div
               style={{
-                backgroundImage: `url(${assetPath('/assets/popups/popup_background.png?v=2')})`,
-                backgroundSize: '100% 100%',
-                backgroundPosition: 'center',
-                backgroundRepeat: 'no-repeat',
+                position: 'relative',
                 filter: 'drop-shadow(0 16px 48px rgba(0,0,0,0.3))',
                 padding: '150px 40px 60px 40px',
               }}
             >
-              <div className="flex flex-col items-center">
+              <PopupVectorBackground />
+              <div className="relative z-[2] flex flex-col items-center">
                 {/* Title - "Level X" (hidden when hideLevel) */}
                 {!hideLevel && (
                   <h2

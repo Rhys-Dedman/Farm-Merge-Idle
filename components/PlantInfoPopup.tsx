@@ -4,6 +4,7 @@
  */
 import React, { useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { PopupVectorBackground } from './PopupVectorBackground';
 
 const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_1.png'), assetPath('/assets/vfx/particle_leaf_2.png')];
 
@@ -37,6 +38,7 @@ const POPUP_LEAF_MAX_LIFETIME_MS = 1000;
 const POPUP_WIDTH = 280;
 const POPUP_HEIGHT = 260;
 const POPUP_LEAF_Y_OFFSET = -15;
+const POPUP_CLOSE_MS = 200;
 
 function createPopupLeaves(): LeafParticle[] {
   return Array.from({ length: POPUP_LEAF_COUNT }, (_, i) => {
@@ -99,20 +101,12 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
   const leafStartTimeRef = useRef<number>(0);
   const leafPosRef = useRef<{ x: number; y: number; vx: number; vy: number; opacity: number; rotation: number; scale: number; started: boolean }[]>([]);
 
-  // Preload critical assets before showing popup
   useEffect(() => {
     if (!isVisible) {
       setAssetsReady(false);
       return;
     }
-    const bgImg = new Image();
-    bgImg.src = assetPath('/assets/popups/popup_background.png?v=2');
-    if (bgImg.complete) {
-      setAssetsReady(true);
-    } else {
-      bgImg.onload = () => setAssetsReady(true);
-      bgImg.onerror = () => setAssetsReady(true);
-    }
+    setAssetsReady(true);
   }, [isVisible]);
 
   // Leaf animation effect
@@ -199,16 +193,17 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
       setTimeout(() => {
         setAnimState('hidden');
         onClose();
-      }, 100);
+      }, POPUP_CLOSE_MS);
     }
   }, [isVisible, assetsReady, animState, onClose]);
 
   const handleClose = () => {
+    if (animState === 'leaving') return;
     setAnimState('leaving');
     setTimeout(() => {
       setAnimState('hidden');
       onClose();
-    }, 100);
+    }, POPUP_CLOSE_MS);
   };
 
   if (animState === 'hidden') return null;
@@ -234,7 +229,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
           bottom: '-10px',
           backgroundColor: 'rgba(0, 0, 0, 0.7)',
           opacity: isLeaving ? 0 : 1,
-          transition: 'opacity 100ms ease-out',
+          transition: `opacity ${POPUP_CLOSE_MS}ms ease-out`,
         }}
       />
 
@@ -303,7 +298,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
           animation: isEntering 
             ? 'plantInfoEnter 250ms ease-out forwards'
             : isLeaving 
-              ? 'plantInfoLeave 100ms ease-in forwards'
+              ? `plantInfoLeave ${POPUP_CLOSE_MS}ms ease-in forwards`
               : 'none',
           transform: animState === 'visible' ? 'scale(1)' : undefined,
           opacity: animState === 'visible' ? 1 : undefined,
@@ -381,16 +376,14 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
         >
           <div
             style={{
-              backgroundImage: `url(${assetPath('/assets/popups/popup_background.png?v=2')})`,
-              backgroundSize: '100% 100%',
-              backgroundPosition: 'center',
-              backgroundRepeat: 'no-repeat',
+              position: 'relative',
               filter: 'drop-shadow(0 16px 48px rgba(0,0,0,0.3))',
               padding: '150px 40px 60px 40px',
             }}
           >
+            <PopupVectorBackground />
             {/* Content */}
-            <div className="flex flex-col items-center">
+            <div className="relative z-[2] flex flex-col items-center">
               {/* Subtitle - Plant Name */}
               <h3 
                 className="font-black tracking-tight text-center"

@@ -6,6 +6,13 @@
  */
 import React, { useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { PopupVectorBackground } from './PopupVectorBackground';
+import {
+  REWARD_PILL_FILL_COLOR,
+  REWARD_PILL_HEIGHT_PX,
+  REWARD_PILL_STROKE_COLOR,
+  REWARD_PILL_STROKE_WIDTH_PX,
+} from './Reward';
 
 const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_3.png'), assetPath('/assets/vfx/particle_leaf_4.png')];
 
@@ -87,6 +94,9 @@ const POPUP_LEAF_MAX_LIFETIME_MS = 1000;
 // Popup dimensions for spawning leaves around the edge (slightly smaller than BG sprite so leaves start behind it)
 const POPUP_WIDTH = 260;
 const POPUP_HEIGHT = 320;
+
+/** Panel + backdrop fade/shrink; keep in sync with CSS `popupLeave` duration and backdrop transition */
+const POPUP_CLOSE_MS = 200;
 
 function createPopupLeaves(): LeafParticle[] {
   return Array.from({ length: POPUP_LEAF_COUNT }, (_, i) => {
@@ -181,20 +191,12 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
   const leafStartTimeRef = useRef<number>(0);
   const leafPosRef = useRef<{ x: number; y: number; vx: number; vy: number; opacity: number; rotation: number; scale: number; started: boolean }[]>([]);
 
-  // Preload critical assets before showing popup
   useEffect(() => {
     if (!isVisible) {
       setAssetsReady(false);
       return;
     }
-    const bgImg = new Image();
-    bgImg.src = assetPath('/assets/popups/popup_background.png?v=2');
-    if (bgImg.complete) {
-      setAssetsReady(true);
-    } else {
-      bgImg.onload = () => setAssetsReady(true);
-      bgImg.onerror = () => setAssetsReady(true);
-    }
+    setAssetsReady(true);
   }, [isVisible]);
 
   // Separate effect for leaf animation - runs independently of popup state
@@ -282,26 +284,31 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
       setTimeout(() => {
         setAnimState('hidden');
         onClose();
-      }, 150);
+      }, POPUP_CLOSE_MS);
     }
   }, [isVisible, assetsReady, animState, onClose]);
 
   const [isClosing, setIsClosing] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
+  const beginDismiss = (beforeLeave?: () => void) => {
+    if (isClosing || animState === 'leaving') return;
+    setIsClosing(true);
+    beforeLeave?.();
+    setAnimState('leaving');
+    setTimeout(() => {
+      setAnimState('hidden');
+      onClose();
+    }, POPUP_CLOSE_MS);
+  };
+
   const handleButtonClick = () => {
-    if (isClosing) return;
     if (isActiveBoostView) return; // Active boost view: button does nothing
     if (onButtonClick && buttonRef.current) {
       onButtonClick(buttonRef.current.getBoundingClientRect());
     }
     if (closeOnButtonClick) {
-      setIsClosing(true);
-      setAnimState('leaving');
-      setTimeout(() => {
-        setAnimState('hidden');
-        onClose();
-      }, 150);
+      beginDismiss();
     }
   };
 
@@ -319,6 +326,16 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
   const buttonPressedBg = isActiveBoostView ? '#e3c28c' : '#f0c840';
   // Header circle gradient: top #ffd856, bottom #f17d3f, outline #bd792c
 
+  const showDurationPill =
+    !isActiveBoostView &&
+    !hideOfferDurationBlock &&
+    ((durationSeconds != null && durationSeconds > 0) ||
+      ((durationSeconds == null || durationSeconds <= 0) && durationMinutes != null && durationMinutes > 0));
+  const durationPillLabel =
+    durationSeconds != null && durationSeconds > 0
+      ? `Duration: ${durationSeconds}s`
+      : `Duration: ${durationMinutes} min`;
+
   return (
     <div 
       className="fixed inset-0 flex items-center justify-center pointer-events-auto"
@@ -326,7 +343,7 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
     >
 {/* Backdrop - not scaled, covers full screen */}
       <div
-        className="absolute transition-opacity duration-300"
+        className="absolute transition-opacity duration-200"
         style={{
           top: '-10px',
           left: '-10px',
@@ -336,10 +353,11 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
           opacity: isLeaving ? 0 : 1,
         }}
         onClick={closeOnBackdropClick ? () => {
-          if (onCloseButtonClick && buttonRef.current) {
-            onCloseButtonClick(buttonRef.current.getBoundingClientRect());
-          }
-          onClose();
+          beginDismiss(() => {
+            if (onCloseButtonClick && buttonRef.current) {
+              onCloseButtonClick(buttonRef.current.getBoundingClientRect());
+            }
+          });
         } : undefined}
       />
 
@@ -409,7 +427,7 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
           animation: isEntering 
             ? 'popupEnter 250ms ease-out forwards'
             : isLeaving 
-              ? 'popupLeave 150ms ease-in forwards'
+              ? `popupLeave ${POPUP_CLOSE_MS}ms ease-in forwards`
               : 'none',
           transform: animState === 'visible' ? 'scale(1)' : undefined,
           opacity: animState === 'visible' ? 1 : undefined,
@@ -485,17 +503,15 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
         >
           <div
             style={{
-              backgroundImage: `url(${assetPath('/assets/popups/popup_background.png?v=2')})`,
-              backgroundSize: '100% 100%',
-              backgroundPosition: 'center',
-              backgroundRepeat: 'no-repeat',
+              position: 'relative',
               filter: 'drop-shadow(0 16px 48px rgba(0,0,0,0.3))',
               padding: '150px 40px 60px 40px',
             }}
           >
+            <PopupVectorBackground />
             {/* Content - doubled sizes since container is scaled 0.5x */}
             <div
-              className="flex flex-col items-center"
+              className="relative z-[2] flex flex-col items-center"
             >
           {/* Title - "Limited Offer" */}
           <h2 
@@ -564,36 +580,34 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
             {description}
           </p>
 
-          {/* Duration: only before activation (active view uses button countdown only). */}
-          {!isActiveBoostView && !hideOfferDurationBlock && (durationSeconds != null && durationSeconds > 0) && (
-            <p
-              className="font-semibold text-center w-full"
-              style={{
-                color: '#c2b280',
-                fontFamily: 'Inter, sans-serif',
-                paddingLeft: '24px',
-                paddingRight: '24px',
-                marginTop: '20px',
-                fontSize: '1.75rem',
-              }}
-            >
-              Duration: {durationSeconds}s
-            </p>
-          )}
-          {!isActiveBoostView && !hideOfferDurationBlock && (durationSeconds == null || durationSeconds <= 0) && durationMinutes != null && durationMinutes > 0 && (
-            <p
-              className="font-semibold text-center w-full"
-              style={{
-                color: '#c2b280',
-                fontFamily: 'Inter, sans-serif',
-                paddingLeft: '24px',
-                paddingRight: '24px',
-                marginTop: '20px',
-                fontSize: '1.75rem',
-              }}
-            >
-              Duration: {durationMinutes} min
-            </p>
+          {/* Duration — discovery coin-reward pill shape, no icon (brown text = reward line color). */}
+          {showDurationPill && (
+            <div className="flex items-center justify-center w-full" style={{ marginTop: '20px' }}>
+              <div
+                className="inline-flex items-center justify-center box-border rounded-full"
+                style={{
+                  backgroundColor: REWARD_PILL_FILL_COLOR,
+                  border: `${REWARD_PILL_STROKE_WIDTH_PX * 2}px solid ${REWARD_PILL_STROKE_COLOR}`,
+                  minHeight: `${REWARD_PILL_HEIGHT_PX * 2}px`,
+                  paddingTop: 12,
+                  paddingBottom: 12,
+                  paddingLeft: 24,
+                  paddingRight: 24,
+                }}
+              >
+                <span
+                  className="font-semibold tracking-tight text-center"
+                  style={{
+                    color: '#a28267',
+                    fontFamily: 'Inter, sans-serif',
+                    fontSize: '2rem',
+                    lineHeight: 1,
+                  }}
+                >
+                  {durationPillLabel}
+                </span>
+              </div>
+            </div>
           )}
 
           {/* Spacer */}
@@ -655,10 +669,11 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
         {showCloseButton && (
           <button
             onClick={() => {
-              if (onCloseButtonClick && buttonRef.current) {
-                onCloseButtonClick(buttonRef.current.getBoundingClientRect());
-              }
-              onClose();
+              beginDismiss(() => {
+                if (onCloseButtonClick && buttonRef.current) {
+                  onCloseButtonClick(buttonRef.current.getBoundingClientRect());
+                }
+              });
             }}
             className="absolute top-[56px] right-6 w-8 h-8 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
             style={{

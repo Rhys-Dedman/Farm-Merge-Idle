@@ -3,8 +3,19 @@
  */
 import React, { useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { PopupVectorBackground } from './PopupVectorBackground';
+import {
+  REWARD_OFFER_LINE_TEXT_COLOR,
+  REWARD_PILL_FILL_COLOR,
+  REWARD_PILL_HEIGHT_PX,
+  REWARD_PILL_STROKE_COLOR,
+  REWARD_PILL_STROKE_WIDTH_PX,
+} from './Reward';
 
 const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_1.png'), assetPath('/assets/vfx/particle_leaf_2.png')];
+
+/** Same as Discovery popup coin reward row (`DiscoveryPopup`). */
+const DISCOVERY_COIN_REWARD_ICON_PX = Math.round(40 * 1.15);
 
 interface LeafParticle {
   id: number;
@@ -25,6 +36,7 @@ const POPUP_LEAF_MIN_LIFETIME_MS = 250;
 const POPUP_LEAF_MAX_LIFETIME_MS = 1000;
 const POPUP_WIDTH = 260;
 const POPUP_HEIGHT = 320;
+const POPUP_CLOSE_MS = 200;
 
 function createPopupLeaves(): LeafParticle[] {
   return Array.from({ length: POPUP_LEAF_COUNT }, (_, i) => {
@@ -113,13 +125,7 @@ export const OfflineEarningsPopup: React.FC<OfflineEarningsPopupProps> = ({
       setAssetsReady(false);
       return;
     }
-    const bgImg = new Image();
-    bgImg.src = assetPath('/assets/popups/popup_background.png?v=2');
-    if (bgImg.complete) setAssetsReady(true);
-    else {
-      bgImg.onload = () => setAssetsReady(true);
-      bgImg.onerror = () => setAssetsReady(true);
-    }
+    setAssetsReady(true);
   }, [isVisible]);
 
   useEffect(() => {
@@ -200,7 +206,7 @@ export const OfflineEarningsPopup: React.FC<OfflineEarningsPopupProps> = ({
       setTimeout(() => {
         setAnimState('hidden');
         onClose();
-      }, 150);
+      }, POPUP_CLOSE_MS);
     }
   }, [isVisible, assetsReady, animState, onClose]);
 
@@ -220,7 +226,7 @@ export const OfflineEarningsPopup: React.FC<OfflineEarningsPopupProps> = ({
     setTimeout(() => {
       setAnimState('hidden');
       onClose();
-    }, 150);
+    }, POPUP_CLOSE_MS);
   };
 
   if (animState === 'hidden') return null;
@@ -247,7 +253,7 @@ export const OfflineEarningsPopup: React.FC<OfflineEarningsPopupProps> = ({
       style={{ zIndex: 100, overflow: 'hidden', paddingTop: 'clamp(36px, 7vh, 80px)' }}
     >
       <div
-        className="absolute transition-opacity duration-300"
+        className="absolute transition-opacity duration-200"
         style={{
           top: '-10px',
           left: '-10px',
@@ -311,7 +317,7 @@ export const OfflineEarningsPopup: React.FC<OfflineEarningsPopupProps> = ({
           style={{
             width: '320px',
             zIndex: 102,
-            animation: isEntering ? 'offlinePopupEnter 250ms ease-out forwards' : isLeaving ? 'offlinePopupLeave 150ms ease-in forwards' : 'none',
+            animation: isEntering ? 'offlinePopupEnter 250ms ease-out forwards' : isLeaving ? `offlinePopupLeave ${POPUP_CLOSE_MS}ms ease-in forwards` : 'none',
             transform: animState === 'visible' ? 'scale(1)' : undefined,
             opacity: animState === 'visible' ? 1 : undefined,
           }}
@@ -369,15 +375,13 @@ export const OfflineEarningsPopup: React.FC<OfflineEarningsPopupProps> = ({
           >
             <div
               style={{
-                backgroundImage: `url(${assetPath('/assets/popups/popup_background.png?v=2')})`,
-                backgroundSize: '100% 100%',
-                backgroundPosition: 'center',
-                backgroundRepeat: 'no-repeat',
+                position: 'relative',
                 filter: 'drop-shadow(0 16px 48px rgba(0,0,0,0.3))',
                 padding: '150px 40px 60px 40px',
               }}
             >
-              <div className="flex flex-col items-center">
+              <PopupVectorBackground />
+              <div className="relative z-[2] flex flex-col items-center">
                 <h2
                   className="font-normal text-center"
                   style={{ color: '#c2b280', fontFamily: 'Inter, sans-serif', letterSpacing: '-0.02em', fontSize: '2.25rem' }}
@@ -412,6 +416,7 @@ export const OfflineEarningsPopup: React.FC<OfflineEarningsPopupProps> = ({
                   You earned some coins whilst you were away.
                 </p>
 
+                {/* Coin reward row — match DiscoveryPopup discovery coin row (pill, stroke, icon, type) */}
                 <div
                   className="flex items-center justify-center"
                   style={{
@@ -420,31 +425,40 @@ export const OfflineEarningsPopup: React.FC<OfflineEarningsPopupProps> = ({
                   }}
                 >
                   <div
-                    className="inline-flex items-center justify-center"
+                    className="inline-flex items-center justify-center box-border rounded-full"
                     style={{
-                      backgroundColor: '#c3b381',
-                      borderRadius: '999px',
-                      padding: '10px 18px',
-                      gap: '6px',
+                      backgroundColor: REWARD_PILL_FILL_COLOR,
+                      border: `${REWARD_PILL_STROKE_WIDTH_PX * 2}px solid ${REWARD_PILL_STROKE_COLOR}`,
+                      minHeight: `${REWARD_PILL_HEIGHT_PX * 2}px`,
+                      paddingTop: 12,
+                      paddingBottom: 12,
+                      paddingLeft: 20,
+                      paddingRight: 31,
+                      gap: '10px',
                     }}
                   >
                     <img
                       ref={rewardCoinRef}
                       src={assetPath('/assets/icons/icon_coin_small.png')}
                       alt=""
-                      className="object-contain"
-                      style={{ width: '40px', height: '40px' }}
+                      className="object-contain shrink-0"
+                      style={{ width: `${DISCOVERY_COIN_REWARD_ICON_PX}px`, height: `${DISCOVERY_COIN_REWARD_ICON_PX}px` }}
                     />
                     <span
-                      className="font-medium tracking-tight"
-                      style={{ color: '#fcf0c7', fontFamily: 'Inter, sans-serif', fontSize: '2rem', lineHeight: 1 }}
+                      className="font-black tracking-tight"
+                      style={{
+                        color: REWARD_OFFER_LINE_TEXT_COLOR,
+                        fontFamily: 'Inter, sans-serif',
+                        fontSize: '2rem',
+                        lineHeight: 1,
+                      }}
                     >
                       {formatCoins(rewardAmount)}
                     </span>
                   </div>
                 </div>
 
-                <div className="flex-grow min-h-[32px]" />
+                <div className="flex-grow min-h-[40px]" />
 
                 {showDoubleButton && (
                   <button

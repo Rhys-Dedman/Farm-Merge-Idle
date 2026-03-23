@@ -5,6 +5,7 @@
  */
 import React, { useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { PopupVectorBackground } from './PopupVectorBackground';
 import {
   REWARD_OFFER_LINE_TEXT_COLOR,
   REWARD_PILL_FILL_COLOR,
@@ -51,6 +52,7 @@ interface DiscoveryPopupProps {
 const POPUP_LEAF_COUNT = 40;
 const POPUP_LEAF_MIN_LIFETIME_MS = 250;
 const POPUP_LEAF_MAX_LIFETIME_MS = 1000;
+const POPUP_CLOSE_MS = 200;
 
 // Popup dimensions for spawning leaves around the edge (slightly smaller than BG sprite so leaves start behind it)
 const POPUP_WIDTH = 260;
@@ -173,20 +175,12 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
   const leafStartTimeRef = useRef<number>(0);
   const leafPosRef = useRef<{ x: number; y: number; vx: number; vy: number; opacity: number; rotation: number; scale: number; started: boolean }[]>([]);
 
-  // Preload critical assets before showing popup
   useEffect(() => {
     if (!isVisible) {
       setAssetsReady(false);
       return;
     }
-    const bgImg = new Image();
-    bgImg.src = assetPath('/assets/popups/popup_background.png?v=2');
-    if (bgImg.complete) {
-      setAssetsReady(true);
-    } else {
-      bgImg.onload = () => setAssetsReady(true);
-      bgImg.onerror = () => setAssetsReady(true);
-    }
+    setAssetsReady(true);
   }, [isVisible]);
 
   // Separate effect for leaf animation - runs independently of popup state
@@ -274,13 +268,23 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
       setTimeout(() => {
         setAnimState('hidden');
         onClose();
-      }, 150);
+      }, POPUP_CLOSE_MS);
     }
   }, [isVisible, assetsReady, animState, onClose]);
 
   const [isClosing, setIsClosing] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const rewardCoinRef = useRef<HTMLImageElement>(null);
+
+  const dismissWithoutCollect = () => {
+    if (isClosing || animState === 'leaving') return;
+    setIsClosing(true);
+    setAnimState('leaving');
+    setTimeout(() => {
+      setAnimState('hidden');
+      onClose();
+    }, POPUP_CLOSE_MS);
+  };
 
   const handleButtonClick = () => {
     if (isClosing) return;
@@ -294,12 +298,11 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
         onButtonClick({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
       }
     }
-    // Trigger leave animation
     setAnimState('leaving');
     setTimeout(() => {
       setAnimState('hidden');
       onClose();
-    }, 150);
+    }, POPUP_CLOSE_MS);
   };
 
   if (animState === 'hidden') return null;
@@ -323,7 +326,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
     >
 {/* Backdrop - not scaled, covers full screen */}
       <div
-        className="absolute transition-opacity duration-300"
+        className="absolute transition-opacity duration-200"
         style={{
           top: '-10px',
           left: '-10px',
@@ -332,7 +335,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
           backgroundColor: 'rgba(0, 0, 0, 0.7)',
           opacity: isLeaving ? 0 : 1,
         }}
-        onClick={closeOnBackdropClick ? onClose : undefined}
+        onClick={closeOnBackdropClick ? dismissWithoutCollect : undefined}
       />
 
       {/* Scaled content wrapper */}
@@ -401,7 +404,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
           animation: isEntering 
             ? 'popupEnter 250ms ease-out forwards'
             : isLeaving 
-              ? 'popupLeave 150ms ease-in forwards'
+              ? `popupLeave ${POPUP_CLOSE_MS}ms ease-in forwards`
               : 'none',
           transform: animState === 'visible' ? 'scale(1)' : undefined,
           opacity: animState === 'visible' ? 1 : undefined,
@@ -477,17 +480,15 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
         >
           <div
             style={{
-              backgroundImage: `url(${assetPath('/assets/popups/popup_background.png?v=2')})`,
-              backgroundSize: '100% 100%',
-              backgroundPosition: 'center',
-              backgroundRepeat: 'no-repeat',
+              position: 'relative',
               filter: 'drop-shadow(0 16px 48px rgba(0,0,0,0.3))',
               padding: '150px 40px 60px 40px',
             }}
           >
+            <PopupVectorBackground />
             {/* Content - doubled sizes since container is scaled 0.5x */}
             <div
-              className="flex flex-col items-center"
+              className="relative z-[2] flex flex-col items-center"
             >
           {/* Title - "New Discovery" */}
           <h2 
@@ -626,7 +627,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
         {/* Close Button */}
         {showCloseButton && (
           <button
-            onClick={onClose}
+            onClick={dismissWithoutCollect}
             className="absolute top-[44px] right-3 w-8 h-8 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
             style={{ 
               backgroundColor: 'transparent',

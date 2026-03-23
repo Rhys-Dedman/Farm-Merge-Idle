@@ -60,7 +60,7 @@ interface PageHeaderProps {
   playerLevelFlashTrigger?: number;
   /** If true, hide the top bar background (e.g. for shed screen - keeps plant wallet + settings only) */
   hideTopBarBg?: boolean;
-  /** If true, hide the small FPS button (useful for Store screen). */
+  /** If true, hide the small FPS button (e.g. Store). Ignored for layout when 5+ active boosts fill the bar. */
   hideFps?: boolean;
   /** If true, hide/collapse the player level block so it doesn't reserve width. */
   collapsePlayerLevel?: boolean;
@@ -182,6 +182,9 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
     }
   }, [playerLevelFlashTrigger]);
 
+  /** Store / shed can force-hide; also hide when the bar is full of boosts (5 visible + busy). */
+  const hideFpsReader = hideFps || activeBoosts.length >= MAX_VISIBLE_BOOST_SLOTS;
+
   /** Up to 5 visible slots; 6+ stay in hidden timers until a slot frees (see hiddenBoostSlice). */
   const displayBoostCount = Math.min(activeBoosts.length, MAX_VISIBLE_BOOST_SLOTS);
   const visibleBoostSlice = activeBoosts.slice(0, displayBoostCount);
@@ -250,7 +253,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
           className="relative z-10 flex w-full min-w-0 min-h-[44px] items-center px-3 py-2"
           style={{
             /* Reserve space for absolute FPS + settings dock — do not shrink the cluster with max-width/clip (that hid boosts 3–5 and clipped the coin icon). */
-            paddingRight: hideFps ? RIGHT_DOCK_RESERVE_PX_NO_FPS : RIGHT_DOCK_RESERVE_PX_WITH_FPS,
+            paddingRight: hideFpsReader ? RIGHT_DOCK_RESERVE_PX_NO_FPS : RIGHT_DOCK_RESERVE_PX_WITH_FPS,
           }}
         >
           {centerTitle && (
@@ -490,7 +493,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
       </div>
 
       {/* FPS below boosts (z-20 < z-30); settings stays on top for taps */}
-      {!hideFps && (
+      {!hideFpsReader && (
         <div
           className="pointer-events-none absolute top-1/2 z-20 flex -translate-y-1/2 items-center"
           style={{ right: FPS_RIGHT_OFFSET_PX }}

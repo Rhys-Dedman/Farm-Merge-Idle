@@ -4,6 +4,7 @@
  */
 import React, { useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { PopupVectorBackground } from './PopupVectorBackground';
 
 const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_1.png'), assetPath('/assets/vfx/particle_leaf_2.png')];
 
@@ -24,6 +25,7 @@ interface LeafParticle {
 const POPUP_LEAF_COUNT = 40;
 const POPUP_LEAF_MIN_LIFETIME_MS = 250;
 const POPUP_LEAF_MAX_LIFETIME_MS = 1000;
+const POPUP_CLOSE_MS = 200;
 
 function createPopupLeaves(width: number, height: number): LeafParticle[] {
   const halfW = width / 2;
@@ -129,13 +131,7 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
       setAssetsReady(false);
       return;
     }
-    const bgImg = new Image();
-    bgImg.src = assetPath('/assets/popups/popup_background.png?v=2');
-    if (bgImg.complete) setAssetsReady(true);
-    else {
-      bgImg.onload = () => setAssetsReady(true);
-      bgImg.onerror = () => setAssetsReady(true);
-    }
+    setAssetsReady(true);
   }, [isVisible]);
 
   useEffect(() => {
@@ -209,16 +205,21 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
       setTimeout(() => {
         setAnimState('hidden');
         onClose();
-      }, 150);
+      }, POPUP_CLOSE_MS);
     }
   }, [isVisible, assetsReady, animState, onClose, burstWidth, burstHeight]);
 
-  const handleButtonClick = () => {
+  const dismissWithAnimation = () => {
+    if (animState === 'leaving') return;
     setAnimState('leaving');
     setTimeout(() => {
       setAnimState('hidden');
       onClose();
-    }, 150);
+    }, POPUP_CLOSE_MS);
+  };
+
+  const handleButtonClick = () => {
+    dismissWithAnimation();
   };
 
   if (animState === 'hidden') return null;
@@ -232,7 +233,7 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
       style={{ zIndex: 100, overflow: 'hidden' }}
     >
       <div
-        className="absolute transition-opacity duration-300"
+        className="absolute transition-opacity duration-200"
         style={{
           top: '-10px',
           left: '-10px',
@@ -241,7 +242,7 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
           backgroundColor: 'rgba(0, 0, 0, 0.7)',
           opacity: isLeaving ? 0 : 1,
         }}
-        onClick={blockBackdropClick ? undefined : onClose}
+        onClick={blockBackdropClick ? undefined : dismissWithAnimation}
       />
 
       <div
@@ -289,7 +290,7 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
           style={{
             width: '320px',
             zIndex: 102,
-            animation: isEntering ? 'ftuePopupEnter 250ms ease-out forwards' : isLeaving ? 'ftuePopupLeave 150ms ease-in forwards' : 'none',
+            animation: isEntering ? 'ftuePopupEnter 250ms ease-out forwards' : isLeaving ? `ftuePopupLeave ${POPUP_CLOSE_MS}ms ease-in forwards` : 'none',
             transform: animState === 'visible' ? 'scale(1)' : undefined,
             opacity: animState === 'visible' ? 1 : undefined,
           }}
@@ -345,15 +346,13 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
           >
             <div
               style={{
-                backgroundImage: `url(${assetPath('/assets/popups/popup_background.png?v=2')})`,
-                backgroundSize: '100% 100%',
-                backgroundPosition: 'center',
-                backgroundRepeat: 'no-repeat',
+                position: 'relative',
                 filter: 'drop-shadow(0 16px 48px rgba(0,0,0,0.3))',
                 padding: header ? '150px 40px 60px 40px' : '80px 40px 60px 40px',
               }}
             >
-              <div className="flex flex-col items-center">
+              <PopupVectorBackground />
+              <div className="relative z-[2] flex flex-col items-center">
                 {/* No "New Discovery" line – main title only, in plant-name style (dark brown, large, bold) */}
                 {title && (
                   <h3

@@ -401,7 +401,6 @@ function useAnimatedPanelHeight(isExpanded: boolean) {
 
 // Preload popup assets on module load to prevent flash of unstyled content
 const POPUP_ASSETS_TO_PRELOAD = [
-  assetPath('/assets/popups/popup_background.png?v=2'),
   assetPath('/assets/popups/popup_header.png'),
   assetPath('/assets/popups/popup_divider.png'),
   assetPath('/assets/vfx/particle_leaf_1.png'),
@@ -4993,16 +4992,10 @@ export default function App() {
                   setLimitedOfferPopup(null);
                 }}
                 closeOnButtonClick={false}
-                closeOnBackdropClick={false}
+                closeOnBackdropClick={limitedOfferPopup.activeBoostEndTime != null}
                 onCloseButtonClick={() => {
-                  if (limitedOfferPopup.activeBoostEndTime != null) {
-                    const now = Date.now();
-                    lastLimitedOfferClosedAtRef.current = now;
-                    lastLimitedOfferShownAtRef.current = now;
-                    setLimitedOfferPopup(null);
-                    return;
-                  }
-                  // Open upgrade panel, scroll to offer, flash yellow and keep yellow (same behaviour as unlock)
+                  if (limitedOfferPopup.activeBoostEndTime != null) return;
+                  // Open upgrade panel, scroll to offer, flash yellow (popup unmount + cooldown refs run in onClose after fade-out)
                   if (limitedOfferPopup.offerId) {
                     const offerId = limitedOfferPopup.offerId;
                     const offerConfig = getOfferById(offerId);
@@ -5024,10 +5017,6 @@ export default function App() {
                         setPendingOfferHighlightId(offerId);
                       }
                     }
-                    const now = Date.now();
-                    lastLimitedOfferClosedAtRef.current = now;
-                    lastLimitedOfferShownAtRef.current = now;
-                    setLimitedOfferPopup(null);
                     setTimeout(() => setPendingOfferHighlightId(null), 2500);
                   }
                 }}

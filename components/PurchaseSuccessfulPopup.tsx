@@ -5,6 +5,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
 import { Reward, REWARD_INLINE_LAYOUT_HEIGHT_PX, REWARD_INLINE_WIDTH_PX, REWARD_PILL_HEIGHT_PX } from './Reward';
+import { PopupVectorBackground } from './PopupVectorBackground';
 
 /** Inner header product art — 85% of prior 94px treatment. */
 const PURCHASE_SUCCESS_HEADER_ICON_PX = Math.round(94 * 0.85);
@@ -65,6 +66,7 @@ const POPUP_LEAF_MAX_LIFETIME_MS = 1000;
 // Popup dimensions for spawning leaves around the edge (slightly smaller than BG sprite so leaves start behind it)
 const POPUP_WIDTH = 260;
 const POPUP_HEIGHT = 320;
+const POPUP_CLOSE_MS = 200;
 
 function createPopupLeaves(): LeafParticle[] {
   return Array.from({ length: POPUP_LEAF_COUNT }, (_, i) => {
@@ -133,20 +135,12 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
   const leafStartTimeRef = useRef<number>(0);
   const leafPosRef = useRef<{ x: number; y: number; vx: number; vy: number; opacity: number; rotation: number; scale: number; started: boolean }[]>([]);
 
-  // Preload critical assets before showing popup
   useEffect(() => {
     if (!isVisible) {
       setAssetsReady(false);
       return;
     }
-    const bgImg = new Image();
-    bgImg.src = assetPath('/assets/popups/popup_background.png?v=2');
-    if (bgImg.complete) {
-      setAssetsReady(true);
-    } else {
-      bgImg.onload = () => setAssetsReady(true);
-      bgImg.onerror = () => setAssetsReady(true);
-    }
+    setAssetsReady(true);
   }, [isVisible]);
 
   // Separate effect for leaf animation - runs independently of popup state
@@ -234,7 +228,7 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
       setTimeout(() => {
         setAnimState('hidden');
         onClose();
-      }, 150);
+      }, POPUP_CLOSE_MS);
     }
   }, [isVisible, assetsReady, animState, onClose]);
 
@@ -251,7 +245,7 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
     setTimeout(() => {
       setAnimState('hidden');
       onClose();
-    }, 150);
+    }, POPUP_CLOSE_MS);
   };
 
   if (animState === 'hidden') return null;
@@ -271,7 +265,7 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
     >
 {/* Backdrop - not scaled, covers full screen */}
       <div
-        className="absolute transition-opacity duration-300"
+        className="absolute transition-opacity duration-200"
         style={{
           top: '-10px',
           left: '-10px',
@@ -349,7 +343,7 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
           animation: isEntering 
             ? 'popupEnter 250ms ease-out forwards'
             : isLeaving 
-              ? 'popupLeave 150ms ease-in forwards'
+              ? `popupLeave ${POPUP_CLOSE_MS}ms ease-in forwards`
               : 'none',
           transform: animState === 'visible' ? 'scale(1)' : undefined,
           opacity: animState === 'visible' ? 1 : undefined,
@@ -425,17 +419,15 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
         >
           <div
             style={{
-              backgroundImage: `url(${assetPath('/assets/popups/popup_background.png?v=2')})`,
-              backgroundSize: '100% 100%',
-              backgroundPosition: 'center',
-              backgroundRepeat: 'no-repeat',
+              position: 'relative',
               filter: 'drop-shadow(0 16px 48px rgba(0,0,0,0.3))',
               padding: '150px 40px 80px 40px',
             }}
           >
+            <PopupVectorBackground />
             {/* Content - doubled sizes since container is scaled 0.5x */}
             <div
-              className="flex flex-col items-center"
+              className="relative z-[2] flex flex-col items-center"
             >
           {/* Title — match Settings visual size: inner panel uses scale(0.5), so 2× rem vs Settings’ 2.25rem */}
           <h2

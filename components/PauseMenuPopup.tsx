@@ -1,7 +1,7 @@
 /**
  * Settings (Pause) Popup - Debugger menu. Title/divider/description match discovery popup style.
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, type CSSProperties } from 'react';
 import { assetPath } from '../utils/assetPath';
 import { getPerformanceMode, setPerformanceMode } from '../utils/performanceMode';
 
@@ -26,11 +26,63 @@ interface PauseMenuPopupProps {
   appScale?: number;
 }
 
-const titleColor = '#c2b280';
-const buttonBgColor = '#b8d458';
-const buttonBorderColor = '#8fb33a';
-const buttonTextColor = '#4a6b1e';
-const buttonPressedBg = '#9fc044';
+const POPUP_CLOSE_MS = 200;
+
+const SETTINGS_PALETTES = {
+  green: {
+    bg: '#b8d458',
+    border: '#8fb33a',
+    text: '#4a6b1e',
+    pressedBg: '#9fc044',
+    textShadow: '0 1px 0 rgba(255,255,255,0.3)',
+  },
+  blue: {
+    bg: '#89c8e1',
+    border: '#66a4c6',
+    text: '#4580a8',
+    pressedBg: '#7ab8d1',
+    textShadow: '0 1px 0 rgba(255,255,255,0.3)',
+  },
+  yellow: {
+    bg: '#ffd856',
+    border: '#f59d42',
+    text: '#e6803a',
+    pressedBg: '#f0c840',
+    textShadow: '0 1px 0 rgba(255,255,255,0.3)',
+  },
+  red: {
+    bg: '#a84848',
+    border: '#6b2a2a',
+    text: '#fce8e8',
+    pressedBg: '#8b4040',
+    textShadow: '0 1px 0 rgba(0,0,0,0.25)',
+  },
+} as const;
+
+function settingsCheatButtonStyle(
+  p: (typeof SETTINGS_PALETTES)['green'],
+  pressed: boolean
+): CSSProperties {
+  return {
+    height: '40px',
+    backgroundColor: pressed ? p.pressedBg : p.bg,
+    border: `3px solid ${p.border}`,
+    borderRadius: '16px',
+    boxShadow: pressed
+      ? 'inset 0 3px 6px rgba(0,0,0,0.15)'
+      : `0 6px 0 ${p.border}, 0 8px 16px rgba(0,0,0,0.15)`,
+    transform: pressed ? 'translateY(3px)' : 'translateY(0)',
+  };
+}
+
+function settingsCheatLabelStyle(p: (typeof SETTINGS_PALETTES)['green']): CSSProperties {
+  return {
+    color: p.text,
+    fontFamily: 'Inter, sans-serif',
+    textShadow: p.textShadow,
+    fontSize: '0.875rem',
+  };
+}
 
 export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   isVisible,
@@ -67,17 +119,27 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
       setTimeout(() => {
         setAnimState('hidden');
         onClose();
-      }, 150);
+      }, POPUP_CLOSE_MS);
     }
   }, [isVisible, animState, onClose]);
 
+  const dismissToClose = () => {
+    if (animState === 'leaving' || animState === 'hidden') return;
+    setAnimState('leaving');
+    setTimeout(() => {
+      setAnimState('hidden');
+      onClose();
+    }, POPUP_CLOSE_MS);
+  };
+
   const handleRewardedAdClick = () => {
+    if (animState === 'leaving') return;
     onRewardedAdClick();
     setAnimState('leaving');
     setTimeout(() => {
       setAnimState('hidden');
       onClose();
-    }, 150);
+    }, POPUP_CLOSE_MS);
   };
 
   if (animState === 'hidden') return null;
@@ -91,7 +153,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
       style={{ zIndex: 100, overflow: 'hidden' }}
     >
       <div
-        className="absolute transition-opacity duration-300"
+        className="absolute transition-opacity duration-200"
         style={{
           top: '-10px',
           left: '-10px',
@@ -100,7 +162,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
           backgroundColor: 'rgba(0, 0, 0, 0.7)',
           opacity: isLeaving ? 0 : 1,
         }}
-        onClick={closeOnBackdropClick ? onClose : undefined}
+        onClick={closeOnBackdropClick ? dismissToClose : undefined}
       />
       <div
         className="relative flex items-center justify-center"
@@ -117,7 +179,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
             animation: isEntering
               ? 'pausePopupEnter 250ms ease-out forwards'
               : isLeaving
-                ? 'pausePopupLeave 150ms ease-in forwards'
+                ? `pausePopupLeave ${POPUP_CLOSE_MS}ms ease-in forwards`
                 : 'none',
             transform: animState === 'visible' ? 'scale(1)' : undefined,
             opacity: animState === 'visible' ? 1 : undefined,
@@ -184,7 +246,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
               </p>
 
               <div className="flex flex-col items-center gap-3 w-full" style={{ maxWidth: '200px' }}>
-                {/* Performance Mode - green button, OFF by default, tap toggles ON */}
+                {/* 1. Performance Mode — green */}
                 <button
                   type="button"
                   onClick={() => {
@@ -195,116 +257,33 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                   className="relative flex items-center justify-center rounded-lg transition-all w-full"
                   style={{
                     height: '40px',
-                    backgroundColor: buttonBgColor,
-                    border: `3px solid ${buttonBorderColor}`,
+                    backgroundColor: SETTINGS_PALETTES.green.bg,
+                    border: `3px solid ${SETTINGS_PALETTES.green.border}`,
                     borderRadius: '16px',
-                    boxShadow: `0 6px 0 ${buttonBorderColor}, 0 8px 16px rgba(0,0,0,0.15)`,
+                    boxShadow: `0 6px 0 ${SETTINGS_PALETTES.green.border}, 0 8px 16px rgba(0,0,0,0.15)`,
                   }}
                 >
-                  <span
-                    className="font-bold tracking-tight"
-                    style={{
-                      color: buttonTextColor,
-                      fontFamily: 'Inter, sans-serif',
-                      textShadow: '0 1px 0 rgba(255,255,255,0.3)',
-                      fontSize: '0.875rem',
-                    }}
-                  >
+                  <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.green)}>
                     Performance Mode {performanceMode ? 'ON' : 'OFF'}
                   </span>
                 </button>
-                {onClearBoosts ? (
+                {/* 2. +1Mil Coins — green */}
+                {onAddMoney ? (
                   <button
                     type="button"
-                    onMouseDown={() => setClearBoostsPressed(true)}
-                    onMouseUp={() => setClearBoostsPressed(false)}
-                    onMouseLeave={() => setClearBoostsPressed(false)}
-                    onClick={() => onClearBoosts()}
+                    onMouseDown={() => setAddCoinsPressed(true)}
+                    onMouseUp={() => setAddCoinsPressed(false)}
+                    onMouseLeave={() => setAddCoinsPressed(false)}
+                    onClick={() => onAddMoney(1000000)}
                     className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                    style={{
-                      height: '40px',
-                      backgroundColor: clearBoostsPressed ? buttonPressedBg : buttonBgColor,
-                      border: `3px solid ${buttonBorderColor}`,
-                      borderRadius: '16px',
-                      boxShadow: clearBoostsPressed
-                        ? 'inset 0 3px 6px rgba(0,0,0,0.15)'
-                        : `0 6px 0 ${buttonBorderColor}, 0 8px 16px rgba(0,0,0,0.15)`,
-                      transform: clearBoostsPressed ? 'translateY(3px)' : 'translateY(0)',
-                    }}
+                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.green, addCoinsPressed)}
                   >
-                    <span
-                      className="font-bold tracking-tight"
-                      style={{
-                        color: buttonTextColor,
-                        fontFamily: 'Inter, sans-serif',
-                        textShadow: '0 1px 0 rgba(255,255,255,0.3)',
-                        fontSize: '0.875rem',
-                      }}
-                    >
-                      Clear Boosts
+                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.green)}>
+                      +1Mil Coins
                     </span>
                   </button>
                 ) : null}
-                <button
-                  type="button"
-                  onMouseDown={() => setRewardedPressed(true)}
-                  onMouseUp={() => setRewardedPressed(false)}
-                  onMouseLeave={() => setRewardedPressed(false)}
-                  onClick={handleRewardedAdClick}
-                  className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                  style={{
-                    height: '40px',
-                    backgroundColor: rewardedPressed ? buttonPressedBg : buttonBgColor,
-                    border: `3px solid ${buttonBorderColor}`,
-                    borderRadius: '16px',
-                    boxShadow: rewardedPressed
-                      ? 'inset 0 3px 6px rgba(0,0,0,0.15)'
-                      : `0 6px 0 ${buttonBorderColor}, 0 8px 16px rgba(0,0,0,0.15)`,
-                    transform: rewardedPressed ? 'translateY(3px)' : 'translateY(0)',
-                  }}
-                >
-                  <span
-                    className="font-bold tracking-tight"
-                    style={{
-                      color: buttonTextColor,
-                      fontFamily: 'Inter, sans-serif',
-                      textShadow: '0 1px 0 rgba(255,255,255,0.3)',
-                      fontSize: '0.875rem',
-                    }}
-                  >
-                    Rewarded Ad
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onMouseDown={() => setLevelUpPressed(true)}
-                  onMouseUp={() => setLevelUpPressed(false)}
-                  onMouseLeave={() => setLevelUpPressed(false)}
-                  onClick={onLevelUpClick}
-                  className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                  style={{
-                    height: '40px',
-                    backgroundColor: levelUpPressed ? buttonPressedBg : buttonBgColor,
-                    border: `3px solid ${buttonBorderColor}`,
-                    borderRadius: '16px',
-                    boxShadow: levelUpPressed
-                      ? 'inset 0 3px 6px rgba(0,0,0,0.15)'
-                      : `0 6px 0 ${buttonBorderColor}, 0 8px 16px rgba(0,0,0,0.15)`,
-                    transform: levelUpPressed ? 'translateY(3px)' : 'translateY(0)',
-                  }}
-                >
-                  <span
-                    className="font-bold tracking-tight"
-                    style={{
-                      color: buttonTextColor,
-                      fontFamily: 'Inter, sans-serif',
-                      textShadow: '0 1px 0 rgba(255,255,255,0.3)',
-                      fontSize: '0.875rem',
-                    }}
-                  >
-                    Level Up
-                  </span>
-                </button>
+                {/* 3. Unlock plant — blue */}
                 {onUnlockPlantClick ? (
                   <button
                     type="button"
@@ -318,64 +297,61 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                     }}
                     className="relative flex items-center justify-center rounded-lg transition-all w-full"
                     style={{
-                      height: '40px',
+                      ...settingsCheatButtonStyle(SETTINGS_PALETTES.blue, unlockPlantPressed && canUnlockPlant),
                       opacity: canUnlockPlant ? 1 : 0.45,
                       cursor: canUnlockPlant ? 'pointer' : 'not-allowed',
-                      backgroundColor: unlockPlantPressed && canUnlockPlant ? buttonPressedBg : buttonBgColor,
-                      border: `3px solid ${buttonBorderColor}`,
-                      borderRadius: '16px',
-                      boxShadow:
-                        unlockPlantPressed && canUnlockPlant
-                          ? 'inset 0 3px 6px rgba(0,0,0,0.15)'
-                          : `0 6px 0 ${buttonBorderColor}, 0 8px 16px rgba(0,0,0,0.15)`,
-                      transform: unlockPlantPressed && canUnlockPlant ? 'translateY(3px)' : 'translateY(0)',
                     }}
                   >
-                    <span
-                      className="font-bold tracking-tight"
-                      style={{
-                        color: buttonTextColor,
-                        fontFamily: 'Inter, sans-serif',
-                        textShadow: '0 1px 0 rgba(255,255,255,0.3)',
-                        fontSize: '0.875rem',
-                      }}
-                    >
+                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.blue)}>
                       Unlock plant
                     </span>
                   </button>
                 ) : null}
-                {onAddMoney ? (
+                {/* 4. Level Up — blue */}
+                <button
+                  type="button"
+                  onMouseDown={() => setLevelUpPressed(true)}
+                  onMouseUp={() => setLevelUpPressed(false)}
+                  onMouseLeave={() => setLevelUpPressed(false)}
+                  onClick={onLevelUpClick}
+                  className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                  style={settingsCheatButtonStyle(SETTINGS_PALETTES.blue, levelUpPressed)}
+                >
+                  <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.blue)}>
+                    Level Up
+                  </span>
+                </button>
+                {/* 5. Rewarded Ad — yellow */}
+                <button
+                  type="button"
+                  onMouseDown={() => setRewardedPressed(true)}
+                  onMouseUp={() => setRewardedPressed(false)}
+                  onMouseLeave={() => setRewardedPressed(false)}
+                  onClick={handleRewardedAdClick}
+                  className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                  style={settingsCheatButtonStyle(SETTINGS_PALETTES.yellow, rewardedPressed)}
+                >
+                  <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.yellow)}>
+                    Rewarded Ad
+                  </span>
+                </button>
+                {/* 6. Clear Boosts — red */}
+                {onClearBoosts ? (
                   <button
                     type="button"
-                    onMouseDown={() => setAddCoinsPressed(true)}
-                    onMouseUp={() => setAddCoinsPressed(false)}
-                    onMouseLeave={() => setAddCoinsPressed(false)}
-                    onClick={() => onAddMoney(1000000)}
+                    onMouseDown={() => setClearBoostsPressed(true)}
+                    onMouseUp={() => setClearBoostsPressed(false)}
+                    onMouseLeave={() => setClearBoostsPressed(false)}
+                    onClick={() => onClearBoosts()}
                     className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                    style={{
-                      height: '40px',
-                      backgroundColor: addCoinsPressed ? buttonPressedBg : buttonBgColor,
-                      border: `3px solid ${buttonBorderColor}`,
-                      borderRadius: '16px',
-                      boxShadow: addCoinsPressed
-                        ? 'inset 0 3px 6px rgba(0,0,0,0.15)'
-                        : `0 6px 0 ${buttonBorderColor}, 0 8px 16px rgba(0,0,0,0.15)`,
-                      transform: addCoinsPressed ? 'translateY(3px)' : 'translateY(0)',
-                    }}
-                    >
-                    <span
-                      className="font-bold tracking-tight"
-                      style={{
-                        color: buttonTextColor,
-                        fontFamily: 'Inter, sans-serif',
-                        textShadow: '0 1px 0 rgba(255,255,255,0.3)',
-                        fontSize: '0.875rem',
-                      }}
-                    >
-                      +1Mil Coins
+                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.red, clearBoostsPressed)}
+                  >
+                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.red)}>
+                      Clear Boosts
                     </span>
                   </button>
                 ) : null}
+                {/* 7. Reset Progress — red */}
                 {onResetProgress ? (
                   <button
                     type="button"
@@ -384,27 +360,9 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                     onMouseLeave={() => setResetPressed(false)}
                     onClick={() => onResetProgress()}
                     className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                    style={{
-                      height: '40px',
-                      marginTop: '4px',
-                      backgroundColor: resetPressed ? '#8b4040' : '#a84848',
-                      border: '3px solid #6b2a2a',
-                      borderRadius: '16px',
-                      boxShadow: resetPressed
-                        ? 'inset 0 3px 6px rgba(0,0,0,0.2)'
-                        : '0 6px 0 #6b2a2a, 0 8px 16px rgba(0,0,0,0.15)',
-                      transform: resetPressed ? 'translateY(3px)' : 'translateY(0)',
-                    }}
+                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.red, resetPressed)}
                   >
-                    <span
-                      className="font-bold tracking-tight"
-                      style={{
-                        color: '#fce8e8',
-                        fontFamily: 'Inter, sans-serif',
-                        textShadow: '0 1px 0 rgba(0,0,0,0.25)',
-                        fontSize: '0.875rem',
-                      }}
-                    >
+                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.red)}>
                       Reset Progress
                     </span>
                   </button>
@@ -414,7 +372,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={dismissToClose}
             className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
             style={{
               backgroundColor: 'transparent',
