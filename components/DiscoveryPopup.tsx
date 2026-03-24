@@ -6,6 +6,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
 import { PopupVectorBackground } from './PopupVectorBackground';
+import { formatCompactNumber } from '../utils/formatCompactNumber';
 import { PlantWithPot } from './PlantWithPot';
 import {
   REWARD_OFFER_LINE_TEXT_COLOR,
@@ -597,7 +598,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
                   lineHeight: 1,
                 }}
               >
-                {rewardAmount}
+                {formatCompactNumber(rewardAmount)}
               </span>
             </div>
           </div>

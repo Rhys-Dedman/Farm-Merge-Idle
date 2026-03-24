@@ -54,6 +54,8 @@ interface HexBoardProps {
   onDeletePlant?: (cellIdx: number, x: number, y: number) => void;
   /** FTUE_3: when true, only allow drag from cell 4 to cell 13 (merge). Any other drop returns plant to 4. */
   ftue3OnlyMerge4To13?: boolean;
+  /** Plant levels whose mastery was purchased; render mastered pot variant. */
+  masteredPlantLevels?: number[];
 }
 
 const HEX_SPRITE_EXT = '.png';
@@ -87,6 +89,7 @@ export const HexBoard: React.FC<HexBoardProps> = ({
   appScale = 1,
   onDeletePlant,
   ftue3OnlyMerge4To13 = false,
+  masteredPlantLevels = [],
 }) => {
   const liftStartRef = useRef<number>(0);
   const flyStartRef = useRef<number>(0);
@@ -804,6 +807,7 @@ export const HexBoard: React.FC<HexBoardProps> = ({
                         {/* 70% on outer root — same as pre-pot `<img className="w-[70%] h-[70%]">` vs hex inner cell (w-full h-full) */}
                         <PlantWithPot
                           level={level}
+                          mastered={masteredPlantLevels.includes(level)}
                           className="h-[70%] w-[70%] drop-shadow-[0_4px_8px_rgba(0,0,0,0.4)]"
                           wrapperClassName="h-full w-full"
                           potClassName={spawnBounceClass}
@@ -860,6 +864,7 @@ export const HexBoard: React.FC<HexBoardProps> = ({
                       >
                         <PlantWithPot
                           level={item.level}
+                          mastered={masteredPlantLevels.includes(item.level)}
                           className="h-[70%] w-[70%] drop-shadow-[0_4px_8px_rgba(0,0,0,0.4)]"
                           wrapperClassName="h-full w-full"
                           alt={`Plant ${item.level}`}

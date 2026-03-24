@@ -11,6 +11,34 @@ import type {
 } from '../components/UpgradeList';
 import type { ActiveBoostData } from '../components/ActiveBoostIndicator';
 import { STORE_STARTER_PACK_COUNTDOWN_END_MS_KEY } from '../offers';
+import { normalizeBarnShelvesUnlocked } from '../constants/barnShelves';
+import { PLANT_MASTERY_ORDERS_PER_SEGMENT } from '../constants/plantMastery';
+
+function normalizePlantMasteryUnlockPending(raw: unknown): number[] {
+  if (!Array.isArray(raw)) return [];
+  const set = new Set<number>();
+  for (const x of raw) {
+    const n = typeof x === 'number' ? x : Number.parseInt(String(x), 10);
+    if (Number.isFinite(n)) {
+      const k = Math.floor(n);
+      if (k >= 1 && k <= 24) set.add(k);
+    }
+  }
+  return [...set].sort((a, b) => a - b);
+}
+
+function normalizePlantMasteryUnlockedLevels(raw: unknown): number[] {
+  if (!Array.isArray(raw)) return [];
+  const set = new Set<number>();
+  for (const x of raw) {
+    const n = typeof x === 'number' ? x : Number.parseInt(String(x), 10);
+    if (Number.isFinite(n)) {
+      const k = Math.floor(n);
+      if (k >= 1 && k <= 24) set.add(k);
+    }
+  }
+  return [...set].sort((a, b) => a - b);
+}
 
 export const GAME_SAVE_STORAGE_KEY = 'pocket-garden-save-v1';
 
@@ -33,6 +61,16 @@ export interface GameSaveV1 {
   highestPlantEver: number;
   playerLevel: number;
   playerLevelProgress: number;
+  /** Lifetime count of completed goals/orders (legacy / analytics). */
+  plantMasteryGoalsCompleted: number;
+  /** Orders completed toward current plant mastery segment (0..ordersPerSegment-1 while filling; segment max when terminal). */
+  plantMasteryOrdersProgress: number;
+  /** Next plant level (1–24) shown beside the mastery bar; segment credit applies to this plant when the bar fills. */
+  plantMasteryTargetLevel: number;
+  /** Plant levels (1–24) with mastery unlock available from the bar (not yet purchased). */
+  plantMasteryUnlockPending: number[];
+  /** Plant levels (1–24) where mastery has been purchased. */
+  plantMasteryUnlockedLevels: number[];
   activeTab: TabType;
   activeScreen: ScreenType;
   isExpanded: boolean;
@@ -78,6 +116,8 @@ export interface GameSaveV1 {
   activeBoosts: ActiveBoostData[];
   pendingUnlockUpgradeId: string | null;
   levelUpPopupQueue: number[];
+  /** Shed shelves unlocked (6); missing on old saves → treated as all true in loader. */
+  barnShelvesUnlocked: boolean[];
 }
 
 export function loadGameSave(): GameSaveV1 | null {
@@ -95,6 +135,29 @@ export function loadGameSave(): GameSaveV1 | null {
       data.money = 0;
     }
     if (!Array.isArray(data.activeBoosts)) data.activeBoosts = [];
+    data.barnShelvesUnlocked = normalizeBarnShelvesUnlocked(data.barnShelvesUnlocked);
+    if (typeof data.plantMasteryGoalsCompleted !== 'number' || !Number.isFinite(data.plantMasteryGoalsCompleted)) {
+      data.plantMasteryGoalsCompleted = 0;
+    }
+    data.plantMasteryGoalsCompleted = Math.max(0, Math.floor(data.plantMasteryGoalsCompleted));
+    if (typeof data.plantMasteryOrdersProgress !== 'number' || !Number.isFinite(data.plantMasteryOrdersProgress)) {
+      data.plantMasteryOrdersProgress = 0;
+    }
+    data.plantMasteryOrdersProgress = Math.max(0, Math.floor(data.plantMasteryOrdersProgress));
+    if (typeof data.plantMasteryTargetLevel !== 'number' || !Number.isFinite(data.plantMasteryTargetLevel)) {
+      data.plantMasteryTargetLevel = 1;
+    }
+    data.plantMasteryTargetLevel = Math.max(1, Math.min(24, Math.floor(data.plantMasteryTargetLevel)));
+    data.plantMasteryUnlockPending = normalizePlantMasteryUnlockPending(data.plantMasteryUnlockPending);
+    data.plantMasteryUnlockedLevels = normalizePlantMasteryUnlockedLevels(
+      (data as GameSaveV1 & { plantMasteryUnlockedLevels?: unknown }).plantMasteryUnlockedLevels
+    );
+    const seg = PLANT_MASTERY_ORDERS_PER_SEGMENT;
+    if (data.plantMasteryTargetLevel < 24) {
+      data.plantMasteryOrdersProgress = Math.min(data.plantMasteryOrdersProgress, seg - 1);
+    } else {
+      data.plantMasteryOrdersProgress = Math.min(data.plantMasteryOrdersProgress, seg);
+    }
     return data;
   } catch {
     return null;

@@ -6,6 +6,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
 import { PopupVectorBackground } from './PopupVectorBackground';
 import { PlantWithPot } from './PlantWithPot';
+import { formatCompactNumber } from '../utils/formatCompactNumber';
 
 const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_1.png'), assetPath('/assets/vfx/particle_leaf_2.png')];
 
@@ -30,7 +31,15 @@ interface PlantInfoPopupProps {
   plantName: string;
   plantDescription: string;
   isUnlocked: boolean;
+  masteryPotUnlocked?: boolean;
   appScale?: number;
+  /** When set, show purchase row (shed mastery unlock). */
+  masteryUnlock?: {
+    coinCost: number;
+    canAfford: boolean;
+    isUnlocked?: boolean;
+    onPurchase: () => void;
+  };
 }
 
 const POPUP_LEAF_COUNT = 30;
@@ -91,10 +100,13 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
   plantName,
   plantDescription,
   isUnlocked,
+  masteryPotUnlocked = false,
   appScale = 1,
+  masteryUnlock,
 }) => {
   const [animState, setAnimState] = useState<'hidden' | 'entering' | 'visible' | 'leaving'>('hidden');
   const [assetsReady, setAssetsReady] = useState(false);
+  const [masteryButtonPressed, setMasteryButtonPressed] = useState(false);
   const [leaves, setLeaves] = useState<LeafParticle[]>([]);
   const [leafPositions, setLeafPositions] = useState<{ x: number; y: number; opacity: number; rotation: number; scale: number }[]>([]);
   const [imgFailed, setImgFailed] = useState<Record<number, boolean>>({});
@@ -360,7 +372,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
               filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
             }}
           >
-            <PlantWithPot level={isUnlocked ? plantLevel : 0} wrapperClassName="h-full w-full" />
+            <PlantWithPot level={isUnlocked ? plantLevel : 0} mastered={masteryPotUnlocked} wrapperClassName="h-full w-full" />
           </div>
         </div>
 
@@ -427,6 +439,74 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
 
               {/* Spacer */}
               <div className="min-h-[24px]" />
+
+              {masteryUnlock && isUnlocked && (
+                <div className="w-full flex justify-center px-6" style={{ marginTop: '8px', marginBottom: '8px' }}>
+                  {(() => {
+                    const isMasteryUnlocked = masteryUnlock.isUnlocked === true;
+                    const canAfford = masteryUnlock.canAfford;
+                    const buttonBgColor = isMasteryUnlocked ? '#e3c28c' : (canAfford ? '#cae060' : '#e3c28c');
+                    const buttonPressedBg = isMasteryUnlocked ? '#d4b27d' : (canAfford ? '#61882b' : '#d4b27d');
+                    const buttonBorderColor = isMasteryUnlocked ? '#c7a36e' : (canAfford ? '#9db546' : '#c7a36e');
+                    const buttonTextColor = isMasteryUnlocked ? '#a68e64' : (canAfford ? '#587e26' : '#a68e64');
+                    return (
+                  <button
+                    type="button"
+                    onMouseDown={() => canAfford && !isMasteryUnlocked && setMasteryButtonPressed(true)}
+                    onMouseUp={() => setMasteryButtonPressed(false)}
+                    onMouseLeave={() => setMasteryButtonPressed(false)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMasteryButtonPressed(false);
+                      if (!canAfford || isMasteryUnlocked) return;
+                      masteryUnlock.onPurchase();
+                    }}
+                    className="relative flex select-none items-center justify-center gap-3 rounded-xl font-bold tracking-tight transition-all"
+                    style={{
+                      minWidth: 460,
+                      minHeight: 88,
+                      paddingLeft: 36,
+                      paddingRight: 36,
+                      paddingTop: 14,
+                      paddingBottom: 14,
+                      boxSizing: 'border-box',
+                      backgroundColor: masteryButtonPressed ? buttonPressedBg : buttonBgColor,
+                      border: `4px solid ${buttonBorderColor}`,
+                      borderRadius: '24px',
+                      boxShadow: masteryButtonPressed
+                        ? 'inset 0 4px 8px rgba(0,0,0,0.15)'
+                        : `0 8px 0 ${buttonBorderColor}, 0 12px 24px rgba(0,0,0,0.15)`,
+                      transform: masteryButtonPressed ? 'translateY(4px)' : 'translateY(0)',
+                      color: buttonTextColor,
+                      fontFamily: 'Inter, sans-serif',
+                      fontSize: '2rem',
+                      lineHeight: 1.1,
+                      textShadow: '0 2px 0 rgba(255,255,255,0.3)',
+                      cursor: canAfford && !isMasteryUnlocked ? 'pointer' : 'default',
+                      opacity: 1,
+                      WebkitTapHighlightColor: 'transparent',
+                    }}
+                  >
+                    {isMasteryUnlocked ? (
+                      <span>Mastery Unlocked</span>
+                    ) : (
+                      <>
+                        <span>Unlock Mastery</span>
+                        <img
+                          src={assetPath('/assets/icons/icon_coin.png')}
+                          alt=""
+                          className="object-contain shrink-0"
+                          style={{ width: 40, height: 40 }}
+                          draggable={false}
+                        />
+                        <span>{formatCompactNumber(masteryUnlock.coinCost)}</span>
+                      </>
+                    )}
+                  </button>
+                    );
+                  })()}
+                </div>
+              )}
             </div>
           </div>
         </div>

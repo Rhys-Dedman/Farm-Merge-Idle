@@ -20,6 +20,8 @@ interface PauseMenuPopupProps {
   onResetProgress?: () => void;
   /** Remove all active boosts (bar + timers + gameplay effects). */
   onClearBoosts?: () => void;
+  /** Lock every shed shelf again (no collection unlocks). */
+  onClearShed?: () => void;
   /** When false, Unlock Plant button is disabled (all plants unlocked) */
   canUnlockPlant?: boolean;
   closeOnBackdropClick?: boolean;
@@ -93,6 +95,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   onAddMoney,
   onResetProgress,
   onClearBoosts,
+  onClearShed,
   canUnlockPlant = true,
   closeOnBackdropClick = true,
   appScale = 1,
@@ -104,6 +107,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   const [addCoinsPressed, setAddCoinsPressed] = useState(false);
   const [resetPressed, setResetPressed] = useState(false);
   const [clearBoostsPressed, setClearBoostsPressed] = useState(false);
+  const [clearShedPressed, setClearShedPressed] = useState(false);
   const [performanceMode, setPerformanceModeLocal] = useState(false);
 
   useEffect(() => {
@@ -351,7 +355,23 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                     </span>
                   </button>
                 ) : null}
-                {/* 7. Reset Progress — red */}
+                {/* 7. Clear Shed — red */}
+                {onClearShed ? (
+                  <button
+                    type="button"
+                    onMouseDown={() => setClearShedPressed(true)}
+                    onMouseUp={() => setClearShedPressed(false)}
+                    onMouseLeave={() => setClearShedPressed(false)}
+                    onClick={() => onClearShed()}
+                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.red, clearShedPressed)}
+                  >
+                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.red)}>
+                      Clear Shed
+                    </span>
+                  </button>
+                ) : null}
+                {/* 8. Reset Progress — red */}
                 {onResetProgress ? (
                   <button
                     type="button"

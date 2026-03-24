@@ -4,6 +4,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
 import { PopupVectorBackground } from './PopupVectorBackground';
+import { formatCompactNumber } from '../utils/formatCompactNumber';
 import {
   REWARD_OFFER_LINE_TEXT_COLOR,
   REWARD_PILL_FILL_COLOR,
@@ -89,12 +90,6 @@ export interface OfflineEarningsPopupProps {
   onCollectClick: (startPoint: { x: number; y: number }) => void;
   appScale?: number;
 }
-
-const formatCoins = (amount: number): string => {
-  if (amount >= 1000000) return (amount / 1000000).toFixed(1) + 'M';
-  if (amount >= 1000) return (amount / 1000).toFixed(1) + 'K';
-  return Math.floor(amount).toString();
-};
 
 export const OfflineEarningsPopup: React.FC<OfflineEarningsPopupProps> = ({
   isVisible,
@@ -453,7 +448,7 @@ export const OfflineEarningsPopup: React.FC<OfflineEarningsPopupProps> = ({
                         lineHeight: 1,
                       }}
                     >
-                      {formatCoins(rewardAmount)}
+                      {formatCompactNumber(rewardAmount)}
                     </span>
                   </div>
                 </div>

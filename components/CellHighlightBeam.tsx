@@ -17,11 +17,19 @@ interface CellHighlightBeamProps {
   cellHeight: number;
   startTime: number;
   onComplete: () => void;
+  /** When false, only rising spiral sparkles (no hex highlight sprite). */
+  showHexSprite?: boolean;
+  /** Spiral sparkle count (default 10). Shed unlock uses 20. */
+  sparkleCount?: number;
+  /** Multiplier for sparkle dot diameter (default 1). Shed uses 2. */
+  sparkleSizeScale?: number;
+  /** Multiplier for upward spiral travel height (default 1). */
+  sparkleHeightScale?: number;
 }
 
 const VFX_DURATION_MS = 1200;
 const FADE_IN_DURATION_MS = 80;
-const SPARKLE_COUNT = 10;
+const DEFAULT_SPARKLE_COUNT = 10;
 const SPIRAL_RADIUS = 0.336;
 const SPARKLE_HEIGHT_MULTIPLIER = 1.2;
 
@@ -57,15 +65,20 @@ export const CellHighlightBeam: React.FC<CellHighlightBeamProps> = ({
   cellHeight,
   startTime,
   onComplete,
+  showHexSprite = true,
+  sparkleCount = DEFAULT_SPARKLE_COUNT,
+  sparkleSizeScale = 1,
+  sparkleHeightScale = 1,
 }) => {
   const [progress, setProgress] = useState(0);
   const [spriteOpacity, setSpriteOpacity] = useState(0);
 
   const sparkles = useMemo<Sparkle[]>(() => {
-    return Array.from({ length: SPARKLE_COUNT }, (_, i) => ({
+    const n = Math.max(1, sparkleCount);
+    return Array.from({ length: n }, (_, i) => ({
       id: i,
-      delay: (i / SPARKLE_COUNT) * 0.5 + Math.random() * 0.1,
-      size: 2 + Math.random() * 2,
+      delay: (i / n) * 0.5 + Math.random() * 0.1,
+      size: (2 + Math.random() * 2) * sparkleSizeScale,
       fadeSpeed: 0.5 + Math.random() * 0.3,
       fadeStartProgress: 0.25 + Math.random() * 0.5,
       lifetimeMultiplier: 0.5 + Math.random() * 0.5,
@@ -73,11 +86,11 @@ export const CellHighlightBeam: React.FC<CellHighlightBeamProps> = ({
       noiseOffsetX: Math.random() * 1000,
       noiseOffsetY: Math.random() * 1000,
       noiseSpeed: 0.3 + Math.random() * 0.4,
-      startAngle: (i / SPARKLE_COUNT) * Math.PI * 2 + Math.random() * 0.5,
+      startAngle: (i / n) * Math.PI * 2 + Math.random() * 0.5,
       heightSpeed: 0.4 + Math.random() * 1.0,
       rotations: 0.5 + Math.random() * 0.5,
     }));
-  }, []);
+  }, [sparkleCount, sparkleSizeScale]);
 
   const frameCountRef = useRef(0);
   useEffect(() => {
@@ -111,7 +124,7 @@ export const CellHighlightBeam: React.FC<CellHighlightBeamProps> = ({
     return () => cancelAnimationFrame(rafId);
   }, [startTime, onComplete]);
 
-  const sparkleMaxHeight = cellHeight * SPARKLE_HEIGHT_MULTIPLIER;
+  const sparkleMaxHeight = cellHeight * SPARKLE_HEIGHT_MULTIPLIER * sparkleHeightScale;
   
   // Spiral radius in pixels
   const spiralRadiusPx = cellWidth * SPIRAL_RADIUS;
@@ -130,19 +143,20 @@ export const CellHighlightBeam: React.FC<CellHighlightBeamProps> = ({
         zIndex: 60,
       }}
     >
-      {/* Hexcell highlight sprite with additive blending - same size as the cell */}
-      <img
-        src={HEXCELL_HIGHLIGHT}
-        alt=""
-        className="w-full h-full object-contain"
-        style={{
-          position: 'absolute',
-          inset: 0,
-          opacity: spriteOpacity,
-          mixBlendMode: 'screen',
-          pointerEvents: 'none',
-        }}
-      />
+      {showHexSprite ? (
+        <img
+          src={HEXCELL_HIGHLIGHT}
+          alt=""
+          className="w-full h-full object-contain"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            opacity: spriteOpacity,
+            mixBlendMode: 'screen',
+            pointerEvents: 'none',
+          }}
+        />
+      ) : null}
       
       {/* Rising sparkles in spiral pattern - staggered so each is at different stage */}
       {sparkles.map((sparkle) => {
