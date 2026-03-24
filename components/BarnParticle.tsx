@@ -7,8 +7,8 @@ const MOVE_DURATION_MS = 475;
 const MAX_TRAIL_POINTS = 9;
 const TRAIL_FADE_AFTER_HIT_MS = 200;
 const PARTICLE_SIZE = 16;
-const PARTICLE_COLOR = '#b8d458';
-const TRAIL_COLOR = '#8fb33a';
+const PARTICLE_COLOR = '#e8f6be';
+const TRAIL_COLOR = '#d5ec95';
 
 interface Point {
   x: number;

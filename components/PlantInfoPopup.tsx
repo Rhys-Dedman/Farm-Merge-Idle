@@ -488,10 +488,10 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
                     }}
                   >
                     {isMasteryUnlocked ? (
-                      <span>Mastery Unlocked</span>
+                      <span>Golden Pot Aquired</span>
                     ) : (
                       <>
-                        <span>Unlock Mastery</span>
+                        <span>Golden Pot</span>
                         <img
                           src={assetPath('/assets/icons/icon_coin.png')}
                           alt=""

@@ -1,5 +1,5 @@
 /** Completed customer orders needed to fill one plant mastery segment. */
-export const PLANT_MASTERY_ORDERS_PER_SEGMENT = 5;
+export const PLANT_MASTERY_ORDERS_PER_SEGMENT = 50;
 /** Coins to purchase mastery for level 1 plant. */
 export const PLANT_MASTERY_UNLOCK_COST_BASE = 5000;
 /** Additive glow pulse duration (synced across plants). */

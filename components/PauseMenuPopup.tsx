@@ -14,6 +14,8 @@ interface PauseMenuPopupProps {
   onLevelUpClick: () => void;
   /** Dev/cheat: unlock next plant in background; pause stays open. Discovery shows on pause close (latest only). */
   onUnlockPlantClick?: () => void;
+  /** Dev/cheat: complete current golden pot progress segment instantly. */
+  onGoldenPotClick?: () => void;
   /** Dev/cheat: add coins (e.g. +100k). Does not close pause menu. */
   onAddMoney?: (amount: number) => void;
   /** Clear save and reload (fresh FTUE). */
@@ -29,6 +31,7 @@ interface PauseMenuPopupProps {
 }
 
 const POPUP_CLOSE_MS = 200;
+const SETTINGS_BUTTON_HEIGHT_PX = 28; // 30% shorter than previous 40px
 
 const SETTINGS_PALETTES = {
   green: {
@@ -66,14 +69,14 @@ function settingsCheatButtonStyle(
   pressed: boolean
 ): CSSProperties {
   return {
-    height: '40px',
+    height: `${SETTINGS_BUTTON_HEIGHT_PX}px`,
     backgroundColor: pressed ? p.pressedBg : p.bg,
     border: `3px solid ${p.border}`,
-    borderRadius: '16px',
+    borderRadius: '12px',
     boxShadow: pressed
-      ? 'inset 0 3px 6px rgba(0,0,0,0.15)'
-      : `0 6px 0 ${p.border}, 0 8px 16px rgba(0,0,0,0.15)`,
-    transform: pressed ? 'translateY(3px)' : 'translateY(0)',
+      ? 'inset 0 2px 4px rgba(0,0,0,0.15)'
+      : `0 4px 0 ${p.border}, 0 6px 12px rgba(0,0,0,0.15)`,
+    transform: pressed ? 'translateY(2px)' : 'translateY(0)',
   };
 }
 
@@ -92,6 +95,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   onRewardedAdClick,
   onLevelUpClick,
   onUnlockPlantClick,
+  onGoldenPotClick,
   onAddMoney,
   onResetProgress,
   onClearBoosts,
@@ -104,6 +108,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   const [rewardedPressed, setRewardedPressed] = useState(false);
   const [levelUpPressed, setLevelUpPressed] = useState(false);
   const [unlockPlantPressed, setUnlockPlantPressed] = useState(false);
+  const [goldenPotPressed, setGoldenPotPressed] = useState(false);
   const [addCoinsPressed, setAddCoinsPressed] = useState(false);
   const [resetPressed, setResetPressed] = useState(false);
   const [clearBoostsPressed, setClearBoostsPressed] = useState(false);
@@ -260,11 +265,11 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                   }}
                   className="relative flex items-center justify-center rounded-lg transition-all w-full"
                   style={{
-                    height: '40px',
+                    height: `${SETTINGS_BUTTON_HEIGHT_PX}px`,
                     backgroundColor: SETTINGS_PALETTES.green.bg,
                     border: `3px solid ${SETTINGS_PALETTES.green.border}`,
-                    borderRadius: '16px',
-                    boxShadow: `0 6px 0 ${SETTINGS_PALETTES.green.border}, 0 8px 16px rgba(0,0,0,0.15)`,
+                    borderRadius: '12px',
+                    boxShadow: `0 4px 0 ${SETTINGS_PALETTES.green.border}, 0 6px 12px rgba(0,0,0,0.15)`,
                   }}
                 >
                   <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.green)}>
@@ -311,7 +316,23 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                     </span>
                   </button>
                 ) : null}
-                {/* 4. Level Up — blue */}
+                {/* 4. Golden Pot — blue */}
+                {onGoldenPotClick ? (
+                  <button
+                    type="button"
+                    onMouseDown={() => setGoldenPotPressed(true)}
+                    onMouseUp={() => setGoldenPotPressed(false)}
+                    onMouseLeave={() => setGoldenPotPressed(false)}
+                    onClick={() => onGoldenPotClick()}
+                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.blue, goldenPotPressed)}
+                  >
+                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.blue)}>
+                      Golden Pot
+                    </span>
+                  </button>
+                ) : null}
+                {/* 5. Level Up — blue */}
                 <button
                   type="button"
                   onMouseDown={() => setLevelUpPressed(true)}
@@ -325,7 +346,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                     Level Up
                   </span>
                 </button>
-                {/* 5. Rewarded Ad — yellow */}
+                {/* 6. Rewarded Ad — yellow */}
                 <button
                   type="button"
                   onMouseDown={() => setRewardedPressed(true)}
@@ -339,7 +360,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                     Rewarded Ad
                   </span>
                 </button>
-                {/* 6. Clear Boosts — red */}
+                {/* 7. Clear Boosts — red */}
                 {onClearBoosts ? (
                   <button
                     type="button"
@@ -355,7 +376,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                     </span>
                   </button>
                 ) : null}
-                {/* 7. Clear Shed — red */}
+                {/* 8. Clear Shed — red */}
                 {onClearShed ? (
                   <button
                     type="button"
@@ -371,7 +392,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                     </span>
                   </button>
                 ) : null}
-                {/* 8. Reset Progress — red */}
+                {/* 9. Reset Progress — red */}
                 {onResetProgress ? (
                   <button
                     type="button"

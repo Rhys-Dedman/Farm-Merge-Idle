@@ -29,6 +29,7 @@ import { BoostParticle, BoostParticleData } from './components/BoostParticle';
 import { ActiveBoostData, ACTIVE_BOOST_INDICATOR_SIZE_PX } from './components/ActiveBoostIndicator';
 import { UpgradeTabsRef } from './components/UpgradeTabs';
 import { ButtonLeafBurst } from './components/ButtonLeafBurst';
+import { BarnParticle, BarnParticleData } from './components/BarnParticle';
 import { LoadingScreen } from './components/LoadingScreen';
 import { FtuePopup } from './components/FtuePopup';
 import { Ftue2Overlay } from './components/Ftue2Overlay';
@@ -593,6 +594,8 @@ export default function App() {
   const [rewardedOffers, setRewardedOffers] = useState<RewardedOffer[]>([]);
   // Discovery reward particles: fly from discovery popup reward icon to wallet.
   const [activeDiscoveryCoinParticles, setActiveDiscoveryCoinParticles] = useState<GoalCoinParticleData[]>([]);
+  // Discovery CTA particle: fly from popup button to Collection nav button.
+  const [activeBarnParticles, setActiveBarnParticles] = useState<BarnParticleData[]>([]);
   // Active rewarded-ad boosts (max 5); each has endTime and duration for radial countdown
   const [activeBoosts, setActiveBoostsState] = useState<ActiveBoostData[]>([]);
   /** Keep in sync with `activeBoosts` on every commit *inside* the setter so rAF / timers see boosts immediately (before the next render). */
@@ -774,6 +777,7 @@ export default function App() {
   });
   const [masteryPurchaseRevealLevels, setMasteryPurchaseRevealLevels] = useState<number[]>([]);
   const masteryPurchaseRevealTimeoutRef = useRef<number | null>(null);
+  const skipNextBarnPendingBounceRef = useRef(false);
 
   /** One increment per collected goal — same moment as player level XP (not on plant-panel impact; avoids double-count). */
   const applyGoalCollectedProgress = useCallback(() => {
@@ -1545,7 +1549,8 @@ export default function App() {
       // Account for barn scale - content is scaled so actual visual height is smaller
       const shelvesBottom = (shelves.offsetTop + shelves.offsetHeight) * barnScale;
       const viewportHeight = el.clientHeight;
-      return Math.max(0, shelvesBottom - viewportHeight + 20);
+      // Keep less trailing space below the last shelf; then add back 25px bottom spacing.
+      return Math.max(0, shelvesBottom - viewportHeight - 55);
     };
     
     const updateScroll = (newValue: number) => {
@@ -1655,24 +1660,16 @@ export default function App() {
   useEffect(() => {
     if (activeScreen !== 'BARN') return;
     if (plantMastery.unlockPending.length === 0) return;
+    if (skipNextBarnPendingBounceRef.current) {
+      skipNextBarnPendingBounceRef.current = false;
+      return;
+    }
 
     if (barnEnterFocusTimeoutRef.current) window.clearTimeout(barnEnterFocusTimeoutRef.current);
     barnEnterFocusTimeoutRef.current = window.setTimeout(() => {
       const targetLevel = plantMastery.unlockPending[0];
       const el = barnScrollRef.current;
       if (!el) return;
-
-      const targetPlant = el.querySelector(`[data-barn-plant-level="${targetLevel}"]`) as HTMLElement | null;
-      const shelves = el.querySelector('[data-barn-shelves]') as HTMLElement | null;
-      if (!targetPlant || !shelves) return;
-
-      const shelvesBottom = (shelves.offsetTop + shelves.offsetHeight) * barnScale;
-      const maxScroll = Math.max(0, shelvesBottom - el.clientHeight + 20);
-      const targetY = (targetPlant.offsetTop + targetPlant.offsetHeight * 0.5) * barnScale;
-      const desiredScroll = Math.max(0, Math.min(targetY - el.clientHeight * 0.45, maxScroll));
-
-      barnScrollYRef.current = desiredScroll;
-      setBarnScrollY(desiredScroll);
       setSeenMasteryUnlockLevels((prev) => (prev.includes(targetLevel) ? prev : [...prev, targetLevel]));
 
       // Staggered scale bounce only (no beam/sparkle VFX).
@@ -4602,7 +4599,7 @@ export default function App() {
                     <div className="relative" style={{ width: '300px' }}>
                       <img
                         src={assetPath('/assets/topui/ui_plantmastery.png')}
-                        alt="Plant Mastery"
+                      alt="Plant Collection"
                         style={{
                           width: '300px',
                           height: 'auto',
@@ -4622,7 +4619,7 @@ export default function App() {
                             lineHeight: 1,
                           }}
                         >
-                          Plant Mastery
+                          Plant Collection
                         </h2>
                         <div className="w-full flex items-center justify-center" style={{ marginTop: 4, marginBottom: 6 }}>
                           <img
@@ -4643,7 +4640,7 @@ export default function App() {
                             marginBottom: 8,
                           }}
                         >
-                          Complete orders to unlock plant mastery!
+                          Complete orders to unlock golden pots for your plants!
                         </p>
                         {/* Plant mastery: outer bar flat L/R; green fill has curved right “head” */}
                         <div className="flex items-center justify-center gap-0 w-full" style={{ marginTop: 0, marginLeft: -2 }}>
@@ -4707,22 +4704,16 @@ export default function App() {
                               </div>
                             </div>
                           </div>
-                          <button
-                            type="button"
-                            className="w-[44px] h-[44px] shrink-0 relative z-20 cursor-pointer"
+                          <div
+                            className="w-[44px] h-[44px] shrink-0 relative z-20"
                             style={{ marginLeft: -13, marginTop: -3 }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              completeMasterySegmentCheat();
-                            }}
-                            aria-label="Cheat: complete mastery segment"
                           >
                             <PlantWithPot
                               level={plantMastery.targetLevel}
                               mastered={plantMastery.unlockedLevels.includes(plantMastery.targetLevel)}
                               wrapperClassName="h-full w-full"
                             />
-                          </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -4764,6 +4755,9 @@ export default function App() {
                               const isPlantDiscovered = plantLevel <= highestPlantEver;
                               const showMasteryUnlock =
                                 isPlantDiscovered && plantMastery.unlockPending.includes(plantLevel);
+                              const isPendingRevealBounce = barnAttentionBounceLevels.includes(plantLevel);
+                              const isMasteryPurchaseBounce = masteryPurchaseRevealLevels.includes(plantLevel);
+                              const isAnyShelfBounceActive = isPendingRevealBounce || isMasteryPurchaseBounce;
                               return (
                                 <div
                                   key={plantOffset}
@@ -4796,7 +4790,7 @@ export default function App() {
                                 >
                                   {showMasteryUnlock && (
                                     <div
-                                      className="absolute left-1/2 z-[15] pointer-events-auto"
+                                      className="absolute left-1/2 z-[5] pointer-events-auto"
                                       style={{ top: '100%', transform: 'translateX(-50%)', marginTop: 0 }}
                                     >
                                       <div
@@ -4806,53 +4800,60 @@ export default function App() {
                                         }}
                                       >
                                         <div
-                                          className="rounded-full p-[3px]"
-                                          style={{ backgroundColor: '#ad9467', boxSizing: 'border-box' }}
+                                          className="rounded-full p-[10px]"
+                                          style={{ backgroundColor: '#c4ac7f', boxSizing: 'border-box' }}
                                         >
-                                          <button
-                                            type="button"
-                                            className="flex w-full min-w-0 select-none items-center justify-center rounded-full font-black shadow-[0_5px_0_#6e8d2d,0_8px_16px_rgba(0,0,0,0.15),inset_0_2px_0_rgba(255,255,255,0.35)] transition-[transform,box-shadow] active:translate-y-[2px] active:shadow-[inset_0_3px_6px_rgba(0,0,0,0.15)]"
-                                            style={{
-                                              boxSizing: 'border-box',
-                                              height: 42,
-                                              minWidth: 143,
-                                              paddingLeft: 22,
-                                              paddingRight: 22,
-                                              paddingTop: 0,
-                                              paddingBottom: 0,
-                                              backgroundColor: '#b8d458',
-                                              border: '3px solid #6e8d2d',
-                                              color: '#4a6b1e',
-                                              fontFamily: 'Inter, sans-serif',
-                                              fontSize: 'calc(1.28rem + 2px)',
-                                              lineHeight: 1,
-                                              textShadow: '0 1px 0 rgba(255,255,255,0.3)',
-                                              WebkitTapHighlightColor: 'transparent',
-                                            }}
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setPlantInfoPopup({ isVisible: true, level: plantLevel });
-                                            }}
+                                          <div
+                                            className="rounded-full p-[3px]"
+                                            style={{ backgroundColor: '#ad9467', boxSizing: 'border-box' }}
                                           >
-                                            Unlock
-                                          </button>
+                                            <button
+                                              type="button"
+                                              className="flex w-full min-w-0 select-none items-center justify-center rounded-full font-black shadow-[0_5px_0_#6e8d2d,0_8px_16px_rgba(0,0,0,0.15),inset_0_2px_0_rgba(255,255,255,0.35)] transition-[transform,box-shadow] active:translate-y-[2px] active:shadow-[inset_0_3px_6px_rgba(0,0,0,0.15)]"
+                                              style={{
+                                                boxSizing: 'border-box',
+                                                height: 52,
+                                                minWidth: 143,
+                                                paddingLeft: 22,
+                                                paddingRight: 22,
+                                                paddingTop: 0,
+                                                paddingBottom: 0,
+                                                backgroundColor: '#b8d458',
+                                                border: '3px solid #6e8d2d',
+                                                color: '#4a6b1e',
+                                                fontFamily: 'Inter, sans-serif',
+                                                fontSize: 'calc(1.28rem + 2px)',
+                                                lineHeight: 1,
+                                                textShadow: '0 1px 0 rgba(255,255,255,0.3)',
+                                                WebkitTapHighlightColor: 'transparent',
+                                              }}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setPlantInfoPopup({ isVisible: true, level: plantLevel });
+                                              }}
+                                            >
+                                              Unlock
+                                            </button>
+                                          </div>
                                         </div>
                                       </div>
                                     </div>
                                   )}
                                   <div
                                     className={`relative z-10 flex h-full w-full items-center justify-center ${
-                                      isPlantDiscovered ? 'transition-transform duration-75 group-active:scale-95' : ''
-                                    } ${barnAttentionBounceLevels.includes(plantLevel) ? 'mastery-shed-reveal-bounce' : ''} ${
-                                      masteryPurchaseRevealLevels.includes(plantLevel) ? 'mastery-unlock-purchase-bounce' : ''
+                                      isPlantDiscovered
+                                        ? (isAnyShelfBounceActive ? 'group-active:scale-95' : 'transition-transform duration-75 group-active:scale-95')
+                                        : ''
+                                    } ${isPendingRevealBounce ? 'mastery-shed-reveal-bounce' : ''} ${
+                                      isMasteryPurchaseBounce ? 'mastery-unlock-purchase-bounce' : ''
                                     }`}
                                   >
                                     <PlantWithPot
                                       level={isPlantDiscovered ? plantLevel : 0}
                                       mastered={isPlantDiscovered && plantMastery.unlockedLevels.includes(plantLevel)}
-                                      className={masteryPurchaseRevealLevels.includes(plantLevel) ? 'mastery-unlock-white-flash' : ''}
+                                      className={isMasteryPurchaseBounce ? 'mastery-unlock-white-flash' : ''}
                                       wrapperClassName="h-full w-full"
-                                      masteryAdditiveGlow={activeScreen === 'BARN' && (showMasteryUnlock || masteryPurchaseRevealLevels.includes(plantLevel))}
+                                      masteryAdditiveGlow={activeScreen === 'BARN' && (showMasteryUnlock || isMasteryPurchaseBounce)}
                                       masteryGlowDelaySec={PLANT_MASTERY_GLOW_ANIM_DELAY_SEC}
                                     />
                                   </div>
@@ -4870,7 +4871,7 @@ export default function App() {
               {/* Shed Header - overlay on top (no top bar bg, just plant wallet + settings) */}
               <div className="absolute top-0 left-0 right-0 z-50 pointer-events-none">
                 <div className="pointer-events-auto">
-                  <PageHeader money={money} walletFlashActive={walletFlashActive} plantWallet={{ unlockedCount: highestPlantEver, totalCount: 24 }} hideTopBarBg onPauseClick={() => setPauseMenuOpen(true)} />
+                  <PageHeader money={money} walletFlashActive={walletFlashActive} plantWallet={{ unlockedCount: highestPlantEver, totalCount: 24 }} hideTopBarBg hideFps onPauseClick={() => setPauseMenuOpen(true)} />
                 </div>
               </div>
             </div>
@@ -5288,7 +5289,7 @@ export default function App() {
                 imageLevel={discoveryPopup.level}
                 subtitle={getPlantData(discoveryPopup.level).name}
                 description={getPlantData(discoveryPopup.level).description}
-                buttonText={discoveryPopup.level === 2 ? 'Excellent!' : 'Add to Shed'}
+                buttonText={discoveryPopup.level === 2 ? 'Excellent!' : 'Add to Collection'}
                 rewardAmount={applyDoubleCoinsVisualAmount(
                   getCoinValueForLevel(discoveryPopup.level) * 3,
                   activeBoosts
@@ -5314,6 +5315,19 @@ export default function App() {
                       startY,
                       value: rewardValue,
                     }]);
+                  }
+                  // From plant 3 onward, also shoot a green particle to Collection and set nav notification.
+                  if (discoveryPopup.level >= 3 && containerRef.current) {
+                    const cr = containerRef.current.getBoundingClientRect();
+                    const scale = appScaleRef.current;
+                    setActiveBarnParticles((prev) => [
+                      ...prev,
+                      {
+                        id: `discovery-collection-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                        startX: (startPoint.x - cr.left) / scale,
+                        startY: (startPoint.y - cr.top) / scale,
+                      },
+                    ]);
                   }
 
                   // FTUE 4 progression from first plant-2 discovery still happens on confirm.
@@ -5400,6 +5414,7 @@ export default function App() {
                         isUnlocked: plantMastery.unlockedLevels.includes(plantInfoPopup.level),
                         onPurchase: () => {
                           const level = plantInfoPopup.level;
+                          skipNextBarnPendingBounceRef.current = true;
                           purchasePlantMasteryForLevel(level);
                           lastOtherPopupClosedAtRef.current = Date.now();
                           setPlantInfoPopup(null);
@@ -5616,6 +5631,9 @@ export default function App() {
                 lastMergeDiscoveryLevelRef.current = newLevel;
                 discoveryLevelAfterPauseCloseRef.current = newLevel; // latest only; popup when pause closes
               }}
+              onGoldenPotClick={() => {
+                completeMasterySegmentCheat();
+              }}
               onAddMoney={(amount) => setMoney((prev) => prev + amount)}
               onClearBoosts={() => {
                 setBoostParticles([]);
@@ -5719,6 +5737,17 @@ export default function App() {
         )}
 
         <div className="absolute inset-0 pointer-events-none z-[60] overflow-hidden">
+          {activeBarnParticles.map((p) => (
+            <BarnParticle
+              key={p.id}
+              data={p}
+              containerRef={containerRef}
+              barnButtonRef={barnButtonRef}
+              appScale={appScale}
+              onImpact={() => setBarnNotification(true)}
+              onComplete={() => setActiveBarnParticles((prev) => prev.filter((x) => x.id !== p.id))}
+            />
+          ))}
           {activeProjectiles.map(p => (
             <Projectile 
               key={p.id}
