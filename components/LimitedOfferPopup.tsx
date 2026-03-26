@@ -7,6 +7,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
 import { PopupVectorBackground } from './PopupVectorBackground';
+import { PlantWithPot } from './PlantWithPot';
 import {
   REWARD_PILL_FILL_COLOR,
   REWARD_PILL_HEIGHT_PX,
@@ -476,18 +477,32 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
             className="absolute inset-0 w-full h-full object-contain"
             style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.25))' }}
           />
-          {/* Plant / offer icon — Double Coins +15% vs default 75px (matches boost art emphasis) */}
-          <img
-            src={imageSrc}
-            alt=""
-            className="relative object-contain"
-            style={{
-              width: subtitleSettingsStyle ? `${75 * 1.15}px` : '75px',
-              height: subtitleSettingsStyle ? `${75 * 1.15}px` : '75px',
-              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
-              marginTop: '-4px',
-            }}
-          />
+          {/* Plant / offer icon — if this is a plant offer, render PlantWithPot so pot is shown too. */}
+          {typeof imageLevel === 'number' && imageLevel > 0 ? (
+            <div
+              className="relative"
+              style={{
+                width: subtitleSettingsStyle ? 86 : 75,
+                height: subtitleSettingsStyle ? 86 : 75,
+                marginTop: -4,
+                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
+              }}
+            >
+              <PlantWithPot level={imageLevel} wrapperClassName="h-full w-full" />
+            </div>
+          ) : (
+            <img
+              src={imageSrc}
+              alt=""
+              className="relative object-contain"
+              style={{
+                width: subtitleSettingsStyle ? `${75 * 1.15}px` : '75px',
+                height: subtitleSettingsStyle ? `${75 * 1.15}px` : '75px',
+                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
+                marginTop: '-4px',
+              }}
+            />
+          )}
         </div>
 
         {/* Background container - uses transform scale trick for sharper rendering */}
