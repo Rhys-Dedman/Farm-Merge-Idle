@@ -374,13 +374,14 @@ const pickGoalPlantLevel = (
   return pickRandomWithVariety();
 };
 
-/** Crops required for goal order. Scales with player level, crop yield, and has random variation. */
+/** Crops required for goal order. Scales with player level, crop yield, and has random variation. +1 base crops each 4 player levels (at 4, 8, 12, …). */
 const getGoalCropRequired = (
   playerLevel: number,
   cropYieldLevel: number,
   goalDifficultyScaling: number = GOAL_DIFFICULTY_SCALING
 ): number => {
-  const baseGoal = 3 + Math.floor(playerLevel / 1) + Math.floor(cropYieldLevel * 0.5);
+  const baseGoal =
+    3 + Math.floor(playerLevel / 1) + Math.floor(cropYieldLevel * 0.5) + Math.floor(playerLevel / 4);
   const variationRange = 1 + Math.floor(playerLevel / 10);
   const randomOffset = Math.floor(Math.random() * (2 * variationRange + 1)) - variationRange;
   const variedGoal = baseGoal + randomOffset;

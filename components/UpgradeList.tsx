@@ -254,61 +254,79 @@ const HARVEST_UNLOCK_LEVELS: Record<string, number> = {
   happy_customer: 10,
 };
 
-/** Upgrade cost formula: base = round(avgGoalValue × unlockLevel × strength × scale), then each purchase = round(previous × 2.0). All to nearest 5.
- *  Garden Expansion and Crop Yield use: first = 1500, then each = round(previous × 2.5).
+/** Pricing tier: higher tier = higher strength multiplier in the same cost formula. */
+export type UpgradeCostTier = 'normal' | 'medium' | 'high';
+
+/** Strength multipliers per tier (used in base cost formulas). */
+export const UPGRADE_COST_STRENGTH: Record<UpgradeCostTier, number> = {
+  normal: 1.5,
+  medium: 2.0,
+  high: 2.5,
+};
+
+/**
+ * Which tier each upgrade uses. Unlisted ids default to `normal` in `getUpgradeCostStrength`.
+ * Normal: Production Speed, Harvest Speed, Order Speed, Double Seed, Lucky Seed, Wild Growth, Surplus Recharges (+ other standard upgrades).
+ * Medium: Crop Yield, Happy Customer.
+ * High: Garden Expansion, Market Value.
+ */
+export const UPGRADE_COST_TIER_BY_ID: Record<string, UpgradeCostTier> = {
+  seed_production: 'normal',
+  seed_storage: 'normal',
+  harvest_speed: 'normal',
+  customer_speed: 'normal',
+  double_seeds: 'normal',
+  bonus_seeds: 'normal',
+  wild_growth: 'normal',
+  seed_surplus: 'normal',
+  merge_harvest: 'normal',
+  surplus_sales: 'normal',
+  crop_value: 'medium',
+  happy_customer: 'medium',
+  plot_expansion: 'high',
+  market_value: 'high',
+};
+
+/** Upgrade cost formula: base = round(avgGoalValue × unlockLevel × strength × scale), then each purchase = round(previous × UPGRADE_GROWTH_MULTIPLIER). All to nearest 5.
+ * Garden Expansion + Crop Yield: first = round(1500 × unlockLevel × tierStrength / highTierStrength), then each = previous × 3.0 (same shape as before for high tier).
  */
 const AVG_GOAL_VALUE = 50;
 const UPGRADE_COST_SCALE = 1.5;
 const UPGRADE_GROWTH_MULTIPLIER = 2.5;
-
-/** Strength multiplier per upgrade (how powerful the upgrade is). Used only in cost formula. */
-const UPGRADE_STRENGTH_MULTIPLIERS: Record<string, number> = {
-  seed_production: 2.0,
-  seed_storage: 2.0,
-  double_seeds: 2.0,
-  seed_surplus: 2.0,
-  bonus_seeds: 2.0,
-  harvest_speed: 2.0,
-  merge_harvest: 2.0,
-  customer_speed: 2.0,
-  surplus_sales: 2.5,
-  happy_customer: 2.5,
-  wild_growth: 2.5,
-  plot_expansion: 3.5,
-  crop_value: 3.5,
-  market_value: 3.5,
-};
 
 const roundToNearest5 = (value: number): number => Math.round(value / 5) * 5;
 
 const getUpgradeUnlockLevel = (upgradeId: string): number =>
   SEEDS_UNLOCK_LEVELS[upgradeId] ?? CROPS_UNLOCK_LEVELS[upgradeId] ?? HARVEST_UNLOCK_LEVELS[upgradeId] ?? 1;
 
+const getUpgradeCostStrength = (upgradeId: string): number => {
+  const tier = UPGRADE_COST_TIER_BY_ID[upgradeId] ?? 'normal';
+  return UPGRADE_COST_STRENGTH[tier];
+};
+
 /**
  * Calculate upgrade cost for the next purchase (currentLevel = level before buying).
  * baseUpgradeCost = round(avgGoalValue × unlockLevel × strength × scale) to nearest 5.
  * Then for each purchase after: nextUpgradeCost = round(previous × UPGRADE_GROWTH_MULTIPLIER) to nearest 5.
- * Garden Expansion (plot_expansion) and Crop Yield (crop_value) use: first = 1500, then each = round(previous × 2.5).
+ * Garden Expansion + Crop Yield: first cost uses 1500×unlock anchor scaled by tier (high matches legacy 1500×unlock), then ×3.0 per level.
  * This is the only cost used by the upgrade panel and handleUpgrade.
  */
 const calculateUpgradeCost = (upgradeId: string, currentLevel: number): number => {
+  if (currentLevel < 0) return 0;
+
+  const strength = getUpgradeCostStrength(upgradeId);
+  const unlockLevel = getUpgradeUnlockLevel(upgradeId);
+
   if (upgradeId === 'plot_expansion' || upgradeId === 'crop_value') {
-    // First = 1500, then each = previous × 2.5 (rounded to nearest 5)
-    if (currentLevel < 0) return 0;
-    // Include unlock-level so prices match the upgrade's player unlock position.
-    const unlockLevel = getUpgradeUnlockLevel(upgradeId);
-    let cost = roundToNearest5(1500 * unlockLevel);
+    const highAnchor = UPGRADE_COST_STRENGTH.high;
+    let cost = roundToNearest5((1500 * unlockLevel * strength) / highAnchor);
     for (let i = 0; i < currentLevel; i++) {
       cost = roundToNearest5(cost * 3.0);
     }
     return roundToNearest5(cost);
   }
 
-  const strengthMultiplier = UPGRADE_STRENGTH_MULTIPLIERS[upgradeId];
-  if (strengthMultiplier == null) return 0;
-
-  const unlockLevel = getUpgradeUnlockLevel(upgradeId);
-  let cost = roundToNearest5(AVG_GOAL_VALUE * unlockLevel * strengthMultiplier * UPGRADE_COST_SCALE);
+  let cost = roundToNearest5(AVG_GOAL_VALUE * unlockLevel * strength * UPGRADE_COST_SCALE);
 
   for (let i = 0; i < currentLevel; i++) {
     cost = roundToNearest5(cost * UPGRADE_GROWTH_MULTIPLIER);
