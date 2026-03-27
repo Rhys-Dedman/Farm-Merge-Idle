@@ -11,6 +11,13 @@ import {
 import { hasActiveDoubleCoinsBoostAt } from '../offers';
 import type { FtueStageId } from '../ftue/ftueConfig';
 import type { GameSaveV1 } from './gameSave';
+import type { BoardCell } from '../types';
+import {
+  getWildGrowthIntervalMsForLevel,
+  pickWildGrowthSpawn,
+  spawnWildGrowthPlantOnGrid,
+  WILD_GROWTH_UNLOCK_PLAYER_LEVEL,
+} from './wildGrowth';
 
 const HARVEST_CHARGES_MAX = 3;
 
@@ -125,7 +132,7 @@ export function simulateOfflineSeedHarvest(input: OfflineSimInput): OfflineSimRe
     const wallTime = input.savedAt + elapsed;
     const doubleCoinsMult = hasActiveDoubleCoinsBoostAt(input.activeBoosts, wallTime) ? 2 : 1;
     const doubleLevel = input.seedsState.double_seeds?.level ?? 0;
-    const doubleChance = Math.min(0.5, doubleLevel * 0.05);
+    const doubleChance = Math.min(1, doubleLevel * 0.1);
     const seedsToAdd = Math.random() < doubleChance ? 2 : 1;
     const total = seedsInStorage + seedsToAdd;
     const capped = Math.min(maxCap, total);
@@ -190,4 +197,61 @@ export function simulateOfflineSeedHarvest(input: OfflineSimInput): OfflineSimRe
     seedsInStorage,
     offlineSurplusCoins,
   };
+}
+
+export interface WildGrowthOfflineInput {
+  deltaMs: number;
+  playerLevel: number;
+  /** `cropsState.wild_growth.level` — speed tiers; 0 = 120s baseline once feature is unlocked. */
+  wildGrowthUpgradeLevel: number;
+  grid: BoardCell[];
+  wildGrowthAccumMs: number;
+}
+
+export interface WildGrowthOfflineResult {
+  grid: BoardCell[];
+  wildGrowthAccumMs: number;
+}
+
+/** Simulates Wild Growth timer and spawns while away (grid mutates on a deep copy). */
+export function simulateWildGrowthOffline(input: WildGrowthOfflineInput): WildGrowthOfflineResult {
+  let grid = input.grid.map((c) => ({
+    ...c,
+    item: c.item ? { ...c.item } : null,
+  }));
+  if (input.playerLevel < WILD_GROWTH_UNLOCK_PLAYER_LEVEL) {
+    return { grid, wildGrowthAccumMs: 0 };
+  }
+  const intervalMs = getWildGrowthIntervalMsForLevel(input.wildGrowthUpgradeLevel);
+  if (intervalMs <= 0) {
+    return { grid, wildGrowthAccumMs: input.wildGrowthAccumMs };
+  }
+
+  let accum = Math.max(0, input.wildGrowthAccumMs);
+  let wall = 0;
+  const delta = Math.min(Math.max(0, input.deltaMs), MAX_OFFLINE_ACCUMULATION_MS);
+  const noReserved = new Set<number>();
+
+  while (wall < delta) {
+    const hasPlant = grid.some((c) => !c.locked && c.item != null);
+    if (!hasPlant) {
+      break;
+    }
+
+    if (accum < intervalMs) {
+      const step = Math.min(intervalMs - accum, delta - wall);
+      accum += step;
+      wall += step;
+      continue;
+    }
+
+    const pick = pickWildGrowthSpawn(grid, noReserved);
+    if (!pick) {
+      break;
+    }
+    grid = spawnWildGrowthPlantOnGrid(grid, pick);
+    accum = 0;
+  }
+
+  return { grid, wildGrowthAccumMs: accum };
 }

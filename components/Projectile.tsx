@@ -15,7 +15,15 @@ interface Point {
   y: number;
 }
 
+/** Lucky Seed bonus projectile — trail + border. */
+const LUCKY_GROWTH_TRAIL_COLOR = '#fae030';
+const LUCKY_GROWTH_HEAD_BG = '#fff54d';
+const LUCKY_GROWTH_HEAD_BORDER = '#ffa200';
+const LUCKY_GROWTH_HEAD_GLOW = 'rgba(253, 252, 46, 0.75)';
+
 export const Projectile: React.FC<ProjectileProps> = ({ data, onImpact, onComplete, appScale = 1 }) => {
+  const isLucky = data.isLuckyGrowth === true;
+  const airTrailStroke = isLucky ? LUCKY_GROWTH_TRAIL_COLOR : '#fcf0c6';
   const [frame, setFrame] = useState<{
     airPos: Point;
     shadowPos: Point;
@@ -207,7 +215,7 @@ export const Projectile: React.FC<ProjectileProps> = ({ data, onImpact, onComple
                 y1={prev.y}
                 x2={p.x}
                 y2={p.y}
-                stroke="#fcf0c6"
+                stroke={airTrailStroke}
                 strokeWidth={particleDiameter * widthScale}
                 strokeLinecap="round"
                 strokeOpacity={opacityScale}
@@ -249,11 +257,19 @@ export const Projectile: React.FC<ProjectileProps> = ({ data, onImpact, onComple
             }}
           >
             <div 
-              className="rounded-full shadow-[0_0_30px_rgba(252,240,198,0.7)] flex items-center justify-center border-2 border-white/60"
+              className={`rounded-full flex items-center justify-center border-2 ${
+                isLucky ? '' : 'shadow-[0_0_30px_rgba(252,240,198,0.7)] border-white/60'
+              }`}
               style={{
                 width: `${particleDiameter}px`,
                 height: `${particleDiameter}px`,
-                background: '#fdf9e9'
+                background: isLucky ? LUCKY_GROWTH_HEAD_BG : '#fdf9e9',
+                ...(isLucky
+                  ? {
+                      boxShadow: `0 0 20px ${LUCKY_GROWTH_HEAD_GLOW}`,
+                      borderColor: LUCKY_GROWTH_HEAD_BORDER,
+                    }
+                  : {}),
               }}
             >
               <img

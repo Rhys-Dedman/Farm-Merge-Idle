@@ -72,7 +72,12 @@ import {
   type GameSaveV1,
   GAME_SAVE_VERSION,
 } from './utils/gameSave';
-import { isOfflineCoinEarningsBlockedByFtue, simulateOfflineSeedHarvest } from './utils/offlineSimulate';
+import { isOfflineCoinEarningsBlockedByFtue, simulateOfflineSeedHarvest, simulateWildGrowthOffline } from './utils/offlineSimulate';
+import {
+  getWildGrowthIntervalMsForLevel,
+  pickWildGrowthSpawn,
+  WILD_GROWTH_UNLOCK_PLAYER_LEVEL,
+} from './utils/wildGrowth';
 import { OfflineEarningsPopup } from './components/OfflineEarningsPopup';
 import { BARN_SHELF_COUNT, normalizeBarnShelvesUnlocked } from './constants/barnShelves';
 import {
@@ -523,6 +528,8 @@ export interface ProjectileData {
   plantLevel: number; // The level of plant to spawn on impact
   /** When true, projectile is Special Delivery: on impact spawn or upgrade cell, then beam + bounce */
   isSpecialDelivery?: boolean;
+  /** Lucky Seed bonus shot: distinct yellow trail / head (coin gold tone). */
+  isLuckyGrowth?: boolean;
 }
 
 /** First mount after "Reset progress": strip stray save + skip quick resume. Also used for normal quick-resume detection. */
@@ -772,6 +779,8 @@ export default function App() {
   const [activeProjectiles, setActiveProjectiles] = useState<ProjectileData[]>([]);
   const activeProjectilesRef = useRef<ProjectileData[]>([]);
   activeProjectilesRef.current = activeProjectiles;
+  const wildGrowthAccumMsRef = useRef(0);
+  const applyWildGrowthSpawnAtCellRef = useRef<(targetIdx: number, plantLevel: number) => void>(() => {});
   const [impactCellIdx, setImpactCellIdx] = useState<number | null>(null);
   const [returnImpactCellIdx, setReturnImpactCellIdx] = useState<number | null>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
@@ -1769,7 +1778,7 @@ export default function App() {
     }
   }, [isOutOfSpaceUniqueFill, coinPanelPortalRect]);
 
-  const spawnProjectile = useCallback((targetIdx: number, plantLevel: number, isSpecialDelivery?: boolean) => {
+  const spawnProjectile = useCallback((targetIdx: number, plantLevel: number, isSpecialDelivery?: boolean, isLuckyGrowth?: boolean) => {
     if (plantButtonRef.current && containerRef.current) {
       const scale = appScaleRef.current;
       const btnRect = plantButtonRef.current.getBoundingClientRect();
@@ -1784,10 +1793,60 @@ export default function App() {
         targetIdx,
         plantLevel,
         ...(isSpecialDelivery ? { isSpecialDelivery: true } : {}),
+        ...(isLuckyGrowth ? { isLuckyGrowth: true } : {}),
       };
       setActiveProjectiles(prev => [...prev, newProj]);
     }
   }, []);
+
+  const wildGrowthUpgradeLevel = cropsState.wild_growth?.level ?? 0;
+  useEffect(() => {
+    if (playerLevel < WILD_GROWTH_UNLOCK_PLAYER_LEVEL) {
+      wildGrowthAccumMsRef.current = 0;
+    }
+  }, [playerLevel]);
+
+  // Wild Growth: auto-duplicate at interval once player level ≥ unlock (no seed flight); spawn + beam via ref.
+  useEffect(() => {
+    if (isLoading) return;
+    if (playerLevel < WILD_GROWTH_UNLOCK_PLAYER_LEVEL) return;
+    const intervalMs = getWildGrowthIntervalMsForLevel(wildGrowthUpgradeLevel);
+    if (intervalMs <= 0) return;
+
+    let last = performance.now();
+    let rafId = 0;
+
+    const tick = (now: number) => {
+      rafId = requestAnimationFrame(tick);
+      const dt = Math.min(now - last, 4000);
+      last = now;
+      if (dt <= 0) return;
+
+      const g = gridRef.current;
+      const hasPlant = g.some((c) => !c.locked && c.item != null);
+      if (!hasPlant) return;
+
+      let acc = wildGrowthAccumMsRef.current;
+      if (acc < intervalMs) {
+        acc = Math.min(intervalMs, acc + dt);
+        wildGrowthAccumMsRef.current = acc;
+        return;
+      }
+
+      const reserved = new Set(activeProjectilesRef.current.map((p) => p.targetIdx));
+      const pick = pickWildGrowthSpawn(g, reserved);
+      if (!pick) {
+        wildGrowthAccumMsRef.current = intervalMs;
+        return;
+      }
+
+      wildGrowthAccumMsRef.current = 0;
+      applyWildGrowthSpawnAtCellRef.current(pick.targetIdx, pick.plantLevel);
+    };
+
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [isLoading, playerLevel, wildGrowthUpgradeLevel]);
 
   // Tap decay: progress per tap goes from 40% down to 10% the more taps in the last 5 seconds. Resets after 5s idle.
   const TAP_DECAY_WINDOW_MS = 5000;
@@ -2158,7 +2217,7 @@ export default function App() {
     setTimeout(() => setIsSeedFlashing(false), 300);
 
     const doubleSeedsLevel = seedsState?.double_seeds?.level ?? 0;
-    const doubleChance = Math.min(0.5, doubleSeedsLevel * 0.05);
+    const doubleChance = Math.min(1, doubleSeedsLevel * 0.1);
     const seedsToAdd = Math.random() < doubleChance ? 2 : 1;
     const surplusValue = getSeedSurplusValue(
       ftueSeedSurplusActivated
@@ -2414,6 +2473,41 @@ export default function App() {
     setTimeout(() => setImpactCellIdx(null), 500);
   }, []);
 
+  const applyWildGrowthSpawnAtCell = useCallback((targetIdx: number, plantLevel: number) => {
+    spawnCropAt(targetIdx, plantLevel);
+    requestAnimationFrame(() => {
+      const hexEl = document.getElementById(`hex-${targetIdx}`);
+      if (!hexEl) return;
+      const r = hexEl.getBoundingClientRect();
+      if (!getPerformanceMode()) {
+        setLeafBurstsSmall((prev) => [
+          ...prev,
+          {
+            id: `wild-growth-burst-${targetIdx}-${Date.now()}`,
+            x: r.left + r.width / 2,
+            y: r.top + r.height / 2,
+            startTime: Date.now(),
+          },
+        ]);
+      }
+      setCellHighlightBeams((prev) => [
+        ...prev,
+        {
+          id: `wild-growth-beam-${targetIdx}-${Date.now()}`,
+          x: r.left + r.width / 2,
+          y: r.top + r.height / 2,
+          cellWidth: r.width,
+          cellHeight: r.height,
+          startTime: Date.now(),
+        },
+      ]);
+    });
+  }, [spawnCropAt]);
+
+  useEffect(() => {
+    applyWildGrowthSpawnAtCellRef.current = applyWildGrowthSpawnAtCell;
+  }, [applyWildGrowthSpawnAtCell]);
+
   const handleTabChange = (tab: TabType) => {
     if (activeFtueStage === 'first_upgrade' && ftue10Phase === 'point_orders' && tab === 'SEEDS') {
       setIsExpanded(true);
@@ -2578,7 +2672,7 @@ export default function App() {
         } else {
           targetIdx = emptyIndices[Math.floor(Math.random() * emptyIndices.length)];
         }
-        // All seeds spawn at seedLevel (from highest plant discovered)
+        // First projectile: always standard tier from current seed level.
         spawnProjectile(targetIdx, seedLevel);
         if (!seedsFreeMode) setSeedsInStorage((prev) => Math.max(0, prev - 1));
         triggerSeedButtonLeafBurst();
@@ -2605,38 +2699,35 @@ export default function App() {
           });
         }
 
-        // Bonus Seed: chance to fire a second seed (skip during FTUE_2 and FTUE_7 so we only fire exactly 2 seeds from 2 taps)
-        const bonusChance = (activeFtueStage === 'seed_tap' || activeFtueStage === 'first_more_orders') ? 0 : getBonusSeedChance(seedsState);
-        if (bonusChance > 0 && Math.random() * 100 < bonusChance) {
-          // Get remaining empty unlocked cells (excluding the first target)
-          const remainingEmptyIndices = emptyIndices.filter(idx => idx !== targetIdx);
-          
-          // Pick a target for the second seed
-          let secondTargetIdx: number;
-          if (remainingEmptyIndices.length > 0) {
-            // Fire to a different empty cell
-            secondTargetIdx = remainingEmptyIndices[Math.floor(Math.random() * remainingEmptyIndices.length)];
-          } else {
-            // No other empty cell - fire to the same cell (seed will be "wasted")
-            // We still spawn the projectile for visual effect, but spawnCropAt won't place anything
-            // since the cell will already have an item
-            secondTargetIdx = targetIdx;
+        // Double Seeds + Lucky Seed: independent rolls. Both can proc → 3 projectiles (2× standard + 1× seedLevel+1 bonus).
+        const skipExtraSeeds = activeFtueStage === 'seed_tap' || activeFtueStage === 'first_more_orders';
+        const doubleSeedsLevel = seedsState?.double_seeds?.level ?? 0;
+        const doubleChancePct = skipExtraSeeds ? 0 : Math.min(100, doubleSeedsLevel * 10);
+        const luckyChancePct = skipExtraSeeds ? 0 : getBonusSeedChance(seedsState);
+        const doubleProcs = doubleChancePct > 0 && Math.random() * 100 < doubleChancePct;
+        const luckyProcs = luckyChancePct > 0 && Math.random() * 100 < luckyChancePct;
+
+        const usedTargets = new Set<number>([targetIdx]);
+        const pickNextTarget = (): number => {
+          const cand = emptyIndices.filter((i) => !usedTargets.has(i));
+          if (cand.length > 0) {
+            const pick = cand[Math.floor(Math.random() * cand.length)];
+            usedTargets.add(pick);
+            return pick;
           }
-          
-          // Slight delay so the two seeds don't overlap visually
-          setTimeout(() => {
-            // Lucky Growth: bonus seed spawns a random in-between tier.
-            // Range is exclusive of both current seed level and highest discovered.
-            const minExclusive = Math.max(1, seedLevel);
-            const maxExclusive = Math.max(1, highestPlantEverRef.current);
-            const low = minExclusive + 1;
-            const high = maxExclusive - 1;
-            const bonusPlantLevel =
-              high >= low
-                ? low + Math.floor(Math.random() * (high - low + 1))
-                : seedLevel; // No in-between tier exists yet; fallback to current seed tier.
-            spawnProjectile(secondTargetIdx, bonusPlantLevel);
-          }, 50);
+          return targetIdx;
+        };
+
+        let staggerMs = 50;
+        if (doubleProcs) {
+          const t2 = pickNextTarget();
+          window.setTimeout(() => spawnProjectile(t2, seedLevel), staggerMs);
+          staggerMs += 50;
+        }
+        if (luckyProcs) {
+          const bonusLevel = Math.min(24, Math.max(1, seedLevel + 1));
+          const t3 = pickNextTarget();
+          window.setTimeout(() => spawnProjectile(t3, bonusLevel, false, true), staggerMs);
         }
       }
       return;
@@ -3371,11 +3462,13 @@ export default function App() {
 
   /** Apply saved game + offline sim; returns total offline coin payout pending (not wallet). */
   const hydrateFromSave = useCallback((save: GameSaveV1) => {
+    const cropsNorm: Record<string, UpgradeState> = { ...save.cropsState };
+    if (!cropsNorm.wild_growth) cropsNorm.wild_growth = { level: 0, progress: 0 };
+
     setMoney(save.money);
-    setGrid(save.grid);
     setSeedsState(save.seedsState);
     setHarvestState(save.harvestState);
-    setCropsState(save.cropsState);
+    setCropsState(cropsNorm);
     setSeedsInStorage(save.seedsInStorage);
     setHighestPlantEver(save.highestPlantEver);
     highestPlantEverRef.current = save.highestPlantEver;
@@ -3430,7 +3523,9 @@ export default function App() {
     setFtuePlayerLevelVisible(save.ftuePlayerLevelVisible);
     const now = Date.now();
     setActiveBoosts(normalizeActiveBoostsAfterLoad(save.activeBoosts.filter((b) => b.endTime > now)));
-    setPendingUnlockUpgradeId(save.pendingUnlockUpgradeId);
+    setPendingUnlockUpgradeId(
+      save.pendingUnlockUpgradeId === 'fertile_soil' ? 'wild_growth' : save.pendingUnlockUpgradeId
+    );
     setLevelUpPopupQueue(save.levelUpPopupQueue);
 
     seedProgressRef.current = save.seedProgress;
@@ -3450,7 +3545,7 @@ export default function App() {
       harvestCharges: save.harvestCharges,
       seedsInStorage: save.seedsInStorage,
       seedsState: save.seedsState,
-      cropsState: save.cropsState,
+      cropsState: cropsNorm,
       activeBoosts: save.activeBoosts.map((b) => ({ offerId: b.offerId, endTime: b.endTime, icon: b.icon })),
       activeFtueStage: save.activeFtueStage,
       ftue7Scheduled: save.ftue7Scheduled,
@@ -3466,6 +3561,16 @@ export default function App() {
     harvestChargesRef.current = sim.harvestCharges;
     setHarvestCharges(sim.harvestCharges);
     setSeedsInStorage(sim.seedsInStorage);
+
+    const wildOut = simulateWildGrowthOffline({
+      deltaMs: elapsed,
+      playerLevel: save.playerLevel,
+      wildGrowthUpgradeLevel: cropsNorm.wild_growth?.level ?? 0,
+      grid: save.grid,
+      wildGrowthAccumMs: save.wildGrowthAccumulatorMs ?? 0,
+    });
+    wildGrowthAccumMsRef.current = wildOut.wildGrowthAccumMs;
+    setGrid(wildOut.grid);
 
     const pendingBank = ftueBlocksOffline ? 0 : (save.pendingOfflineEarnings ?? 0);
     const totalOffline = pendingBank + sim.offlineSurplusCoins;
@@ -3666,6 +3771,7 @@ export default function App() {
       activeBoosts,
       pendingUnlockUpgradeId,
       levelUpPopupQueue,
+      wildGrowthAccumulatorMs: wildGrowthAccumMsRef.current,
     };
     persistGameSave(payload);
   };
@@ -4611,7 +4717,7 @@ export default function App() {
                             withPlants.sort((a, b) => a.level - b.level);
                             targetIdx = withPlants[0].idx;
                           }
-                          spawnProjectile(targetIdx, plantLevel, true);
+                          spawnProjectile(targetIdx, plantLevel, true, true);
                         }
                         if (offerId && isCoinMultiplierBoostId(offerId)) {
                           setActiveBoosts((prev) =>
@@ -5663,7 +5769,7 @@ export default function App() {
                         withPlants.sort((a, b) => a.level - b.level);
                         targetIdx = withPlants[0].idx;
                       }
-                      spawnProjectile(targetIdx, plantLevel, true);
+                      spawnProjectile(targetIdx, plantLevel, true, true);
                     }
                     // Double Coins from rewarded ad: config has no duration so boost particle path is skipped — grant timed boost here.
                     if (offerId && isCoinMultiplierBoostId(offerId)) {

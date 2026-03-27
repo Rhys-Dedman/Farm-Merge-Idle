@@ -116,6 +116,11 @@ export interface GameSaveV1 {
   activeBoosts: ActiveBoostData[];
   pendingUnlockUpgradeId: string | null;
   levelUpPopupQueue: number[];
+  /**
+   * Wild Growth: ms accumulated toward next auto-duplicate (0 when upgrade inactive).
+   * Missing on old saves → 0.
+   */
+  wildGrowthAccumulatorMs?: number;
   /** Shed shelves unlocked (6); missing on old saves → treated as all true in loader. */
   barnShelvesUnlocked: boolean[];
 }
@@ -157,6 +162,12 @@ export function loadGameSave(): GameSaveV1 | null {
       data.plantMasteryOrdersProgress = Math.min(data.plantMasteryOrdersProgress, seg - 1);
     } else {
       data.plantMasteryOrdersProgress = Math.min(data.plantMasteryOrdersProgress, seg);
+    }
+    const wg = (data as GameSaveV1).wildGrowthAccumulatorMs;
+    if (typeof wg !== 'number' || !Number.isFinite(wg)) {
+      (data as GameSaveV1).wildGrowthAccumulatorMs = 0;
+    } else {
+      (data as GameSaveV1).wildGrowthAccumulatorMs = Math.max(0, wg);
     }
     return data;
   } catch {

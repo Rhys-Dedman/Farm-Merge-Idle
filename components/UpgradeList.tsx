@@ -3,6 +3,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import { TabType } from '../types';
 import { assetPath } from '../utils/assetPath';
 import { getPlantCoinValue } from '../utils/plantValue';
+import {
+  getWildGrowthDisplaySecForLevel,
+  isWildGrowthMaxLevel,
+  WILD_GROWTH_UNLOCK_PLAYER_LEVEL,
+} from '../utils/wildGrowth';
 import { PlantWithPot } from './PlantWithPot';
 
 export interface UpgradeState {
@@ -37,19 +42,19 @@ export const getSeedLevelFromHighestPlant = (highestPlant: number): number => {
   return 1;
 };
 
-/** Get the bonus seed chance percentage (0-50%, 5% per level, max level 10) */
+/** Lucky Seed (bonus_seeds) proc chance percentage (0-100%, 10% per level, max level 10). */
 export const getBonusSeedChance = (seedsState: SeedsState): number => {
   const level = seedsState.bonus_seeds?.level ?? 0;
-  return Math.min(level * 5, 50); // Cap at 50%
+  return Math.min(level * 10, 100); // Cap at 100%
 };
 
 /** Check if bonus_seeds upgrade is at max level */
 export const isBonusSeedMaxed = (seedsState: SeedsState): boolean => {
   const level = seedsState.bonus_seeds?.level ?? 0;
-  return level >= 10; // Max at level 10 (50%)
+  return level >= 10; // Max at level 10 (100%)
 };
 
-/** Check if double_seeds upgrade is at max level (max level 10 = 50%). */
+/** Check if double_seeds upgrade is at max level (max level 10 = 100%). */
 export const isDoubleSeedsMaxed = (seedsState: SeedsState): boolean => {
   const level = seedsState.double_seeds?.level ?? 0;
   return level >= 10;
@@ -223,31 +228,30 @@ const formatCost = (cost: number): string => {
 
 const SEEDS_UPGRADES: UpgradeDef[] = [
   { id: 'seed_production', name: 'Production Speed', icon: assetPath('/assets/icons/icon_seedproduction.png'), description: 'Increase how fast seeds are produced' },
-  { id: 'bonus_seeds', name: 'LUCKY GROWTH', icon: assetPath('/assets/icons/icon_luckyseed.png'), description: 'Increase chance to spawn a bonus higher-tier plant' },
-  { id: 'double_seeds', name: 'DOUBLE SEEDS', icon: assetPath('/assets/icons/icon_seedquality.png'), description: 'Increase the chance to produce 2 seeds each recharge' },
+  { id: 'double_seeds', name: 'DOUBLE SEEDS', icon: assetPath('/assets/icons/icon_seedquality.png'), description: 'Increase chance to spawn 2 seeds at a time' },
+  { id: 'bonus_seeds', name: 'Lucky Seed', icon: assetPath('/assets/icons/icon_luckyseed.png'), description: 'Increase chance to produce a bonus higher level seed' },
 ];
 
 const SEEDS_UNLOCK_LEVELS: Record<string, number> = {
   seed_production: 1,
   seed_storage: 2, // Storage Capacity: unlocks at level 2
-  // Unlock positions used for both cost + FTUE pricing alignment.
-  bonus_seeds: 6, // Lucky Growth unlocks at player level 6
-  double_seeds: 8, // Double Seeds unlocks at player level 8
+  double_seeds: 5,
+  bonus_seeds: 8,
 };
 
 const CROPS_UNLOCK_LEVELS: Record<string, number> = {
   harvest_speed: 1,
-  plot_expansion: 2, // Garden Expansion unlocks at player level 2
-  crop_value: 7, // Crop Yield unlocks at player level 7
-  fertile_soil: 9, // Fertile Soil unlocks at player level 9
+  plot_expansion: 2,
+  wild_growth: WILD_GROWTH_UNLOCK_PLAYER_LEVEL,
+  crop_value: 9,
   merge_harvest: 10,
 };
 
 const HARVEST_UNLOCK_LEVELS: Record<string, number> = {
   customer_speed: 1,
-  market_value: 5, // Market Value unlocks at player level 5
-  seed_surplus: 3, // Surplus Recharges unlocks at player level 3
-  happy_customer: 10, // Happy Customers unlocks at player level 10
+  seed_surplus: 3,
+  market_value: 7,
+  happy_customer: 10,
 };
 
 /** Upgrade cost formula: base = round(avgGoalValue × unlockLevel × strength × scale), then each purchase = round(previous × 2.0). All to nearest 5.
@@ -269,7 +273,7 @@ const UPGRADE_STRENGTH_MULTIPLIERS: Record<string, number> = {
   customer_speed: 2.0,
   surplus_sales: 2.5,
   happy_customer: 2.5,
-  fertile_soil: 2.5,
+  wild_growth: 2.5,
   plot_expansion: 3.5,
   crop_value: 3.5,
   market_value: 3.5,
@@ -318,11 +322,11 @@ export const getLevelUnlockInfo = (level: number): { title: string; description:
     { level: 2, upgradeId: 'plot_expansion', tab: 'CROPS', name: 'Garden Expansion', description: 'Unlock additional plots in the garden', icon: 'icon_plotexpansion.png', popupDescription: 'You can now unlock additional plots in the garden' },
     { level: 3, upgradeId: 'seed_surplus', tab: 'HARVEST', name: 'Surplus Recharges', description: 'Increase coins gained from extra seed and harvest recharges', icon: 'icon_seedsurplus.png', popupDescription: 'Increase coins gained from extra seed and harvest recharges' },
     { level: 4, upgradeId: '', tab: 'HARVEST', name: 'Extra Orders', description: 'You can now recieve up to 4 orders at a time', icon: 'icon_extracustomer.png', popupDescription: 'You can now recieve up to 4 orders at a time' },
-    { level: 5, upgradeId: 'market_value', tab: 'HARVEST', name: 'Market Value', description: 'Increase the coins earned when completing orders', icon: 'icon_marketvalue.png' },
-    { level: 6, upgradeId: 'bonus_seeds', tab: 'SEEDS', name: 'Lucky Growth', description: 'Increase chance to spawn a bonus higher-tier plant', icon: 'icon_luckyseed.png', popupDescription: 'Increase chance to spawn a bonus higher-tier plant' },
-    { level: 7, upgradeId: 'crop_value', tab: 'CROPS', name: 'Crop Yield', description: 'Increase how many crops your plants produce when harvesting', icon: 'icon_cropvalue.png', popupDescription: 'You can now increase how many crops your plants produce when harvesting' },
-    { level: 8, upgradeId: 'double_seeds', tab: 'SEEDS', name: 'Double Seeds', description: 'Increase the chance to produce 2 seeds each recharge', icon: 'icon_seedquality.png', popupDescription: 'Increase the chance to produce 2 seeds each recharge' },
-    { level: 9, upgradeId: 'fertile_soil', tab: 'CROPS', name: 'Fertile Soil', description: 'You can now create fertile soil to yield double crops when harvesting', icon: 'icon_fetilesoil.png', popupDescription: 'You can now create fertile soil to yield double crops when harvesting' },
+    { level: 5, upgradeId: 'double_seeds', tab: 'SEEDS', name: 'Double Seeds', description: 'Increase chance to spawn 2 seeds at a time', icon: 'icon_seedquality.png', popupDescription: 'Increase chance to spawn 2 seeds at a time' },
+    { level: 6, upgradeId: 'wild_growth', tab: 'CROPS', name: 'Wild Growth', description: 'Plants automatically duplicate over time', icon: 'icon_luckymerge.png', popupDescription: 'Plants in your garden will now automatically duplicate over time' },
+    { level: 7, upgradeId: 'market_value', tab: 'HARVEST', name: 'Market Value', description: 'Increase the coins earned when completing orders', icon: 'icon_marketvalue.png' },
+    { level: 8, upgradeId: 'bonus_seeds', tab: 'SEEDS', name: 'Lucky Seed', description: 'Increase chance to produce a bonus higher level seed', icon: 'icon_luckyseed.png', popupDescription: 'Seeds now have a chance to produce an extra higher level plant' },
+    { level: 9, upgradeId: 'crop_value', tab: 'CROPS', name: 'Crop Yield', description: 'Increase how many crops your plants produce when harvesting', icon: 'icon_cropvalue.png', popupDescription: 'You can now increase how many crops your plants produce when harvesting' },
     { level: 10, upgradeId: 'happy_customer', tab: 'HARVEST', name: 'Happy Customers', description: 'Increase chance that customers pay double for orders', icon: 'icon_happycustomer.png', popupDescription: 'You can now increase the chance for customers to pay double coins for orders' },
   ];
   const match = allUnlocks.find(u => u.level === level);
@@ -346,8 +350,8 @@ const ICON_COIN_SMALL = assetPath('/assets/icons/icon_coin_small.png');
 const CROPS_UPGRADES: UpgradeDef[] = [
   { id: 'harvest_speed', name: 'Harvest Speed', icon: assetPath('/assets/icons/icon_harvestspeed.png'), description: 'Increase automatic harvest cycle speed' },
   { id: 'plot_expansion', name: 'Garden Expansion', icon: assetPath('/assets/icons/icon_plotexpansion.png'), description: 'Unlock additional plots in the garden' },
+  { id: 'wild_growth', name: 'Wild Growth', icon: assetPath('/assets/icons/icon_luckymerge.png'), description: 'Plants automatically duplicate over time' },
   { id: 'crop_value', name: 'Crop Yield', icon: assetPath('/assets/icons/icon_cropvalue.png'), description: 'Plants produce more crops per harvest' },
-  { id: 'fertile_soil', name: 'Fertile Soil', icon: assetPath('/assets/icons/icon_fetilesoil.png'), description: 'Fertile plots yield double crops when harvested' },
 ];
 
 const HARVEST_UPGRADES: UpgradeDef[] = [
@@ -374,9 +378,9 @@ const getSeedsUpgradeValue = (upgradeId: string, level: number, seedsState?: See
     case 'seed_storage':
       return `${Math.min(SEED_STORAGE_MAX_CAP, SEED_STORAGE_BASE + level)}`;
     case 'double_seeds':
-      return `${Math.min(50, level * 5)}%`;
+      return `${Math.min(100, level * 10)}%`;
     case 'bonus_seeds':
-      return `${level * 5}%`;
+      return `${Math.min(100, level * 10)}%`;
     case 'seed_surplus':
       return level <= 0 ? '1.0x' : `${Math.min(5, 1 + 0.5 * (level - 1)).toFixed(1)}x`;
     default:
@@ -393,8 +397,8 @@ const getCropsUpgradeValue = (upgradeId: string, level: number): string | null =
       return `+1`;
     case 'crop_value':
       return `${Math.min(10, 1 + level)}`;
-    case 'fertile_soil':
-      return `+1`;
+    case 'wild_growth':
+      return `${getWildGrowthDisplaySecForLevel(level)}s`;
     case 'merge_harvest':
       return `${level * 5}%`;
     default:
@@ -513,7 +517,7 @@ const createInitialState = (upgrades: UpgradeDef[]) =>
   upgrades.reduce((acc, curr) => ({ ...acc, [curr.id]: { level: 1, progress: 0 } }), {} as Record<string, UpgradeState>);
 
 /** Initial seeds state: seed_production, seed_storage, bonus_seeds, seed_surplus start at level 0.
- * bonus_seeds starts at 0% chance (max 50% at level 10).
+ * Lucky Seed (bonus_seeds) starts at 0% chance (max 100% at level 10).
  */
 export const createInitialSeedsState = (): SeedsState => ({
   ...createInitialState(SEEDS_UPGRADES),
@@ -530,6 +534,7 @@ export const createInitialCropsState = (): Record<string, UpgradeState> => ({
   plot_expansion: { level: 0, progress: 0 },
   crop_value: { level: 0, progress: 0 },
   fertile_soil: { level: 0, progress: 0 },
+  wild_growth: { level: 0, progress: 0 },
   merge_harvest: { level: 0, progress: 0 },
 });
 
@@ -862,11 +867,6 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
       onUnlockCell?.();
     }
 
-    // Special handling for fertile_soil: trigger cell fertilization
-    if (id === 'fertile_soil') {
-      onFertilizeCell?.();
-    }
-
     const setter =
       category === 'SEEDS'
         ? setSeedsState
@@ -1048,7 +1048,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
           (upgrade.id === 'harvest_speed' && state.level >= 9) || // 10%..100% visual; 3/min..10/min
           (upgrade.id === 'bonus_seeds' && isBonusSeedMaxed(stateMap as SeedsState)) ||
           (upgrade.id === 'plot_expansion' && isPlotExpansionMaxed(lockedCellCount)) ||
-          (upgrade.id === 'fertile_soil' && isFertileSoilMaxed(fertilizableCellCount)) ||
+          (upgrade.id === 'wild_growth' && isWildGrowthMaxLevel(state.level)) ||
           (upgrade.id === 'crop_value' && isCropYieldMaxed(stateMap)) ||
           (upgrade.id === 'merge_harvest' && isMergeHarvestMaxed(stateMap)) ||
           (upgrade.id === 'customer_speed' && isCustomerSpeedMaxed(stateMap)) ||
