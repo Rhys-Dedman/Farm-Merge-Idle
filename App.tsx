@@ -318,6 +318,9 @@ const getDiscoveryGoalBuffer = (highestPlant: number): number => {
   return 18; // 10+
 };
 
+/** Discovery popup coin reward = `getCoinValueForLevel(plant)` × this (before Double Coins boost). */
+const PLANT_DISCOVERY_COIN_MULTIPLIER = 5;
+
 /**
  * Pick plant level for a new goal.
  * - "Discovering a plant" = merging to a new highest level. Only that event starts/resets the counter.
@@ -5535,7 +5538,7 @@ export default function App() {
                 description={getPlantData(discoveryPopup.level).description}
                 buttonText={discoveryPopup.level === 2 ? 'Excellent!' : 'Add to Collection'}
                 rewardAmount={applyDoubleCoinsVisualAmount(
-                  getCoinValueForLevel(discoveryPopup.level) * 3,
+                  getCoinValueForLevel(discoveryPopup.level) * PLANT_DISCOVERY_COIN_MULTIPLIER,
                   activeBoosts
                 )}
                 showCloseButton={false}
@@ -5543,7 +5546,7 @@ export default function App() {
                 appScale={appScale}
                 onButtonClick={(startPoint) => {
                   const rewardValue = applyDoubleCoinsVisualAmount(
-                    getCoinValueForLevel(discoveryPopup.level) * 3,
+                    getCoinValueForLevel(discoveryPopup.level) * PLANT_DISCOVERY_COIN_MULTIPLIER,
                     activeBoostsRef.current
                   );
                   // Render particles in a fixed full-viewport layer (portaled with modals) so coords match
