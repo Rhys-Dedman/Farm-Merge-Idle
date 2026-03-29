@@ -1,8 +1,9 @@
 /**
  * Settings (Pause) Popup - Debugger menu. Title/divider/description match discovery popup style.
  */
-import React, { useState, useEffect, type CSSProperties } from 'react';
+import React, { useState, useEffect, useCallback, type CSSProperties } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
 import { getPerformanceMode, setPerformanceMode } from '../utils/performanceMode';
 import { getAutoMergeMode, setAutoMergeMode } from '../utils/autoMergeMode';
 
@@ -111,7 +112,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   closeOnBackdropClick = true,
   appScale = 1,
 }) => {
-  const [animState, setAnimState] = useState<'hidden' | 'entering' | 'visible' | 'leaving'>('hidden');
+  const [animState, setAnimState] = useState<PopupAnimWithPreflight>('hidden');
   const [rewardedPressed, setRewardedPressed] = useState(false);
   const [levelUpPressed, setLevelUpPressed] = useState(false);
   const [unlockPlantPressed, setUnlockPlantPressed] = useState(false);
@@ -130,11 +131,17 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
     }
   }, [isVisible]);
 
+  const beginEnterAfterPreflight = useCallback(() => {
+    setAnimState('entering');
+    setTimeout(() => setAnimState('visible'), 250);
+  }, []);
+
+  usePopupPreflightEnter(animState, beginEnterAfterPreflight);
+
   useEffect(() => {
     if (isVisible && animState === 'hidden') {
-      setAnimState('entering');
-      setTimeout(() => setAnimState('visible'), 250);
-    } else if (!isVisible && (animState === 'visible' || animState === 'entering')) {
+      setAnimState('preflight');
+    } else if (!isVisible && (animState === 'visible' || animState === 'entering' || animState === 'preflight')) {
       setAnimState('leaving');
       setTimeout(() => {
         setAnimState('hidden');
@@ -144,7 +151,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   }, [isVisible, animState, onClose]);
 
   const dismissToClose = () => {
-    if (animState === 'leaving' || animState === 'hidden') return;
+    if (animState === 'leaving' || animState === 'hidden' || animState === 'preflight') return;
     setAnimState('leaving');
     setTimeout(() => {
       setAnimState('hidden');
@@ -153,7 +160,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   };
 
   const handleRewardedAdClick = () => {
-    if (animState === 'leaving') return;
+    if (animState === 'leaving' || animState === 'preflight') return;
     onRewardedAdClick();
     setAnimState('leaving');
     setTimeout(() => {
@@ -164,13 +171,14 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
 
   if (animState === 'hidden') return null;
 
+  const isPreflight = animState === 'preflight';
   const isEntering = animState === 'entering';
   const isLeaving = animState === 'leaving';
 
   return (
     <div
-      className="fixed inset-0 flex items-center justify-center pointer-events-auto"
-      style={{ zIndex: 100, overflow: 'hidden' }}
+      className="fixed inset-0 flex items-center justify-center"
+      style={{ zIndex: 100, overflow: 'hidden', pointerEvents: isPreflight ? 'none' : 'auto' }}
     >
       <div
         className="absolute transition-opacity duration-200"
@@ -180,7 +188,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
           right: '-10px',
           bottom: '-10px',
           backgroundColor: 'rgba(0, 0, 0, 0.7)',
-          opacity: isLeaving ? 0 : 1,
+          opacity: isLeaving || isPreflight ? 0 : 1,
         }}
         onClick={closeOnBackdropClick ? dismissToClose : undefined}
       />
@@ -196,13 +204,13 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
           style={{
             width: '260px',
             zIndex: 102,
-            animation: isEntering
-              ? 'pausePopupEnter 250ms ease-out forwards'
-              : isLeaving
-                ? `pausePopupLeave ${POPUP_CLOSE_MS}ms ease-in forwards`
-                : 'none',
-            transform: animState === 'visible' ? 'scale(1)' : undefined,
-            opacity: animState === 'visible' ? 1 : undefined,
+            ...popupCardSurfaceStyle(
+              animState,
+              isEntering,
+              isLeaving,
+              'pausePopupEnter 250ms ease-out forwards',
+              `pausePopupLeave ${POPUP_CLOSE_MS}ms ease-in forwards`
+            ),
           }}
         >
           <style>{`

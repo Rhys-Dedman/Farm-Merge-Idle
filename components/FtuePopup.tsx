@@ -2,8 +2,9 @@
  * FTUE Popup - Same look as other popups; optional header, title, divider, description, button.
  * Leaf burst is sized to the popup. When blockBackdropClick is true, only the primary button is clickable.
  */
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
 import { PopupVectorBackground } from './PopupVectorBackground';
 
 const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_1.png'), assetPath('/assets/vfx/particle_leaf_2.png')];
@@ -121,7 +122,7 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
   burstHeight = DEFAULT_BURST_HEIGHT,
   appScale = 1,
 }) => {
-  const [animState, setAnimState] = useState<'hidden' | 'entering' | 'visible' | 'leaving'>('hidden');
+  const [animState, setAnimState] = useState<PopupAnimWithPreflight>('hidden');
   const [assetsReady, setAssetsReady] = useState(false);
   const [leaves, setLeaves] = useState<LeafParticle[]>([]);
   const [leafPositions, setLeafPositions] = useState<{ x: number; y: number; opacity: number; rotation: number; scale: number }[]>([]);
@@ -187,36 +188,42 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
     return () => cancelAnimationFrame(leafRafRef.current);
   }, [leaves]);
 
+  const beginEnterAfterPreflight = useCallback(() => {
+    const newLeaves = createPopupLeaves(burstWidth, burstHeight);
+    setLeaves(newLeaves);
+    leafStartTimeRef.current = Date.now();
+    leafPosRef.current = newLeaves.map((leaf) => ({
+      x: leaf.spawnX ?? 0,
+      y: leaf.spawnY ?? 0,
+      vx: 0,
+      vy: 0,
+      opacity: 1,
+      rotation: 0,
+      scale: 1,
+      started: false,
+    }));
+    setLeafPositions(newLeaves.map((leaf) => ({ x: leaf.spawnX ?? 0, y: leaf.spawnY ?? 0, opacity: 1, rotation: 0, scale: 1 })));
+    setImgFailed({});
+    setAnimState('entering');
+    setTimeout(() => setAnimState('visible'), 250);
+  }, [burstWidth, burstHeight]);
+
+  usePopupPreflightEnter(animState, beginEnterAfterPreflight);
+
   useEffect(() => {
     if (isVisible && assetsReady && animState === 'hidden') {
-      const newLeaves = createPopupLeaves(burstWidth, burstHeight);
-      setLeaves(newLeaves);
-      leafStartTimeRef.current = Date.now();
-      leafPosRef.current = newLeaves.map((leaf) => ({
-        x: leaf.spawnX ?? 0,
-        y: leaf.spawnY ?? 0,
-        vx: 0,
-        vy: 0,
-        opacity: 1,
-        rotation: 0,
-        scale: 1,
-        started: false,
-      }));
-      setLeafPositions(newLeaves.map((leaf) => ({ x: leaf.spawnX ?? 0, y: leaf.spawnY ?? 0, opacity: 1, rotation: 0, scale: 1 })));
-      setImgFailed({});
-      setAnimState('entering');
-      setTimeout(() => setAnimState('visible'), 250);
-    } else if (!isVisible && (animState === 'visible' || animState === 'entering')) {
+      setAnimState('preflight');
+    } else if (!isVisible && (animState === 'visible' || animState === 'entering' || animState === 'preflight')) {
       setAnimState('leaving');
       setTimeout(() => {
         setAnimState('hidden');
         onClose();
       }, POPUP_CLOSE_MS);
     }
-  }, [isVisible, assetsReady, animState, onClose, burstWidth, burstHeight]);
+  }, [isVisible, assetsReady, animState, onClose]);
 
   const dismissWithAnimation = () => {
-    if (animState === 'leaving') return;
+    if (animState === 'leaving' || animState === 'preflight') return;
     setAnimState('leaving');
     setTimeout(() => {
       setAnimState('hidden');
@@ -230,6 +237,7 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
 
   if (animState === 'hidden') return null;
 
+  const isPreflight = animState === 'preflight';
   const isEntering = animState === 'entering';
   const isLeaving = animState === 'leaving';
 
@@ -237,8 +245,8 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
 
   return (
     <div
-      className={`absolute inset-0 flex ${alignClass} justify-center pointer-events-auto`}
-      style={{ zIndex: 100, overflow: 'hidden' }}
+      className={`absolute inset-0 flex ${alignClass} justify-center`}
+      style={{ zIndex: 100, overflow: 'hidden', pointerEvents: isPreflight ? 'none' : 'auto' }}
     >
       <div
         className="absolute transition-opacity duration-200"
@@ -248,7 +256,7 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
           right: '-10px',
           bottom: '-10px',
           backgroundColor: 'rgba(0, 0, 0, 0.7)',
-          opacity: isLeaving ? 0 : 1,
+          opacity: isLeaving || isPreflight ? 0 : 1,
         }}
         onClick={blockBackdropClick ? undefined : dismissWithAnimation}
       />
@@ -302,9 +310,13 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
           style={{
             width: '320px',
             zIndex: 102,
-            animation: isEntering ? 'ftuePopupEnter 250ms ease-out forwards' : isLeaving ? `ftuePopupLeave ${POPUP_CLOSE_MS}ms ease-in forwards` : 'none',
-            transform: animState === 'visible' ? 'scale(1)' : undefined,
-            opacity: animState === 'visible' ? 1 : undefined,
+            ...popupCardSurfaceStyle(
+              animState,
+              isEntering,
+              isLeaving,
+              'ftuePopupEnter 250ms ease-out forwards',
+              `ftuePopupLeave ${POPUP_CLOSE_MS}ms ease-in forwards`
+            ),
           }}
         >
           <style>{`

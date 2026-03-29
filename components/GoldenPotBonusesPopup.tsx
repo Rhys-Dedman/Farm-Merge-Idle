@@ -2,8 +2,9 @@
  * Golden pot bonuses — discovery-style shell without plant subtitle or collect button.
  * Backdrop and X dismiss; shows golden pot count and bonus tier strip.
  */
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
 import { PopupVectorBackground } from './PopupVectorBackground';
 import { PlantWithPot } from './PlantWithPot';
 import {
@@ -116,7 +117,7 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
   maxGoldenPots = 24,
   appScale = 1,
 }) => {
-  const [animState, setAnimState] = useState<'hidden' | 'entering' | 'visible' | 'leaving'>('hidden');
+  const [animState, setAnimState] = useState<PopupAnimWithPreflight>('hidden');
   const [assetsReady, setAssetsReady] = useState(false);
   const [leaves, setLeaves] = useState<LeafParticle[]>([]);
   const [leafPositions, setLeafPositions] = useState<
@@ -198,26 +199,32 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
     return () => cancelAnimationFrame(leafRafRef.current);
   }, [leaves]);
 
+  const beginEnterAfterPreflight = useCallback(() => {
+    const newLeaves = createPopupLeaves();
+    setLeaves(newLeaves);
+    leafStartTimeRef.current = Date.now();
+    leafPosRef.current = newLeaves.map((leaf) => ({
+      x: leaf.spawnX ?? 0,
+      y: leaf.spawnY ?? 0,
+      vx: 0,
+      vy: 0,
+      opacity: 1,
+      rotation: 0,
+      scale: 1,
+      started: false,
+    }));
+    setLeafPositions(newLeaves.map((leaf) => ({ x: leaf.spawnX ?? 0, y: leaf.spawnY ?? 0, opacity: 1, rotation: 0, scale: 1 })));
+    setImgFailed({});
+    setAnimState('entering');
+    setTimeout(() => setAnimState('visible'), 250);
+  }, []);
+
+  usePopupPreflightEnter(animState, beginEnterAfterPreflight);
+
   useEffect(() => {
     if (isVisible && assetsReady && animState === 'hidden') {
-      const newLeaves = createPopupLeaves();
-      setLeaves(newLeaves);
-      leafStartTimeRef.current = Date.now();
-      leafPosRef.current = newLeaves.map((leaf) => ({
-        x: leaf.spawnX ?? 0,
-        y: leaf.spawnY ?? 0,
-        vx: 0,
-        vy: 0,
-        opacity: 1,
-        rotation: 0,
-        scale: 1,
-        started: false,
-      }));
-      setLeafPositions(newLeaves.map((leaf) => ({ x: leaf.spawnX ?? 0, y: leaf.spawnY ?? 0, opacity: 1, rotation: 0, scale: 1 })));
-      setImgFailed({});
-      setAnimState('entering');
-      setTimeout(() => setAnimState('visible'), 250);
-    } else if (!isVisible && (animState === 'visible' || animState === 'entering')) {
+      setAnimState('preflight');
+    } else if (!isVisible && (animState === 'visible' || animState === 'entering' || animState === 'preflight')) {
       setAnimState('leaving');
       setTimeout(() => {
         setAnimState('hidden');
@@ -240,13 +247,14 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
 
   if (animState === 'hidden') return null;
 
+  const isPreflight = animState === 'preflight';
   const isEntering = animState === 'entering';
   const isLeaving = animState === 'leaving';
 
   return (
     <div
-      className="fixed inset-0 flex items-center justify-center pointer-events-auto"
-      style={{ zIndex: 100, overflow: 'hidden' }}
+      className="fixed inset-0 flex items-center justify-center"
+      style={{ zIndex: 100, overflow: 'hidden', pointerEvents: isPreflight ? 'none' : 'auto' }}
     >
       <div
         className="absolute transition-opacity duration-200"
@@ -256,7 +264,7 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
           right: '-10px',
           bottom: '-10px',
           backgroundColor: 'rgba(0, 0, 0, 0.7)',
-          opacity: isLeaving ? 0 : 1,
+          opacity: isLeaving || isPreflight ? 0 : 1,
         }}
         onClick={dismiss}
       />
@@ -320,13 +328,13 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
           style={{
             width: '320px',
             zIndex: 102,
-            animation: isEntering
-              ? 'popupEnter 250ms ease-out forwards'
-              : isLeaving
-                ? `popupLeave ${POPUP_CLOSE_MS}ms ease-in forwards`
-                : 'none',
-            transform: animState === 'visible' ? 'scale(1)' : undefined,
-            opacity: animState === 'visible' ? 1 : undefined,
+            ...popupCardSurfaceStyle(
+              animState,
+              isEntering,
+              isLeaving,
+              'popupEnter 250ms ease-out forwards',
+              `popupLeave ${POPUP_CLOSE_MS}ms ease-in forwards`
+            ),
           }}
         >
           <style>{`

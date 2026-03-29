@@ -2,8 +2,9 @@
  * Fake Ad Popup - "Ad" shown when player taps Watch Ad.
  * Constrained to the game area (same size as game) so it matches splash/game layout.
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { POPUP_PREFLIGHT_MIN_MS } from '../hooks/usePopupPreflightEnter';
 
 const GAME_DESIGN_WIDTH = 448;
 const GAME_DESIGN_HEIGHT = 796;
@@ -26,6 +27,36 @@ const BUTTON_PRESSED_BG = '#f0c840';
 
 export const FakeAdPopup: React.FC<FakeAdPopupProps> = ({ isVisible, onComplete, onActivateRewardClick, appScale = 1 }) => {
   const [buttonPressed, setButtonPressed] = useState(false);
+  const [layoutReady, setLayoutReady] = useState(false);
+
+  useEffect(() => {
+    if (!isVisible) setLayoutReady(false);
+  }, [isVisible]);
+
+  useLayoutEffect(() => {
+    if (!isVisible) return;
+    setLayoutReady(false);
+    let cancelled = false;
+    const t0 = Date.now();
+    let r1 = 0;
+    let r2 = 0;
+    let to = 0;
+    r1 = requestAnimationFrame(() => {
+      r2 = requestAnimationFrame(() => {
+        if (cancelled) return;
+        const rest = Math.max(0, POPUP_PREFLIGHT_MIN_MS - (Date.now() - t0));
+        to = window.setTimeout(() => {
+          if (!cancelled) setLayoutReady(true);
+        }, rest);
+      });
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(r1);
+      cancelAnimationFrame(r2);
+      clearTimeout(to);
+    };
+  }, [isVisible]);
 
   if (!isVisible) return null;
 
@@ -36,10 +67,13 @@ export const FakeAdPopup: React.FC<FakeAdPopupProps> = ({ isVisible, onComplete,
     <>
       {/* Full-screen overlay: black pillarbox, centered game-sized area */}
       <div
-        className="fixed inset-0 flex items-center justify-center pointer-events-auto"
+        className="fixed inset-0 flex items-center justify-center"
         style={{
           zIndex: 110,
           backgroundColor: '#050608',
+          opacity: layoutReady ? 1 : 0,
+          visibility: layoutReady ? 'visible' : 'hidden',
+          pointerEvents: layoutReady ? 'auto' : 'none',
         }}
       >
         {/* Ad content constrained to same size as game (splash-style) */}

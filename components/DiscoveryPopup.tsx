@@ -3,8 +3,9 @@
  * Features mobile game style show/hide animations with leaf burst VFX.
  * Uses 9-slice sprite scaling for the background.
  */
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
 import { PopupVectorBackground } from './PopupVectorBackground';
 import { formatCompactNumber } from '../utils/formatCompactNumber';
 import { PlantWithPot } from './PlantWithPot';
@@ -167,7 +168,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
   closeOnBackdropClick = true,
   appScale = 1,
 }) => {
-  const [animState, setAnimState] = useState<'hidden' | 'entering' | 'visible' | 'leaving'>('hidden');
+  const [animState, setAnimState] = useState<PopupAnimWithPreflight>('hidden');
   const [assetsReady, setAssetsReady] = useState(false);
   const [leaves, setLeaves] = useState<LeafParticle[]>([]);
   const [leafPositions, setLeafPositions] = useState<{ x: number; y: number; opacity: number; rotation: number; scale: number }[]>([]);
@@ -245,27 +246,32 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
     return () => cancelAnimationFrame(leafRafRef.current);
   }, [leaves]);
 
-  // Popup visibility effect - waits for assets to be ready
+  const beginEnterAfterPreflight = useCallback(() => {
+    const newLeaves = createPopupLeaves();
+    setLeaves(newLeaves);
+    leafStartTimeRef.current = Date.now();
+    leafPosRef.current = newLeaves.map((leaf) => ({
+      x: leaf.spawnX ?? 0,
+      y: leaf.spawnY ?? 0,
+      vx: 0,
+      vy: 0,
+      opacity: 1,
+      rotation: 0,
+      scale: 1,
+      started: false,
+    }));
+    setLeafPositions(newLeaves.map((leaf) => ({ x: leaf.spawnX ?? 0, y: leaf.spawnY ?? 0, opacity: 1, rotation: 0, scale: 1 })));
+    setImgFailed({});
+    setAnimState('entering');
+    setTimeout(() => setAnimState('visible'), 250);
+  }, []);
+
+  usePopupPreflightEnter(animState, beginEnterAfterPreflight);
+
   useEffect(() => {
     if (isVisible && assetsReady && animState === 'hidden') {
-      const newLeaves = createPopupLeaves();
-      setLeaves(newLeaves);
-      leafStartTimeRef.current = Date.now();
-      leafPosRef.current = newLeaves.map((leaf) => ({ 
-        x: leaf.spawnX ?? 0, 
-        y: leaf.spawnY ?? 0, 
-        vx: 0, 
-        vy: 0, 
-        opacity: 1, 
-        rotation: 0, 
-        scale: 1, 
-        started: false 
-      }));
-      setLeafPositions(newLeaves.map((leaf) => ({ x: leaf.spawnX ?? 0, y: leaf.spawnY ?? 0, opacity: 1, rotation: 0, scale: 1 })));
-      setImgFailed({});
-      setAnimState('entering');
-      setTimeout(() => setAnimState('visible'), 250);
-    } else if (!isVisible && (animState === 'visible' || animState === 'entering')) {
+      setAnimState('preflight');
+    } else if (!isVisible && (animState === 'visible' || animState === 'entering' || animState === 'preflight')) {
       setAnimState('leaving');
       setTimeout(() => {
         setAnimState('hidden');
@@ -279,7 +285,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
   const rewardCoinRef = useRef<HTMLImageElement>(null);
 
   const dismissWithoutCollect = () => {
-    if (isClosing || animState === 'leaving') return;
+    if (isClosing || animState === 'leaving' || animState === 'preflight') return;
     setIsClosing(true);
     setAnimState('leaving');
     setTimeout(() => {
@@ -289,7 +295,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
   };
 
   const handleButtonClick = () => {
-    if (isClosing) return;
+    if (isClosing || animState === 'preflight') return;
     setIsClosing(true);
     if (onButtonClick) {
       if (rewardCoinRef.current) {
@@ -309,6 +315,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
 
   if (animState === 'hidden') return null;
 
+  const isPreflight = animState === 'preflight';
   const isEntering = animState === 'entering';
   const isLeaving = animState === 'leaving';
 
@@ -323,8 +330,8 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
 
   return (
     <div 
-      className="fixed inset-0 flex items-center justify-center pointer-events-auto"
-      style={{ zIndex: 100, overflow: 'hidden', paddingTop: 'clamp(28px, 5vh, 52px)' }}
+      className="fixed inset-0 flex items-center justify-center"
+      style={{ zIndex: 100, overflow: 'hidden', paddingTop: 'clamp(28px, 5vh, 52px)', pointerEvents: isPreflight ? 'none' : 'auto' }}
     >
 {/* Backdrop - not scaled, covers full screen */}
       <div
@@ -335,7 +342,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
           right: '-10px',
           bottom: '-10px',
           backgroundColor: 'rgba(0, 0, 0, 0.7)',
-          opacity: isLeaving ? 0 : 1,
+          opacity: isLeaving || isPreflight ? 0 : 1,
         }}
         onClick={closeOnBackdropClick ? dismissWithoutCollect : undefined}
       />
@@ -403,13 +410,13 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
         style={{ 
           width: '320px',
           zIndex: 102,
-          animation: isEntering 
-            ? 'popupEnter 250ms ease-out forwards'
-            : isLeaving 
-              ? `popupLeave ${POPUP_CLOSE_MS}ms ease-in forwards`
-              : 'none',
-          transform: animState === 'visible' ? 'scale(1)' : undefined,
-          opacity: animState === 'visible' ? 1 : undefined,
+          ...popupCardSurfaceStyle(
+            animState,
+            isEntering,
+            isLeaving,
+            'popupEnter 250ms ease-out forwards',
+            `popupLeave ${POPUP_CLOSE_MS}ms ease-in forwards`
+          ),
         }}
       >
         <style>{`

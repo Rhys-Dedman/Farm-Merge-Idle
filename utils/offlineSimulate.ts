@@ -19,8 +19,8 @@ import {
   WILD_GROWTH_UNLOCK_PLAYER_LEVEL,
 } from './wildGrowth';
 import {
-  applyGoldenPotHarvestPerMinute,
-  applyGoldenPotProductionPerMinute,
+  getHarvestRechargePerMinute,
+  getSeedRechargePerMinute,
 } from '../constants/goldenPotBonuses';
 
 const HARVEST_CHARGES_MAX = 3;
@@ -124,16 +124,14 @@ export function simulateOfflineSeedHarvest(input: OfflineSimInput): OfflineSimRe
   const getSeedRatePerMs = (wallTime: number) => {
     if (seedFrozen) return 0;
     const hasRapid = input.activeBoosts.some((b) => b.offerId === 'rapid_seeds' && b.endTime > wallTime);
-    let perMin = hasRapid ? 15 : (3 + (7 * Math.min(9, Math.max(0, seedProdLevel))) / 9);
-    perMin = applyGoldenPotProductionPerMinute(perMin, goldPots);
+    const perMin = getSeedRechargePerMinute(seedProdLevel, goldPots, hasRapid);
     return (perMin * 100) / (60 * 1000);
   };
 
   const getHarvestRatePerMs = (wallTime: number) => {
     if (harvestFrozen) return 0;
     const hasRapid = input.activeBoosts.some((b) => b.offerId === 'rapid_harvest' && b.endTime > wallTime);
-    let perMin = hasRapid ? 15 : (3 + (7 * Math.min(9, Math.max(0, harvestSpeedLevel))) / 9);
-    perMin = applyGoldenPotHarvestPerMinute(perMin, goldPots);
+    const perMin = getHarvestRechargePerMinute(harvestSpeedLevel, goldPots, hasRapid);
     return (perMin * 100) / (60 * 1000);
   };
 

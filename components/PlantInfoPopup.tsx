@@ -2,8 +2,9 @@
  * Plant Info Popup - Shows plant information when tapping on barn shelves.
  * Simplified version of DiscoveryPopup without title or button.
  */
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
 import { PopupVectorBackground } from './PopupVectorBackground';
 import { PlantWithPot } from './PlantWithPot';
 import { formatCompactNumber } from '../utils/formatCompactNumber';
@@ -104,7 +105,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
   appScale = 1,
   masteryUnlock,
 }) => {
-  const [animState, setAnimState] = useState<'hidden' | 'entering' | 'visible' | 'leaving'>('hidden');
+  const [animState, setAnimState] = useState<PopupAnimWithPreflight>('hidden');
   const [assetsReady, setAssetsReady] = useState(false);
   const [masteryButtonPressed, setMasteryButtonPressed] = useState(false);
   const [leaves, setLeaves] = useState<LeafParticle[]>([]);
@@ -181,27 +182,32 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
     return () => cancelAnimationFrame(leafRafRef.current);
   }, [leaves]);
 
-  // Popup visibility effect - waits for assets to be ready
+  const beginEnterAfterPreflight = useCallback(() => {
+    const newLeaves = createPopupLeaves();
+    setLeaves(newLeaves);
+    leafStartTimeRef.current = Date.now();
+    leafPosRef.current = newLeaves.map((leaf) => ({
+      x: leaf.spawnX ?? 0,
+      y: leaf.spawnY ?? 0,
+      vx: 0,
+      vy: 0,
+      opacity: 1,
+      rotation: 0,
+      scale: 1,
+      started: false,
+    }));
+    setLeafPositions(newLeaves.map((leaf) => ({ x: leaf.spawnX ?? 0, y: leaf.spawnY ?? 0, opacity: 1, rotation: 0, scale: 1 })));
+    setImgFailed({});
+    setAnimState('entering');
+    setTimeout(() => setAnimState('visible'), 250);
+  }, []);
+
+  usePopupPreflightEnter(animState, beginEnterAfterPreflight);
+
   useEffect(() => {
     if (isVisible && assetsReady && animState === 'hidden') {
-      const newLeaves = createPopupLeaves();
-      setLeaves(newLeaves);
-      leafStartTimeRef.current = Date.now();
-      leafPosRef.current = newLeaves.map((leaf) => ({ 
-        x: leaf.spawnX ?? 0, 
-        y: leaf.spawnY ?? 0, 
-        vx: 0, 
-        vy: 0, 
-        opacity: 1, 
-        rotation: 0, 
-        scale: 1, 
-        started: false 
-      }));
-      setLeafPositions(newLeaves.map((leaf) => ({ x: leaf.spawnX ?? 0, y: leaf.spawnY ?? 0, opacity: 1, rotation: 0, scale: 1 })));
-      setImgFailed({});
-      setAnimState('entering');
-      setTimeout(() => setAnimState('visible'), 250);
-    } else if (!isVisible && (animState === 'visible' || animState === 'entering')) {
+      setAnimState('preflight');
+    } else if (!isVisible && (animState === 'visible' || animState === 'entering' || animState === 'preflight')) {
       setAnimState('leaving');
       setTimeout(() => {
         setAnimState('hidden');
@@ -211,7 +217,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
   }, [isVisible, assetsReady, animState, onClose]);
 
   const handleClose = () => {
-    if (animState === 'leaving') return;
+    if (animState === 'leaving' || animState === 'preflight') return;
     setAnimState('leaving');
     setTimeout(() => {
       setAnimState('hidden');
@@ -221,6 +227,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
 
   if (animState === 'hidden') return null;
 
+  const isPreflight = animState === 'preflight';
   const isEntering = animState === 'entering';
   const isLeaving = animState === 'leaving';
 
@@ -228,8 +235,8 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
 
   return (
     <div 
-      className="fixed inset-0 flex items-center justify-center pointer-events-auto"
-      style={{ zIndex: 100, overflow: 'hidden', paddingTop: 'clamp(28px, 5vh, 52px)' }}
+      className="fixed inset-0 flex items-center justify-center"
+      style={{ zIndex: 100, overflow: 'hidden', paddingTop: 'clamp(28px, 5vh, 52px)', pointerEvents: isPreflight ? 'none' : 'auto' }}
       onClick={handleClose}
     >
 {/* Backdrop - not scaled, covers full screen */}
@@ -241,7 +248,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
           right: '-10px',
           bottom: '-10px',
           backgroundColor: 'rgba(0, 0, 0, 0.7)',
-          opacity: isLeaving ? 0 : 1,
+          opacity: isLeaving || isPreflight ? 0 : 1,
           transition: `opacity ${POPUP_CLOSE_MS}ms ease-out`,
         }}
       />
@@ -308,13 +315,13 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
         style={{ 
           width: '320px',
           zIndex: 102,
-          animation: isEntering 
-            ? 'plantInfoEnter 250ms ease-out forwards'
-            : isLeaving 
-              ? `plantInfoLeave ${POPUP_CLOSE_MS}ms ease-in forwards`
-              : 'none',
-          transform: animState === 'visible' ? 'scale(1)' : undefined,
-          opacity: animState === 'visible' ? 1 : undefined,
+          ...popupCardSurfaceStyle(
+            animState,
+            isEntering,
+            isLeaving,
+            'plantInfoEnter 250ms ease-out forwards',
+            `plantInfoLeave ${POPUP_CLOSE_MS}ms ease-in forwards`
+          ),
         }}
         onClick={(e) => e.stopPropagation()}
       >

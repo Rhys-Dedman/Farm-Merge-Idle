@@ -64,6 +64,17 @@ interface PageHeaderProps {
   hideFps?: boolean;
   /** If true, hide/collapse the player level block so it doesn't reserve width. */
   collapsePlayerLevel?: boolean;
+  /**
+   * When true (interactive header only), do not render the level bar or its spacer — coin sits next to boosts.
+   * Used e.g. Collection / barn screen.
+   */
+  omitPlayerLevelBlock?: boolean;
+  /** Override outer `<header>` left padding (px); omit to keep `px-2` (8px). */
+  headerOuterPadLeftPx?: number;
+  /** Override inner content row left padding (px); omit to keep 12px (`pl-3`). */
+  headerRowPadLeftPx?: number;
+  /** Override left cluster `marginLeft` (default 10). */
+  headerClusterMarginLeftPx?: number;
   /** Optional centered title rendered above the 9-slice top bar background. */
   centerTitle?: string;
   /** When provided, shows a + button that grants 1 goal worth of XP on tap */
@@ -110,6 +121,10 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   hideTopBarBg = false,
   hideFps = false,
   collapsePlayerLevel = false,
+  omitPlayerLevelBlock = false,
+  headerOuterPadLeftPx,
+  headerRowPadLeftPx,
+  headerClusterMarginLeftPx,
   centerTitle,
   onXpBoostClick,
   onPauseClick,
@@ -206,7 +221,10 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   const capWidthPx = Math.round((LEFT_CAP_PX * 44) / SPRITE_H);
 
   return (
-    <header className="z-10 shrink-0 px-2 pt-4 pb-2">
+    <header
+      className={`z-10 shrink-0 pt-4 pb-2 ${headerOuterPadLeftPx === undefined ? 'px-2' : 'pr-2'}`}
+      style={headerOuterPadLeftPx !== undefined ? { paddingLeft: headerOuterPadLeftPx } : undefined}
+    >
       {/* Top UI background - 3-slice: left cap (fixed), center (stretch), right cap (fixed) */}
       <div className="relative flex min-h-[44px]">
         {/* 3-slice background layer - hidden when hideTopBarBg (e.g. shed screen) */}
@@ -250,10 +268,11 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
         )}
         {/* Content on top — left cluster flexes; FPS + settings are absolutely docked so boosts never push them off-screen */}
         <div
-          className="relative z-10 flex w-full min-w-0 min-h-[44px] items-center px-3 py-2"
+          className={`relative z-10 flex w-full min-w-0 min-h-[44px] items-center py-2 ${headerRowPadLeftPx === undefined ? 'pl-3 pr-3' : 'pr-3'}`}
           style={{
             /* Reserve space for absolute FPS + settings dock — do not shrink the cluster with max-width/clip (that hid boosts 3–5 and clipped the coin icon). */
             paddingRight: hideFpsReader ? RIGHT_DOCK_RESERVE_PX_NO_FPS : RIGHT_DOCK_RESERVE_PX_WITH_FPS,
+            ...(headerRowPadLeftPx !== undefined ? { paddingLeft: headerRowPadLeftPx } : {}),
           }}
         >
           {centerTitle && (
@@ -277,7 +296,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
         ref={headerLeftWrapperRef}
         className="relative z-30 flex min-w-0 flex-1 items-center overflow-visible"
         style={{
-          marginLeft: 10,
+          marginLeft: headerClusterMarginLeftPx ?? 10,
           gap: HEADER_CLUSTER_GAP_PX,
           transform: 'scale(0.88)',
           transformOrigin: 'left center',
@@ -325,84 +344,85 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
               </span>
             </button>
             {/* Store: invisible spacer same width as level bar so boost strip matches Farm X position. Farm: real level (opacity 0 during FTUE but still reserves width). */}
-            {collapsePlayerLevel && hidePlayerLevel ? (
-              <div
-                aria-hidden
-                className="flex-shrink-0 pointer-events-none"
-                style={{
-                  width: PLAYER_LEVEL_SLOT_WIDTH_PX,
-                  minWidth: PLAYER_LEVEL_SLOT_WIDTH_PX,
-                  height: 22,
-                }}
-              />
-            ) : (
-            <div
-              className="relative inline-flex items-center rounded-full border flex-shrink-0 overflow-visible"
-              style={{
-                width: PLAYER_LEVEL_SLOT_WIDTH_PX,
-                minWidth: PLAYER_LEVEL_SLOT_WIDTH_PX,
-                maxWidth: PLAYER_LEVEL_SLOT_WIDTH_PX,
-                height: 22,
-                backgroundColor: '#775041',
-                borderWidth: 1,
-                borderColor: '#e9dcaf',
-                display: 'inline-flex',
-                opacity: hidePlayerLevel ? 0 : 1,
-                transition: 'opacity 400ms ease-out',
-                ...(hidePlayerLevel && { pointerEvents: 'none' as const }),
-              }}
-            >
-              <span className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center justify-center leading-none -ml-3 pointer-events-none z-10 w-[30px] h-[30px]">
-                <img src={assetPath('/assets/icons/icon_level.png')} alt="" className="w-[30px] h-[30px] object-contain object-left" />
-                <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center font-black leading-none" style={{ color: '#c8e9eb', fontSize: 12, WebkitTextStroke: '1px rgba(0,0,0,0.5)', paintOrder: 'stroke fill' }}>{playerLevel}</span>
-              </span>
-              {/* Progress bar: 1px padding top/right/bottom, 4px left; track #775041; fill has 1px inner stroke */}
-              <div className="flex-1 h-full flex items-stretch relative" style={{ paddingTop: 1, paddingRight: 1, paddingBottom: 1, paddingLeft: 10 }}>
-                {/* Goals count: fixed center of bar, above progress fill; cream text, black stroke 50%; same size as coin panel (text-xs) */}
-                <span
-                  className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none font-black text-xs leading-none z-10"
+            {!omitPlayerLevelBlock &&
+              (collapsePlayerLevel && hidePlayerLevel ? (
+                <div
+                  aria-hidden
+                  className="flex-shrink-0 pointer-events-none"
                   style={{
-                    color: '#fcf0c7',
-                    WebkitTextStroke: '1px rgba(0,0,0,0.5)',
-                    paintOrder: 'stroke fill',
+                    width: PLAYER_LEVEL_SLOT_WIDTH_PX,
+                    minWidth: PLAYER_LEVEL_SLOT_WIDTH_PX,
+                    height: 22,
+                  }}
+                />
+              ) : (
+                <div
+                  className="relative inline-flex items-center rounded-full border flex-shrink-0 overflow-visible"
+                  style={{
+                    width: PLAYER_LEVEL_SLOT_WIDTH_PX,
+                    minWidth: PLAYER_LEVEL_SLOT_WIDTH_PX,
+                    maxWidth: PLAYER_LEVEL_SLOT_WIDTH_PX,
+                    height: 22,
+                    backgroundColor: '#775041',
+                    borderWidth: 1,
+                    borderColor: '#e9dcaf',
+                    display: 'inline-flex',
+                    opacity: hidePlayerLevel ? 0 : 1,
+                    transition: 'opacity 400ms ease-out',
+                    ...(hidePlayerLevel && { pointerEvents: 'none' as const }),
                   }}
                 >
-                  {playerLevelProgress}/{playerLevelGoalsRequired}
-                </span>
-                <div className="w-full h-full overflow-hidden bg-[#775041]" style={{ borderRadius: '0 9999px 9999px 0' }}>
-                  {/* Progress completed: 2px padding, inner 2px stroke (gradient) on top of fill */}
-                  <div
-                    className="relative h-full transition-all duration-300 overflow-hidden"
-                    style={{ width: `${playerLevelGoalsRequired > 0 ? (playerLevelProgress / playerLevelGoalsRequired) * 100 : 0}%`, borderRadius: '0 9999px 9999px 0' }}
-                  >
-                    <div
-                      className="w-full h-full overflow-hidden relative"
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center justify-center leading-none -ml-3 pointer-events-none z-10 w-[30px] h-[30px]">
+                    <img src={assetPath('/assets/icons/icon_level.png')} alt="" className="w-[30px] h-[30px] object-contain object-left" />
+                    <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center font-black leading-none" style={{ color: '#c8e9eb', fontSize: 12, WebkitTextStroke: '1px rgba(0,0,0,0.5)', paintOrder: 'stroke fill' }}>{playerLevel}</span>
+                  </span>
+                  {/* Progress bar: 1px padding top/right/bottom, 4px left; track #775041; fill has 1px inner stroke */}
+                  <div className="flex-1 h-full flex items-stretch relative" style={{ paddingTop: 1, paddingRight: 1, paddingBottom: 1, paddingLeft: 10 }}>
+                    {/* Goals count: fixed center of bar, above progress fill; cream text, black stroke 50%; same size as coin panel (text-xs) */}
+                    <span
+                      className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none font-black text-xs leading-none z-10"
                       style={{
-                        padding: 1,
-                        background: 'linear-gradient(180deg, #c2e3f6 0%, #2d77b5 100%)',
-                        borderRadius: '0 9999px 9999px 0',
+                        color: '#fcf0c7',
+                        WebkitTextStroke: '1px rgba(0,0,0,0.5)',
+                        paintOrder: 'stroke fill',
                       }}
                     >
+                      {playerLevelProgress}/{playerLevelGoalsRequired}
+                    </span>
+                    <div className="w-full h-full overflow-hidden bg-[#775041]" style={{ borderRadius: '0 9999px 9999px 0' }}>
+                      {/* Progress completed: 2px padding, inner 2px stroke (gradient) on top of fill */}
                       <div
-                        className="w-full h-full"
-                        style={{
-                          background: 'linear-gradient(180deg, #7fc8eb 0%, #559dcf 100%)',
-                          borderRadius: '0 9999px 9999px 0',
-                        }}
-                      />
-                      {/* Flash overlay: only over progress completed, below icon, fades out with bar animation */}
-                      {progressBarFlash && (
+                        className="relative h-full transition-all duration-300 overflow-hidden"
+                        style={{ width: `${playerLevelGoalsRequired > 0 ? (playerLevelProgress / playerLevelGoalsRequired) * 100 : 0}%`, borderRadius: '0 9999px 9999px 0' }}
+                      >
                         <div
-                          className="absolute inset-0 pointer-events-none progress-bar-flash"
-                          style={{ backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: '0 9999px 9999px 0' }}
-                        />
-                      )}
+                          className="w-full h-full overflow-hidden relative"
+                          style={{
+                            padding: 1,
+                            background: 'linear-gradient(180deg, #c2e3f6 0%, #2d77b5 100%)',
+                            borderRadius: '0 9999px 9999px 0',
+                          }}
+                        >
+                          <div
+                            className="w-full h-full"
+                            style={{
+                              background: 'linear-gradient(180deg, #7fc8eb 0%, #559dcf 100%)',
+                              borderRadius: '0 9999px 9999px 0',
+                            }}
+                          />
+                          {/* Flash overlay: only over progress completed, below icon, fades out with bar animation */}
+                          {progressBarFlash && (
+                            <div
+                              className="absolute inset-0 pointer-events-none progress-bar-flash"
+                              style={{ backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: '0 9999px 9999px 0' }}
+                            />
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </div>
-            )}
+              ))}
             {/* Active boosts: wallet/level sit outside this box so coin -ml-3 is never clipped; up to 5 icons (6+ use hidden timers). */}
             <div
               ref={activeBoostAreaRef}

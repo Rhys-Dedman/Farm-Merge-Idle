@@ -88,8 +88,8 @@ import {
   getPlantMasteryUnlockCost,
 } from './constants/plantMastery';
 import {
-  applyGoldenPotHarvestPerMinute,
-  applyGoldenPotProductionPerMinute,
+  getHarvestRechargePerMinute,
+  getSeedRechargePerMinute,
   hasGoldenPotMergeCoinsDouble,
   hasGoldenPotOfflineEarningsDouble,
 } from './constants/goldenPotBonuses';
@@ -680,6 +680,180 @@ function autoMergeSeedGraceRemainMsForPair(
     if (ts != null) remain = Math.max(remain, AUTO_MERGE_SEED_INVOLVED_GRACE_MS - (now - ts));
   }
   return remain;
+}
+
+type BarnShelfPlantSlotProps = {
+  plantLevel: number;
+  isPlantDiscovered: boolean;
+  showMasteryUnlock: boolean;
+  isPendingRevealBounce: boolean;
+  isMasteryPurchaseBounce: boolean;
+  barnCellStackZ: number;
+  mastered: boolean;
+  masteryAdditiveGlow: boolean;
+  masteryGlowDelaySec: number;
+  onOpenPlantInfo: () => void;
+};
+
+/** Shelf cell: blue hitbox + optional mastery Unlock; shared sprite press feedback (CDN Tailwind :has() was unreliable). */
+function BarnShelfPlantSlot({
+  plantLevel,
+  isPlantDiscovered,
+  showMasteryUnlock,
+  isPendingRevealBounce,
+  isMasteryPurchaseBounce,
+  barnCellStackZ,
+  mastered,
+  masteryAdditiveGlow,
+  masteryGlowDelaySec,
+  onOpenPlantInfo,
+}: BarnShelfPlantSlotProps) {
+  const [spritePressed, setSpritePressed] = useState(false);
+  const isAnyShelfBounceActive = isPendingRevealBounce || isMasteryPurchaseBounce;
+  const barnPlantHitboxW = 72;
+  const barnPlantHitboxH = Math.round(barnPlantHitboxW * 1.2);
+
+  useEffect(() => {
+    if (!spritePressed) return;
+    const clear = () => setSpritePressed(false);
+    window.addEventListener('pointerup', clear);
+    window.addEventListener('pointercancel', clear);
+    return () => {
+      window.removeEventListener('pointerup', clear);
+      window.removeEventListener('pointercancel', clear);
+    };
+  }, [spritePressed]);
+
+  const onSpritePressPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    setSpritePressed(true);
+  };
+
+  return (
+    <div
+      data-barn-plant-level={plantLevel}
+      className="relative flex items-center justify-center shrink-0 pointer-events-none"
+      style={{ width: '95px', height: '95px', zIndex: barnCellStackZ }}
+    >
+      {showMasteryUnlock && (
+        <div
+          className="absolute left-1/2 pointer-events-auto"
+          style={{
+            top: '100%',
+            transform: 'translateX(-50%)',
+            marginTop: 0,
+            zIndex: 40,
+          }}
+        >
+          <div
+            style={{
+              transform: 'scale(0.5)',
+              transformOrigin: 'top center',
+            }}
+          >
+            <div className="rounded-full p-[10px]" style={{ backgroundColor: '#c4ac7f', boxSizing: 'border-box' }}>
+              <div className="rounded-full p-[3px]" style={{ backgroundColor: '#ad9467', boxSizing: 'border-box' }}>
+                <button
+                  type="button"
+                  className="flex w-full min-w-0 select-none items-center justify-center rounded-full font-black shadow-[0_5px_0_#6e8d2d,0_8px_16px_rgba(0,0,0,0.15),inset_0_2px_0_rgba(255,255,255,0.35)] transition-[transform,box-shadow] active:translate-y-[2px] active:shadow-[inset_0_3px_6px_rgba(0,0,0,0.15)]"
+                  style={{
+                    boxSizing: 'border-box',
+                    height: 52,
+                    minWidth: 143,
+                    paddingLeft: 22,
+                    paddingRight: 22,
+                    paddingTop: 0,
+                    paddingBottom: 0,
+                    backgroundColor: '#b8d458',
+                    border: '3px solid #6e8d2d',
+                    color: '#4a6b1e',
+                    fontFamily: 'Inter, sans-serif',
+                    fontSize: 'calc(1.28rem + 2px)',
+                    lineHeight: 1,
+                    textShadow: '0 1px 0 rgba(255,255,255,0.3)',
+                    WebkitTapHighlightColor: 'transparent',
+                    touchAction: 'manipulation',
+                  }}
+                  onPointerDown={onSpritePressPointerDown}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') setSpritePressed(true);
+                  }}
+                  onKeyUp={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') setSpritePressed(false);
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenPlantInfo();
+                  }}
+                >
+                  Unlock
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      <div
+        className={`relative z-10 flex h-full w-full items-center justify-center pointer-events-none ${
+          isPlantDiscovered
+            ? isAnyShelfBounceActive
+              ? ''
+              : 'transition-transform duration-75'
+            : ''
+        } ${spritePressed ? 'scale-95' : ''} ${isPendingRevealBounce ? 'mastery-shed-reveal-bounce' : ''} ${
+          isMasteryPurchaseBounce ? 'mastery-unlock-purchase-bounce' : ''
+        }`}
+      >
+        <PlantWithPot
+          level={isPlantDiscovered ? plantLevel : 0}
+          mastered={mastered}
+          className={isMasteryPurchaseBounce ? 'mastery-unlock-white-flash' : ''}
+          wrapperClassName="h-full w-full"
+          masteryAdditiveGlow={masteryAdditiveGlow}
+          masteryGlowDelaySec={masteryGlowDelaySec}
+        />
+      </div>
+      <button
+        type="button"
+        aria-label={
+          isPlantDiscovered ? `Open plant ${plantLevel} details` : `Plant ${plantLevel} locked`
+        }
+        tabIndex={isPlantDiscovered ? 0 : -1}
+        className={`absolute rounded-md p-0 outline-none ${isPlantDiscovered ? 'cursor-pointer' : 'cursor-default'}`}
+        style={{
+          left: '50%',
+          top: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: barnPlantHitboxW,
+          height: barnPlantHitboxH,
+          zIndex: 25,
+          backgroundColor: 'transparent',
+          border: 'none',
+          pointerEvents: isPlantDiscovered ? 'auto' : 'none',
+          touchAction: 'manipulation',
+          WebkitTapHighlightColor: 'transparent',
+        }}
+        onPointerDown={onSpritePressPointerDown}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!isPlantDiscovered) return;
+          onOpenPlantInfo();
+        }}
+        onKeyDown={(e) => {
+          if (!isPlantDiscovered) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            setSpritePressed(true);
+            e.preventDefault();
+            e.stopPropagation();
+            onOpenPlantInfo();
+          }
+        }}
+        onKeyUp={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') setSpritePressed(false);
+        }}
+      />
+    </div>
+  );
 }
 
 export default function App() {
@@ -2085,10 +2259,9 @@ export default function App() {
     // Don't start progress until loading is complete
     if (isLoading) return;
     
-    // Rapid Seeds boost: 15/min; otherwise 3/min..10/min linear across 9 upgrades (level 0..9)
+    // Same % scale as upgrade list (10% steps → 100%; golden pot → 150%) mapped to seeds/min.
     const hasRapidSeedsBoost = activeBoosts.some(b => b.offerId === 'rapid_seeds');
-    let perMinute = hasRapidSeedsBoost ? 15 : (3 + (7 * Math.min(9, Math.max(0, seedProductionLevel))) / 9);
-    perMinute = applyGoldenPotProductionPerMinute(perMinute, goldenPotCount);
+    const perMinute = getSeedRechargePerMinute(seedProductionLevel, goldenPotCount, hasRapidSeedsBoost);
     lastSeedProgressTimeRef.current = Date.now();
     let rafId: number;
     const percentPerMs = (perMinute * 100) / (60 * 1000); // % progress per millisecond
@@ -2496,8 +2669,7 @@ export default function App() {
   useEffect(() => {
     if (isLoading) return;
     const hasRapidHarvestBoost = activeBoosts.some(b => b.offerId === 'rapid_harvest');
-    let perMinute = hasRapidHarvestBoost ? 15 : (3 + (7 * Math.min(9, Math.max(0, harvestSpeedLevel))) / 9);
-    perMinute = applyGoldenPotHarvestPerMinute(perMinute, goldenPotCount);
+    const perMinute = getHarvestRechargePerMinute(harvestSpeedLevel, goldenPotCount, hasRapidHarvestBoost);
     lastHarvestProgressTimeRef.current = Date.now();
     let rafId: number;
     const percentPerMs = (perMinute * 100) / (60 * 1000);
@@ -4381,75 +4553,79 @@ export default function App() {
                 />
               </div>
 
-              {/* Farm Header - pinned to this screen */}
+              {/* Farm header only while Farm is the active column so walletRef targets the visible coin button */}
               <div className="relative z-50 w-full">
-                <PageHeader
-                  money={money}
-                  walletRef={walletRef}
-                  walletIconRef={walletIconRef}
-                  walletFlashActive={walletFlashActive}
-                  walletBurstCount={walletBounceTrigger}
-                  onWalletClick={() => setActiveScreen('STORE')}
-                  hidePlayerLevel={!ftuePlayerLevelVisible}
-                  playerLevel={playerLevel}
-                  playerLevelProgress={playerLevelProgress}
-                  playerLevelFlashTrigger={playerLevelFlashTrigger}
-                  playerLevelGoalsRequired={getGoalsRequiredForLevel(playerLevel)}
-                  onXpBoostClick={() => {
-                    applyGoalCollectedProgress();
-                    setPlayerLevelProgress((prev) => {
-                      const next = prev + 1;
-                      const goalsRequired = getGoalsRequiredForLevel(playerLevel);
-                      if (next >= goalsRequired) {
-                        if (!levelUpGuardRef.current) {
-                          levelUpGuardRef.current = true;
-                          const nextLevel = playerLevel + 1;
-                          if (nextLevel <= 10) {
-                            setLevelUpPopup({ isVisible: true, level: nextLevel });
-                          } else {
-                            setPlayerLevel((l) => l + 1);
+                {activeScreen === 'FARM' ? (
+                  <PageHeader
+                    money={money}
+                    walletRef={walletRef}
+                    walletIconRef={walletIconRef}
+                    walletFlashActive={walletFlashActive}
+                    walletBurstCount={walletBounceTrigger}
+                    onWalletClick={() => setActiveScreen('STORE')}
+                    hidePlayerLevel={!ftuePlayerLevelVisible}
+                    playerLevel={playerLevel}
+                    playerLevelProgress={playerLevelProgress}
+                    playerLevelFlashTrigger={playerLevelFlashTrigger}
+                    playerLevelGoalsRequired={getGoalsRequiredForLevel(playerLevel)}
+                    onXpBoostClick={() => {
+                      applyGoalCollectedProgress();
+                      setPlayerLevelProgress((prev) => {
+                        const next = prev + 1;
+                        const goalsRequired = getGoalsRequiredForLevel(playerLevel);
+                        if (next >= goalsRequired) {
+                          if (!levelUpGuardRef.current) {
+                            levelUpGuardRef.current = true;
+                            const nextLevel = playerLevel + 1;
+                            if (nextLevel <= 10) {
+                              setLevelUpPopup({ isVisible: true, level: nextLevel });
+                            } else {
+                              setPlayerLevel((l) => l + 1);
+                              setTimeout(() => { levelUpGuardRef.current = false; }, 0);
+                              return 0;
+                            }
                             setTimeout(() => { levelUpGuardRef.current = false; }, 0);
-                            return 0;
                           }
-                          setTimeout(() => { levelUpGuardRef.current = false; }, 0);
+                          return goalsRequired;
                         }
-                        return goalsRequired;
+                        return next;
+                      });
+                      setPlayerLevelFlashTrigger((t) => t + 1);
+                    }}
+                    onGiftClick={() => {
+                      if (!canOpenLimitedOfferRewardPopup()) return;
+                      const state = buildLimitedOfferPopupState('seed_storm');
+                      if (state) setLimitedOfferPopup(state);
+                    }}
+                    onPauseClick={() => setPauseMenuOpen(true)}
+                    activeBoosts={activeBoosts}
+                    activeBoostAreaRef={activeBoostAreaRef}
+                    activeBoostMinWidthPx={ACTIVE_BOOST_INDICATOR_SIZE_PX}
+                    headerLeftWrapperRef={headerLeftWrapperRef}
+                    onBoostComplete={(id, rect) => {
+                      setActiveBoosts((prev) => prev.filter((b) => b.id !== id));
+                      if (rect) {
+                        setBoostBursts((prev) => [
+                          ...prev,
+                          {
+                            id: `boost-burst-${Date.now()}`,
+                            x: rect.left + rect.width / 2,
+                            y: rect.top + rect.height / 2,
+                            startTime: Date.now(),
+                          },
+                        ]);
                       }
-                      return next;
-                    });
-                    setPlayerLevelFlashTrigger((t) => t + 1);
-                  }}
-                  onGiftClick={() => {
-                    if (!canOpenLimitedOfferRewardPopup()) return;
-                    const state = buildLimitedOfferPopupState('seed_storm');
-                    if (state) setLimitedOfferPopup(state);
-                  }}
-                  onPauseClick={() => setPauseMenuOpen(true)}
-                  activeBoosts={activeBoosts}
-                  activeBoostAreaRef={activeBoostAreaRef}
-                  activeBoostMinWidthPx={ACTIVE_BOOST_INDICATOR_SIZE_PX}
-                  headerLeftWrapperRef={headerLeftWrapperRef}
-                  onBoostComplete={(id, rect) => {
-                    setActiveBoosts((prev) => prev.filter((b) => b.id !== id));
-                    if (rect) {
-                      setBoostBursts((prev) => [
-                        ...prev,
-                        {
-                          id: `boost-burst-${Date.now()}`,
-                          x: rect.left + rect.width / 2,
-                          y: rect.top + rect.height / 2,
-                          startTime: Date.now(),
-                        },
-                      ]);
-                    }
-                  }}
-                  onBoostClick={(boost) => {
-                    if (!boost.offerId) return;
-                    if (!canOpenLimitedOfferRewardPopup()) return;
-                    const state = buildLimitedOfferPopupState(boost.offerId, { activeBoostEndTime: boost.endTime, highestPlantEver });
-                    if (state) setLimitedOfferPopup(state);
-                  }}
-                />
+                    }}
+                    onBoostClick={(boost) => {
+                      if (!boost.offerId) return;
+                      if (!canOpenLimitedOfferRewardPopup()) return;
+                      const state = buildLimitedOfferPopupState(boost.offerId, { activeBoostEndTime: boost.endTime, highestPlantEver });
+                      if (state) setLimitedOfferPopup(state);
+                    }}
+                  />
+                ) : (
+                  <div className="min-h-[44px] shrink-0" aria-hidden />
+                )}
               </div>
 
               {/* Goals Area - 5 goals, overlapping, left justified; compact when one completes (slide-over) */}
@@ -5353,6 +5529,7 @@ export default function App() {
                               zIndex: 10,
                               minHeight: '95px',
                               width: '100%',
+                              isolation: 'isolate',
                             }}
                           >
                             {[0, 1, 2, 3].map((plantOffset) => {
@@ -5362,107 +5539,26 @@ export default function App() {
                                 isPlantDiscovered && plantMastery.unlockPending.includes(plantLevel);
                               const isPendingRevealBounce = barnAttentionBounceLevels.includes(plantLevel);
                               const isMasteryPurchaseBounce = masteryPurchaseRevealLevels.includes(plantLevel);
-                              const isAnyShelfBounceActive = isPendingRevealBounce || isMasteryPurchaseBounce;
+                              /** Stacking: unlock pills extend past 95px slots — higher index wins in horizontal overlap so the correct column receives the tap. */
+                              const barnCellStackZ = showMasteryUnlock ? 20 + plantOffset : isPlantDiscovered ? 2 : 0;
                               return (
-                                <div
+                                <BarnShelfPlantSlot
                                   key={plantOffset}
-                                  data-barn-plant-level={plantLevel}
-                                  className={`relative flex items-center justify-center shrink-0 ${
-                                    isPlantDiscovered ? 'group cursor-pointer pointer-events-auto' : 'pointer-events-none'
-                                  }`}
-                                  style={{ width: '95px', height: '95px' }}
-                                  role={isPlantDiscovered ? 'button' : undefined}
-                                  tabIndex={isPlantDiscovered ? 0 : undefined}
-                                  onClick={
-                                    isPlantDiscovered
-                                      ? (e) => {
-                                          e.stopPropagation();
-                                          setPlantInfoPopup({ isVisible: true, level: plantLevel });
-                                        }
-                                      : undefined
+                                  plantLevel={plantLevel}
+                                  isPlantDiscovered={isPlantDiscovered}
+                                  showMasteryUnlock={showMasteryUnlock}
+                                  isPendingRevealBounce={isPendingRevealBounce}
+                                  isMasteryPurchaseBounce={isMasteryPurchaseBounce}
+                                  barnCellStackZ={barnCellStackZ}
+                                  mastered={isPlantDiscovered && plantMastery.unlockedLevels.includes(plantLevel)}
+                                  masteryAdditiveGlow={
+                                    activeScreen === 'BARN' && (showMasteryUnlock || isMasteryPurchaseBounce)
                                   }
-                                  onKeyDown={
-                                    isPlantDiscovered
-                                      ? (e) => {
-                                          if (e.key === 'Enter' || e.key === ' ') {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            setPlantInfoPopup({ isVisible: true, level: plantLevel });
-                                          }
-                                        }
-                                      : undefined
+                                  masteryGlowDelaySec={PLANT_MASTERY_GLOW_ANIM_DELAY_SEC}
+                                  onOpenPlantInfo={() =>
+                                    setPlantInfoPopup({ isVisible: true, level: plantLevel })
                                   }
-                                >
-                                  {showMasteryUnlock && (
-                                    <div
-                                      className="absolute left-1/2 z-[5] pointer-events-auto"
-                                      style={{ top: '100%', transform: 'translateX(-50%)', marginTop: 0 }}
-                                    >
-                                      <div
-                                        style={{
-                                          transform: 'scale(0.5)',
-                                          transformOrigin: 'top center',
-                                        }}
-                                      >
-                                        <div
-                                          className="rounded-full p-[10px]"
-                                          style={{ backgroundColor: '#c4ac7f', boxSizing: 'border-box' }}
-                                        >
-                                          <div
-                                            className="rounded-full p-[3px]"
-                                            style={{ backgroundColor: '#ad9467', boxSizing: 'border-box' }}
-                                          >
-                                            <button
-                                              type="button"
-                                              className="flex w-full min-w-0 select-none items-center justify-center rounded-full font-black shadow-[0_5px_0_#6e8d2d,0_8px_16px_rgba(0,0,0,0.15),inset_0_2px_0_rgba(255,255,255,0.35)] transition-[transform,box-shadow] active:translate-y-[2px] active:shadow-[inset_0_3px_6px_rgba(0,0,0,0.15)]"
-                                              style={{
-                                                boxSizing: 'border-box',
-                                                height: 52,
-                                                minWidth: 143,
-                                                paddingLeft: 22,
-                                                paddingRight: 22,
-                                                paddingTop: 0,
-                                                paddingBottom: 0,
-                                                backgroundColor: '#b8d458',
-                                                border: '3px solid #6e8d2d',
-                                                color: '#4a6b1e',
-                                                fontFamily: 'Inter, sans-serif',
-                                                fontSize: 'calc(1.28rem + 2px)',
-                                                lineHeight: 1,
-                                                textShadow: '0 1px 0 rgba(255,255,255,0.3)',
-                                                WebkitTapHighlightColor: 'transparent',
-                                              }}
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                setPlantInfoPopup({ isVisible: true, level: plantLevel });
-                                              }}
-                                            >
-                                              Unlock
-                                            </button>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )}
-                                  <div
-                                    className={`relative z-10 flex h-full w-full items-center justify-center ${
-                                      isPlantDiscovered
-                                        ? (isAnyShelfBounceActive ? 'group-active:scale-95' : 'transition-transform duration-75 group-active:scale-95')
-                                        : ''
-                                    } ${isPendingRevealBounce ? 'mastery-shed-reveal-bounce' : ''} ${
-                                      isMasteryPurchaseBounce ? 'mastery-unlock-purchase-bounce' : ''
-                                    }`}
-                                  >
-                                    <PlantWithPot
-                                      level={isPlantDiscovered ? plantLevel : 0}
-                                      mastered={isPlantDiscovered && plantMastery.unlockedLevels.includes(plantLevel)}
-                                      className={isMasteryPurchaseBounce ? 'mastery-unlock-white-flash' : ''}
-                                      wrapperClassName="h-full w-full"
-                                      masteryAdditiveGlow={activeScreen === 'BARN' && (showMasteryUnlock || isMasteryPurchaseBounce)}
-                                      masteryGlowDelaySec={PLANT_MASTERY_GLOW_ANIM_DELAY_SEC}
-                                    />
-                                  </div>
-                                </div>
+                                />
                               );
                             })}
                           </div>
@@ -5473,12 +5569,57 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Shed Header - overlay on top (no top bar bg, just plant wallet + settings) */}
-              <div className="absolute top-0 left-0 right-0 z-50 pointer-events-none">
-                <div className="pointer-events-auto">
-                  <PageHeader money={money} walletFlashActive={walletFlashActive} plantWallet={{ unlockedCount: highestPlantEver, totalCount: 24 }} hideTopBarBg hideFps onPauseClick={() => setPauseMenuOpen(true)} />
+              {/* Shed header: coin wallet + boosts + settings; no level bar; tighter left inset (Collection only) */}
+              {activeScreen === 'BARN' && (
+                <div className="absolute top-0 left-0 right-0 z-50 pointer-events-none">
+                  <div className="pointer-events-auto">
+                    <PageHeader
+                      money={money}
+                      walletRef={walletRef}
+                      walletIconRef={walletIconRef}
+                      walletFlashActive={walletFlashActive}
+                      walletBurstCount={walletBounceTrigger}
+                      onWalletClick={() => setActiveScreen('STORE')}
+                      omitPlayerLevelBlock
+                      headerOuterPadLeftPx={0}
+                      headerRowPadLeftPx={0}
+                      headerClusterMarginLeftPx={14}
+                      onGiftClick={() => {
+                        if (!canOpenLimitedOfferRewardPopup()) return;
+                        const state = buildLimitedOfferPopupState('seed_storm');
+                        if (state) setLimitedOfferPopup(state);
+                      }}
+                      onPauseClick={() => setPauseMenuOpen(true)}
+                      activeBoosts={activeBoosts}
+                      activeBoostAreaRef={activeBoostAreaRef}
+                      activeBoostMinWidthPx={ACTIVE_BOOST_INDICATOR_SIZE_PX}
+                      headerLeftWrapperRef={headerLeftWrapperRef}
+                      onBoostComplete={(id, rect) => {
+                        setActiveBoosts((prev) => prev.filter((b) => b.id !== id));
+                        if (rect) {
+                          setBoostBursts((prev) => [
+                            ...prev,
+                            {
+                              id: `boost-burst-${Date.now()}`,
+                              x: rect.left + rect.width / 2,
+                              y: rect.top + rect.height / 2,
+                              startTime: Date.now(),
+                            },
+                          ]);
+                        }
+                      }}
+                      onBoostClick={(boost) => {
+                        if (!boost.offerId) return;
+                        if (!canOpenLimitedOfferRewardPopup()) return;
+                        const state = buildLimitedOfferPopupState(boost.offerId, { activeBoostEndTime: boost.endTime, highestPlantEver });
+                        if (state) setLimitedOfferPopup(state);
+                      }}
+                      hideTopBarBg
+                      hideFps
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
