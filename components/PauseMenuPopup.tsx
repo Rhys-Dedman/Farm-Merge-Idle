@@ -4,36 +4,28 @@
 import React, { useState, useEffect, useCallback, type CSSProperties } from 'react';
 import { assetPath } from '../utils/assetPath';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
-import { getPerformanceMode, setPerformanceMode } from '../utils/performanceMode';
-import { getAutoMergeMode, setAutoMergeMode } from '../utils/autoMergeMode';
 
 interface PauseMenuPopupProps {
   isVisible: boolean;
   onClose: () => void;
-  /** Rewarded Ad: same as gift – opens limited offer. Closes pause menu when tapped. */
-  onRewardedAdClick: () => void;
-  /** Level Up: same as + next to player level – 1 goal XP per tap. Does not close pause menu. */
-  onLevelUpClick: () => void;
+  /** Rewarded Ad: same as gift – opens limited offer. */
+  onRewardedAdClick?: () => void;
+  /** Level Up: same as + next to player level – 1 goal XP per tap. */
+  onLevelUpClick?: () => void;
   /** Dev/cheat: unlock next plant in background; pause stays open. Discovery shows on pause close (latest only). */
   onUnlockPlantClick?: () => void;
   /** Dev/cheat: complete current golden pot progress segment instantly. */
   onGoldenPotClick?: () => void;
   /** Dev/cheat: add coins (e.g. +100k). Does not close pause menu. */
   onAddMoney?: (amount: number) => void;
-  /** Sync auto-merge toggle to parent (gameplay only reacts when this updates). */
-  onAutoMergeChange?: (enabled: boolean) => void;
   /** Reset economy + progression to post–FTUE 11, level 1 (no tutorial replay). */
   onClearProgress?: () => void;
-  /** Clear save and reload (fresh FTUE). */
-  onResetProgress?: () => void;
   /** Remove all active boosts (bar + timers + gameplay effects). */
   onClearBoosts?: () => void;
   /** Lock every shed shelf again (no collection unlocks). */
   onClearShed?: () => void;
   /** When false, Unlock Plant button is disabled (all plants unlocked) */
   canUnlockPlant?: boolean;
-  /** Auto-merge toggle only appears after the 24 golden-pot bonus is earned. */
-  showAutoMergeSetting?: boolean;
   closeOnBackdropClick?: boolean;
   appScale?: number;
 }
@@ -106,12 +98,9 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   onGoldenPotClick,
   onAddMoney,
   onClearProgress,
-  onResetProgress,
   onClearBoosts,
   onClearShed,
-  onAutoMergeChange,
   canUnlockPlant = true,
-  showAutoMergeSetting = false,
   closeOnBackdropClick = true,
   appScale = 1,
 }) => {
@@ -122,18 +111,8 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   const [goldenPotPressed, setGoldenPotPressed] = useState(false);
   const [addCoinsPressed, setAddCoinsPressed] = useState(false);
   const [clearProgressPressed, setClearProgressPressed] = useState(false);
-  const [resetPressed, setResetPressed] = useState(false);
   const [clearBoostsPressed, setClearBoostsPressed] = useState(false);
   const [clearShedPressed, setClearShedPressed] = useState(false);
-  const [performanceMode, setPerformanceModeLocal] = useState(false);
-  const [autoMergeMode, setAutoMergeModeLocal] = useState(false);
-
-  useEffect(() => {
-    if (isVisible) {
-      setPerformanceModeLocal(getPerformanceMode());
-      setAutoMergeModeLocal(getAutoMergeMode());
-    }
-  }, [isVisible]);
 
   const beginEnterAfterPreflight = useCallback(() => {
     setAnimState('entering');
@@ -165,6 +144,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
 
   const handleRewardedAdClick = () => {
     if (animState === 'leaving' || animState === 'preflight') return;
+    if (!onRewardedAdClick) return;
     onRewardedAdClick();
     setAnimState('leaving');
     setTimeout(() => {
@@ -249,7 +229,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                   fontSize: '2.25rem',
                 }}
               >
-                Settings
+                Dev Tools
               </h2>
 
               {/* Green divider - same as discovery popup */}
@@ -278,51 +258,22 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
               </p>
 
               <div className="flex flex-col items-center gap-3 w-full" style={{ maxWidth: '200px' }}>
-                {/* 1. Performance Mode — green */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = !performanceMode;
-                    setPerformanceModeLocal(next);
-                    setPerformanceMode(next);
-                  }}
-                  className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                  style={{
-                    height: `${SETTINGS_BUTTON_HEIGHT_PX}px`,
-                    backgroundColor: SETTINGS_PALETTES.green.bg,
-                    border: `3px solid ${SETTINGS_PALETTES.green.border}`,
-                    borderRadius: '12px',
-                    boxShadow: `0 4px 0 ${SETTINGS_PALETTES.green.border}, 0 6px 12px rgba(0,0,0,0.15)`,
-                  }}
-                >
-                  <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.green)}>
-                    Performance Mode {performanceMode ? 'ON' : 'OFF'}
-                  </span>
-                </button>
-                {showAutoMergeSetting ? (
+                {onRewardedAdClick ? (
                   <button
                     type="button"
-                    onClick={() => {
-                      const next = !autoMergeMode;
-                      setAutoMergeModeLocal(next);
-                      setAutoMergeMode(next);
-                      onAutoMergeChange?.(next);
-                    }}
+                    onMouseDown={() => setRewardedPressed(true)}
+                    onMouseUp={() => setRewardedPressed(false)}
+                    onMouseLeave={() => setRewardedPressed(false)}
+                    onClick={handleRewardedAdClick}
                     className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                    style={{
-                      height: `${SETTINGS_BUTTON_HEIGHT_PX}px`,
-                      backgroundColor: SETTINGS_PALETTES.green.bg,
-                      border: `3px solid ${SETTINGS_PALETTES.green.border}`,
-                      borderRadius: '12px',
-                      boxShadow: `0 4px 0 ${SETTINGS_PALETTES.green.border}, 0 6px 12px rgba(0,0,0,0.15)`,
-                    }}
+                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.yellow, rewardedPressed)}
                   >
-                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.green)}>
-                      Auto Merge {autoMergeMode ? 'ON' : 'OFF'}
+                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.yellow)}>
+                      Rewarded Ad
                     </span>
                   </button>
                 ) : null}
-                {/* 2. +1Mil Coins — green */}
+                {/* 2. +1Mil Coins — blue */}
                 {onAddMoney ? (
                   <button
                     type="button"
@@ -331,27 +282,13 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                     onMouseLeave={() => setAddCoinsPressed(false)}
                     onClick={() => onAddMoney(1000000)}
                     className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.green, addCoinsPressed)}
+                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.blue, addCoinsPressed)}
                   >
-                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.green)}>
+                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.blue)}>
                       +1Mil Coins
                     </span>
                   </button>
                 ) : null}
-                {/* Rewarded Ad — yellow */}
-                <button
-                  type="button"
-                  onMouseDown={() => setRewardedPressed(true)}
-                  onMouseUp={() => setRewardedPressed(false)}
-                  onMouseLeave={() => setRewardedPressed(false)}
-                  onClick={handleRewardedAdClick}
-                  className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                  style={settingsCheatButtonStyle(SETTINGS_PALETTES.yellow, rewardedPressed)}
-                >
-                  <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.yellow)}>
-                    Rewarded Ad
-                  </span>
-                </button>
                 {/* 3. Unlock plant — blue */}
                 {onUnlockPlantClick ? (
                   <button
@@ -392,20 +329,21 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                     </span>
                   </button>
                 ) : null}
-                {/* 5. Level Up — blue */}
-                <button
-                  type="button"
-                  onMouseDown={() => setLevelUpPressed(true)}
-                  onMouseUp={() => setLevelUpPressed(false)}
-                  onMouseLeave={() => setLevelUpPressed(false)}
-                  onClick={onLevelUpClick}
-                  className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                  style={settingsCheatButtonStyle(SETTINGS_PALETTES.blue, levelUpPressed)}
-                >
-                  <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.blue)}>
-                    Level Up
-                  </span>
-                </button>
+                {onLevelUpClick ? (
+                  <button
+                    type="button"
+                    onMouseDown={() => setLevelUpPressed(true)}
+                    onMouseUp={() => setLevelUpPressed(false)}
+                    onMouseLeave={() => setLevelUpPressed(false)}
+                    onClick={onLevelUpClick}
+                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.blue, levelUpPressed)}
+                  >
+                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.blue)}>
+                      Level Up
+                    </span>
+                  </button>
+                ) : null}
                 {/* 6. Rewarded Ad — yellow */}
                 {/* 7. Clear Boosts — red */}
                 {onClearBoosts ? (
@@ -451,21 +389,6 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                   >
                     <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.red)}>
                       Clear Progress
-                    </span>
-                  </button>
-                ) : null}
-                {onResetProgress ? (
-                  <button
-                    type="button"
-                    onMouseDown={() => setResetPressed(true)}
-                    onMouseUp={() => setResetPressed(false)}
-                    onMouseLeave={() => setResetPressed(false)}
-                    onClick={() => onResetProgress()}
-                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.red, resetPressed)}
-                  >
-                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.red)}>
-                      Reset Game
                     </span>
                   </button>
                 ) : null}

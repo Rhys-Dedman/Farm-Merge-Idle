@@ -26,6 +26,7 @@ import { PlantWithPot } from './components/PlantWithPot';
 import { LimitedOfferPopup } from './components/LimitedOfferPopup';
 import { FakeAdPopup } from './components/FakeAdPopup';
 import { PauseMenuPopup } from './components/PauseMenuPopup';
+import { SettingsPopup } from './components/SettingsPopup';
 import { BoostParticle, BoostParticleData } from './components/BoostParticle';
 import { ActiveBoostData, ACTIVE_BOOST_INDICATOR_SIZE_PX } from './components/ActiveBoostIndicator';
 import { UpgradeTabsRef } from './components/UpgradeTabs';
@@ -1013,6 +1014,7 @@ export default function App() {
   const [pendingOfferHighlightId, setPendingOfferHighlightId] = useState<string | null>(null);
   // Pause menu (opened from settings/gear button)
   const [pauseMenuOpen, setPauseMenuOpen] = useState(false);
+  const [devToolsOpen, setDevToolsOpen] = useState(false);
   const [autoMergeSetting, setAutoMergeSetting] = useState(() => getAutoMergeMode());
   /** Skip treating 0→24 (hydrate) as “just unlocked”; only 23→24 in-session turns auto-merge on. */
   const autoMergePotCountInitRef = useRef(true);
@@ -6771,13 +6773,13 @@ export default function App() {
               }}
             />
 
-            {/* Pause Menu - opened from settings/gear; Rewarded Ad = gift offer + close, Level Up = +1 goal XP (does not close) */}
-            <PauseMenuPopup
+            <SettingsPopup
               isVisible={pauseMenuOpen}
               showAutoMergeSetting={goldenPotCount >= 24}
               onAutoMergeChange={setAutoMergeSetting}
               onClose={() => {
                 setPauseMenuOpen(false);
+                setDevToolsOpen(false);
                 const plantLevelToDiscover = discoveryLevelAfterPauseCloseRef.current;
                 discoveryLevelAfterPauseCloseRef.current = null;
                 if (plantLevelToDiscover != null) {
@@ -6790,6 +6792,33 @@ export default function App() {
                   }
                   return q;
                 });
+              }}
+              onOpenDevTools={() => setDevToolsOpen(true)}
+              onResetProgress={() => {
+                if (
+                  !window.confirm(
+                    'You will Reset your game & progress back to the start including all FTUE'
+                  )
+                ) {
+                  return;
+                }
+                suppressGameSaveRef.current = true;
+                clearGameSave();
+                try {
+                  sessionStorage.setItem('pocket-garden-reset-v1', '1');
+                } catch {
+                  /* ignore */
+                }
+                window.location.reload();
+              }}
+              closeOnBackdropClick
+              appScale={appScale}
+            />
+
+            <PauseMenuPopup
+              isVisible={devToolsOpen}
+              onClose={() => {
+                setDevToolsOpen(false);
               }}
               onRewardedAdClick={() => {
                 if (!canOpenLimitedOfferRewardPopup()) return;
@@ -6837,23 +6866,6 @@ export default function App() {
                 suppressGameSaveRef.current = true;
                 setAutoMergeMode(false);
                 persistGameSave(createPostFtueCleanSave());
-                window.location.reload();
-              }}
-              onResetProgress={() => {
-                if (
-                  !window.confirm(
-                    'You will Reset your game & progress back to the start including all FTUE'
-                  )
-                ) {
-                  return;
-                }
-                suppressGameSaveRef.current = true;
-                clearGameSave();
-                try {
-                  sessionStorage.setItem('pocket-garden-reset-v1', '1');
-                } catch {
-                  /* ignore */
-                }
                 window.location.reload();
               }}
               closeOnBackdropClick
