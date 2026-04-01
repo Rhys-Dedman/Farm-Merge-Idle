@@ -256,7 +256,7 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
                     letterSpacing: '0.01em',
                   }}
                 >
-                  v0.02
+                  v0.03
                 </div>
               </div>
             </div>

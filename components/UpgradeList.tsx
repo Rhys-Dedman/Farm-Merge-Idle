@@ -486,7 +486,7 @@ const getCropsUpgradeValue = (upgradeId: string, level: number): string | null =
 const getHarvestUpgradeValue = (upgradeId: string, level: number): string | null => {
   switch (upgradeId) {
     case 'customer_speed':
-      return `${Math.max(5, 15 - 1 * level)}s`;
+      return `${Math.max(0, 10 - 1 * level)}s`;
     case 'market_value':
       return `${Math.min(3, 1 + 0.2 * level).toFixed(1)}x`;
     case 'seed_surplus':
@@ -510,17 +510,17 @@ export const isCropYieldMaxed = (cropsState: Record<string, UpgradeState>): bool
   return level >= 9; // 1 + 9 = 10 max
 };
 
-/** Order Speed: goal loading time in seconds (15 base - 1 per level, min 5). Golden pot tier 8+ → 0s. */
+/** Order Speed: goal loading time in seconds (10 base - 1 per level, min 0). Golden pot tier 8+ → 0s. */
 export const getGoalLoadingSeconds = (harvestState: HarvestState, goldenPotCount = 0): number => {
   if (hasGoldenPotInstantOrders(goldenPotCount)) return 0;
   const level = harvestState?.customer_speed?.level ?? 0;
-  return Math.max(5, 15 - 1 * level);
+  return Math.max(0, 10 - 1 * level);
 };
 
 export const isCustomerSpeedMaxed = (harvestState: Record<string, UpgradeState>, goldenPotCount = 0): boolean => {
   if (hasGoldenPotInstantOrders(goldenPotCount)) return true;
   const level = harvestState?.customer_speed?.level ?? 0;
-  return level >= 10; // 15 - 1*10 = 5s
+  return level >= 10; // 10 - 1*10 = 0s
 };
 
 /** Market Value: +0.2× per purchase, max 3.0× (reached at level 10). */
