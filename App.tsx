@@ -9,6 +9,7 @@ import { StoreScreen } from './components/StoreScreen';
 import { SideAction } from './components/SideAction';
 import { Projectile } from './components/Projectile';
 import { LeafBurst, LEAF_BURST_BASELINE_COUNT, LEAF_BURST_SMALL_COUNT } from './components/LeafBurst';
+import { AmbientFallingLeaves } from './components/AmbientFallingLeaves';
 import { UnlockBurst } from './components/UnlockBurst';
 import { CellHighlightBeam } from './components/CellHighlightBeam';
 import { ShelfUnlockConeBurst } from './components/ShelfUnlockConeBurst';
@@ -5716,9 +5717,24 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Ambient leaves: two identical emitters (leaf 8 below, leaf 7 above); upgrade panel z-60 stays on top */}
+              <AmbientFallingLeaves
+                enabled={!isLoading && activeScreen === 'FARM'}
+                spriteUrl={assetPath('/assets/vfx/particle_leaf_8.png')}
+                zIndex={54}
+                spawnIntervalMs={6000}
+                noiseStrength={0.5}
+              />
+              <AmbientFallingLeaves
+                enabled={!isLoading && activeScreen === 'FARM'}
+                spriteUrl={assetPath('/assets/vfx/particle_leaf_7.png')}
+                zIndex={55}
+                spawnIntervalMs={5000}
+              />
+
               <div 
                 onClick={(e) => e.stopPropagation()}
-                className="flex flex-col overflow-visible relative z-30 flex-shrink-0 shadow-[0_-15px_50px_rgba(0,0,0,0.15)] rounded-t-[32px]"
+                className="flex flex-col overflow-visible relative z-[60] flex-shrink-0 shadow-[0_-15px_50px_rgba(0,0,0,0.15)] rounded-t-[32px]"
                 style={{
                   height: panelHeight,
                   minHeight: 0,

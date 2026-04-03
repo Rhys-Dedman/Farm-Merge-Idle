@@ -90,6 +90,8 @@ const ASSETS_TO_PRELOAD = [
   '/assets/vfx/particle_leaf_4.png',
   '/assets/vfx/particle_leaf_5.png',
   '/assets/vfx/particle_leaf_6.png',
+  '/assets/vfx/particle_leaf_7.png',
+  '/assets/vfx/particle_leaf_8.png',
 ];
 
 export const LoadingScreen: React.FC<LoadingScreenProps> = ({
