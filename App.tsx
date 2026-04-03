@@ -131,6 +131,24 @@ const getGoalsRequiredForLevel = (level: number): number => {
 /** Goal difficulty scaling: 0.9 = easier, 1.0 = normal, 1.1 = harder, 1.2 = much harder */
 const GOAL_DIFFICULTY_SCALING = 1.0;
 
+/** Goal crop impact: clear bounce/flash after this many ms (matches ~500ms keyframes). */
+const GOAL_IMPACT_CLEAR_MS = 400;
+
+/**
+ * Light-green “undiscovered tier” goal frame (only after FTUE 11 persistence is on).
+ * FTUE-11 triple spawn: only plant 3 while highest < 3. After that: standard next discovery (highest+1).
+ */
+function isDiscoveryLightGreenEligible(
+  postFtue11: boolean,
+  ftue11ThreePlantWindow: boolean,
+  plantLevel: number,
+  highestPlantEver: number
+): boolean {
+  if (!postFtue11) return false;
+  if (ftue11ThreePlantWindow) return plantLevel === 3 && highestPlantEver < 3;
+  return plantLevel === highestPlantEver + 1 && highestPlantEver < 24;
+}
+
 /** Double Coins duration when granted from a limited-offer / upgrade-panel rewarded ad (offer has no duration in config). */
 const REWARDED_DOUBLE_COINS_AD_DURATION_MS = 30 * 60 * 1000;
 
@@ -326,14 +344,16 @@ function normalizeActiveBoostsAfterLoad(boosts: ActiveBoostData[]): ActiveBoostD
 
 /** Number of NEW goals that must spawn after "discovering a plant" (merge) before we may show one +1 discovery goal. Only reset when player discovers by merge. */
 const getDiscoveryGoalBuffer = (highestPlant: number): number => {
-  if (highestPlant <= 3) return 4;
-  if (highestPlant <= 4) return 6;
-  if (highestPlant <= 5) return 9;
-  if (highestPlant <= 6) return 12;
-  if (highestPlant <= 7) return 14;
-  if (highestPlant <= 8) return 16;
-  if (highestPlant <= 9) return 18;
-  return 20; // 10+
+  const h = Math.max(0, Math.floor(highestPlant));
+  if (h <= 3) return 3;
+  if (h <= 4) return 5;
+  if (h <= 5) return 8;
+  if (h <= 6) return 10;
+  if (h <= 7) return 12;
+  if (h <= 8) return 14;
+  if (h <= 9) return 16;
+  if (h <= 10) return 18;
+  return 20;
 };
 
 /** Discovery popup coin reward = `getCoinValueForLevel(plant)` × this (before Double Coins boost). */
@@ -398,14 +418,14 @@ const pickGoalPlantLevel = (
   return pickRandomWithVariety();
 };
 
-/** Crops required for goal order. Scales with player level (every 4 levels), crop yield, and has random variation. */
+/** Crops required for goal order. Scales with player level (+1 base every 2 levels), crop yield, and has random variation. */
 const getGoalCropRequired = (
   playerLevel: number,
   cropYieldLevel: number,
   goalDifficultyScaling: number = GOAL_DIFFICULTY_SCALING
 ): number => {
   const baseGoal =
-    3 + Math.floor(cropYieldLevel * 0.5) + Math.floor(playerLevel / 4);
+    3 + Math.floor(cropYieldLevel * 0.5) + Math.floor(playerLevel / 2);
   const variationRange = 1 + Math.floor(playerLevel / 10);
   const randomOffset = Math.floor(Math.random() * (2 * variationRange + 1)) - variationRange;
   const variedGoal = baseGoal + randomOffset;
@@ -473,6 +493,23 @@ POPUP_ASSETS_TO_PRELOAD.forEach((src) => {
 /** Goal icon for plant level: plant_N uses icon_goal_N.png (plants 1-24) */
 const getGoalIconForPlantLevel = (plantLevel: number): string =>
   assetPath(`/assets/icons/icons_goals/icon_goal_${Math.max(1, Math.min(24, plantLevel))}.png`);
+
+/** Load + decode icon before goal bounce/transition so the sprite does not pop in mid-animation. */
+function preloadGoalOrderIcon(plantLevel: number): Promise<void> {
+  const url = getGoalIconForPlantLevel(plantLevel);
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      if (typeof img.decode === 'function') {
+        img.decode().then(() => resolve()).catch(() => resolve());
+      } else {
+        resolve();
+      }
+    };
+    img.onerror = () => resolve();
+    img.src = url;
+  });
+}
 
 /** Negative animation-delay so every barn plant mastery glow shares the same phase. */
 const PLANT_MASTERY_GLOW_ANIM_DELAY_SEC = -((Date.now() % PLANT_MASTERY_GLOW_MS) / 1000);
@@ -1068,6 +1105,8 @@ export default function App() {
   const lastProcessedGoalLoadingSlotRef = useRef<number | null>(null); // prevent duplicate pick/increment when effect runs twice (e.g. Strict Mode) for same loading slot
   const nextGoalSpawnIdRef = useRef(0); // unique id per spawn so we can dedupe in setTimeout without confusing reused slot indices
   const lastCommittedSpawnIdRef = useRef<number | null>(null); // only increment once per spawnId (same slot can load again for a different goal)
+  /** Supersedes stale preload completion when Strict Mode or a new spawn reuses the pipeline. */
+  const goalSpawnPreloadTokenRef = useRef<{ loadingIdx: number; spawnId: number } | null>(null);
   const [goalLoadingSeconds, setGoalLoadingSeconds] = useState(15); // countdown 15->0 (Order Speed: 15 base - 2 per level)
   const [goalTransitionSlot, setGoalTransitionSlot] = useState<number | null>(null); // slot transitioning loading->green (for fade)
   const [goalTransitionFade, setGoalTransitionFade] = useState(false); // triggers fade: loading out, green in
@@ -1076,6 +1115,16 @@ export default function App() {
   const [goalAmountsRequired, setGoalAmountsRequired] = useState<number[]>([3, 3, 3, 0, 0]); // crops required when goal was created (for reward calc)
   const [goalCompletedValues, setGoalCompletedValues] = useState<number[]>([0, 0, 0, 0, 0]); // coin value when completed (plantValue × amountRequired × 2)
   const [goalImpactSlots, setGoalImpactSlots] = useState<number[]>([]); // slots currently playing impact (white flash + icon scale)
+  /**
+   * After first crop hits a light-green discovery goal, stay on normal green. Reset to false when the slot gets a new plant.
+   */
+  const [discoveryGoalLightGreenDismissed, setDiscoveryGoalLightGreenDismissed] = useState<boolean[]>([
+    false, false, false, false, false,
+  ]);
+  const discoveryGoalLightGreenDismissedRef = useRef<boolean[]>([false, false, false, false, false]);
+  discoveryGoalLightGreenDismissedRef.current = discoveryGoalLightGreenDismissed;
+  /** True briefly after FTUE 11 spawns the 1/2/3 goals so only plant 3 can use the light-green frame. */
+  const [ftue11ThreePlantGoalWindowActive, setFtue11ThreePlantGoalWindowActive] = useState(false);
   const [goalBounceSlots, setGoalBounceSlots] = useState<number[]>([]); // slots currently bouncing (panel down)
   const [goalSlidingUpSlots, setGoalSlidingUpSlots] = useState<Set<number>>(new Set()); // slots currently playing slide-up animation
   const [goalCompactionStagger, setGoalCompactionStagger] = useState<{ completedSlotIdx: number; completedPosition: number; oldDisplayIndices: number[]; isOverlapping?: boolean } | null>(null);
@@ -1658,6 +1707,7 @@ export default function App() {
       ftue7SkipLoadingSlot0Ref.current = false;
       setGoalSlots((s) => { const n = [...s]; n[0] = 'green'; n[1] = 'green'; return n; });
       setGoalPlantTypes((p) => { const n = [...p]; n[0] = 1; n[1] = 2; return n; });
+      setDiscoveryGoalLightGreenDismissed((p) => { const n = [...p]; n[0] = false; n[1] = false; return n; });
       setGoalCounts((c) => { const n = [...c]; n[0] = 5; n[1] = 3; return n; });
       setGoalAmountsRequired((a) => { const n = [...a]; n[0] = 5; n[1] = 3; return n; });
       setGoalDisplayOrder([0, 1]);
@@ -2499,49 +2549,85 @@ export default function App() {
       lastProcessedGoalLoadingSlotRef.current = loadingIdx;
     }
     if (goalIntervalRef.current) clearInterval(goalIntervalRef.current);
-    if (effectiveGoalLoadingSeconds <= 0) {
-      // Instant: complete immediately
-      const spawnId = nextGoalSpawnIdRef.current++;
-      setGoalBounceSlots((prev) => prev.includes(loadingIdx) ? prev : [...prev, loadingIdx]);
-      setGoalTransitionSlot(loadingIdx);
-      setGoalTransitionFade(false);
+
+    const beginSpawnFromLoadingSlot = (hasRush: boolean) => {
       const minLevel = getPremiumOrdersMinLevel(harvestState);
       const seedLevel = getSeedLevelFromHighestPlant(highestPlantEverRef.current);
       const slots = goalSlotsRef.current;
       const types = goalPlantTypesRef.current;
       const highest = highestPlantEverRef.current;
-      const hasDiscoveryOnBoard = slots.some((s, i) => i !== loadingIdx && s === 'green' && (types[i] ?? 0) === highest + 1);
-      const plantLevel = pickGoalPlantLevel(highest, minLevel, seedLevel, newGoalsSinceDiscoveryRef, lastMergeDiscoveryLevelRef, lastSpawnedGoalLevelsRef, hasDiscoveryOnBoard);
-      lastSpawnedGoalLevelsRef.current = [lastSpawnedGoalLevelsRef.current[1], plantLevel];
-      setGoalPlantTypes((p) => { const n = [...p]; n[loadingIdx] = plantLevel; return n; });
-      const cropYieldLevel = cropsState?.crop_value?.level ?? 0;
-      const goalRequired = getGoalCropRequired(playerLevel, cropYieldLevel);
-      setGoalCounts((c) => { const next = [...c]; next[loadingIdx] = goalRequired; return next; });
-      setGoalAmountsRequired((a) => { const next = [...a]; next[loadingIdx] = goalRequired; return next; });
-      requestAnimationFrame(() => requestAnimationFrame(() => setGoalTransitionFade(true)));
-      setTimeout(() => {
-        lastProcessedGoalLoadingSlotRef.current = null; // allow next loading slot to be processed
-        const alreadyCommitted = lastCommittedSpawnIdRef.current === spawnId;
-        if (!alreadyCommitted && plantLevel <= highest) newGoalsSinceDiscoveryRef.current++; // exactly once per spawn (spawnId dedupes duplicate timeout runs; slot index would under-count when slot reused)
-        lastCommittedSpawnIdRef.current = spawnId;
-        const maxSlots = getMaxGoalSlots(playerLevel);
-        const firstEmptyIdx = goalSlots.findIndex((s, i) => s === 'empty' && i < maxSlots);
-        setGoalBounceSlots((prev) => prev.filter((s) => s !== loadingIdx));
-        setGoalSlots((slots) => {
-          const next = [...slots];
-          next[loadingIdx] = 'green';
-          if (firstEmptyIdx >= 0) next[firstEmptyIdx] = 'loading';
+      const hasDiscoveryOnBoard = slots.some(
+        (s, i) => i !== loadingIdx && s === 'green' && (types[i] ?? 0) === highest + 1
+      );
+      const plantLevel = pickGoalPlantLevel(
+        highest,
+        minLevel,
+        seedLevel,
+        newGoalsSinceDiscoveryRef,
+        lastMergeDiscoveryLevelRef,
+        lastSpawnedGoalLevelsRef,
+        hasDiscoveryOnBoard
+      );
+      const spawnId = nextGoalSpawnIdRef.current++;
+      goalSpawnPreloadTokenRef.current = { loadingIdx, spawnId };
+      void preloadGoalOrderIcon(plantLevel).then(() => {
+        const t = goalSpawnPreloadTokenRef.current;
+        if (!t || t.loadingIdx !== loadingIdx || t.spawnId !== spawnId) return;
+        lastSpawnedGoalLevelsRef.current = [lastSpawnedGoalLevelsRef.current[1], plantLevel];
+        setGoalBounceSlots((prev) => (prev.includes(loadingIdx) ? prev : [...prev, loadingIdx]));
+        setGoalTransitionSlot(loadingIdx);
+        setGoalTransitionFade(false);
+        setGoalPlantTypes((p) => {
+          const n = [...p];
+          n[loadingIdx] = plantLevel;
+          return n;
+        });
+        setDiscoveryGoalLightGreenDismissed((p) => {
+          const n = [...p];
+          n[loadingIdx] = false;
+          return n;
+        });
+        const cropYieldLevel = cropsState?.crop_value?.level ?? 0;
+        const goalRequired = getGoalCropRequired(playerLevel, cropYieldLevel);
+        setGoalCounts((c) => {
+          const next = [...c];
+          next[loadingIdx] = goalRequired;
           return next;
         });
-        if (firstEmptyIdx >= 0) {
-          setGoalDisplayOrder((prev) => (prev.includes(firstEmptyIdx) ? prev : [...prev, firstEmptyIdx]));
-          setGoalSlotFadeInSlot(firstEmptyIdx);
-          setGoalLoadingSeconds(hasRushOrdersBoost ? 0 : getGoalLoadingSeconds(harvestState, goldenPotCount));
-          setTimeout(() => setGoalSlotFadeInSlot(null), 500);
-        }
-        setGoalTransitionSlot(null);
-        setGoalTransitionFade(false);
-      }, 500);
+        setGoalAmountsRequired((a) => {
+          const next = [...a];
+          next[loadingIdx] = goalRequired;
+          return next;
+        });
+        requestAnimationFrame(() => requestAnimationFrame(() => setGoalTransitionFade(true)));
+        setTimeout(() => {
+          lastProcessedGoalLoadingSlotRef.current = null;
+          const alreadyCommitted = lastCommittedSpawnIdRef.current === spawnId;
+          if (!alreadyCommitted && plantLevel <= highest) newGoalsSinceDiscoveryRef.current++;
+          lastCommittedSpawnIdRef.current = spawnId;
+          const maxSlots = getMaxGoalSlots(playerLevel);
+          const firstEmptyIdx = goalSlots.findIndex((s, i) => s === 'empty' && i < maxSlots);
+          setGoalBounceSlots((prev) => prev.filter((s) => s !== loadingIdx));
+          setGoalSlots((slotArr) => {
+            const next = [...slotArr];
+            next[loadingIdx] = 'green';
+            if (firstEmptyIdx >= 0) next[firstEmptyIdx] = 'loading';
+            return next;
+          });
+          if (firstEmptyIdx >= 0) {
+            setGoalDisplayOrder((prev) => (prev.includes(firstEmptyIdx) ? prev : [...prev, firstEmptyIdx]));
+            setGoalSlotFadeInSlot(firstEmptyIdx);
+            setGoalLoadingSeconds(hasRush ? 0 : getGoalLoadingSeconds(harvestState, goldenPotCount));
+            setTimeout(() => setGoalSlotFadeInSlot(null), 500);
+          }
+          setGoalTransitionSlot(null);
+          setGoalTransitionFade(false);
+        }, 500);
+      });
+    };
+
+    if (effectiveGoalLoadingSeconds <= 0) {
+      beginSpawnFromLoadingSlot(hasRushOrdersBoost);
       return () => {};
     }
     goalIntervalRef.current = setInterval(() => {
@@ -2551,51 +2637,7 @@ export default function App() {
             clearInterval(goalIntervalRef.current);
             goalIntervalRef.current = null;
           }
-          const spawnId = nextGoalSpawnIdRef.current++;
-          setGoalBounceSlots((prev) => prev.includes(loadingIdx) ? prev : [...prev, loadingIdx]);
-          setGoalTransitionSlot(loadingIdx);
-          setGoalTransitionFade(false);
-          const minLevel = getPremiumOrdersMinLevel(harvestState);
-          const seedLevel = getSeedLevelFromHighestPlant(highestPlantEverRef.current);
-          const slots = goalSlotsRef.current;
-          const types = goalPlantTypesRef.current;
-          const highest = highestPlantEverRef.current;
-          const hasDiscoveryOnBoard = slots.some((s, i) => i !== loadingIdx && s === 'green' && (types[i] ?? 0) === highest + 1);
-          const plantLevel = pickGoalPlantLevel(highest, minLevel, seedLevel, newGoalsSinceDiscoveryRef, lastMergeDiscoveryLevelRef, lastSpawnedGoalLevelsRef, hasDiscoveryOnBoard);
-          lastSpawnedGoalLevelsRef.current = [lastSpawnedGoalLevelsRef.current[1], plantLevel];
-          setGoalPlantTypes((p) => { const n = [...p]; n[loadingIdx] = plantLevel; return n; });
-          const cropYieldLevel = cropsState?.crop_value?.level ?? 0;
-          const goalRequired = getGoalCropRequired(playerLevel, cropYieldLevel);
-          setGoalCounts((c) => {
-            const next = [...c];
-            next[loadingIdx] = goalRequired;
-            return next;
-          });
-          setGoalAmountsRequired((a) => { const next = [...a]; next[loadingIdx] = goalRequired; return next; });
-          requestAnimationFrame(() => requestAnimationFrame(() => setGoalTransitionFade(true)));
-          setTimeout(() => {
-            lastProcessedGoalLoadingSlotRef.current = null; // allow next loading slot to be processed
-            const alreadyCommitted = lastCommittedSpawnIdRef.current === spawnId;
-            if (!alreadyCommitted && plantLevel <= highest) newGoalsSinceDiscoveryRef.current++; // exactly once per spawn (spawnId dedupes duplicate timeout runs)
-            lastCommittedSpawnIdRef.current = spawnId;
-            const maxSlots = getMaxGoalSlots(playerLevel);
-            const firstEmptyIdx = goalSlots.findIndex((s, i) => s === 'empty' && i < maxSlots);
-            setGoalBounceSlots((prev) => prev.filter((s) => s !== loadingIdx));
-            setGoalSlots((slots) => {
-              const next = [...slots];
-              next[loadingIdx] = 'green';
-              if (firstEmptyIdx >= 0) next[firstEmptyIdx] = 'loading';
-              return next;
-            });
-            if (firstEmptyIdx >= 0) {
-              setGoalDisplayOrder((prev) => (prev.includes(firstEmptyIdx) ? prev : [...prev, firstEmptyIdx]));
-              setGoalSlotFadeInSlot(firstEmptyIdx);
-              setGoalLoadingSeconds(hasRushOrdersBoost ? 0 : getGoalLoadingSeconds(harvestState, goldenPotCount));
-              setTimeout(() => setGoalSlotFadeInSlot(null), 500);
-            }
-            setGoalTransitionSlot(null);
-            setGoalTransitionFade(false);
-          }, 500);
+          beginSpawnFromLoadingSlot(hasRushOrdersBoost);
           return 0;
         }
         return prev - 1;
@@ -2725,6 +2767,13 @@ export default function App() {
       setGoalPlantTypes((prev) => {
         const next = [...prev];
         slotsToUpgrade.forEach((slotIdx) => { next[slotIdx] = newSeedLevel; });
+        return next;
+      });
+      setDiscoveryGoalLightGreenDismissed((prev) => {
+        const next = [...prev];
+        slotsToUpgrade.forEach((slotIdx) => {
+          next[slotIdx] = false;
+        });
         return next;
       });
       slotsToUpgrade.forEach((slotIdx) => {
@@ -4216,6 +4265,7 @@ export default function App() {
     setBarnNotification(save.barnNotification);
     setGoalSlots(save.goalSlots);
     setGoalPlantTypes(save.goalPlantTypes);
+    setDiscoveryGoalLightGreenDismissed([false, false, false, false, false]);
     setGoalLoadingSeconds(save.goalLoadingSeconds);
     setGoalCounts(save.goalCounts);
     setGoalAmountsRequired(save.goalAmountsRequired);
@@ -4848,6 +4898,22 @@ export default function App() {
                   const showGreenContent = isGreenState || (isTransitioning && goalTransitionFade);
                   const showCompletedContent = isCompletedState;
                   const showLoadingText = isLoadingState && !goalTransitionFade;
+                  const plantLevelForGoal = goalPlantTypes[slotIdx] ?? slotIdx + 1;
+                  const hForDiscoveryUi = highestPlantEverRef.current;
+                  const postFtue11 = ftue11PersistenceEnabledRef.current;
+                  const lightGreenEligible = isDiscoveryLightGreenEligible(
+                    postFtue11,
+                    ftue11ThreePlantGoalWindowActive,
+                    plantLevelForGoal,
+                    hForDiscoveryUi
+                  );
+                  const lightGreenDismissed = discoveryGoalLightGreenDismissed[slotIdx];
+                  const showLightGreenDiscoveryFrame =
+                    showGreenContent &&
+                    !showCompletedContent &&
+                    lightGreenEligible &&
+                    !lightGreenDismissed;
+                  const goalImpactActive = goalImpactSlots.includes(slotIdx) && !isCompletedState;
                   const handleCompletedTap = () => {
                     if (!isCompletedState || isSlidingUp) return;
                     if (slotIdx === 0 && activeFtueStage === 'first_goal_collect') {
@@ -4921,6 +4987,7 @@ export default function App() {
 
                       setGoalSlots((s) => { const n = [...s]; n[slotIdx] = 'empty'; return n; });
                       setGoalPlantTypes((p) => { const n = [...p]; n[slotIdx] = 0; return n; });
+                      setDiscoveryGoalLightGreenDismissed((p) => { const n = [...p]; n[slotIdx] = false; return n; });
                       setGoalCompletedValues((v) => { const n = [...v]; n[slotIdx] = 0; return n; });
                       setGoalSlidingUpSlots((prev) => { const next = new Set(prev); next.delete(slotIdx); return next; });
                       setGoalDisplayOrder((prev) => prev.filter((i) => i !== slotIdx));
@@ -4978,14 +5045,52 @@ export default function App() {
                         <>
                           <img src={assetPath('/assets/goals/goal_shadow.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top transition-opacity duration-100" style={{ zIndex: 1, opacity: greenOpacity }} />
                           <img src={assetPath('/assets/goals/goal_loading.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top transition-opacity duration-100" style={{ zIndex: 2, opacity: loadingOpacity }} />
-                          <img src={assetPath('/assets/goals/goal_green.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top transition-opacity duration-100" style={{ zIndex: 3, opacity: greenOpacity }} />
+                          <img
+                            src={assetPath('/assets/goals/goal_green.png')}
+                            alt=""
+                            className="absolute inset-0 w-full h-full object-contain object-top transition-opacity duration-100"
+                            style={{
+                              zIndex: 3,
+                              opacity: greenOpacity * (showLightGreenDiscoveryFrame ? 0 : 1),
+                            }}
+                          />
                           <img src={assetPath('/assets/goals/goal_yellow.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top" style={{ zIndex: 4, opacity: 0 }} />
-                          <img src={assetPath('/assets/goals/goal_lightgreen.png')} alt="" className={`absolute inset-0 w-full h-full object-contain object-top ${goalImpactSlots.includes(slotIdx) && !isCompletedState ? 'goal-impact-lightgreen' : ''}`} style={{ zIndex: 5, opacity: goalImpactSlots.includes(slotIdx) && !isCompletedState ? undefined : 0 }} />
+                          <img
+                            src={assetPath('/assets/goals/goal_lightgreen.png')}
+                            alt=""
+                            className={`absolute inset-0 w-full h-full object-contain object-top ${goalImpactActive ? 'goal-impact-lightgreen' : ''}`}
+                            style={{
+                              zIndex: 5,
+                              opacity: goalImpactActive ? undefined : showLightGreenDiscoveryFrame ? greenOpacity : 0,
+                            }}
+                          />
                           <img src={assetPath('/assets/goals/goal_cream.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top" style={{ zIndex: 5, opacity: isCompletedState ? 1 : 0 }} />
                           {showGreenContent && !showCompletedContent && (
                             <>
-                              <img ref={goalIconRefs[slotIdx]} src={getGoalIconForPlantLevel(goalPlantTypes[slotIdx] ?? slotIdx + 1)} alt="" className={`absolute left-1/2 object-contain pointer-events-none transition-opacity duration-100 ${(goalImpactSlots.includes(slotIdx) || goalSpawnBounceSlots.includes(slotIdx)) ? 'goal-icon-bounce' : ''}`} style={{ zIndex: 6, bottom: '71%', width: 40, height: 40, opacity: greenOpacity, transform: 'translate(-50%, -2px)' }} />
-                              <span className="absolute left-1/2 font-bold pointer-events-none transition-opacity duration-100" style={{ zIndex: 6, bottom: '62%', color: goalImpactSlots.includes(slotIdx) ? '#537b38' : '#a1b54e', fontSize: '15px', opacity: greenOpacity, transform: 'translate(-50%, -1px)' }}>{goalCounts[slotIdx]}</span>
+                              <img
+                                ref={goalIconRefs[slotIdx]}
+                                src={getGoalIconForPlantLevel(plantLevelForGoal)}
+                                alt=""
+                                className={`absolute left-1/2 object-contain pointer-events-none transition-opacity duration-100 ${goalImpactSlots.includes(slotIdx) || goalSpawnBounceSlots.includes(slotIdx) ? 'goal-icon-bounce' : ''}`}
+                                style={{ zIndex: 6, bottom: '71%', width: 40, height: 40, opacity: greenOpacity, transform: 'translate(-50%, -2px)' }}
+                              />
+                              <span
+                                className="absolute left-1/2 font-bold pointer-events-none transition-opacity duration-100"
+                                style={{
+                                  zIndex: 6,
+                                  bottom: '62%',
+                                  color: goalImpactSlots.includes(slotIdx)
+                                    ? '#537b38'
+                                    : showLightGreenDiscoveryFrame
+                                      ? '#3d5628'
+                                      : '#a1b54e',
+                                  fontSize: '15px',
+                                  opacity: greenOpacity,
+                                  transform: 'translate(-50%, -1px)',
+                                }}
+                              >
+                                {goalCounts[slotIdx]}
+                              </span>
                             </>
                           )}
                           {showCompletedContent && (
@@ -6249,6 +6354,8 @@ export default function App() {
                   ftue11PersistenceEnabledRef.current = true;
                   persistGameSnapshotRef.current();
                   setActiveFtueStage(null);
+                  setFtue11ThreePlantGoalWindowActive(true);
+                  window.setTimeout(() => setFtue11ThreePlantGoalWindowActive(false), 3200);
 
                   // Spawn 3 starter goals (plant 1/2/3) with 0.5s stagger and bounce.
                   const maxSlots = getMaxGoalSlots(playerLevel);
@@ -6261,34 +6368,40 @@ export default function App() {
                   emptySlots.forEach((slotIdx, index) => {
                     const level = plantLevels[index];
                     setTimeout(() => {
-                      const required = getGoalCropRequired(playerLevel, cropYieldLevel);
-                      setGoalSlots((prev) => {
-                        const next = [...prev];
-                        next[slotIdx] = 'green';
-                        return next;
+                      void preloadGoalOrderIcon(level).then(() => {
+                        const required = getGoalCropRequired(playerLevel, cropYieldLevel);
+                        setGoalSlots((prev) => {
+                          const next = [...prev];
+                          next[slotIdx] = 'green';
+                          return next;
+                        });
+                        setGoalPlantTypes((prev) => {
+                          const next = [...prev];
+                          next[slotIdx] = level;
+                          return next;
+                        });
+                        setDiscoveryGoalLightGreenDismissed((prev) => {
+                          const next = [...prev];
+                          next[slotIdx] = false;
+                          return next;
+                        });
+                        setGoalCounts((prev) => {
+                          const next = [...prev];
+                          next[slotIdx] = required;
+                          return next;
+                        });
+                        setGoalAmountsRequired((prev) => {
+                          const next = [...prev];
+                          next[slotIdx] = required;
+                          return next;
+                        });
+                        setGoalDisplayOrder((prev) => (prev.includes(slotIdx) ? prev : [...prev, slotIdx]));
+                        setGoalSpawnBounceSlots((prev) => (prev.includes(slotIdx) ? prev : [...prev, slotIdx]));
+                        setTimeout(() => {
+                          setGoalSpawnBounceSlots((prev) => prev.filter((s) => s !== slotIdx));
+                        }, 500);
+                        persistGameSnapshotRef.current();
                       });
-                      setGoalPlantTypes((prev) => {
-                        const next = [...prev];
-                        next[slotIdx] = level;
-                        return next;
-                      });
-                      setGoalCounts((prev) => {
-                        const next = [...prev];
-                        next[slotIdx] = required;
-                        return next;
-                      });
-                      setGoalAmountsRequired((prev) => {
-                        const next = [...prev];
-                        next[slotIdx] = required;
-                        return next;
-                      });
-                      setGoalDisplayOrder((prev) => (prev.includes(slotIdx) ? prev : [...prev, slotIdx]));
-                      setGoalSpawnBounceSlots((prev) => (prev.includes(slotIdx) ? prev : [...prev, slotIdx]));
-                      setTimeout(() => {
-                        setGoalSpawnBounceSlots((prev) => prev.filter((s) => s !== slotIdx));
-                      }, 500);
-                      // Quitting mid-stagger should still retain goals created so far.
-                      persistGameSnapshotRef.current();
                     }, index * 500);
                   });
                 }}
@@ -6504,6 +6617,7 @@ export default function App() {
                     setActiveFtueStage('first_goal');
                     setGoalSlots(['green', 'empty', 'empty', 'empty', 'empty']);
                     setGoalPlantTypes([2, 0, 0, 0, 0]);
+                    setDiscoveryGoalLightGreenDismissed([false, false, false, false, false]);
                     setGoalCounts([3, 0, 0, 0, 0]);
                     setGoalAmountsRequired([3, 0, 0, 0, 0]);
                     setGoalDisplayOrder([0]);
@@ -7109,6 +7223,25 @@ export default function App() {
               targetRef={goalIconRefs[panel.goalSlotIdx]}
               appScale={appScale}
               onImpact={(goalSlotIdx, amount) => {
+                const plantLevelAtHit = goalPlantTypes[goalSlotIdx] ?? goalSlotIdx + 1;
+                const hHit = highestPlantEverRef.current;
+                const eligibleHit = isDiscoveryLightGreenEligible(
+                  ftue11PersistenceEnabledRef.current,
+                  ftue11ThreePlantGoalWindowActive,
+                  plantLevelAtHit,
+                  hHit
+                );
+                if (
+                  eligibleHit &&
+                  amount > 0 &&
+                  !discoveryGoalLightGreenDismissedRef.current[goalSlotIdx]
+                ) {
+                  const dNext = [...discoveryGoalLightGreenDismissedRef.current];
+                  dNext[goalSlotIdx] = true;
+                  discoveryGoalLightGreenDismissedRef.current = dNext;
+                  setDiscoveryGoalLightGreenDismissed(dNext);
+                }
+
                 goalInFlightHarvestBySlotRef.current[goalSlotIdx] = Math.max(0, (goalInFlightHarvestBySlotRef.current[goalSlotIdx] ?? 0) - amount);
                 goalsPendingCompletionRef.current.delete(goalSlotIdx);
                 setGoalBounceSlots((prev) => prev.includes(goalSlotIdx) ? prev : [...prev, goalSlotIdx]);
@@ -7138,10 +7271,11 @@ export default function App() {
                   }
                   return next;
                 });
-                setTimeout(() => {
+
+                window.setTimeout(() => {
                   setGoalBounceSlots((prev) => prev.filter((s) => s !== goalSlotIdx));
                   setGoalImpactSlots((prev) => prev.filter((s) => s !== goalSlotIdx));
-                }, 400); // Clear before animation ends so text is #a1b54e by 0% light green
+                }, GOAL_IMPACT_CLEAR_MS);
               }}
               onComplete={() => setActivePlantPanels(prev => prev.filter((p) => p.id !== panel.id))}
             />
