@@ -9,7 +9,7 @@ import {
   getCropYieldPerHarvest,
 } from '../components/UpgradeList';
 import { normalizeBarnShelvesUnlocked } from '../constants/barnShelves';
-import { GAME_SAVE_VERSION, type GameSaveV1 } from './gameSave';
+import { GAME_SAVE_VERSION, type GameSaveV1, deriveGoalDiscoveryLightGreenActive } from './gameSave';
 
 const getHexDistance = (q: number, r: number): number => (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2;
 
@@ -77,6 +77,11 @@ export function createPostFtueCleanSave(): GameSaveV1 {
     goalAmountsRequired: [req, req, req, 0, 0],
     goalCompletedValues: [0, 0, 0, 0, 0],
     goalDisplayOrder: [0, 1, 2],
+    goalDiscoveryLightGreenActive: deriveGoalDiscoveryLightGreenActive(
+      ['green', 'green', 'green', 'empty', 'empty'],
+      [1, 2, 3, 0, 0],
+      1
+    ),
     coinGoalVisible: false,
     coinGoalValue: 0,
     coinGoalTimeRemaining: 30,

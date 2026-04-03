@@ -94,6 +94,8 @@ export interface GameSaveV1 {
   goalAmountsRequired: number[];
   goalCompletedValues: number[];
   goalDisplayOrder: number[];
+  /** Discovery-order light-green frame until first crop bounce ends; optional on older saves. */
+  goalDiscoveryLightGreenActive?: boolean[];
   coinGoalVisible: boolean;
   coinGoalValue: number;
   coinGoalTimeRemaining: number;
@@ -134,6 +136,23 @@ export interface GameSaveV1 {
   wildGrowthAccumulatorMs?: number;
   /** Shed shelves unlocked (6); missing on old saves → treated as all true in loader. */
   barnShelvesUnlocked: boolean[];
+}
+
+/** Best-effort when `goalDiscoveryLightGreenActive` missing (undiscovered tier === highest + 1 only). */
+export function deriveGoalDiscoveryLightGreenActive(
+  goalSlots: GameSaveV1['goalSlots'],
+  goalPlantTypes: number[],
+  highestPlantEver: number
+): boolean[] {
+  const h = Math.max(0, Math.floor(highestPlantEver));
+  if (h >= 24) return [false, false, false, false, false];
+  const discoveryTier = h + 1;
+  return [0, 1, 2, 3, 4].map((i) => {
+    const st = goalSlots[i];
+    if (st !== 'green' && st !== 'loading') return false;
+    const pl = goalPlantTypes[i] ?? 0;
+    return pl >= 1 && pl === discoveryTier;
+  });
 }
 
 export function loadGameSave(): GameSaveV1 | null {
@@ -200,6 +219,16 @@ export function loadGameSave(): GameSaveV1 | null {
       (data as GameSaveV1).wildGrowthAccumulatorMs = 0;
     } else {
       (data as GameSaveV1).wildGrowthAccumulatorMs = Math.max(0, wg);
+    }
+    const gdl = data.goalDiscoveryLightGreenActive;
+    if (!Array.isArray(gdl) || gdl.length !== 5) {
+      data.goalDiscoveryLightGreenActive = deriveGoalDiscoveryLightGreenActive(
+        data.goalSlots,
+        data.goalPlantTypes,
+        data.highestPlantEver
+      );
+    } else {
+      data.goalDiscoveryLightGreenActive = gdl.map((x) => x === true);
     }
     return data;
   } catch {
