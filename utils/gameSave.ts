@@ -144,6 +144,8 @@ export interface GameSaveV1 {
   ftueUpgradePanelVisible: boolean;
   ftuePlayerLevelVisible: boolean;
   activeBoosts: ActiveBoostData[];
+  musicEnabled: boolean;
+  sfxEnabled: boolean;
   pendingUnlockUpgradeId: string | null;
   levelUpPopupQueue: number[];
   /**
@@ -187,6 +189,8 @@ export function loadGameSave(): GameSaveV1 | null {
       data.money = 0;
     }
     if (!Array.isArray(data.activeBoosts)) data.activeBoosts = [];
+    if (typeof data.musicEnabled !== 'boolean') data.musicEnabled = true;
+    if (typeof data.sfxEnabled !== 'boolean') data.sfxEnabled = true;
     data.barnShelvesUnlocked = normalizeBarnShelvesUnlocked(data.barnShelvesUnlocked);
     if (typeof data.plantMasteryGoalsCompleted !== 'number' || !Number.isFinite(data.plantMasteryGoalsCompleted)) {
       data.plantMasteryGoalsCompleted = 0;

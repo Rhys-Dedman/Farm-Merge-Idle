@@ -119,6 +119,8 @@ export function createPostFtueCleanSave(): GameSaveV1 {
     ftueUpgradePanelVisible: true,
     ftuePlayerLevelVisible: true,
     activeBoosts: [],
+    musicEnabled: true,
+    sfxEnabled: true,
     pendingUnlockUpgradeId: null,
     levelUpPopupQueue: [],
     wildGrowthAccumulatorMs: 0,

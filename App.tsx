@@ -52,6 +52,7 @@ import { assetPath } from './utils/assetPath';
 import { getTickCount60, TARGET_FRAME_MS, scheduleNextFrame } from './utils/raf60';
 import { getPerformanceMode } from './utils/performanceMode';
 import { getAutoMergeMode, setAutoMergeMode } from './utils/autoMergeMode';
+import { playMusicLoop, playSfx, setAudioSettings, SFX_IDS } from './utils/sfx';
 import {
   DOUBLE_COINS_HEADER_ICON,
   DOUBLE_COINS_OFFER_ID,
@@ -1160,6 +1161,10 @@ export default function App() {
   const lastShownOfferIdRef = useRef<string | null>(null);
   const lastShownOfferTabRef = useRef<TabType | null>(null);
   const lastLimitedOfferClosedAtRef = useRef<number>(0);
+  const suppressDiscoveryDeclineSfxRef = useRef(false);
+  const suppressLevelUpDeclineSfxRef = useRef(false);
+  const suppressLimitedOfferDeclineSfxRef = useRef(false);
+  const suppressPlantInfoDeclineSfxRef = useRef(false);
   const lastFakeAdClosedAtRef = useRef<number>(0); // 10s cooldown before showing limited offer popup after closing fake ad
   const lastOtherPopupClosedAtRef = useRef<number>(0); // 5–10s cooldown after closing level up / discovery / seed progression / plant info before showing limited offer
   const showFakeAdRef = useRef<boolean>(false); // so timers can pause while fake ad is visible
@@ -1225,6 +1230,9 @@ export default function App() {
   // Pause menu (opened from settings/gear button)
   const [pauseMenuOpen, setPauseMenuOpen] = useState(false);
   const [devToolsOpen, setDevToolsOpen] = useState(false);
+  const [musicEnabled, setMusicEnabled] = useState(true);
+  const [sfxEnabled, setSfxEnabled] = useState(true);
+  const [ftueSettingsButtonRect, setFtueSettingsButtonRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const [autoMergeSetting, setAutoMergeSetting] = useState(() => getAutoMergeMode());
   /** Skip treating 0→24 (hydrate) as “just unlocked”; only 23→24 in-session turns auto-merge on. */
   const autoMergePotCountInitRef = useRef(true);
@@ -1254,6 +1262,24 @@ export default function App() {
   const ftue11PersistenceEnabledRef = useRef(false);
   /** After spamming Unlock plant, show discovery only for this level when pause closes */
   const discoveryLevelAfterPauseCloseRef = useRef<number | null>(null);
+
+  const prevPopupOpenRef = useRef({
+    levelUp: false,
+    discovery: false,
+    limitedOffer: false,
+    plantInfo: false,
+    goldenPot: false,
+    purchaseSuccess: false,
+  });
+  useEffect(() => {
+    setAudioSettings({ musicEnabled, sfxEnabled });
+  }, [musicEnabled, sfxEnabled]);
+
+  useEffect(() => {
+    if (isLoading) return;
+    playMusicLoop();
+  }, [isLoading]);
+
   // Fake ad popup: show full-screen "ad", on Complete ad run callback then close
   const [showFakeAd, setShowFakeAd] = useState(false);
   showFakeAdRef.current = showFakeAd;
@@ -1600,8 +1626,89 @@ export default function App() {
   const [levelUpPopup, setLevelUpPopup] = useState<{ isVisible: boolean; level: number } | null>(null);
   /** Queued level-up popups (e.g. from pause menu fast-level); shown one by one after pause menu closes. */
   const [levelUpPopupQueue, setLevelUpPopupQueue] = useState<number[]>([]);
+  useEffect(() => {
+    const was = prevPopupOpenRef.current;
+    const isLevelUpOpen = !!levelUpPopup?.isVisible;
+    const isDiscoveryOpen = !!discoveryPopup?.isVisible;
+    const isLimitedOfferOpen = !!limitedOfferPopup?.isVisible;
+    const isPlantInfoOpen = !!plantInfoPopup?.isVisible;
+    const isGoldenPotOpen = goldenPotBonusesPopupOpen;
+    const isPurchaseSuccessOpen = !!purchaseSuccessfulUi;
+
+    if (!was.levelUp && isLevelUpOpen) playSfx(SFX_IDS.popupLevelUp);
+    if (!was.discovery && isDiscoveryOpen) playSfx(SFX_IDS.popupPlantDiscovery);
+    if (!was.limitedOffer && isLimitedOfferOpen) playSfx(SFX_IDS.popupNormal);
+    if (!was.plantInfo && isPlantInfoOpen) playSfx(SFX_IDS.popupNormal);
+    if (!was.goldenPot && isGoldenPotOpen) playSfx(SFX_IDS.popupNormal);
+    if (!was.purchaseSuccess && isPurchaseSuccessOpen) playSfx(SFX_IDS.popupNormal);
+
+    prevPopupOpenRef.current = {
+      levelUp: isLevelUpOpen,
+      discovery: isDiscoveryOpen,
+      limitedOffer: isLimitedOfferOpen,
+      plantInfo: isPlantInfoOpen,
+      goldenPot: isGoldenPotOpen,
+      purchaseSuccess: isPurchaseSuccessOpen,
+    };
+  }, [levelUpPopup, discoveryPopup, limitedOfferPopup, plantInfoPopup, goldenPotBonusesPopupOpen, purchaseSuccessfulUi]);
   /** FTUE: current stage (e.g. 'welcome' after splash); null when not in FTUE */
   const [activeFtueStage, setActiveFtueStage] = useState<FtueStageId | null>(null);
+  const prevWelcomeFtueOpenRef = useRef(false);
+  useEffect(() => {
+    const isWelcomeOpen = activeFtueStage === 'welcome';
+    if (!prevWelcomeFtueOpenRef.current && isWelcomeOpen) {
+      playSfx(SFX_IDS.popupNormal);
+    }
+    prevWelcomeFtueOpenRef.current = isWelcomeOpen;
+  }, [activeFtueStage]);
+  useLayoutEffect(() => {
+    if (activeFtueStage == null) {
+      setFtueSettingsButtonRect(null);
+      return;
+    }
+    const measure = () => {
+      const candidates = Array.from(document.querySelectorAll<HTMLElement>('#settings-gear-button'));
+      if (candidates.length === 0) {
+        setFtueSettingsButtonRect(null);
+        return;
+      }
+      const visible = candidates
+        .map((el) => el.getBoundingClientRect())
+        .filter((r) => {
+          const hasSize = r.width > 0 && r.height > 0;
+          const inViewport =
+            r.right > 0 &&
+            r.bottom > 0 &&
+            r.left < window.innerWidth &&
+            r.top < window.innerHeight;
+          return hasSize && inViewport;
+        });
+      const r =
+        visible.sort((a, b) => {
+          // Prefer the right-most button; if tied, pick the top-most.
+          if (b.right !== a.right) return b.right - a.right;
+          return a.top - b.top;
+        })[0] ?? null;
+      if (!r) {
+        setFtueSettingsButtonRect(null);
+        return;
+      }
+      setFtueSettingsButtonRect({
+        left: r.left,
+        top: r.top,
+        width: r.width,
+        height: r.height,
+      });
+    };
+    measure();
+    const onResize = () => measure();
+    window.addEventListener('resize', onResize);
+    const raf = requestAnimationFrame(measure);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      cancelAnimationFrame(raf);
+    };
+  }, [activeFtueStage, activeScreen]);
   /** Warning FTUE: shown when unlocked grid is full and all plants are unique. */
   const [outOfSpaceFtueVisible, setOutOfSpaceFtueVisible] = useState(false);
   /** Gate so dismissing doesn't instantly re-open until condition clears then re-enters. */
@@ -1931,6 +2038,7 @@ export default function App() {
     if (!ftue7Scheduled) return;
     const t1 = setTimeout(() => {
       ftue7SkipLoadingSlot0Ref.current = false;
+      playSfx(SFX_IDS.goalSpawnNormal);
       setGoalSlots((s) => { const n = [...s]; n[0] = 'green'; n[1] = 'green'; return n; });
       setGoalPlantTypes((p) => { const n = [...p]; n[0] = 1; n[1] = 2; return n; });
       recordSpawnedGoalPlantLevel(1, lastSpawnedGoalLevelsRef, lastSpawnedGoalPlantLevelHUDRef);
@@ -1951,6 +2059,7 @@ export default function App() {
       setGoalSpawnBounceSlots((prev) => prev.filter((s) => s !== 0));
       setGoalSlotFadeInSlot(1);
       setFtue7UnrevealedSlots((prev) => prev.filter((s) => s !== 0));
+      playSfx(SFX_IDS.goalSpawnNormal);
       setGoalBounceSlots((prev) => (prev.includes(1) ? prev : [...prev, 1]));
       setGoalSpawnBounceSlots((prev) => (prev.includes(1) ? prev : [...prev, 1]));
     }, 1200);
@@ -2819,6 +2928,9 @@ export default function App() {
         return n;
       });
       const hSpawn = effectiveHighestPlantEverForDiscovery(highestPlantEverRef, highestPlantEverStateRef);
+      const isDiscoverySpawn = plantLevel > hSpawn;
+      // Spawn SFX should fire when the goal starts bouncing into active, not after settle.
+      playSfx(isDiscoverySpawn ? SFX_IDS.goalSpawnUndiscovered : SFX_IDS.goalSpawnNormal);
       const markDiscoveryLightGreen = isDiscoveryLightGreenEligible(
         ftue11PersistenceEnabledRef.current,
         ftue11ThreePlantGoalWindowActive,
@@ -3059,6 +3171,7 @@ export default function App() {
         setCoinGoalValue(roundedValue);
         setCoinGoalTimeRemaining(30);
         setCoinGoalVisible(true);
+        playSfx(SFX_IDS.goalSpawnNormal);
         setCoinGoalBounce(true);
         setTimeout(() => setCoinGoalBounce(false), 400);
       }
@@ -3444,6 +3557,7 @@ export default function App() {
       for (const [index, plantLevel] of entries) {
         const cell = next[index];
         if (cell && cell.item === null) {
+          playSfx(SFX_IDS.gameplayPlantSpawn);
           recentSeedLandTimesRef.current.set(index, Date.now());
           next[index] = {
             ...cell,
@@ -3478,6 +3592,7 @@ export default function App() {
   );
 
   const applyWildGrowthSpawnAtCell = useCallback((targetIdx: number, plantLevel: number) => {
+    playSfx(SFX_IDS.gameplayPlantSpawn);
     spawnCropAt(targetIdx, plantLevel);
     queueMicrotask(() => scheduleAutoMergeRecheckRef.current(AUTO_MERGE_POST_SETTLE_MS));
     requestAnimationFrame(() => {
@@ -3515,11 +3630,13 @@ export default function App() {
 
   const handleTabChange = (tab: TabType) => {
     if (activeFtueStage === 'first_upgrade' && ftue10Phase === 'point_orders' && tab === 'SEEDS') {
+      playSfx(SFX_IDS.uiConfirmNormal);
       setIsExpanded(true);
       setFtue10Phase('panel_open_orders');
       return;
     }
     if (activeFtueStage === 'first_upgrade' && ftue10Phase === 'panel_open_orders' && tab === 'CROPS') {
+      playSfx(SFX_IDS.uiConfirmNormal);
       setActiveTab('CROPS');
       setFtue10Phase('finger');
       setFtue10GreenFlashUpgradeId('harvest_speed');
@@ -3527,6 +3644,7 @@ export default function App() {
     }
     setActiveTab(tab);
     if (!ftueUpgradePanelVisible) return; // FTUE: panel hidden until we reveal it
+    playSfx(SFX_IDS.uiConfirmNormal);
     setIsExpanded(true);
   };
 
@@ -3658,6 +3776,14 @@ export default function App() {
     // FTUE_7: must tap exactly 2 times; block 3rd tap
     if (activeFtueStage === 'first_more_orders' && ftue7SeedFireCount >= 2) return;
 
+    if (
+      activeFtueStage === 'seed_tap' ||
+      activeFtueStage === 'first_more_orders' ||
+      activeFtueStage === 'first_upgrade'
+    ) {
+      playSfx(SFX_IDS.uiConfirmNormal);
+    }
+
     // When white (seeds in storage) or FTUE 7 (free 2 seeds): only fire seed, no progress
     if (seedsInStorage > 0 || activeFtueStage === 'first_more_orders') {
       // Get cells that have projectiles in flight (reserved)
@@ -3681,6 +3807,7 @@ export default function App() {
         }
         // First projectile: always standard tier from current seed level.
         spawnProjectile(targetIdx, seedLevel);
+        playSfx(SFX_IDS.gameplaySeed);
         if (!seedsFreeMode) setSeedsInStorage((prev) => Math.max(0, prev - 1));
         triggerSeedButtonLeafBurst();
         // FTUE_2: count this seed; after 2, start fade out
@@ -3740,6 +3867,9 @@ export default function App() {
             window.setTimeout(() => spawnProjectile(t3, bonusLevel, false, true), staggerMs);
           }
         }
+      } else {
+        // Has charges but nowhere valid to spawn (board/reservations full) → same feedback as no charges.
+        playSfx(SFX_IDS.gameplayNoCharges);
       }
       return;
     }
@@ -3748,6 +3878,7 @@ export default function App() {
 
     // FTUE 1–4 free mode: progress bar doesn't move, don't add progress on tap
     if (seedsFreeMode) return;
+    if (seedsInStorage <= 0) playSfx(SFX_IDS.gameplayNoCharges);
 
     // Seed button: TAP_BAR_PERCENT when empty (no seeds to fire)
     const tapPercent = TAP_BAR_PERCENT;
@@ -3809,10 +3940,21 @@ export default function App() {
     e.stopPropagation();
     if (harvestTapZoomRef.current) return;
 
+    if (
+      activeFtueStage === 'first_harvest' ||
+      activeFtueStage === 'first_harvest_multi' ||
+      activeFtueStage === 'first_upgrade'
+    ) {
+      playSfx(SFX_IDS.uiConfirmNormal);
+    }
+
     // FTUE 5 free mode: harvest works but doesn't consume charges; no progress bar fill
     if (harvestFreeMode) {
       const hasPlant = grid.some((c) => c.item);
-      if (!hasPlant) return;
+      if (!hasPlant) {
+        playSfx(SFX_IDS.gameplayNoCharges);
+        return;
+      }
       let canSpendCharge = isSurplusSalesUnlocked(harvestState, playerLevel);
       if (!canSpendCharge) {
         for (let i = 0; i < goalSlots.length; i++) {
@@ -3826,7 +3968,11 @@ export default function App() {
           }
         }
       }
-      if (!canSpendCharge) return;
+      if (!canSpendCharge) {
+        playSfx(SFX_IDS.gameplayNoCharges);
+        return;
+      }
+      playSfx(SFX_IDS.gameplayHarvest);
       performHarvest(0, '');
       triggerHarvestButtonLeafBurst();
       setHarvestBounceTrigger((t) => t + 1);
@@ -3836,7 +3982,10 @@ export default function App() {
 
     if (harvestCharges > 0) {
       const hasPlant = grid.some((c) => c.item);
-      if (!hasPlant) return;
+      if (!hasPlant) {
+        playSfx(SFX_IDS.gameplayNoCharges);
+        return;
+      }
       let canSpendCharge = isSurplusSalesUnlocked(harvestState, playerLevel);
       if (!canSpendCharge) {
         for (let i = 0; i < goalSlots.length; i++) {
@@ -3850,7 +3999,11 @@ export default function App() {
           }
         }
       }
-      if (!canSpendCharge) return;
+      if (!canSpendCharge) {
+        playSfx(SFX_IDS.gameplayNoCharges);
+        return;
+      }
+      playSfx(SFX_IDS.gameplayHarvest);
       performHarvest(0, '');
       triggerHarvestButtonLeafBurst();
       setHarvestBounceTrigger((t) => t + 1);
@@ -3858,6 +4011,7 @@ export default function App() {
       setActiveTab('CROPS');
       return;
     }
+    playSfx(SFX_IDS.gameplayNoCharges);
 
     const tapPercent = TAP_BAR_PERCENT;
     const current = harvestProgressRef.current;
@@ -4303,6 +4457,20 @@ export default function App() {
     const source = grid[sourceIdx];
     const target = grid[targetIdx];
     const willMerge = source.item && target.item && target.item.level === source.item.level;
+    if (willMerge && target.item) {
+      const mergeResultLevel = target.item.level + pendingMergeLevelIncreaseRef.current;
+      const hasGoalForResult =
+        mergeResultLevel >= 1 &&
+        mergeResultLevel <= 24 &&
+        goalPlantTypes.some((pt, i) => {
+          if (pt !== mergeResultLevel) return false;
+          if (goalSlots[i] !== 'green') return false;
+          if ((goalCounts[i] ?? 0) <= 0) return false;
+          if (goalsPendingCompletionRef.current.has(i)) return false;
+          return true;
+        });
+      playSfx(hasGoalForResult ? SFX_IDS.gameplayMergeCrops : SFX_IDS.gameplayMergeCoins);
+    }
 
     // Deny merges beyond max plant tier (24). Snap dragged plant back and show toast on the static plant.
     if (willMerge && source.item?.level === 24 && target.item?.level === 24) {
@@ -4726,6 +4894,8 @@ export default function App() {
     setFtuePlayerLevelVisible(save.ftuePlayerLevelVisible);
     const now = Date.now();
     setActiveBoosts(normalizeActiveBoostsAfterLoad(save.activeBoosts.filter((b) => b.endTime > now)));
+    setMusicEnabled(save.musicEnabled !== false);
+    setSfxEnabled(save.sfxEnabled !== false);
     setPendingUnlockUpgradeId(
       save.pendingUnlockUpgradeId === 'fertile_soil' ? 'wild_growth' : save.pendingUnlockUpgradeId
     );
@@ -4983,6 +5153,8 @@ export default function App() {
       ftueUpgradePanelVisible,
       ftuePlayerLevelVisible,
       activeBoosts,
+      musicEnabled,
+      sfxEnabled,
       pendingUnlockUpgradeId,
       levelUpPopupQueue,
       wildGrowthAccumulatorMs: wildGrowthAccumMsRef.current,
@@ -5120,7 +5292,10 @@ export default function App() {
                 money={money}
                 walletFlashActive={walletFlashActive}
                 onAddMoney={(amt) => setMoney(prev => prev + amt)}
-                onSettingsClick={() => setPauseMenuOpen(true)}
+                onSettingsClick={() => {
+                  playSfx(SFX_IDS.uiConfirmNormal);
+                  setPauseMenuOpen(true);
+                }}
                 onFreeOfferClick={(offerId, slotIndex) => {
                   pendingAdSourceRef.current = 'storeFreeOffer';
                   pendingOfferIdRef.current = offerId;
@@ -5162,6 +5337,7 @@ export default function App() {
                 storeSlotCooldownEnds={storeSlotCooldownEnds}
                 onStoreSlotCooldownEnded={handleStoreSlotCooldownEnded}
                 onStoreCoinPurchase={(offerId) => {
+                  playSfx(SFX_IDS.uiConfirmReward);
                   const config =
                     STORE_COIN_OFFERS.find((c) => c.id === offerId) ??
                     STORE_BUNDLE_OFFERS.find((c) => c.id === offerId);
@@ -5264,7 +5440,10 @@ export default function App() {
                       const state = buildLimitedOfferPopupState('seed_storm');
                       if (state) setLimitedOfferPopup(state);
                     }}
-                    onPauseClick={() => setPauseMenuOpen(true)}
+                    onPauseClick={() => {
+                      playSfx(SFX_IDS.uiConfirmNormal);
+                      setPauseMenuOpen(true);
+                    }}
                     activeBoosts={activeBoosts}
                     activeBoostAreaRef={activeBoostAreaRef}
                     activeBoostMinWidthPx={ACTIVE_BOOST_INDICATOR_SIZE_PX}
@@ -5345,6 +5524,7 @@ export default function App() {
                   const goalImpactActive = goalImpactSlots.includes(slotIdx) && !isCompletedState;
                   const handleCompletedTap = () => {
                     if (!isCompletedState || isSlidingUp) return;
+                    playSfx(SFX_IDS.goalClaim);
                     if (slotIdx === 0 && activeFtueStage === 'first_goal_collect') {
                       setActiveFtueStage(null);
                       ftue7SkipLoadingSlot0Ref.current = true;
@@ -5632,7 +5812,11 @@ export default function App() {
                 <div
                   className="absolute inset-0 z-0 cursor-pointer"
                   style={{ touchAction: 'manipulation' }}
-                  onClick={() => setIsExpanded(false)}
+                  onClick={() => {
+                    if (!isExpanded) return;
+                    playSfx(SFX_IDS.uiConfirmNormal);
+                    setIsExpanded(false);
+                  }}
                   aria-label="Close upgrade panel"
                 />
                 <div 
@@ -5902,6 +6086,7 @@ export default function App() {
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
+                    playSfx(SFX_IDS.uiConfirmNormal);
                     setIsExpanded((prev) => !prev);
                   }}
                   className="pointer-events-auto absolute left-1/2 top-0"
@@ -5972,6 +6157,7 @@ export default function App() {
                     ftue10LockScroll={activeFtueStage === 'first_upgrade' && ftue10Phase === 'finger'}
                     goldenPotCount={goldenPotCount}
                     onUpgradePurchase={(upgradeId) => {
+                      playSfx(SFX_IDS.uiConfirmReward);
                       if (upgradeId === 'harvest_speed' && activeFtueStage === 'first_upgrade') {
                         // FTUE 10: on purchase, bounce Harvest button like a tap.
                         setHarvestBounceTrigger((t) => t + 1);
@@ -6468,7 +6654,10 @@ export default function App() {
                         const state = buildLimitedOfferPopupState('seed_storm');
                         if (state) setLimitedOfferPopup(state);
                       }}
-                      onPauseClick={() => setPauseMenuOpen(true)}
+                      onPauseClick={() => {
+                        playSfx(SFX_IDS.uiConfirmNormal);
+                        setPauseMenuOpen(true);
+                      }}
                       activeBoosts={[]}
                       activeBoostAreaRef={activeBoostAreaRef}
                       activeBoostMinWidthPx={0}
@@ -6506,6 +6695,7 @@ export default function App() {
         <Navbar 
           activeScreen={activeScreen} 
           onScreenChange={(screen) => {
+            if (screen !== activeScreen) playSfx(SFX_IDS.uiConfirmNormal);
             if (screen === 'FARM' && collectionFtuePhase === 'point_garden_nav') {
               setCollectionFtuePhase(null);
               setCollectionFtueCompleted(true);
@@ -6670,6 +6860,7 @@ export default function App() {
               <FtuePopup
                 isVisible={true}
                 onClose={() => {
+                  playSfx(SFX_IDS.uiConfirmNormal);
                   setActiveFtueStage('seed_tap');
                   setFtue2SeedFireCount(0);
                   setFtue2FadingOut(false);
@@ -6689,7 +6880,10 @@ export default function App() {
             {/* Warning: Out of Space — blocks input; re-shows whenever grid becomes full+unique again */}
             <FtuePopup
               isVisible={outOfSpaceFtueVisible}
-              onClose={() => setOutOfSpaceFtueVisible(false)}
+              onClose={() => {
+                playSfx(SFX_IDS.uiConfirmNormal);
+                setOutOfSpaceFtueVisible(false);
+              }}
               blockBackdropClick={true}
               position="top"
               topOffsetPx={120}
@@ -6733,6 +6927,7 @@ export default function App() {
                 isFadingOut={ftue4FadingOut}
                 appScale={appScale}
                 onLetsHarvest={() => {
+                  playSfx(SFX_IDS.uiConfirmNormal);
                   setGoalBounceSlots((prev) => prev.filter((s) => s !== 0));
                   setFtue4FadingOut(true);
                 }}
@@ -6783,6 +6978,7 @@ export default function App() {
                 isVisible={activeFtueStage === 'recharge_pre_upgrade' && ftue95ShowTextbox}
                 isFadingOut={ftue95FadingOut}
                 onConfirm={() => {
+                  playSfx(SFX_IDS.uiConfirmNormal);
                   setFtue95FadingOut(true);
                 }}
                 onFadeOutComplete={() => {
@@ -6824,6 +7020,7 @@ export default function App() {
                 seedButtonRect={seedButtonRect}
                 harvestButtonRect={harvestButtonRect}
                 onConfirm={() => {
+                  playSfx(SFX_IDS.uiConfirmNormal);
                   // FTUE 11 is fully closed: from now on we save progress + allow offline earnings.
                   ftue11PersistenceEnabledRef.current = true;
                   persistGameSnapshotRef.current();
@@ -6843,6 +7040,8 @@ export default function App() {
                     const level = plantLevels[index];
                     setTimeout(() => {
                       void preloadGoalOrderIcon(level).then(() => {
+                        const isUndiscoveredSpawn = level > Math.max(0, Math.floor(highestPlantEverRef.current));
+                        playSfx(isUndiscoveredSpawn ? SFX_IDS.goalSpawnUndiscovered : SFX_IDS.goalSpawnNormal);
                         const required = getGoalCropRequired(playerLevel, cropYieldLevel);
                         setGoalSlots((prev) => {
                           const next = [...prev];
@@ -6930,6 +7129,39 @@ export default function App() {
           </div>,
           document.body
         )}
+        {activeFtueStage != null && ftueSettingsButtonRect && createPortal(
+          <div
+            className="fixed pointer-events-none"
+            style={{
+              left: ftueSettingsButtonRect.left,
+              top: ftueSettingsButtonRect.top,
+              width: ftueSettingsButtonRect.width,
+              height: ftueSettingsButtonRect.height,
+              zIndex: 230,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                playSfx(SFX_IDS.uiConfirmNormal);
+                setPauseMenuOpen(true);
+              }}
+              className="pointer-events-auto flex h-full w-full items-center justify-center rounded-full transition-all active:scale-95"
+              style={{
+                backgroundColor: '#775041',
+                borderWidth: 1,
+                borderColor: '#e9dcaf',
+              }}
+              aria-label="Settings"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="#fcf0c7" className="w-7 h-7">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
+          </div>,
+          document.body
+        )}
         {/* Modals (level up, discovery, offers, pause): above surplus coin panels */}
         {createPortal(
           <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 220 }}>
@@ -6940,6 +7172,11 @@ export default function App() {
                 <LevelUpPopup
                   isVisible={levelUpPopup.isVisible}
                   onClose={() => {
+                    if (suppressLevelUpDeclineSfxRef.current) {
+                      suppressLevelUpDeclineSfxRef.current = false;
+                    } else {
+                      playSfx(SFX_IDS.uiDecline);
+                    }
                     lastOtherPopupClosedAtRef.current = Date.now();
                     setLevelUpPopup(null);
                     setLevelUpPopupQueue((q) => {
@@ -6965,6 +7202,8 @@ export default function App() {
                   }
                   buttonText={unlockInfo.levelUpButtonText}
                   onUnlockNow={() => {
+                    playSfx(SFX_IDS.uiConfirmNormal);
+                    suppressLevelUpDeclineSfxRef.current = true;
                     // Settings "Level Up" already advances `playerLevel` before showing the popup.
                     // Only increment here if the player is still below the popup level.
                     setPlayerLevel((l) => (l < levelUpPopup.level ? l + 1 : l));
@@ -7024,6 +7263,7 @@ export default function App() {
                 appScale={appScale}
                 revealTierPotCount={goldenPotBonusRevealTier}
                 onClose={() => {
+                  playSfx(SFX_IDS.uiDecline);
                   lastOtherPopupClosedAtRef.current = Date.now();
                   setGoldenPotBonusRevealTier(null);
                   setGoldenPotBonusesPopupOpen(false);
@@ -7040,6 +7280,11 @@ export default function App() {
               <DiscoveryPopup
                 isVisible={discoveryPopup.isVisible}
                 onClose={() => {
+                  if (suppressDiscoveryDeclineSfxRef.current) {
+                    suppressDiscoveryDeclineSfxRef.current = false;
+                  } else {
+                    playSfx(SFX_IDS.uiDecline);
+                  }
                   lastOtherPopupClosedAtRef.current = Date.now();
                   setDiscoveryPopup(null);
                   queueMicrotask(() => {
@@ -7061,6 +7306,8 @@ export default function App() {
                 closeOnBackdropClick={false}
                 appScale={appScale}
                 onButtonClick={(startPoint) => {
+                  playSfx(SFX_IDS.uiConfirmReward);
+                  suppressDiscoveryDeclineSfxRef.current = true;
                   const rewardValue = applyDoubleCoinsVisualAmount(
                     getCoinValueForLevel(discoveryPopup.level) * PLANT_DISCOVERY_COIN_MULTIPLIER,
                     activeBoostsRef.current
@@ -7117,6 +7364,7 @@ export default function App() {
                 rewards={purchaseSuccessfulUi.rewards}
                 appScale={appScale}
                 onClose={() => {
+                  playSfx(SFX_IDS.uiDecline);
                   lastOtherPopupClosedAtRef.current = Date.now();
                   pendingPurchaseBoostsRef.current = [];
                   setPurchaseSuccessfulUi(null);
@@ -7161,6 +7409,11 @@ export default function App() {
               <PlantInfoPopup
                 isVisible={plantInfoPopup.isVisible}
                 onClose={() => {
+                  if (suppressPlantInfoDeclineSfxRef.current) {
+                    suppressPlantInfoDeclineSfxRef.current = false;
+                  } else {
+                    playSfx(SFX_IDS.uiDecline);
+                  }
                   lastOtherPopupClosedAtRef.current = Date.now();
                   setPlantInfoPopup(null);
                 }}
@@ -7184,6 +7437,8 @@ export default function App() {
                         canAfford: money >= getPlantMasteryUnlockCost(plantInfoPopup.level),
                         isUnlocked: plantMastery.unlockedLevels.includes(plantInfoPopup.level),
                         onPurchase: () => {
+                          playSfx(SFX_IDS.uiConfirmReward);
+                          suppressPlantInfoDeclineSfxRef.current = true;
                           const level = plantInfoPopup.level;
                           const wasCollectionFtuePopup =
                             collectionFtuePhase === 'popup_free' && level === 1 && !collectionFtueCompleted;
@@ -7228,6 +7483,11 @@ export default function App() {
               <LimitedOfferPopup
                 isVisible={limitedOfferPopup.isVisible}
                 onClose={() => {
+                  if (suppressLimitedOfferDeclineSfxRef.current) {
+                    suppressLimitedOfferDeclineSfxRef.current = false;
+                  } else {
+                    playSfx(SFX_IDS.uiDecline);
+                  }
                   const now = Date.now();
                   lastLimitedOfferClosedAtRef.current = now;
                   lastLimitedOfferShownAtRef.current = now; // start 90s cooldown for next offer when timer starts
@@ -7279,6 +7539,8 @@ export default function App() {
                 subtitleSettingsStyle={limitedOfferPopup.subtitleSettingsStyle}
                 hideOfferDurationBlock={limitedOfferPopup.hideOfferDurationBlock}
                 onButtonClick={() => {
+                  playSfx(SFX_IDS.uiConfirmNormal);
+                  suppressLimitedOfferDeclineSfxRef.current = true;
                   // Show fake ad; when user taps "Complete ad", grant reward. Close limited offer popup now so it's gone when fake ad closes.
                   const offerId = limitedOfferPopup.offerId;
                   pendingAdSourceRef.current = 'limitedOffer';
@@ -7390,7 +7652,12 @@ export default function App() {
               isVisible={pauseMenuOpen}
               showAutoMergeSetting={goldenPotCount >= 24}
               onAutoMergeChange={setAutoMergeSetting}
+              musicEnabled={musicEnabled}
+              sfxEnabled={sfxEnabled}
+              onMusicEnabledChange={setMusicEnabled}
+              onSfxEnabledChange={setSfxEnabled}
               onClose={() => {
+                playSfx(SFX_IDS.uiDecline);
                 setPauseMenuOpen(false);
                 setDevToolsOpen(false);
                 const plantLevelToDiscover = discoveryLevelAfterPauseCloseRef.current;
@@ -7437,6 +7704,7 @@ export default function App() {
             <PauseMenuPopup
               isVisible={devToolsOpen}
               onClose={() => {
+                playSfx(SFX_IDS.uiDecline);
                 setDevToolsOpen(false);
               }}
               onRewardedAdClick={() => {
@@ -7553,6 +7821,7 @@ export default function App() {
                   onImpact={(value) => {
                     setMoney((prev) => prev + value);
                     setWalletFlashActive(true);
+                    playSfx(SFX_IDS.coinImpact);
                     setWalletBounceTrigger((t) => t + 1);
                     if (walletFlashTimeoutRef.current) clearTimeout(walletFlashTimeoutRef.current);
                     walletFlashTimeoutRef.current = setTimeout(() => setWalletFlashActive(false), 120);
@@ -7675,6 +7944,7 @@ export default function App() {
                     appScale={appScale}
                     activePanelCount={activeCoinPanels.length}
                     onImpact={(value) => {
+                      playSfx(SFX_IDS.coinImpact);
                       pendingCoinImpactRef.current.total += value;
                         if (!pendingCoinImpactRef.current.scheduled) {
                           pendingCoinImpactRef.current.scheduled = true;
@@ -7707,6 +7977,7 @@ export default function App() {
               targetRef={goalIconRefs[panel.goalSlotIdx]}
               appScale={appScale}
               onImpact={(goalSlotIdx, amount) => {
+                playSfx(SFX_IDS.goalImpact);
                 const plantLevelAtHit = goalPlantTypes[goalSlotIdx] ?? goalSlotIdx + 1;
                 const hHit = highestPlantEverRef.current;
                 const eligibleHit =
@@ -7742,6 +8013,7 @@ export default function App() {
                   const prevCount = next[goalSlotIdx] ?? 0;
                   next[goalSlotIdx] = Math.max(0, prevCount - amount);
                   if (next[goalSlotIdx] === 0) {
+                    if (prevCount > 0) playSfx(SFX_IDS.goalImpactComplete);
                     const plantLevel = goalPlantTypes[goalSlotIdx] ?? goalSlotIdx + 1;
                     const plantValue = getCoinValueForLevel(plantLevel);
                     const amountRequired = goalAmountsRequired[goalSlotIdx] ?? 3;
@@ -7802,6 +8074,7 @@ export default function App() {
                 }
                 setMoney((prev) => prev + finalValue);
                 setWalletFlashActive(true);
+                playSfx(SFX_IDS.coinImpact);
                 setWalletBounceTrigger((t) => t + 1);
                 if (walletFlashTimeoutRef.current) clearTimeout(walletFlashTimeoutRef.current);
                 walletFlashTimeoutRef.current = setTimeout(() => setWalletFlashActive(false), 120);

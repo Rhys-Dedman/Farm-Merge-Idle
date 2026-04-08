@@ -595,6 +595,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
       )}
       <div className="absolute right-3 top-1/2 z-40 flex -translate-y-1/2 items-center">
         <button
+          id="settings-gear-button"
           ref={settingsButtonRef}
           type="button"
           onClick={onPauseClick}

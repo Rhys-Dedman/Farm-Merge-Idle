@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { preloadSfxAssets } from '../utils/sfx';
 
 interface LoadingScreenProps {
   onLoadComplete: () => void;
@@ -143,7 +144,10 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
       });
     };
 
-    await Promise.all(ASSETS_TO_PRELOAD.map(loadImage));
+    await Promise.all([
+      Promise.all(ASSETS_TO_PRELOAD.map(loadImage)),
+      preloadSfxAssets(),
+    ]);
     if (variant === 'quick') {
       setPhase('quickFade');
     } else {

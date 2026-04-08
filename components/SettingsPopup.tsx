@@ -8,6 +8,10 @@ interface SettingsPopupProps {
   isVisible: boolean;
   onClose: () => void;
   onOpenDevTools: () => void;
+  musicEnabled: boolean;
+  sfxEnabled: boolean;
+  onMusicEnabledChange: (enabled: boolean) => void;
+  onSfxEnabledChange: (enabled: boolean) => void;
   onClearBoosts?: () => void;
   onResetProgress?: () => void;
   showAutoMergeSetting?: boolean;
@@ -41,6 +45,13 @@ const PALETTES = {
     pressedBg: '#7ab8d1',
     textShadow: '0 1px 0 rgba(255,255,255,0.3)',
   },
+  disabled: {
+    bg: '#b7a07a',
+    border: '#8c7554',
+    text: '#5f4b33',
+    pressedBg: '#a58d68',
+    textShadow: '0 1px 0 rgba(255,255,255,0.2)',
+  },
 } as const;
 
 function btnStyle(p: (typeof PALETTES)['green'], pressed: boolean): React.CSSProperties {
@@ -69,6 +80,10 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
   isVisible,
   onClose,
   onOpenDevTools,
+  musicEnabled,
+  sfxEnabled,
+  onMusicEnabledChange,
+  onSfxEnabledChange,
   onClearBoosts,
   onResetProgress,
   showAutoMergeSetting = false,
@@ -177,6 +192,26 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
                 <img src={assetPath('/assets/popups/popup_divider.png')} alt="" className="h-auto object-contain" style={{ width: '100%', maxWidth: '220px' }} />
               </div>
               <div className="flex flex-col items-center gap-3 w-full" style={{ maxWidth: '200px' }}>
+                <button
+                  type="button"
+                  onClick={() => onMusicEnabledChange(!musicEnabled)}
+                  className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                  style={btnStyle(musicEnabled ? PALETTES.green : PALETTES.disabled, false)}
+                >
+                  <span className="font-bold tracking-tight" style={labelStyle(musicEnabled ? PALETTES.green : PALETTES.disabled)}>
+                    Music {musicEnabled ? 'ON' : 'OFF'}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onSfxEnabledChange(!sfxEnabled)}
+                  className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                  style={btnStyle(sfxEnabled ? PALETTES.green : PALETTES.disabled, false)}
+                >
+                  <span className="font-bold tracking-tight" style={labelStyle(sfxEnabled ? PALETTES.green : PALETTES.disabled)}>
+                    Sound Effects {sfxEnabled ? 'ON' : 'OFF'}
+                  </span>
+                </button>
                 <button
                   type="button"
                   onClick={() => {
