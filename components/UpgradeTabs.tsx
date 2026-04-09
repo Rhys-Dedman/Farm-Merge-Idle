@@ -77,7 +77,7 @@ export const UpgradeTabs = forwardRef<UpgradeTabsRef, UpgradeTabsProps>(
   const underlineColor = activeTabHasOffer ? NOTIFICATION_UNDERLINE_COLOR : NORMAL_UNDERLINE_COLOR;
 
   return (
-    <div className="flex w-full bg-[#fcf0c6] relative h-[43px] shrink-0 items-center px-4">
+    <div className="flex w-full bg-[#fcf0c6] relative h-[43px] shrink-0 items-center px-4 rounded-t-[32px] overflow-hidden">
       {/* Background Underline - Spans full width, matches thickness of the active indicator */}
       <div className="absolute bottom-0 left-0 w-full h-[2px] bg-black/5 pointer-events-none"></div>
 
