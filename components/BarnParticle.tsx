@@ -7,8 +7,11 @@ const MOVE_DURATION_MS = 475;
 const MAX_TRAIL_POINTS = 9;
 const TRAIL_FADE_AFTER_HIT_MS = 200;
 const PARTICLE_SIZE = 16;
-const PARTICLE_COLOR = '#e8f6be';
-const TRAIL_COLOR = '#d5ec95';
+const DEFAULT_PARTICLE_COLOR = '#e8f6be';
+const DEFAULT_TRAIL_COLOR = '#d5ec95';
+/** Same motion as green “Add to Collection” particle; warm gold for golden-pot callouts. */
+const GOLDEN_PARTICLE_COLOR = '#ffe082';
+const GOLDEN_TRAIL_COLOR = '#ffb300';
 
 interface Point {
   x: number;
@@ -19,6 +22,8 @@ export interface BarnParticleData {
   id: string;
   startX: number;
   startY: number;
+  /** Default green trail; `golden` matches level-up golden pot cue. */
+  variant?: 'default' | 'golden';
 }
 
 interface BarnParticleProps {
@@ -38,6 +43,10 @@ export const BarnParticle: React.FC<BarnParticleProps> = ({
   onComplete,
   appScale = 1,
 }) => {
+  const isGolden = data.variant === 'golden';
+  const particleColor = isGolden ? GOLDEN_PARTICLE_COLOR : DEFAULT_PARTICLE_COLOR;
+  const trailColor = isGolden ? GOLDEN_TRAIL_COLOR : DEFAULT_TRAIL_COLOR;
+
   const [frame, setFrame] = useState<{ phase: 'moving' | 'trailOnly'; pos: Point; trail: Point[]; trailOpacity: number }>({
     phase: 'moving',
     pos: { x: data.startX, y: data.startY },
@@ -161,7 +170,7 @@ export const BarnParticle: React.FC<BarnParticleProps> = ({
                   y1={prev.y}
                   x2={point.x}
                   y2={point.y}
-                  stroke={TRAIL_COLOR}
+                  stroke={trailColor}
                   strokeWidth={PARTICLE_SIZE}
                   strokeLinecap="round"
                   strokeOpacity={opacityScale}
@@ -182,9 +191,9 @@ export const BarnParticle: React.FC<BarnParticleProps> = ({
             width: PARTICLE_SIZE,
             height: PARTICLE_SIZE,
             transform: 'translate(-50%, -50%)',
-            backgroundColor: PARTICLE_COLOR,
+            backgroundColor: particleColor,
             borderRadius: '50%',
-            border: `2px solid ${TRAIL_COLOR}`,
+            border: `2px solid ${trailColor}`,
             boxShadow: `0 2px 4px rgba(0,0,0,0.2)`,
           }}
         />

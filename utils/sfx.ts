@@ -5,6 +5,7 @@ export const SFX_IDS = {
   uiConfirmNormal: 'sfx_ui_confirm_normal',
   uiConfirmReward: 'sfx_ui_confirm_reward',
   uiDecline: 'sfx_ui_decline',
+  uiUnlockUpgrade: 'sfx_ui_unlockupgrade',
   popupLevelUp: 'sfx_popup_levelup',
   popupPlantDiscovery: 'sfx_popup_plantdiscovery',
   popupNormal: 'sfx_popup_normal',
@@ -15,6 +16,8 @@ export const SFX_IDS = {
   gameplayMergeCrops: 'sfx_gameplay_mergecrops',
   gameplayHarvest: 'sfx_gameplay_harvest',
   gameplayPlantSpawn: 'sfx_gameplay_plantspawn',
+  gameplayMovePlant: 'sfx_gameplay_moveplant',
+  gameplayDeletePlant: 'sfx_gameplay_deleteplant',
   goalImpact: 'sfx_goal_impact',
   goalImpactComplete: 'sfx_goal_impact_complete',
   goalClaim: 'sfx_goal_claim',
@@ -29,6 +32,7 @@ const SFX_PATHS: Record<SfxId, string> = {
   [SFX_IDS.uiConfirmNormal]: '/assets/sfx/sfx_ui_confirm_normal.wav',
   [SFX_IDS.uiConfirmReward]: '/assets/sfx/sfx_ui_confirm_reward.wav',
   [SFX_IDS.uiDecline]: '/assets/sfx/sfx_ui_decline.wav',
+  [SFX_IDS.uiUnlockUpgrade]: '/assets/sfx/sfx_ui_unlockupgrade.wav',
   [SFX_IDS.popupLevelUp]: '/assets/sfx/sfx_popup_levelup.wav',
   [SFX_IDS.popupPlantDiscovery]: '/assets/sfx/sfx_popup_plantdiscovery.wav',
   [SFX_IDS.popupNormal]: '/assets/sfx/sfx_popup_normal.wav',
@@ -39,6 +43,8 @@ const SFX_PATHS: Record<SfxId, string> = {
   [SFX_IDS.gameplayMergeCrops]: '/assets/sfx/sfx_gameplay_mergecrops.wav',
   [SFX_IDS.gameplayHarvest]: '/assets/sfx/sfx_gameplay_harvest.wav',
   [SFX_IDS.gameplayPlantSpawn]: '/assets/sfx/sfx_gameplay_plantspawn.wav',
+  [SFX_IDS.gameplayMovePlant]: '/assets/sfx/sfx_gameplay_moveplant.wav',
+  [SFX_IDS.gameplayDeletePlant]: '/assets/sfx/sfx_gameplay_deleteplant.wav',
   [SFX_IDS.goalImpact]: '/assets/sfx/sfx_goal_impact.wav',
   [SFX_IDS.goalImpactComplete]: '/assets/sfx/sfx_goal_impact_complete.wav',
   [SFX_IDS.goalClaim]: '/assets/sfx/sfx_goal_claim.wav',
@@ -47,7 +53,7 @@ const SFX_PATHS: Record<SfxId, string> = {
 };
 
 /** Global game audio master volume (applies to all SFX now and future callers of playSfx). */
-export const MASTER_AUDIO_VOLUME = 0.75;
+export const MASTER_AUDIO_VOLUME = 0.5;
 
 const audioTemplateById = new Map<SfxId, HTMLAudioElement>();
 const audioBufferById = new Map<SfxId, AudioBuffer>();

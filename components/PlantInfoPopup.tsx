@@ -28,6 +28,8 @@ interface LeafParticle {
 interface PlantInfoPopupProps {
   isVisible: boolean;
   onClose: () => void;
+  /** Fired on tap when dismissing via X or backdrop (immediate), not when the close animation ends. */
+  onUserDismiss?: () => void;
   plantLevel: number;
   plantName: string;
   plantDescription: string;
@@ -99,6 +101,7 @@ function createPopupLeaves(): LeafParticle[] {
 export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
   isVisible,
   onClose,
+  onUserDismiss,
   plantLevel,
   plantName,
   plantDescription,
@@ -222,6 +225,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
 
   const handleClose = () => {
     if (animState === 'leaving' || animState === 'preflight') return;
+    onUserDismiss?.();
     setAnimState('leaving');
     setTimeout(() => {
       setAnimState('hidden');

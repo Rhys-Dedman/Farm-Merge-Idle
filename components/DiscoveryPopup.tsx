@@ -39,6 +39,8 @@ interface LeafParticle {
 interface DiscoveryPopupProps {
   isVisible: boolean;
   onClose: () => void;
+  /** Fired on tap when dismissing via X or backdrop (immediate), not when the close animation ends. */
+  onUserDismiss?: () => void;
   title: string;
   imageSrc: string;
   subtitle: string;
@@ -156,6 +158,7 @@ const NineSlice: React.FC<NineSliceProps> = ({
 export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
   isVisible,
   onClose,
+  onUserDismiss,
   title,
   imageSrc,
   subtitle,
@@ -287,6 +290,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
 
   const dismissWithoutCollect = () => {
     if (isClosing || animState === 'leaving' || animState === 'preflight') return;
+    onUserDismiss?.();
     setIsClosing(true);
     setAnimState('leaving');
     setTimeout(() => {

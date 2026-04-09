@@ -6,6 +6,16 @@ import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
 import { PopupVectorBackground } from './PopupVectorBackground';
+import {
+  REWARD_OFFER_LINE_TEXT_COLOR,
+  REWARD_PILL_FILL_COLOR,
+  REWARD_PILL_HEIGHT_PX,
+  REWARD_PILL_STROKE_COLOR,
+  REWARD_PILL_STROKE_WIDTH_PX,
+} from './Reward';
+
+/** Match DiscoveryPopup coin reward icon size (2× layout space). */
+const LEVEL_UP_REWARD_ICON_PX = Math.round(40 * 1.15);
 
 const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_5.png'), assetPath('/assets/vfx/particle_leaf_6.png')];
 
@@ -36,6 +46,8 @@ interface LevelUpPopupProps {
   /** When set, shown inside the blue header circle instead of `icon` (e.g. PlantWithPot). */
   headerIcon?: React.ReactNode;
   onUnlockNow?: () => void;
+  /** Fires immediately on Unlock Now (before close animation); use for VFX e.g. particle to Collection. */
+  onUnlockNowImmediate?: (ctx: { startPoint: { x: number; y: number } }) => void;
   appScale?: number;
   /** When provided, show smaller text above title (e.g. "New Feature") */
   subtitle?: string;
@@ -45,6 +57,8 @@ interface LevelUpPopupProps {
   iconScale?: number;
   /** When true, hide "Level X" (for info-style popups) */
   hideLevel?: boolean;
+  /** Level ≥ 6: show Discovery-style reward pill (“Golden Pot Available”). */
+  showGoldenPotAvailableRow?: boolean;
 }
 
 const POPUP_LEAF_COUNT = 40;
@@ -106,11 +120,13 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
   icon,
   headerIcon,
   onUnlockNow,
+  onUnlockNowImmediate,
   appScale = 1,
   subtitle,
   buttonText = 'Unlock Now!',
   iconScale = 1,
   hideLevel = false,
+  showGoldenPotAvailableRow = false,
 }) => {
   const [animState, setAnimState] = useState<PopupAnimWithPreflight>('hidden');
   const [assetsReady, setAssetsReady] = useState(false);
@@ -223,9 +239,19 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
   }, [isVisible, assetsReady, animState, onClose]);
 
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const goldenPotRewardIconRef = useRef<HTMLImageElement>(null);
 
   const handleButtonClick = () => {
     if (animState === 'preflight') return;
+    let ctx: { startPoint: { x: number; y: number } } | undefined;
+    if (showGoldenPotAvailableRow && goldenPotRewardIconRef.current) {
+      const r = goldenPotRewardIconRef.current.getBoundingClientRect();
+      ctx = { startPoint: { x: r.left + r.width / 2, y: r.top + r.height / 2 } };
+    } else if (buttonRef.current) {
+      const r = buttonRef.current.getBoundingClientRect();
+      ctx = { startPoint: { x: r.left + r.width / 2, y: r.top + r.height / 2 } };
+    }
+    if (ctx) onUnlockNowImmediate?.(ctx);
     setAnimState('leaving');
     setTimeout(() => {
       setAnimState('hidden');
@@ -477,7 +503,48 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
                   {description}
                 </p>
 
-                <div className="flex-grow min-h-[48px]" />
+                {showGoldenPotAvailableRow && (
+                  <div className="flex items-center justify-center" style={{ marginTop: '20px' }}>
+                    <div
+                      className="inline-flex items-center justify-center box-border rounded-full"
+                      style={{
+                        backgroundColor: REWARD_PILL_FILL_COLOR,
+                        border: `${REWARD_PILL_STROKE_WIDTH_PX * 2}px solid ${REWARD_PILL_STROKE_COLOR}`,
+                        minHeight: `${REWARD_PILL_HEIGHT_PX * 2}px`,
+                        minWidth: '420px',
+                        paddingTop: 12,
+                        paddingBottom: 12,
+                        paddingLeft: 20,
+                        paddingRight: 24,
+                        gap: '10px',
+                      }}
+                    >
+                      <img
+                        ref={goldenPotRewardIconRef}
+                        src={assetPath('/assets/icons/icon_goldenpot.png')}
+                        alt=""
+                        className="object-contain shrink-0"
+                        style={{
+                          width: `${LEVEL_UP_REWARD_ICON_PX}px`,
+                          height: `${LEVEL_UP_REWARD_ICON_PX}px`,
+                        }}
+                      />
+                      <span
+                        className="font-black tracking-tight whitespace-nowrap"
+                        style={{
+                          color: REWARD_OFFER_LINE_TEXT_COLOR,
+                          fontFamily: 'Inter, sans-serif',
+                          fontSize: '2rem',
+                          lineHeight: 1,
+                        }}
+                      >
+                        Golden Pot Available
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div className={`flex-grow ${showGoldenPotAvailableRow ? 'min-h-[40px]' : 'min-h-[48px]'}`} />
 
                 {/* Unlock Now Button - blue */}
                 <button

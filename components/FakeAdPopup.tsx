@@ -4,6 +4,7 @@
  */
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { playSfx, SFX_IDS } from '../utils/sfx';
 import { POPUP_PREFLIGHT_MIN_MS } from '../hooks/usePopupPreflightEnter';
 
 const GAME_DESIGN_WIDTH = 448;
@@ -121,6 +122,7 @@ export const FakeAdPopup: React.FC<FakeAdPopupProps> = ({ isVisible, onComplete,
               onMouseLeave={() => setButtonPressed(false)}
               onClick={(e) => {
                 setButtonPressed(false);
+                playSfx(SFX_IDS.uiConfirmNormal);
                 const rect = e.currentTarget.getBoundingClientRect();
                 onActivateRewardClick?.(rect);
                 onComplete();

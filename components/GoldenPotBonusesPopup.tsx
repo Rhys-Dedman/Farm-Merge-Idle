@@ -48,6 +48,8 @@ interface RowBurstLeaf {
 export interface GoldenPotBonusesPopupProps {
   isVisible: boolean;
   onClose: () => void;
+  /** Fired on tap when dismissing via X or backdrop (immediate), not when the close animation ends. */
+  onUserDismiss?: () => void;
   /** Plants that currently have a golden pot (mastered). */
   goldenPotCount: number;
   maxGoldenPots?: number;
@@ -203,6 +205,7 @@ const BONUS_ROW_REVEAL_DELAY_MS = 250;
 export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
   isVisible,
   onClose,
+  onUserDismiss,
   goldenPotCount,
   maxGoldenPots = 24,
   appScale = 1,
@@ -354,6 +357,7 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
 
   const dismiss = () => {
     if (isClosing || animState === 'leaving') return;
+    onUserDismiss?.();
     setIsClosing(true);
     setAnimState('leaving');
     setTimeout(() => {

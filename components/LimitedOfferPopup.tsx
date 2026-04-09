@@ -35,6 +35,8 @@ interface LeafParticle {
 interface LimitedOfferPopupProps {
   isVisible: boolean;
   onClose: () => void;
+  /** Fired on tap when dismissing via X or backdrop (immediate), not when the close animation ends. */
+  onUserDismiss?: () => void;
   title?: string;
   imageSrc: string;
   subtitle: string;
@@ -153,6 +155,7 @@ function createPopupLeaves(): LeafParticle[] {
 export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
   isVisible,
   onClose,
+  onUserDismiss,
   title = 'Limited Offer',
   imageSrc,
   subtitle,
@@ -302,8 +305,9 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
   const [isClosing, setIsClosing] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  const beginDismiss = (beforeLeave?: () => void) => {
+  const beginDismiss = (beforeLeave?: () => void, fromUserDismissGesture = true) => {
     if (isClosing || animState === 'leaving' || animState === 'preflight') return;
+    if (fromUserDismissGesture) onUserDismiss?.();
     setIsClosing(true);
     beforeLeave?.();
     setAnimState('leaving');
@@ -319,7 +323,7 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
       onButtonClick(buttonRef.current.getBoundingClientRect());
     }
     if (closeOnButtonClick) {
-      beginDismiss();
+      beginDismiss(undefined, false);
     }
   };
 

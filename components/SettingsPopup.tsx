@@ -7,7 +7,11 @@ import { getAutoMergeMode, setAutoMergeMode } from '../utils/autoMergeMode';
 interface SettingsPopupProps {
   isVisible: boolean;
   onClose: () => void;
+  /** Fired on tap when dismissing via X or backdrop (immediate), not when the close animation ends. */
+  onUserDismiss?: () => void;
   onOpenDevTools: () => void;
+  showDevToolsButton?: boolean;
+  onAnyButtonClick?: () => void;
   musicEnabled: boolean;
   sfxEnabled: boolean;
   onMusicEnabledChange: (enabled: boolean) => void;
@@ -79,7 +83,10 @@ function labelStyle(p: (typeof PALETTES)['green']): React.CSSProperties {
 export const SettingsPopup: React.FC<SettingsPopupProps> = ({
   isVisible,
   onClose,
+  onUserDismiss,
   onOpenDevTools,
+  showDevToolsButton = true,
+  onAnyButtonClick,
   musicEnabled,
   sfxEnabled,
   onMusicEnabledChange,
@@ -125,8 +132,9 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
     }
   }, [isVisible, animState, onClose]);
 
-  const dismissToClose = () => {
+  const dismissToClose = (fromUserDismissGesture?: boolean) => {
     if (animState === 'leaving' || animState === 'hidden' || animState === 'preflight') return;
+    if (fromUserDismissGesture) onUserDismiss?.();
     setAnimState('leaving');
     setTimeout(() => {
       setAnimState('hidden');
@@ -144,7 +152,7 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
       <div
         className="absolute transition-opacity duration-200"
         style={{ top: '-10px', left: '-10px', right: '-10px', bottom: '-10px', backgroundColor: 'rgba(0, 0, 0, 0.7)', opacity: isLeaving || isPreflight ? 0 : 1 }}
-        onClick={closeOnBackdropClick ? dismissToClose : undefined}
+        onClick={closeOnBackdropClick ? () => dismissToClose(true) : undefined}
       />
       <div className="relative flex items-center justify-center" style={{ transform: `scale(${appScale})`, transformOrigin: 'center center' }}>
         <div
@@ -194,7 +202,10 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
               <div className="flex flex-col items-center gap-3 w-full" style={{ maxWidth: '200px' }}>
                 <button
                   type="button"
-                  onClick={() => onMusicEnabledChange(!musicEnabled)}
+                  onClick={() => {
+                    onAnyButtonClick?.();
+                    onMusicEnabledChange(!musicEnabled);
+                  }}
                   className="relative flex items-center justify-center rounded-lg transition-all w-full"
                   style={btnStyle(musicEnabled ? PALETTES.green : PALETTES.disabled, false)}
                 >
@@ -204,7 +215,10 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => onSfxEnabledChange(!sfxEnabled)}
+                  onClick={() => {
+                    onAnyButtonClick?.();
+                    onSfxEnabledChange(!sfxEnabled);
+                  }}
                   className="relative flex items-center justify-center rounded-lg transition-all w-full"
                   style={btnStyle(sfxEnabled ? PALETTES.green : PALETTES.disabled, false)}
                 >
@@ -215,20 +229,15 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
                 <button
                   type="button"
                   onClick={() => {
+                    onAnyButtonClick?.();
                     const next = !performanceMode;
                     setPerformanceModeLocal(next);
                     setPerformanceMode(next);
                   }}
                   className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                  style={{
-                    height: `${BUTTON_HEIGHT_PX}px`,
-                    backgroundColor: PALETTES.green.bg,
-                    border: `3px solid ${PALETTES.green.border}`,
-                    borderRadius: '12px',
-                    boxShadow: `0 4px 0 ${PALETTES.green.border}, 0 6px 12px rgba(0,0,0,0.15)`,
-                  }}
+                  style={btnStyle(performanceMode ? PALETTES.green : PALETTES.disabled, false)}
                 >
-                  <span className="font-bold tracking-tight" style={labelStyle(PALETTES.green)}>
+                  <span className="font-bold tracking-tight" style={labelStyle(performanceMode ? PALETTES.green : PALETTES.disabled)}>
                     Performance Mode {performanceMode ? 'ON' : 'OFF'}
                   </span>
                 </button>
@@ -236,6 +245,7 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
                   <button
                     type="button"
                     onClick={() => {
+                      onAnyButtonClick?.();
                       const next = !autoMergeMode;
                       setAutoMergeModeLocal(next);
                       setAutoMergeMode(next);
@@ -256,19 +266,24 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
                   </button>
                 ) : null}
 
-                <button
-                  type="button"
-                  onMouseDown={() => setDevToolsPressed(true)}
-                  onMouseUp={() => setDevToolsPressed(false)}
-                  onMouseLeave={() => setDevToolsPressed(false)}
-                  onClick={onOpenDevTools}
-                  className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                  style={btnStyle(PALETTES.green, devToolsPressed)}
-                >
-                  <span className="font-bold tracking-tight" style={labelStyle(PALETTES.green)}>
-                    Dev Tools
-                  </span>
-                </button>
+                {showDevToolsButton ? (
+                  <button
+                    type="button"
+                    onMouseDown={() => setDevToolsPressed(true)}
+                    onMouseUp={() => setDevToolsPressed(false)}
+                    onMouseLeave={() => setDevToolsPressed(false)}
+                    onClick={() => {
+                      onAnyButtonClick?.();
+                      onOpenDevTools();
+                    }}
+                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                    style={btnStyle(PALETTES.red, devToolsPressed)}
+                  >
+                    <span className="font-bold tracking-tight" style={labelStyle(PALETTES.red)}>
+                      Dev Tools
+                    </span>
+                  </button>
+                ) : null}
 
                 {onClearBoosts ? (
                   <button
@@ -276,7 +291,10 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
                     onMouseDown={() => setClearBoostsPressed(true)}
                     onMouseUp={() => setClearBoostsPressed(false)}
                     onMouseLeave={() => setClearBoostsPressed(false)}
-                    onClick={onClearBoosts}
+                    onClick={() => {
+                      onAnyButtonClick?.();
+                      onClearBoosts();
+                    }}
                     className="relative flex items-center justify-center rounded-lg transition-all w-full"
                     style={btnStyle(PALETTES.red, clearBoostsPressed)}
                   >
@@ -292,7 +310,10 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
                     onMouseDown={() => setResetPressed(true)}
                     onMouseUp={() => setResetPressed(false)}
                     onMouseLeave={() => setResetPressed(false)}
-                    onClick={onResetProgress}
+                    onClick={() => {
+                      onAnyButtonClick?.();
+                      onResetProgress();
+                    }}
                     className="relative flex items-center justify-center rounded-lg transition-all w-full"
                     style={btnStyle(PALETTES.red, resetPressed)}
                   >
@@ -312,14 +333,14 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
                     letterSpacing: '0.01em',
                   }}
                 >
-                  v0.06
+                  v0.0.8
                 </div>
               </div>
             </div>
           </div>
           <button
             type="button"
-            onClick={dismissToClose}
+            onClick={() => dismissToClose(true)}
             className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
             style={{ backgroundColor: 'transparent', border: 'none', color: '#c2b280', zIndex: 105 }}
           >

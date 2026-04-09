@@ -8,6 +8,8 @@ import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPrefli
 interface PauseMenuPopupProps {
   isVisible: boolean;
   onClose: () => void;
+  /** Fired on tap when dismissing via X or backdrop (immediate), not when the close animation ends. */
+  onUserDismiss?: () => void;
   /** Rewarded Ad: same as gift – opens limited offer. */
   onRewardedAdClick?: () => void;
   /** Level Up: same as + next to player level – 1 goal XP per tap. */
@@ -90,6 +92,7 @@ function settingsCheatLabelStyle(p: (typeof SETTINGS_PALETTES)['green']): CSSPro
 export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   isVisible,
   onClose,
+  onUserDismiss,
   onRewardedAdClick,
   onLevelUpClick,
   onUnlockPlantClick,
@@ -132,6 +135,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
 
   const dismissToClose = () => {
     if (animState === 'leaving' || animState === 'hidden' || animState === 'preflight') return;
+    onUserDismiss?.();
     setAnimState('leaving');
     setTimeout(() => {
       setAnimState('hidden');

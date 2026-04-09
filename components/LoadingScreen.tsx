@@ -101,8 +101,8 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
   onQuickResumeHydrate,
 }) => {
   const [progress, setProgress] = useState(0);
-  const [phase, setPhase] = useState<'fadeIn' | 'loading' | 'ready' | 'fadeOut' | 'quickFade' | 'done'>(() =>
-    variant === 'quick' ? 'loading' : 'fadeIn'
+  const [phase, setPhase] = useState<'boot' | 'fadeIn' | 'loading' | 'ready' | 'fadeOut' | 'quickFade' | 'done'>(() =>
+    variant === 'quick' ? 'loading' : 'boot'
   );
   const [blackOpacity, setBlackOpacity] = useState(1);
   const [viewportSize, setViewportSize] = useState({ width: window.innerWidth, height: window.innerHeight });
@@ -121,6 +121,21 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const preloadCriticalSplashAssets = useCallback(async () => {
+    const critical = [
+      '/assets/background/background_loading.png',
+      '/assets/icons/icon_logo.png',
+    ];
+    const loadImage = (src: string): Promise<void> =>
+      new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve();
+        img.onerror = () => resolve();
+        img.src = assetPath(src);
+      });
+    await Promise.all(critical.map(loadImage));
   }, []);
 
   const preloadAssets = useCallback(async () => {
@@ -157,6 +172,12 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
 
   useEffect(() => {
     if (variant === 'quick') return;
+    if (phase === 'boot') {
+      void preloadCriticalSplashAssets().then(() => {
+        setPhase('fadeIn');
+      });
+      return;
+    }
     if (phase === 'fadeIn') {
       const fadeInDuration = 500;
       const startTime = Date.now();
@@ -176,7 +197,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
       
       requestAnimationFrame(animate);
     }
-  }, [phase, variant]);
+  }, [phase, variant, preloadCriticalSplashAssets]);
 
   const quickFadeStartedRef = useRef(false);
   // Quick resume: fade black out then hand off to App (dismiss loading + fade game in)

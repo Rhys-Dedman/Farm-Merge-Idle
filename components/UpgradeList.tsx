@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { TabType } from '../types';
 import { assetPath } from '../utils/assetPath';
+import { playSfx, SFX_IDS } from '../utils/sfx';
 import { getPlantCoinValue } from '../utils/plantValue';
 import {
   getWildGrowthDisplaySecForLevel,
@@ -695,12 +696,18 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
     const TAB_SLIDE_MS = 700;
     const SCROLL_DURATION_MS = 800;
     const FLASH_DURATION_MS = 600;
+    const unlockId = pendingUnlockUpgradeId;
     let scrollRafId: number | null = null;
 
     const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 
+    const startBlueUnlockFlash = () => {
+      playSfx(SFX_IDS.uiUnlockUpgrade);
+      setUnlockFlashIds((prev) => new Set(prev).add(unlockId));
+    };
+
     const scrollT = setTimeout(() => {
-      const el = upgradeRowRefs.current[pendingUnlockUpgradeId];
+      const el = upgradeRowRefs.current[unlockId];
       const scrollContainer = (scrollRefs as Record<string, React.RefObject<HTMLDivElement | null>>)[activeTab]?.current;
       if (el && scrollContainer) {
         const containerRect = scrollContainer.getBoundingClientRect();
@@ -732,26 +739,26 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
           if (progress < 1) {
             scrollRafId = requestAnimationFrame(animate);
           } else {
-            setUnlockFlashIds(prev => new Set(prev).add(pendingUnlockUpgradeId));
+            startBlueUnlockFlash();
           }
         };
         if (Math.abs(distance) > 2) {
           scrollRafId = requestAnimationFrame(animate);
         } else {
-          setUnlockFlashIds(prev => new Set(prev).add(pendingUnlockUpgradeId));
+          startBlueUnlockFlash();
         }
       } else {
-        setUnlockFlashIds(prev => new Set(prev).add(pendingUnlockUpgradeId));
+        startBlueUnlockFlash();
       }
     }, TAB_SLIDE_MS);
 
     const clearT = setTimeout(() => {
       setUnlockFlashIds(prev => {
         const next = new Set(prev);
-        next.delete(pendingUnlockUpgradeId);
+        next.delete(unlockId);
         return next;
       });
-      setCompletedUnlockFlashIds(prev => new Set(prev).add(pendingUnlockUpgradeId));
+      setCompletedUnlockFlashIds(prev => new Set(prev).add(unlockId));
     }, TAB_SLIDE_MS + SCROLL_DURATION_MS + FLASH_DURATION_MS);
 
     return () => {
@@ -761,10 +768,10 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
       // Clear flash immediately when effect tears down (panel closed, tab switched, etc.) so it never gets stuck
       setUnlockFlashIds(prev => {
         const next = new Set(prev);
-        next.delete(pendingUnlockUpgradeId);
+        next.delete(unlockId);
         return next;
       });
-      setCompletedUnlockFlashIds(prev => new Set(prev).add(pendingUnlockUpgradeId));
+      setCompletedUnlockFlashIds(prev => new Set(prev).add(unlockId));
     };
   }, [pendingUnlockUpgradeId, activeTab, isExpanded]);
 
