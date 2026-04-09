@@ -122,14 +122,15 @@ function tryPlayMusic(): void {
 }
 
 const sfxIds = Object.values(SFX_IDS) as SfxId[];
-/** Number of individual SFX load steps (load + decode per ID). */
-export const SFX_PRELOAD_STEP_COUNT = sfxIds.length * 2;
+const preloadSfxIds = sfxIds.filter((id) => id !== SFX_IDS.music);
+/** Number of SFX load steps tracked by the loading bar (excludes music + decode phase). */
+export const SFX_PRELOAD_STEP_COUNT = preloadSfxIds.length;
 
 export function preloadSfxAssets(onStepDone?: () => void): Promise<void> {
   if (preloadPromise) return preloadPromise;
   attachAudioUnlockHandlers();
   preloadPromise = Promise.all(
-    sfxIds.map((id) => {
+    preloadSfxIds.map((id) => {
       return new Promise<void>((resolve) => {
         const audio = createTemplate(id);
         audioTemplateById.set(id, audio);
@@ -140,24 +141,22 @@ export function preloadSfxAssets(onStepDone?: () => void): Promise<void> {
       });
     })
   )
-    .then(async () => {
+    .then(() => {
+      // Decode SFX into AudioBuffers in the background (low-latency optimisation).
+      // Not awaited — game works fine with HTMLAudio fallback until decode finishes.
       const ctx = getAudioContext();
-      if (!ctx) {
-        sfxIds.forEach(() => onStepDone?.());
-        return;
-      }
-      await Promise.all(
-        sfxIds.map(async (id) => {
+      if (!ctx) return;
+      void Promise.all(
+        preloadSfxIds.map(async (id) => {
           try {
             const resp = await fetch(assetPath(SFX_PATHS[id]));
-            if (!resp.ok) { onStepDone?.(); return; }
+            if (!resp.ok) return;
             const arr = await resp.arrayBuffer();
             const buf = await ctx.decodeAudioData(arr.slice(0));
             audioBufferById.set(id, buf);
           } catch {
             // Keep HTMLAudio fallback if decode/fetch fails.
           }
-          onStepDone?.();
         })
       );
     })
