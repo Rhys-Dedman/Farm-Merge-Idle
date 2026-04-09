@@ -28,7 +28,7 @@ export const SFX_IDS = {
 export type SfxId = (typeof SFX_IDS)[keyof typeof SFX_IDS];
 
 const SFX_PATHS: Record<SfxId, string> = {
-  [SFX_IDS.music]: '/assets/sfx/sfx_music.wav',
+  [SFX_IDS.music]: '/assets/sfx/sfx_music.mp3',
   [SFX_IDS.uiConfirmNormal]: '/assets/sfx/sfx_ui_confirm_normal.wav',
   [SFX_IDS.uiConfirmReward]: '/assets/sfx/sfx_ui_confirm_reward.wav',
   [SFX_IDS.uiDecline]: '/assets/sfx/sfx_ui_decline.wav',
@@ -122,15 +122,14 @@ function tryPlayMusic(): void {
 }
 
 const sfxIds = Object.values(SFX_IDS) as SfxId[];
-const preloadSfxIds = sfxIds.filter((id) => id !== SFX_IDS.music);
-/** Number of SFX load steps tracked by the loading bar (excludes music + decode phase). */
-export const SFX_PRELOAD_STEP_COUNT = preloadSfxIds.length;
+/** Number of SFX load steps tracked by the loading bar. */
+export const SFX_PRELOAD_STEP_COUNT = sfxIds.length;
 
 export function preloadSfxAssets(onStepDone?: () => void): Promise<void> {
   if (preloadPromise) return preloadPromise;
   attachAudioUnlockHandlers();
   preloadPromise = Promise.all(
-    preloadSfxIds.map((id) => {
+    sfxIds.map((id) => {
       return new Promise<void>((resolve) => {
         const audio = createTemplate(id);
         audioTemplateById.set(id, audio);
@@ -147,7 +146,7 @@ export function preloadSfxAssets(onStepDone?: () => void): Promise<void> {
       const ctx = getAudioContext();
       if (!ctx) return;
       void Promise.all(
-        preloadSfxIds.map(async (id) => {
+        sfxIds.map(async (id) => {
           try {
             const resp = await fetch(assetPath(SFX_PATHS[id]));
             if (!resp.ok) return;
