@@ -1,10 +1,12 @@
 /**
  * Store bundle row (`ui_store_large`) — same overlay layout as coin boosters, from top of sprite.
  */
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { assetPath } from '../utils/assetPath';
 import type { StoreBundleOfferConfig } from '../offers';
 import { Reward, REWARD_DURATION_TEXT_COLOR } from './Reward';
+import { useLimitedOfferCountdown } from '../hooks/useLimitedOfferCountdown';
+import { formatBundleLimitedCountdown } from '../utils/limitedOfferCountdown';
 import {
   STORE_BUNDLE_CARD_ICON_WRAP,
   STORE_BUNDLE_CARD_PURCHASE_ANCHOR,
@@ -101,21 +103,6 @@ function StoreBundleValueCallout({ text, boxWidthPx }: { text: string; boxWidthP
   );
 }
 
-function formatBundleLimitedCountdown(remainingMs: number): string {
-  const totalSec = Math.max(0, Math.floor(remainingMs / 1000));
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const sec = totalSec % 60;
-
-  if (h > 0) {
-    return `${h}h ${m}m`;
-  }
-  if (m > 0) {
-    return `${m}m ${sec}s`;
-  }
-  return `${sec}s`;
-}
-
 export interface StoreBundleOfferProps {
   config: StoreBundleOfferConfig;
   onPurchase?: (id: string) => void;
@@ -124,7 +111,6 @@ export interface StoreBundleOfferProps {
 
 export const StoreBundleOffer: React.FC<StoreBundleOfferProps> = ({ config, onPurchase, className = '' }) => {
   const [pressed, setPressed] = useState(false);
-  const [bundleCountdownRemainingMs, setBundleCountdownRemainingMs] = useState(0);
   const {
     id,
     title,
@@ -141,35 +127,10 @@ export const StoreBundleOffer: React.FC<StoreBundleOfferProps> = ({ config, onPu
     rewardStripIconPath,
   } = config;
 
-  useEffect(() => {
-    if (!limitedOfferCountdownStorageKey || !limitedOfferCountdownDurationMs) {
-      setBundleCountdownRemainingMs(0);
-      return;
-    }
-    const key = limitedOfferCountdownStorageKey;
-    const duration = limitedOfferCountdownDurationMs;
-    let endMs: number;
-    try {
-      const raw = localStorage.getItem(key);
-      if (raw == null) {
-        endMs = Date.now() + duration;
-        localStorage.setItem(key, String(endMs));
-      } else {
-        endMs = parseInt(raw, 10);
-        if (!Number.isFinite(endMs)) {
-          endMs = Date.now() + duration;
-          localStorage.setItem(key, String(endMs));
-        }
-      }
-    } catch {
-      endMs = Date.now() + duration;
-    }
-
-    const tick = () => setBundleCountdownRemainingMs(Math.max(0, endMs - Date.now()));
-    tick();
-    const intervalId = window.setInterval(tick, 1000);
-    return () => window.clearInterval(intervalId);
-  }, [limitedOfferCountdownStorageKey, limitedOfferCountdownDurationMs]);
+  const bundleCountdownRemainingMs = useLimitedOfferCountdown(
+    limitedOfferCountdownStorageKey,
+    limitedOfferCountdownDurationMs,
+  );
 
   const showLimitedCountdown =
     Boolean(limitedOfferCountdownStorageKey && limitedOfferCountdownDurationMs && bundleCountdownRemainingMs > 0);
@@ -207,7 +168,7 @@ export const StoreBundleOffer: React.FC<StoreBundleOfferProps> = ({ config, onPu
           style={{ overflow: 'visible' }}
         >
           <div
-            className="shrink-0 w-full flex items-start justify-start box-border"
+            className="shrink-0 w-full flex items-start justify-between box-border"
             style={{ ...STORE_OFFER_CARD_TITLE_BAND }}
           >
             <h2
@@ -219,6 +180,17 @@ export const StoreBundleOffer: React.FC<StoreBundleOfferProps> = ({ config, onPu
             >
               {title}
             </h2>
+            {showLimitedCountdown && (
+              <span
+                className="text-[13px] font-black tracking-tight leading-tight shrink-0"
+                style={{
+                  color: STORE_BUNDLE_CARD_TITLE_STYLE.color,
+                  transform: `translate(-24px, ${STORE_OFFER_CARD_TITLE_TRANSLATE_Y_PX}px)`,
+                }}
+              >
+                {formatBundleLimitedCountdown(bundleCountdownRemainingMs)}
+              </span>
+            )}
           </div>
 
           <div
@@ -314,16 +286,9 @@ export const StoreBundleOffer: React.FC<StoreBundleOfferProps> = ({ config, onPu
               <div
                 className="pointer-events-none flex shrink-0 items-center justify-center self-stretch text-center"
                 style={{ minHeight: STORE_BUNDLE_COUNTDOWN_ROW_MIN_HEIGHT_PX }}
-                aria-hidden={!showLimitedCountdown && !originalPriceLabel}
+                aria-hidden={!originalPriceLabel}
               >
-                {showLimitedCountdown ? (
-                  <span
-                    className="text-[15px] font-black tracking-tight leading-none"
-                    style={{ color: REWARD_DURATION_TEXT_COLOR }}
-                  >
-                    {formatBundleLimitedCountdown(bundleCountdownRemainingMs)}
-                  </span>
-                ) : originalPriceLabel ? (
+                {originalPriceLabel ? (
                   <span
                     className="text-[15px] font-black tracking-tight leading-none line-through"
                     style={{ color: REWARD_DURATION_TEXT_COLOR }}

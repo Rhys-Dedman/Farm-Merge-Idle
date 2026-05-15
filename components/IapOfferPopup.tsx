@@ -1,14 +1,22 @@
 /**
- * Purchase Successful Popup — same look/feel as Discovery (leaves, panel, header ring)
- * but dedicated to post–IAP / paid store purchases. Collect activates pending rewards.
+ * Premium **IAP Offer** pre-purchase shell (purple top band + ring, shared layout).
+ * Which product is shown is chosen by `offerId` in `App` (see `offers.ts`):
+ * - **Starter Pack popup** — `STORE_IAP_OFFER_STARTER_PACK_ID` (limited-offer pill + bundle copy).
+ * - **Remove Ads popup** — `STORE_IAP_OFFER_REMOVE_ADS_ID` (store Remove Ads 7d row / price / icon).
+ * Post-purchase confirmation uses `PurchaseSuccessfulPopup` (plain panel, no purple band).
  */
-import React, { useCallback, useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
+import { useLimitedOfferCountdown } from '../hooks/useLimitedOfferCountdown';
+import { formatBundleLimitedCountdown } from '../utils/limitedOfferCountdown';
 import { Reward, REWARD_INLINE_LAYOUT_HEIGHT_PX, REWARD_INLINE_WIDTH_PX, REWARD_PILL_HEIGHT_PX } from './Reward';
 import {
   PopupVectorBackground,
+  PREMIUM_IAP_POPUP_TOP_ACCENT_BLUE,
+  PREMIUM_IAP_POPUP_TOP_ACCENT_HEIGHT_PRESCALE_PX,
 } from './PopupVectorBackground';
+import type { PurchaseSuccessfulRewardRow } from './PurchaseSuccessfulPopup';
 
 /** Inner header product art — 85% of prior 94px treatment. */
 const PURCHASE_SUCCESS_HEADER_ICON_PX = Math.round(94 * 0.85);
@@ -25,7 +33,18 @@ const PURCHASE_POPUP_REWARD_PILL_GAP_PX = 4;
 const PURCHASE_POPUP_REWARD_STACK_STEP_PX =
   REWARD_PILL_HEIGHT_PX * PURCHASE_POPUP_REWARD_SCALE + PURCHASE_POPUP_REWARD_PILL_GAP_PX;
 
-const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_1.png'), assetPath('/assets/vfx/particle_leaf_2.png')];
+const DEFAULT_IAP_LEAF_BURST_SPRITES = [
+  assetPath('/assets/vfx/particle_leaf_1.png'),
+  assetPath('/assets/vfx/particle_leaf_2.png'),
+];
+const STARTER_PACK_IAP_LEAF_BURST_SPRITES = [
+  assetPath('/assets/vfx/particle_leaf_11.png'),
+  assetPath('/assets/vfx/particle_leaf_12.png'),
+];
+const REMOVE_ADS_IAP_LEAF_BURST_SPRITES = [
+  assetPath('/assets/vfx/particle_leaf_9.png'),
+  assetPath('/assets/vfx/particle_leaf_10.png'),
+];
 
 interface LeafParticle {
   id: number;
@@ -42,24 +61,44 @@ interface LeafParticle {
 }
 
 /** One reward strip — same props as store `Reward` (pill + icon + text + divider + duration). */
-export interface PurchaseSuccessfulRewardRow {
-  offerLineText: string;
-  durationText: string;
-  coinIconPath?: string;
-  coinIconScale?: number;
-}
+export type IapOfferRewardRow = PurchaseSuccessfulRewardRow;
 
-export interface PurchaseSuccessfulPopupProps {
+export interface IapOfferPopupProps {
   isVisible: boolean;
   onClose: () => void;
+  title: string;
   /** Main product icon in header (see `PURCHASE_SUCCESS_HEADER_ICON_PX`). */
   headerImageSrc: string;
-  /** Default: Thank you for your purchase */
-  description?: string;
-  rewards: PurchaseSuccessfulRewardRow[];
-  /** Fired with the Collect button’s screen rect; App spawns boost particles from the button’s right edge. */
-  onCollect?: (buttonRect: DOMRect) => void;
+  rewards: IapOfferRewardRow[];
+  priceLabel: string;
+  /** When set, shown left of `priceLabel` on the purchase button (strikethrough), same text color as the final price. */
+  originalPriceLabel?: string;
+  /** Fired with the purchase button’s screen rect before the success popup opens. */
+  onPurchase?: (buttonRect: DOMRect) => void;
   appScale?: number;
+  /** Optional body copy under title (Discovery-style: italic, `2rem`, `#c2b280`). */
+  description?: string;
+  /** Title `<h2>` color; default `#5c4a32`. */
+  titleColor?: string;
+  /** Header ring sprite path (pass `assetPath(...)`); default `popup_header.png`. */
+  headerRingSrc?: string;
+  /** Nudge title up (px, inner panel coords); negative moves up. */
+  titleOffsetYPx?: number;
+  /** Close (X) icon stroke color. */
+  closeIconColor?: string;
+  /** When both set, shows “Limited Offer: …” pill (live countdown) between title and description. */
+  limitedOfferCountdownStorageKey?: string;
+  limitedOfferCountdownDurationMs?: number;
+  /** Override premium top band fill (default purple `#ba82d8`). */
+  premiumIapTopAccentFill?: string;
+  /** Override narrow inset ring on premium band (default `#ba82d8`). */
+  premiumIapTopAccentStrokeNarrow?: string;
+  /** Override wide (20px) inset ring on premium band (default `#995fb7`). */
+  premiumIapTopAccentStrokeWide?: string;
+  /** Leaf burst alternates two `particle_leaf_*` textures (`starter` → 11–12, `removeAds` → 9–10). */
+  leafBurstVariant?: 'starter' | 'removeAds';
+  /** Nudge entire popup vertically (negative moves up), screen px before `appScale`. */
+  iapPopupShellOffsetYPx?: number;
 }
 
 const POPUP_LEAF_COUNT = 40;
@@ -71,7 +110,7 @@ const POPUP_WIDTH = 260;
 const POPUP_HEIGHT = 320;
 const POPUP_CLOSE_MS = 200;
 
-function createPopupLeaves(): LeafParticle[] {
+function createPopupLeaves(sprites: readonly string[]): LeafParticle[] {
   return Array.from({ length: POPUP_LEAF_COUNT }, (_, i) => {
     // Spawn leaves around the rectangle edge of the popup
     const perimeter = 2 * (POPUP_WIDTH + POPUP_HEIGHT);
@@ -105,7 +144,7 @@ function createPopupLeaves(): LeafParticle[] {
     
     return {
       id: i,
-      sprite: LEAF_SPRITES[i % LEAF_SPRITES.length],
+      sprite: sprites[i % sprites.length]!,
       angle: outwardAngle,
       speed: Math.random() * 600, // 0 to 600 - wide variety of speeds
       rotationSpeed: (Math.random() - 0.5) * 540,
@@ -119,15 +158,44 @@ function createPopupLeaves(): LeafParticle[] {
   });
 }
 
-export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = ({
+export const IapOfferPopup: React.FC<IapOfferPopupProps> = ({
   isVisible,
   onClose,
+  title,
   headerImageSrc,
-  description = 'Thank you for your purchase',
   rewards,
-  onCollect,
+  priceLabel,
+  originalPriceLabel,
+  onPurchase,
   appScale = 1,
+  description,
+  titleColor = '#5c4a32',
+  headerRingSrc,
+  titleOffsetYPx = 0,
+  closeIconColor = '#c2b280',
+  limitedOfferCountdownStorageKey,
+  limitedOfferCountdownDurationMs,
+  premiumIapTopAccentFill,
+  premiumIapTopAccentStrokeNarrow,
+  premiumIapTopAccentStrokeWide,
+  leafBurstVariant,
+  iapPopupShellOffsetYPx,
 }) => {
+  const leafBurstSprites = useMemo(() => {
+    if (leafBurstVariant === 'starter') return STARTER_PACK_IAP_LEAF_BURST_SPRITES;
+    if (leafBurstVariant === 'removeAds') return REMOVE_ADS_IAP_LEAF_BURST_SPRITES;
+    return DEFAULT_IAP_LEAF_BURST_SPRITES;
+  }, [leafBurstVariant]);
+
+  const limitedOfferRemainingMs = useLimitedOfferCountdown(
+    limitedOfferCountdownStorageKey,
+    limitedOfferCountdownDurationMs,
+  );
+  const showLimitedOfferPill =
+    Boolean(limitedOfferCountdownStorageKey && limitedOfferCountdownDurationMs) &&
+    limitedOfferRemainingMs > 0;
+
+  const headerRing = headerRingSrc ?? assetPath('/assets/popups/popup_header.png');
   const [animState, setAnimState] = useState<PopupAnimWithPreflight>('hidden');
   const [assetsReady, setAssetsReady] = useState(false);
   const [leaves, setLeaves] = useState<LeafParticle[]>([]);
@@ -208,7 +276,7 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
   }, [leaves]);
 
   const beginEnterAfterPreflight = useCallback(() => {
-    const newLeaves = createPopupLeaves();
+    const newLeaves = createPopupLeaves(leafBurstSprites);
     setLeaves(newLeaves);
     leafStartTimeRef.current = Date.now();
     leafPosRef.current = newLeaves.map((leaf) => ({
@@ -225,7 +293,7 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
     setImgFailed({});
     setAnimState('entering');
     setTimeout(() => setAnimState('visible'), 250);
-  }, []);
+  }, [leafBurstSprites]);
 
   usePopupPreflightEnter(animState, beginEnterAfterPreflight, popupCardLayoutRef);
 
@@ -244,11 +312,21 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
   const [isClosing, setIsClosing] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  const handleCollectClick = () => {
+  const dismissPopup = () => {
     if (isClosing || animState === 'preflight') return;
     setIsClosing(true);
-    if (onCollect && buttonRef.current) {
-      onCollect(buttonRef.current.getBoundingClientRect());
+    setAnimState('leaving');
+    setTimeout(() => {
+      setAnimState('hidden');
+      onClose();
+    }, POPUP_CLOSE_MS);
+  };
+
+  const handlePurchaseClick = () => {
+    if (isClosing || animState === 'preflight') return;
+    setIsClosing(true);
+    if (onPurchase && buttonRef.current) {
+      onPurchase(buttonRef.current.getBoundingClientRect());
     }
     setAnimState('leaving');
     setTimeout(() => {
@@ -351,6 +429,7 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
         style={{ 
           width: '320px',
           zIndex: 102,
+          ...(iapPopupShellOffsetYPx !== undefined ? { marginTop: iapPopupShellOffsetYPx } : {}),
           ...popupCardSurfaceStyle(
             animState,
             isEntering,
@@ -398,7 +477,7 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
         >
           {/* Header background sprite */}
           <img 
-            src={assetPath('/assets/popups/popup_header.png')} 
+            src={headerRing} 
             alt="" 
             className="absolute inset-0 w-full h-full object-contain"
             style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.25))' }}
@@ -432,10 +511,17 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
             style={{
               position: 'relative',
               filter: 'drop-shadow(0 16px 48px rgba(0,0,0,0.3))',
-              padding: '150px 40px 80px 40px',
+              padding: '150px 40px 56px 40px',
             }}
           >
-            <PopupVectorBackground />
+            <PopupVectorBackground
+              premiumTopAccent={{
+                heightPx: PREMIUM_IAP_POPUP_TOP_ACCENT_HEIGHT_PRESCALE_PX,
+                backgroundColor: premiumIapTopAccentFill ?? PREMIUM_IAP_POPUP_TOP_ACCENT_BLUE,
+                strokeNarrowColor: premiumIapTopAccentStrokeNarrow,
+                strokeWideColor: premiumIapTopAccentStrokeWide,
+              }}
+            />
             {/* Content - doubled sizes since container is scaled 0.5x */}
             <div
               className="relative z-[2] flex flex-col items-center"
@@ -444,45 +530,58 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
           <h2
             className="font-black tracking-tight text-center"
             style={{
-              color: '#5c4a32',
+              color: titleColor,
               fontFamily: 'Inter, sans-serif',
               fontSize: '4.5rem',
+              marginTop: titleOffsetYPx,
+              marginBottom:
+                description || limitedOfferCountdownStorageKey ? '8px' : '0',
             }}
           >
-            Successful
+            {title}
           </h2>
 
-          {/* Divider */}
-          <div className="w-full flex items-center justify-center" style={{ marginTop: '8px', marginBottom: '24px' }}>
-            <img 
-              src={assetPath('/assets/popups/popup_divider.png')} 
-              alt="" 
-              className="h-auto object-contain"
-              style={{ 
-                width: '520px',
+          {showLimitedOfferPill ? (
+            <div
+              role="status"
+              aria-live="polite"
+              className="font-black tracking-tight text-center whitespace-nowrap rounded-full shadow-md"
+              style={{
+                backgroundColor: '#eb5761',
+                color: '#fbefc6',
+                fontFamily: 'Inter, sans-serif',
+                fontSize: '1.6rem',
+                padding: '8px 22px',
+                marginTop: '16px',
+                marginBottom: '10px',
               }}
-            />
-          </div>
+            >
+              Limited Offer: {formatBundleLimitedCountdown(limitedOfferRemainingMs)}
+            </div>
+          ) : null}
 
-          {/* Description */}
-          <p 
-            className="font-medium text-center leading-relaxed italic w-full"
-            style={{ 
-              color: '#c2b280',
-              fontFamily: 'Inter, sans-serif',
-              paddingLeft: '24px',
-              paddingRight: '24px',
-              fontSize: '2rem',
-            }}
-          >
-            {description}
-          </p>
+          {description ? (
+            <p
+              className="font-medium text-center leading-relaxed italic w-full"
+              style={{
+                color: '#c2b280',
+                fontFamily: 'Inter, sans-serif',
+                paddingLeft: '24px',
+                paddingRight: '24px',
+                fontSize: '2rem',
+                marginTop: showLimitedOfferPill ? '0' : '12px',
+                marginBottom: '24px',
+              }}
+            >
+              {description}
+            </p>
+          ) : null}
 
           {/* Rewards — stacked so pill bottom → next pill top = PURCHASE_POPUP_REWARD_PILL_GAP_PX */}
           <div
             className="relative w-full overflow-visible flex justify-center"
             style={{
-              marginTop: '28px',
+              marginTop: description ? 0 : '28px',
               minHeight:
                 rewards.length === 0
                   ? 0
@@ -524,7 +623,7 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
             ))}
           </div>
 
-          {/* Tight gap above Collect */}
+          {/* Tight gap above purchase */}
           <div className="flex-grow" style={{ minHeight: '12px' }} />
 
           {/* Action Button */}
@@ -533,7 +632,7 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
             onMouseDown={() => setButtonPressed(true)}
             onMouseUp={() => setButtonPressed(false)}
             onMouseLeave={() => setButtonPressed(false)}
-            onClick={handleCollectClick}
+            onClick={handlePurchaseClick}
             className="relative flex items-center justify-center rounded-xl transition-all"
             style={{
               width: '360px',
@@ -548,21 +647,53 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
               transform: buttonPressed ? 'translateY(4px)' : 'translateY(0)',
             }}
           >
-            <span 
-              className="font-bold tracking-tight"
-              style={{ 
-                color: buttonTextColor,
-                fontFamily: 'Inter, sans-serif',
-                textShadow: '0 2px 0 rgba(255,255,255,0.3)',
-                fontSize: '2rem',
-              }}
-            >
-              Collect
-            </span>
+            {originalPriceLabel ? (
+              <span
+                className="flex items-center justify-center gap-8 font-bold tracking-tight"
+                style={{
+                  color: buttonTextColor,
+                  fontFamily: 'Inter, sans-serif',
+                  textShadow: '0 2px 0 rgba(255,255,255,0.3)',
+                  fontSize: '2rem',
+                }}
+              >
+                <span className="line-through shrink-0">{originalPriceLabel}</span>
+                <span className="shrink-0">{priceLabel}</span>
+              </span>
+            ) : (
+              <span
+                className="font-bold tracking-tight"
+                style={{
+                  color: buttonTextColor,
+                  fontFamily: 'Inter, sans-serif',
+                  textShadow: '0 2px 0 rgba(255,255,255,0.3)',
+                  fontSize: '2rem',
+                }}
+              >
+                {priceLabel}
+              </span>
+            )}
           </button>
             </div>
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={dismissPopup}
+          aria-label="Close"
+          className="absolute top-[56px] right-6 w-8 h-8 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
+          style={{
+            backgroundColor: 'transparent',
+            border: 'none',
+            color: closeIconColor,
+            zIndex: 105,
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M2 2L12 12M12 2L2 12" />
+          </svg>
+        </button>
       </div>
       </div>
     </div>

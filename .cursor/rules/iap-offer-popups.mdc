@@ -1,0 +1,19 @@
+---
+description: >-
+  Names the premium pre-purchase IAP shells (Starter Pack popup, Remove Ads popup),
+  their offer ids, and how they map to IapOfferPopup vs PurchaseSuccessfulPopup.
+alwaysApply: false
+---
+
+# IAP offer popups (named)
+
+All of these use **`IapOfferPopup`** (`components/IapOfferPopup.tsx`) — premium top band + header ring (not the post-purchase **`PurchaseSuccessfulPopup`**, which stays plain cream). **Starter Pack popup** uses purple band / `popup_header_purple.png`. **Remove Ads popup** uses red band (`#eb5761` fill, `#d33d57` wide stroke), `popup_header_red.png`, title `#af233a`, and a vertical shell nudge in `App.tsx`.
+
+| Name (when talking to the AI) | `offerId` constant | `offers.ts` row |
+| --- | --- | --- |
+| **Starter Pack popup** | `STORE_IAP_OFFER_STARTER_PACK_ID` | `STORE_BUNDLE_OFFERS` starter bundle |
+| **Remove Ads popup** | `STORE_IAP_OFFER_REMOVE_ADS_ID` | `STORE_COIN_OFFERS` Remove Ads (7d, same price/icon as store small row) |
+
+- **State:** `iapOfferUi` in `App.tsx` — `setIapOfferUi({ offerId: … })`.
+- **Farm:** Starter floating button → Starter Pack popup; NO ADS floating button → Remove Ads popup.
+- **Leaf burst:** Starter Pack uses `particle_leaf_11` / `12`; Remove Ads uses `particle_leaf_9` / `10` (`IapOfferPopup` `leafBurstVariant`).

@@ -1,0 +1,41 @@
+---
+description: Floating button UI template — reuse FloatingButton + FloatingButtonStack
+alwaysApply: true
+---
+
+# Floating button template
+
+When adding or changing floating buttons, reuse the locked template in:
+
+- `components/FloatingButton.tsx`
+- `components/FloatingButtonStack.tsx`
+- `constants/floatingButtonLayout.ts`
+
+Do not rebuild from scratch. Extend `FloatingButton` / stack props or add layout constants only when needed.
+
+## Structure
+
+- `FloatingButton`: one control (icon + bottom-center pill). Pill is above the icon (`z-10` vs `z-0`).
+- `FloatingButtonStack`: absolute stack under the farm top bar + goals (`z-[15]`, below header/goals). `side="left"` or `side="right"`; children stack vertically.
+- Mount stacks in the farm column after the goals row, before the hex area. Use `assetPath()` for icons under `/assets/icons/icon_fb_<name>.png`.
+
+## Visual spec
+
+- Icon: 65×65, `translateY(8px)` only on the icon layer.
+- Pill: height 22, width 60, horizontal padding 8, centered uppercase 8px text `#526e43`, gradient `#efe5ba` → `#c1cd67`, 2px border `#56764d` (`border-box`).
+- Icon drop shadow `0 2px 4px rgba(0,0,0,0.35)`; pill `shadow-md`.
+- Tap: `active:scale-95` on the root button so icon + pill scale together.
+
+## Placement
+
+- Top: `FLOATING_BUTTON_STACK_TOP_PX` (header + goals + gap + nudge).
+- Left/right insets: `FLOATING_BUTTON_STACK_LEFT_PX` / `FLOATING_BUTTON_STACK_RIGHT_PX`.
+- Stack gap: `FLOATING_BUTTON_STACK_ITEM_GAP_PX`.
+
+## Example
+
+```tsx
+<FloatingButtonStack side="left">
+  <FloatingButton title="Gardens" iconSrc={assetPath('/assets/icons/icon_fb_gardens.png')} />
+</FloatingButtonStack>
+```

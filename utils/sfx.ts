@@ -213,3 +213,22 @@ export function playMusicLoop(): void {
   tryResumeAudioContext();
   tryPlayMusic();
 }
+
+/**
+ * Read saved music/sfx preference from localStorage before the full game save is
+ * hydrated so that audio unlock handlers respect the player's mute setting during
+ * the splash screen.  Also returns the values so React state can initialise from them.
+ */
+export function applySavedAudioSettingsEarly(): { musicEnabled: boolean; sfxEnabled: boolean } {
+  const defaults = { musicEnabled: true, sfxEnabled: true };
+  try {
+    const raw = localStorage.getItem('pocket-garden-save-v1');
+    if (!raw) return defaults;
+    const data = JSON.parse(raw);
+    if (typeof data?.musicEnabled === 'boolean') { musicEnabled = data.musicEnabled; defaults.musicEnabled = data.musicEnabled; }
+    if (typeof data?.sfxEnabled === 'boolean') { sfxEnabled = data.sfxEnabled; defaults.sfxEnabled = data.sfxEnabled; }
+  } catch {
+    /* corrupt or missing save — keep defaults */
+  }
+  return defaults;
+}

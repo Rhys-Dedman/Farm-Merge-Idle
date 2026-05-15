@@ -7,6 +7,9 @@ import { UpgradeList, createInitialSeedsState, createInitialHarvestState, create
 import { Navbar } from './components/Navbar';
 import { StoreScreen } from './components/StoreScreen';
 import { SideAction } from './components/SideAction';
+import { FloatingButton } from './components/FloatingButton';
+import { FloatingButtonStack } from './components/FloatingButtonStack';
+import { FloatingButtonStarterPack } from './components/FloatingButtonStarterPack';
 import { Projectile } from './components/Projectile';
 import { LeafBurst, LEAF_BURST_BASELINE_COUNT, LEAF_BURST_SMALL_COUNT } from './components/LeafBurst';
 import { AmbientFallingLeaves } from './components/AmbientFallingLeaves';
@@ -21,6 +24,7 @@ import { PageHeader, MAX_VISIBLE_BOOST_SLOTS } from './components/PageHeader';
 import { DiscoveryPopup } from './components/DiscoveryPopup';
 import { GoldenPotBonusesPopup } from './components/GoldenPotBonusesPopup';
 import { PurchaseSuccessfulPopup, type PurchaseSuccessfulRewardRow } from './components/PurchaseSuccessfulPopup';
+import { IapOfferPopup } from './components/IapOfferPopup';
 import { LevelUpPopup } from './components/LevelUpPopup';
 import { PlantInfoPopup } from './components/PlantInfoPopup';
 import { PlantWithPot } from './components/PlantWithPot';
@@ -52,7 +56,9 @@ import { assetPath } from './utils/assetPath';
 import { getTickCount60, TARGET_FRAME_MS, scheduleNextFrame } from './utils/raf60';
 import { getPerformanceMode } from './utils/performanceMode';
 import { getAutoMergeMode, setAutoMergeMode } from './utils/autoMergeMode';
-import { playMusicLoop, playSfx, setAudioSettings, SFX_IDS } from './utils/sfx';
+import { playMusicLoop, playSfx, setAudioSettings, SFX_IDS, applySavedAudioSettingsEarly } from './utils/sfx';
+
+const _earlyAudio = applySavedAudioSettingsEarly();
 import {
   DOUBLE_COINS_HEADER_ICON,
   DOUBLE_COINS_OFFER_ID,
@@ -60,6 +66,8 @@ import {
   LIMITED_OFFERS_AD_POOL,
   STORE_BUNDLE_OFFERS,
   STORE_COIN_OFFERS,
+  STORE_IAP_OFFER_REMOVE_ADS_ID,
+  STORE_IAP_OFFER_STARTER_PACK_ID,
   getOfferById,
   isStorePremiumOnlyOfferId,
   applyDoubleCoinsVisualAmount,
@@ -68,6 +76,8 @@ import {
   pickInitialStoreFreeOfferSlots,
   pickStoreDurationOfferId,
   getStorePurchaseBoostGrants,
+  STORE_STARTER_PACK_COUNTDOWN_END_MS_KEY,
+  type StoreBundleOfferConfig,
   type StoreCoinOfferConfig,
 } from './offers';
 import {
@@ -1147,6 +1157,7 @@ export default function App() {
     headerImageSrc: string;
     rewards: PurchaseSuccessfulRewardRow[];
   } | null>(null);
+  const [iapOfferUi, setIapOfferUi] = useState<{ offerId: string } | null>(null);
   const pendingPurchaseBoostsRef = useRef<{ offerId: string; durationMs: number; icon: string }[]>([]);
   // Plant info popup state (for barn)
   const [plantInfoPopup, setPlantInfoPopup] = useState<{ isVisible: boolean; level: number } | null>(null);
@@ -1241,8 +1252,8 @@ export default function App() {
   // Pause menu (opened from settings/gear button)
   const [pauseMenuOpen, setPauseMenuOpen] = useState(false);
   const [devToolsOpen, setDevToolsOpen] = useState(false);
-  const [musicEnabled, setMusicEnabled] = useState(true);
-  const [sfxEnabled, setSfxEnabled] = useState(true);
+  const [musicEnabled, setMusicEnabled] = useState(_earlyAudio.musicEnabled);
+  const [sfxEnabled, setSfxEnabled] = useState(_earlyAudio.sfxEnabled);
   const [settingsOpenedFromFtue, setSettingsOpenedFromFtue] = useState(false);
   const [ftueSettingsButtonRect, setFtueSettingsButtonRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const [autoMergeSetting, setAutoMergeSetting] = useState(() => getAutoMergeMode());
@@ -1282,6 +1293,7 @@ export default function App() {
     plantInfo: false,
     goldenPot: false,
     purchaseSuccess: false,
+    iapOffer: false,
   });
   useEffect(() => {
     setAudioSettings({ musicEnabled, sfxEnabled });
@@ -1649,6 +1661,7 @@ export default function App() {
     const isPlantInfoOpen = !!plantInfoPopup?.isVisible;
     const isGoldenPotOpen = goldenPotBonusesPopupOpen;
     const isPurchaseSuccessOpen = !!purchaseSuccessfulUi;
+    const isIapOfferOpen = !!iapOfferUi;
 
     if (!was.levelUp && isLevelUpOpen) playSfx(SFX_IDS.popupLevelUp);
     if (!was.discovery && isDiscoveryOpen) playSfx(SFX_IDS.popupPlantDiscovery);
@@ -1656,6 +1669,7 @@ export default function App() {
     if (!was.plantInfo && isPlantInfoOpen) playSfx(SFX_IDS.popupNormal);
     if (!was.goldenPot && isGoldenPotOpen) playSfx(SFX_IDS.popupNormal);
     if (!was.purchaseSuccess && isPurchaseSuccessOpen) playSfx(SFX_IDS.popupNormal);
+    if (!was.iapOffer && isIapOfferOpen) playSfx(SFX_IDS.popupNormal);
 
     prevPopupOpenRef.current = {
       levelUp: isLevelUpOpen,
@@ -1664,8 +1678,9 @@ export default function App() {
       plantInfo: isPlantInfoOpen,
       goldenPot: isGoldenPotOpen,
       purchaseSuccess: isPurchaseSuccessOpen,
+      iapOffer: isIapOfferOpen,
     };
-  }, [levelUpPopup, discoveryPopup, limitedOfferPopup, plantInfoPopup, goldenPotBonusesPopupOpen, purchaseSuccessfulUi]);
+  }, [levelUpPopup, discoveryPopup, limitedOfferPopup, plantInfoPopup, goldenPotBonusesPopupOpen, purchaseSuccessfulUi, iapOfferUi]);
   /** FTUE: current stage (e.g. 'welcome' after splash); null when not in FTUE */
   const [activeFtueStage, setActiveFtueStage] = useState<FtueStageId | null>(null);
   const prevWelcomeFtueOpenRef = useRef(false);
@@ -2278,6 +2293,19 @@ export default function App() {
     });
   }, [offlineEarningsUi?.open]);
 
+  const completePremiumStorePurchase = useCallback((offerId: string) => {
+    playSfx(SFX_IDS.uiConfirmReward);
+    const config =
+      STORE_COIN_OFFERS.find((c) => c.id === offerId) ??
+      STORE_BUNDLE_OFFERS.find((c) => c.id === offerId);
+    if (!config) return;
+    pendingPurchaseBoostsRef.current = getStorePurchaseBoostGrants(config);
+    setPurchaseSuccessfulUi({
+      headerImageSrc: assetPath(config.headerIcon),
+      rewards: buildPurchaseSuccessRewards(config),
+    });
+  }, []);
+
   const canOpenLimitedOfferRewardPopup = useCallback(() => {
     if (offlineEarningsUi?.open) return false;
     const t = lastOfflineEarningsClosedAtRef.current;
@@ -2304,6 +2332,7 @@ export default function App() {
       if (discoveryPopup?.isVisible) return;
       if (goldenPotBonusesPopupOpen) return;
       if (purchaseSuccessfulUi) return;
+      if (iapOfferUi) return;
       if (plantInfoPopup?.isVisible) return;
       const now = Date.now();
       // Don't show another popup for 10s after user just closed one
@@ -2366,7 +2395,7 @@ export default function App() {
       }
     }, 2000);
     return () => clearInterval(interval);
-  }, [playerLevel, grid, money, limitedOfferPopup?.isVisible, goalSlots, harvestState, highestPlantEver, levelUpPopup?.isVisible, discoveryPopup?.isVisible, goldenPotBonusesPopupOpen, purchaseSuccessfulUi, plantInfoPopup?.isVisible, offlineEarningsUi?.open, activeScreen, goldenPotCount]);
+  }, [playerLevel, grid, money, limitedOfferPopup?.isVisible, goalSlots, harvestState, highestPlantEver, levelUpPopup?.isVisible, discoveryPopup?.isVisible, goldenPotBonusesPopupOpen, purchaseSuccessfulUi, iapOfferUi, plantInfoPopup?.isVisible, offlineEarningsUi?.open, activeScreen, goldenPotCount]);
 
   // Derive which tabs have offers (for tab notification coloring)
   const tabsWithOffers = new Set(rewardedOffers.map(o => o.tab));
@@ -4703,6 +4732,7 @@ export default function App() {
     if (offlineEarningsUi?.open) return;
     if (showFakeAd) return;
     if (purchaseSuccessfulUi) return;
+    if (iapOfferUi) return;
     if (limitedOfferPopup?.isVisible) return;
     if (plantInfoPopup?.isVisible) return;
     if (activeScreen !== 'FARM') return;
@@ -4746,6 +4776,7 @@ export default function App() {
     offlineEarningsUi?.open,
     showFakeAd,
     purchaseSuccessfulUi,
+    iapOfferUi,
     limitedOfferPopup?.isVisible,
     plantInfoPopup?.isVisible,
     activeScreen,
@@ -5388,18 +5419,7 @@ export default function App() {
                 storeFreeOfferSlots={storeFreeOfferSlots}
                 storeSlotCooldownEnds={storeSlotCooldownEnds}
                 onStoreSlotCooldownEnded={handleStoreSlotCooldownEnded}
-                onStoreCoinPurchase={(offerId) => {
-                  playSfx(SFX_IDS.uiConfirmReward);
-                  const config =
-                    STORE_COIN_OFFERS.find((c) => c.id === offerId) ??
-                    STORE_BUNDLE_OFFERS.find((c) => c.id === offerId);
-                  if (!config) return;
-                  pendingPurchaseBoostsRef.current = getStorePurchaseBoostGrants(config);
-                  setPurchaseSuccessfulUi({
-                    headerImageSrc: assetPath(config.headerIcon),
-                    rewards: buildPurchaseSuccessRewards(config),
-                  });
-                }}
+                onStoreCoinPurchase={completePremiumStorePurchase}
               />
             </div>
 
@@ -5860,7 +5880,38 @@ export default function App() {
                 </div>
               </div>
 
-              <div 
+              {activeScreen === 'FARM' ? (
+                <>
+                  <FloatingButtonStack side="left">
+                    <FloatingButtonStarterPack
+                      onClick={() => {
+                        playSfx(SFX_IDS.uiConfirmNormal);
+                        setIapOfferUi({ offerId: STORE_IAP_OFFER_STARTER_PACK_ID });
+                      }}
+                    />
+                    <FloatingButton
+                      title="NO ADS"
+                      iconSrc={assetPath('/assets/icons/icon_fb_noads.png')}
+                      onClick={() => {
+                        playSfx(SFX_IDS.uiConfirmNormal);
+                        setIapOfferUi({ offerId: STORE_IAP_OFFER_REMOVE_ADS_ID });
+                      }}
+                    />
+                  </FloatingButtonStack>
+                  <FloatingButtonStack side="right">
+                    <FloatingButton
+                      title="TASKS"
+                      iconSrc={assetPath('/assets/icons/icon_fb_tasks_normal.png')}
+                    />
+                    <FloatingButton
+                      title="Gardens"
+                      iconSrc={assetPath('/assets/icons/icon_fb_gardens.png')}
+                    />
+                  </FloatingButtonStack>
+                </>
+              ) : null}
+
+              <div
                 ref={hexAreaRef}
                 className="relative flex-grow flex flex-col items-center justify-center overflow-visible z-10"
               >
@@ -7481,6 +7532,82 @@ export default function App() {
               />
             )}
 
+            {iapOfferUi && (() => {
+              const config =
+                STORE_BUNDLE_OFFERS.find((c) => c.id === iapOfferUi.offerId) ??
+                STORE_COIN_OFFERS.find((c) => c.id === iapOfferUi.offerId);
+              if (!config) return null;
+              const isStarterPackPopup = iapOfferUi.offerId === STORE_IAP_OFFER_STARTER_PACK_ID;
+              const isRemoveAdsPopup = iapOfferUi.offerId === STORE_IAP_OFFER_REMOVE_ADS_ID;
+              const usesPremiumIapOfferChrome = isStarterPackPopup || isRemoveAdsPopup;
+              return (
+                <IapOfferPopup
+                  isVisible
+                  title={config.title}
+                  headerImageSrc={assetPath(config.headerIcon)}
+                  rewards={buildPurchaseSuccessRewards(config)}
+                  priceLabel={config.priceLabel}
+                  originalPriceLabel={
+                    'originalPriceLabel' in config ? config.originalPriceLabel : undefined
+                  }
+                  appScale={appScale}
+                  description={
+                    isStarterPackPopup
+                      ? 'Everything you need to get started'
+                      : isRemoveAdsPopup
+                        ? 'Remove all forced Ads'
+                        : undefined
+                  }
+                  titleColor={
+                    isRemoveAdsPopup
+                      ? '#af233a'
+                      : usesPremiumIapOfferChrome
+                        ? '#764793'
+                        : undefined
+                  }
+                  headerRingSrc={
+                    isRemoveAdsPopup
+                      ? assetPath('/assets/popups/popup_header_red.png')
+                      : usesPremiumIapOfferChrome
+                        ? assetPath('/assets/popups/popup_header_purple.png')
+                        : undefined
+                  }
+                  titleOffsetYPx={usesPremiumIapOfferChrome ? -10 : undefined}
+                  closeIconColor={
+                    isRemoveAdsPopup
+                      ? '#d33d57'
+                      : usesPremiumIapOfferChrome
+                        ? '#995fb7'
+                        : undefined
+                  }
+                  premiumIapTopAccentFill={isRemoveAdsPopup ? '#eb5761' : undefined}
+                  premiumIapTopAccentStrokeNarrow={isRemoveAdsPopup ? '#eb5761' : undefined}
+                  premiumIapTopAccentStrokeWide={isRemoveAdsPopup ? '#d33d57' : undefined}
+                  iapPopupShellOffsetYPx={isRemoveAdsPopup ? -80 : undefined}
+                  leafBurstVariant={
+                    isStarterPackPopup ? 'starter' : isRemoveAdsPopup ? 'removeAds' : undefined
+                  }
+                  limitedOfferCountdownStorageKey={
+                    isStarterPackPopup
+                      ? (config as StoreBundleOfferConfig).limitedOfferCountdownStorageKey
+                      : undefined
+                  }
+                  limitedOfferCountdownDurationMs={
+                    isStarterPackPopup
+                      ? (config as StoreBundleOfferConfig).limitedOfferCountdownDurationMs
+                      : undefined
+                  }
+                  onClose={() => {
+                    lastOtherPopupClosedAtRef.current = Date.now();
+                    setIapOfferUi(null);
+                  }}
+                  onPurchase={() => {
+                    completePremiumStorePurchase(iapOfferUi.offerId);
+                  }}
+                />
+              );
+            })()}
+
             {purchaseSuccessfulUi && (
               <PurchaseSuccessfulPopup
                 isVisible
@@ -7897,6 +8024,7 @@ export default function App() {
                 }
                 suppressGameSaveRef.current = true;
                 setAutoMergeMode(false);
+                try { localStorage.removeItem(STORE_STARTER_PACK_COUNTDOWN_END_MS_KEY); } catch { /* ignore */ }
                 persistGameSave(createPostFtueCleanSave());
                 window.location.reload();
               }}

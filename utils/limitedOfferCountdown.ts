@@ -1,0 +1,36 @@
+export function formatBundleLimitedCountdown(remainingMs: number): string {
+  const totalSec = Math.max(0, Math.floor(remainingMs / 1000));
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const sec = totalSec % 60;
+
+  if (h > 0) {
+    return `${h}h ${m}m`;
+  }
+  if (m > 0) {
+    return `${m}m ${sec}s`;
+  }
+  return `${sec}s`;
+}
+
+export function readLimitedOfferCountdownEndMs(storageKey: string, durationMs: number): number {
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (raw == null) {
+      const endMs = Date.now() + durationMs;
+      localStorage.setItem(storageKey, String(endMs));
+      return endMs;
+    }
+
+    const endMs = parseInt(raw, 10);
+    if (!Number.isFinite(endMs)) {
+      const nextEndMs = Date.now() + durationMs;
+      localStorage.setItem(storageKey, String(nextEndMs));
+      return nextEndMs;
+    }
+
+    return endMs;
+  } catch {
+    return Date.now() + durationMs;
+  }
+}

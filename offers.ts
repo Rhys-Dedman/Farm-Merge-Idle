@@ -35,9 +35,13 @@ export const DOUBLE_COINS_HEADER_ICON = '/assets/icons/icon_coinmultiplier_1.png
 /** Store IAP no-ads row — stacks on boost bar (timer only; ad removal is game feature TBD). */
 export const REMOVE_ADS_OFFER_ID = 'remove_ads';
 export const REMOVE_ADS_HEADER_ICON = '/assets/icons/icon_noads.png';
+/** Store small-row id for Remove Ads IAP — also used by **`IapOfferPopup`** (“Remove Ads popup”). */
+export const STORE_IAP_OFFER_REMOVE_ADS_ID = 'store_no_ads' as const;
+/** Bundle row id for Starter Pack — also used by **`IapOfferPopup`** (“Starter Pack popup”). */
+export const STORE_IAP_OFFER_STARTER_PACK_ID = 'store_bundle_starter_pack' as const;
 /** Bundle main-column art (top of stacked pair). */
 export const STARTER_PACK_HEADER_ICON = '/assets/icons/icon_starterpack.png';
-export const HARVESTER_PACK_HEADER_ICON = '/assets/icons/icon_harvesterpack.png';
+export const HARVESTER_PACK_HEADER_ICON = '/assets/icons/icon_farmerpack.png';
 export const STORE_NO_ADS_ROW_BACKGROUND = '/assets/topui/ui_store_noads.png';
 
 /** Old save / particle ids — treated as `double_coins` for stacking + UI. */
@@ -314,7 +318,7 @@ export const STORE_COIN_OFFERS: StoreCoinOfferConfig[] = [
     durationMs: 24 * 60 * 60 * 1000,
   },
   {
-    id: 'store_no_ads',
+    id: STORE_IAP_OFFER_REMOVE_ADS_ID,
     title: 'Remove Ads',
     titleColor: '#bc2b44',
     headerIcon: REMOVE_ADS_HEADER_ICON,
@@ -385,7 +389,7 @@ export const STORE_STARTER_PACK_COUNTDOWN_END_MS_KEY = 'store_bundle_starter_pac
 export const STORE_BUNDLE_OFFERS: StoreBundleOfferConfig[] = [
   {
     ...STORE_COIN_OFFERS[0],
-    id: 'store_bundle_starter_pack',
+    id: STORE_IAP_OFFER_STARTER_PACK_ID,
     title: 'Starter Pack',
     headerIcon: STARTER_PACK_HEADER_ICON,
     headerIconStack: [STARTER_PACK_HEADER_ICON, REMOVE_ADS_HEADER_ICON],
@@ -395,9 +399,9 @@ export const STORE_BUNDLE_OFFERS: StoreBundleOfferConfig[] = [
     extraRewardRows: [
       { offerLineText: 'Double Coins', durationText: '2hr' },
       {
-        offerLineText: 'Rapid Seeds',
+        offerLineText: 'Rapid Harvest',
         durationText: '30m',
-        coinIconPath: '/assets/icons/icon_seedproduction.png',
+        coinIconPath: '/assets/icons/icon_harvestspeed.png',
         coinIconScale: 0.95,
       },
     ],
@@ -405,12 +409,13 @@ export const STORE_BUNDLE_OFFERS: StoreBundleOfferConfig[] = [
       { offerId: REMOVE_ADS_OFFER_ID, durationMs: 24 * 60 * 60 * 1000, icon: REMOVE_ADS_HEADER_ICON },
       { offerId: DOUBLE_COINS_OFFER_ID, durationMs: 2 * 60 * 60 * 1000, icon: DOUBLE_COINS_HEADER_ICON },
       {
-        offerId: 'rapid_seeds',
+        offerId: 'rapid_harvest',
         durationMs: 30 * 60 * 1000,
-        icon: '/assets/icons/icon_seedproduction.png',
+        icon: '/assets/icons/icon_harvestspeed.png',
       },
     ],
     priceLabel: '$9.99',
+    originalPriceLabel: '$49.99',
     valueCalloutText: 'Limited Offer',
     limitedOfferCountdownStorageKey: STORE_STARTER_PACK_COUNTDOWN_END_MS_KEY,
     limitedOfferCountdownDurationMs: 24 * 60 * 60 * 1000,
@@ -418,7 +423,7 @@ export const STORE_BUNDLE_OFFERS: StoreBundleOfferConfig[] = [
   {
     ...STORE_COIN_OFFERS[1],
     id: 'store_bundle_harvesters_pack',
-    title: 'Harvester Pack',
+    title: "Farmer's Pack",
     headerIcon: HARVESTER_PACK_HEADER_ICON,
     headerIconStack: [HARVESTER_PACK_HEADER_ICON, REMOVE_ADS_HEADER_ICON],
     offerLineText: 'Remove Ads',
@@ -427,9 +432,9 @@ export const STORE_BUNDLE_OFFERS: StoreBundleOfferConfig[] = [
     extraRewardRows: [
       { offerLineText: 'Double Coins', durationText: '24hr' },
       {
-        offerLineText: 'Rapid Harvest',
+        offerLineText: 'Rapid Seeds',
         durationText: '2hr',
-        coinIconPath: '/assets/icons/icon_harvestspeed.png',
+        coinIconPath: '/assets/icons/icon_seedproduction.png',
         coinIconScale: 0.95,
       },
     ],
@@ -437,9 +442,9 @@ export const STORE_BUNDLE_OFFERS: StoreBundleOfferConfig[] = [
       { offerId: REMOVE_ADS_OFFER_ID, durationMs: 7 * 24 * 60 * 60 * 1000, icon: REMOVE_ADS_HEADER_ICON },
       { offerId: DOUBLE_COINS_OFFER_ID, durationMs: 24 * 60 * 60 * 1000, icon: DOUBLE_COINS_HEADER_ICON },
       {
-        offerId: 'rapid_harvest',
+        offerId: 'rapid_seeds',
         durationMs: 2 * 60 * 60 * 1000,
-        icon: '/assets/icons/icon_harvestspeed.png',
+        icon: '/assets/icons/icon_seedproduction.png',
       },
     ],
     priceLabel: '$29.99',

@@ -36,11 +36,11 @@ export const STORE_COIN_PACK_TITLE_STYLE: CSSProperties = {
   fontSize: `${16 / STORE_COIN_OFFER_ROW_SCALE}px`,
 };
 
-/** Bundle title: pre-scaled font + blue (card is scaled `STORE_BUNDLE_OFFER_ROW_SCALE`). */
+/** Bundle title: pre-scaled font + purple (matches Starter Pack IAP title); countdown uses same `color`. */
 export const STORE_BUNDLE_CARD_TITLE_STYLE: CSSProperties = {
   ...STORE_OFFER_CARD_TITLE_STYLE,
   fontSize: `${16 / STORE_BUNDLE_OFFER_ROW_SCALE}px`,
-  color: '#4681aa',
+  color: '#764793',
 };
 
 /** Fine nudge on bundle `<h2>`. */

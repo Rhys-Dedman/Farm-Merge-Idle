@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
-import { preloadSfxAssets, SFX_PRELOAD_STEP_COUNT } from '../utils/sfx';
+import { preloadSfxAssets, SFX_PRELOAD_STEP_COUNT, applySavedAudioSettingsEarly } from '../utils/sfx';
+
+applySavedAudioSettingsEarly();
 
 interface LoadingScreenProps {
   onLoadComplete: () => void;
