@@ -3,8 +3,9 @@ import type { BoardCell } from '../types';
 export const WILD_GROWTH_BASE_SEC = 120;
 export const WILD_GROWTH_MIN_SEC = 30;
 export const WILD_GROWTH_STEP_SEC = 10;
-/** Player level at which Wild Growth starts (same as CROPS unlock row for `wild_growth`). */
-export const WILD_GROWTH_UNLOCK_PLAYER_LEVEL = 6;
+import { WILD_GROWTH_UNLOCK_PLAYER_LEVEL } from '../constants/playerLevelUnlocks';
+
+export { WILD_GROWTH_UNLOCK_PLAYER_LEVEL };
 /**
  * Max `wild_growth` upgrade count: at level 9, interval is 30s (0 = 120s auto baseline, no purchases yet).
  */

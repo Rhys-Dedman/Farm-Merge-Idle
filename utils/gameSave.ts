@@ -10,11 +10,19 @@ import type {
   UpgradeState,
 } from '../components/UpgradeList';
 import type { ActiveBoostData } from '../components/ActiveBoostIndicator';
-import { STORE_STARTER_PACK_COUNTDOWN_END_MS_KEY } from '../offers';
+import {
+  STORE_STARTER_PACK_COUNTDOWN_END_MS_KEY,
+  STORE_STARTER_PACK_PURCHASED_KEY,
+  STORE_STARTER_PACK_UNLOCKED_KEY,
+} from '../offers';
 import { normalizeBarnShelvesUnlocked } from '../constants/barnShelves';
 import { PLANT_MASTERY_ORDERS_PER_SEGMENT, getMaxStoredOrdersProgressForTarget } from '../constants/plantMastery';
 import { parseCollectionFtuePhase } from '../constants/collectionFtue';
 import { AUTO_MERGE_STORAGE_KEY } from './autoMergeMode';
+import {
+  LIMITED_OFFER_INTRO_CYCLE_COMPLETE_KEY,
+  LIMITED_OFFER_INTRO_CYCLE_SEEN_IDS_KEY,
+} from './limitedOfferIntroCycle';
 
 function normalizePlantMasteryUnlockPending(raw: unknown): number[] {
   if (!Array.isArray(raw)) return [];
@@ -88,7 +96,7 @@ export interface GameSaveV1 {
   /** Plant levels (1–24) where mastery has been purchased. */
   plantMasteryUnlockedLevels: number[];
   /**
-   * After first Collection visit from level 5: bar shows fake 15/15 (display L4) until intro clears, then normal level 5 tally.
+   * After first Collection visit from collection unlock level: bar shows fake 15/15 until intro clears, then normal level tally.
    * Next collected goal clears this; bar then mirrors player level progress; golden-pot queue advances on player level-up.
    */
   plantMasteryIntroBarComplete?: boolean;
@@ -279,7 +287,27 @@ export function clearGameSave(): void {
     /* ignore */
   }
   try {
+    localStorage.removeItem(STORE_STARTER_PACK_UNLOCKED_KEY);
+  } catch {
+    /* ignore */
+  }
+  try {
+    localStorage.removeItem(STORE_STARTER_PACK_PURCHASED_KEY);
+  } catch {
+    /* ignore */
+  }
+  try {
     localStorage.removeItem(AUTO_MERGE_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+  try {
+    localStorage.removeItem(LIMITED_OFFER_INTRO_CYCLE_SEEN_IDS_KEY);
+  } catch {
+    /* ignore */
+  }
+  try {
+    localStorage.removeItem(LIMITED_OFFER_INTRO_CYCLE_COMPLETE_KEY);
   } catch {
     /* ignore */
   }

@@ -107,9 +107,18 @@ export interface StoreBundleOfferProps {
   config: StoreBundleOfferConfig;
   onPurchase?: (id: string) => void;
   className?: string;
+  /** When false, limited-offer countdown is hidden and the timer is not auto-started (Starter Pack before unlock). */
+  limitedOfferCountdownEnabled?: boolean;
+  limitedOfferCountdownRefreshKey?: number;
 }
 
-export const StoreBundleOffer: React.FC<StoreBundleOfferProps> = ({ config, onPurchase, className = '' }) => {
+export const StoreBundleOffer: React.FC<StoreBundleOfferProps> = ({
+  config,
+  onPurchase,
+  className = '',
+  limitedOfferCountdownEnabled = true,
+  limitedOfferCountdownRefreshKey = 0,
+}) => {
   const [pressed, setPressed] = useState(false);
   const {
     id,
@@ -130,9 +139,14 @@ export const StoreBundleOffer: React.FC<StoreBundleOfferProps> = ({ config, onPu
   const bundleCountdownRemainingMs = useLimitedOfferCountdown(
     limitedOfferCountdownStorageKey,
     limitedOfferCountdownDurationMs,
+    {
+      autoStart: limitedOfferCountdownEnabled,
+      refreshKey: limitedOfferCountdownRefreshKey,
+    },
   );
 
   const showLimitedCountdown =
+    limitedOfferCountdownEnabled &&
     Boolean(limitedOfferCountdownStorageKey && limitedOfferCountdownDurationMs && bundleCountdownRemainingMs > 0);
 
   const rewardRows = [

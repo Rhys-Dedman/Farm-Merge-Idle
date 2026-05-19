@@ -195,6 +195,38 @@ export function hasActiveDoubleCoinsBoost(
   return hasActiveDoubleCoinsBoostAt(activeBoosts, Date.now());
 }
 
+/** Remove Ads is active at a specific moment (IAP / bundle / starter pack). */
+export function hasActiveRemoveAdsBoostAt(
+  activeBoosts: ReadonlyArray<{ offerId?: string; endTime?: number; icon?: string }>,
+  atTimeMs: number,
+): boolean {
+  const headerNorm = REMOVE_ADS_HEADER_ICON.replace(/\\/g, '/').toLowerCase();
+  return activeBoosts.some((b) => {
+    const endMs = typeof b.endTime === 'number' && Number.isFinite(b.endTime) ? b.endTime : Number(b.endTime);
+    if (!Number.isFinite(endMs) || endMs <= atTimeMs) return false;
+
+    const oid = String(b.offerId ?? '').trim().toLowerCase();
+    if (oid === REMOVE_ADS_OFFER_ID) return true;
+
+    const icon = String(b.icon ?? '')
+      .replace(/\\/g, '/')
+      .toLowerCase();
+    if (!icon) return false;
+    return (
+      icon.includes('noads') ||
+      icon.includes('no_ads') ||
+      icon === headerNorm ||
+      icon.endsWith('icon_noads.png')
+    );
+  });
+}
+
+export function hasActiveRemoveAdsBoost(
+  activeBoosts: ReadonlyArray<{ offerId?: string; endTime?: number; icon?: string }>,
+): boolean {
+  return hasActiveRemoveAdsBoostAt(activeBoosts, Date.now());
+}
+
 /** Wallet / payout multiplier while Double Coins boost is active (IAP / ad-granted bar). */
 export function getDoubleCoinsPayoutMultiplier(
   activeBoosts: ReadonlyArray<{ offerId?: string; endTime?: number; icon?: string }>
@@ -385,6 +417,10 @@ export function getStorePurchaseBoostGrants(config: StoreCoinOfferConfig): { off
 
 /** localStorage end timestamp for starter-pack 24h UI; removed in `clearGameSave` so reset / fresh FTUE restarts the timer */
 export const STORE_STARTER_PACK_COUNTDOWN_END_MS_KEY = 'store_bundle_starter_pack_countdown_end_ms';
+/** Set when the level-4 Starter Pack unlock popup has been shown; starts the 24h countdown. */
+export const STORE_STARTER_PACK_UNLOCKED_KEY = 'store_bundle_starter_pack_unlocked';
+/** Set when starter pack IAP succeeds; removed in `clearGameSave` with the countdown key. */
+export const STORE_STARTER_PACK_PURCHASED_KEY = 'store_bundle_starter_pack_purchased';
 
 export const STORE_BUNDLE_OFFERS: StoreBundleOfferConfig[] = [
   {
@@ -452,3 +488,113 @@ export const STORE_BUNDLE_OFFERS: StoreBundleOfferConfig[] = [
     valueCalloutText: 'Best Value',
   },
 ];
+
+export function readStarterPackPurchased(): boolean {
+  try {
+    return localStorage.getItem(STORE_STARTER_PACK_PURCHASED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function markStarterPackPurchased(): void {
+  try {
+    localStorage.setItem(STORE_STARTER_PACK_PURCHASED_KEY, '1');
+  } catch {
+    /* ignore */
+  }
+}
+
+const STARTER_PACK_BUNDLE = STORE_BUNDLE_OFFERS.find((o) => o.id === STORE_IAP_OFFER_STARTER_PACK_ID);
+
+export function readStarterPackCountdownEndMs(): number | null {
+  if (!STARTER_PACK_BUNDLE?.limitedOfferCountdownStorageKey) return null;
+  try {
+    const raw = localStorage.getItem(STARTER_PACK_BUNDLE.limitedOfferCountdownStorageKey);
+    if (raw == null) return null;
+    const endMs = parseInt(raw, 10);
+    return Number.isFinite(endMs) ? endMs : null;
+  } catch {
+    return null;
+  }
+}
+
+/** True after the level-4 unlock popup has been shown (or legacy save already had a countdown). */
+export function readStarterPackUnlocked(): boolean {
+  try {
+    if (localStorage.getItem(STORE_STARTER_PACK_UNLOCKED_KEY) === '1') return true;
+  } catch {
+    /* ignore */
+  }
+  return readStarterPackCountdownEndMs() != null;
+}
+
+/** Call when the Starter Pack unlock IAP popup is shown; starts the 24h timer once. */
+export function markStarterPackUnlocked(): void {
+  try {
+    localStorage.setItem(STORE_STARTER_PACK_UNLOCKED_KEY, '1');
+  } catch {
+    /* ignore */
+  }
+  if (readStarterPackCountdownEndMs() == null) {
+    startStarterPackCountdown();
+  }
+}
+
+export function startStarterPackCountdown(atTimeMs = Date.now()): number {
+  const durationMs = STARTER_PACK_BUNDLE?.limitedOfferCountdownDurationMs ?? 24 * 60 * 60 * 1000;
+  const key = STARTER_PACK_BUNDLE?.limitedOfferCountdownStorageKey ?? STORE_STARTER_PACK_COUNTDOWN_END_MS_KEY;
+  const endMs = atTimeMs + durationMs;
+  try {
+    localStorage.setItem(key, String(endMs));
+  } catch {
+    /* ignore */
+  }
+  return endMs;
+}
+
+/**
+ * Settings → Clear Boosts: bring back Starter Pack in store + farm FB when already unlocked
+ * (restarts 24h timer; clears purchased flag so expired/purchased offers can return).
+ */
+export function restoreStarterPackOfferAfterClearBoosts(): boolean {
+  if (!readStarterPackUnlocked()) return false;
+  try {
+    localStorage.removeItem(STORE_STARTER_PACK_PURCHASED_KEY);
+    localStorage.setItem(STORE_STARTER_PACK_UNLOCKED_KEY, '1');
+  } catch {
+    /* ignore */
+  }
+  startStarterPackCountdown();
+  return true;
+}
+
+export function getStarterPackCountdownRemainingMs(atTimeMs = Date.now()): number {
+  if (!readStarterPackUnlocked()) return 0;
+  const endMs = readStarterPackCountdownEndMs();
+  if (endMs == null) return 0;
+  return Math.max(0, endMs - atTimeMs);
+}
+
+/** Starter pack row in the store (same window as the farm floating button). */
+export function isStarterPackStoreRowVisible(atTimeMs = Date.now()): boolean {
+  return isStarterPackFloatingButtonVisible(atTimeMs);
+}
+
+/** Farm floating button: unlocked, not purchased, countdown still running. */
+export function isStarterPackFloatingButtonVisible(atTimeMs = Date.now()): boolean {
+  if (readStarterPackPurchased()) return false;
+  if (!readStarterPackUnlocked()) return false;
+  return getStarterPackCountdownRemainingMs(atTimeMs) > 0;
+}
+
+/** @deprecated Use `isStarterPackStoreRowVisible` / `isStarterPackFloatingButtonVisible`. */
+export function isStarterPackOfferAvailable(atTimeMs = Date.now()): boolean {
+  return isStarterPackFloatingButtonVisible(atTimeMs);
+}
+
+export function getVisibleStoreBundleOffers(): StoreBundleOfferConfig[] {
+  return STORE_BUNDLE_OFFERS.filter(
+    (o) => o.id !== STORE_IAP_OFFER_STARTER_PACK_ID || isStarterPackStoreRowVisible(),
+  );
+}

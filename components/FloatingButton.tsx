@@ -1,7 +1,12 @@
 import React from 'react';
+import { assetPath } from '../utils/assetPath';
+
+const FLOATING_BUTTON_LOCK_ICON = assetPath('/assets/icons/icon_lock.png');
 
 export const FLOATING_BUTTON_PILL_GRADIENT_TOP = '#efe5ba';
 export const FLOATING_BUTTON_PILL_GRADIENT_BOTTOM = '#c1cd67';
+export const FLOATING_BUTTON_PILL_LOCKED_GRADIENT_TOP = '#d9e6c0';
+export const FLOATING_BUTTON_PILL_LOCKED_GRADIENT_BOTTOM = '#94bf79';
 export const FLOATING_BUTTON_PILL_OUTLINE_COLOR = '#56764d';
 export const FLOATING_BUTTON_PILL_TEXT_COLOR = '#526e43';
 export const FLOATING_BUTTON_PILL_OUTLINE_WIDTH_PX = 2;
@@ -18,6 +23,10 @@ export interface FloatingButtonProps {
   iconSrc: string;
   pillLabel?: string;
   pillUppercase?: boolean;
+  /** Locked preview: same pill chrome as unlocked, "LEVEL N" + lock icon. */
+  locked?: boolean;
+  /** Shown on the pill as "LEVEL N" when `locked` is true. */
+  unlockLevel?: number;
   onClick?: () => void;
   className?: string;
   style?: React.CSSProperties;
@@ -29,18 +38,32 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
   iconSrc,
   pillLabel,
   pillUppercase = true,
+  locked = false,
+  unlockLevel,
   onClick,
   className = '',
   style,
   'aria-label': ariaLabel,
 }) => {
-  const pillText = pillLabel ?? title;
+  const pillLabelText = pillLabel ?? title;
+  const pillGradientTop = locked
+    ? FLOATING_BUTTON_PILL_LOCKED_GRADIENT_TOP
+    : FLOATING_BUTTON_PILL_GRADIENT_TOP;
+  const pillGradientBottom = locked
+    ? FLOATING_BUTTON_PILL_LOCKED_GRADIENT_BOTTOM
+    : FLOATING_BUTTON_PILL_GRADIENT_BOTTOM;
+  const resolvedAriaLabel =
+    ariaLabel ??
+    (locked && unlockLevel != null
+      ? `${title}, unlocks at level ${unlockLevel}`
+      : title);
   return (
     <button
       type="button"
-      onClick={onClick}
-      aria-label={ariaLabel ?? title}
-      className={`relative inline-block overflow-visible border-0 bg-transparent p-0 outline-none select-none transition-transform duration-150 active:scale-95 ${className}`}
+      onClick={locked ? undefined : onClick}
+      aria-label={resolvedAriaLabel}
+      aria-disabled={locked || undefined}
+      className={`relative inline-block overflow-visible border-0 bg-transparent p-0 outline-none select-none transition-transform duration-150 ${locked ? 'cursor-default' : 'active:scale-95'} ${className}`}
       style={{
         width: FLOATING_BUTTON_ICON_SIZE_PX,
         height: FLOATING_BUTTON_ICON_SIZE_PX,
@@ -70,12 +93,35 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
           borderWidth: FLOATING_BUTTON_PILL_OUTLINE_WIDTH_PX,
           borderStyle: 'solid',
           borderColor: FLOATING_BUTTON_PILL_OUTLINE_COLOR,
-          backgroundImage: `linear-gradient(to bottom, ${FLOATING_BUTTON_PILL_GRADIENT_TOP}, ${FLOATING_BUTTON_PILL_GRADIENT_BOTTOM})`,
+          backgroundImage: `linear-gradient(to bottom, ${pillGradientTop}, ${pillGradientBottom})`,
           color: FLOATING_BUTTON_PILL_TEXT_COLOR,
           fontSize: FLOATING_BUTTON_PILL_FONT_SIZE_PX,
         }}
       >
-        <span className="whitespace-nowrap">{pillText}</span>
+        {locked && unlockLevel != null ? (
+          <span className="flex items-center gap-px whitespace-nowrap">
+            <span
+              className="shrink-0"
+              aria-hidden
+              style={{
+                width: 10,
+                height: 10,
+                backgroundColor: FLOATING_BUTTON_PILL_TEXT_COLOR,
+                maskImage: `url(${FLOATING_BUTTON_LOCK_ICON})`,
+                maskSize: 'contain',
+                maskRepeat: 'no-repeat',
+                maskPosition: 'center',
+                WebkitMaskImage: `url(${FLOATING_BUTTON_LOCK_ICON})`,
+                WebkitMaskSize: 'contain',
+                WebkitMaskRepeat: 'no-repeat',
+                WebkitMaskPosition: 'center',
+              }}
+            />
+            <span>{`LEVEL ${unlockLevel}`}</span>
+          </span>
+        ) : (
+          <span className="whitespace-nowrap">{pillLabelText}</span>
+        )}
       </span>
     </button>
   );

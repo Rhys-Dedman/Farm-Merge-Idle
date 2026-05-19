@@ -4,12 +4,19 @@ import { createPortal, flushSync } from 'react-dom';
 import { HexBoard, type HexBoardHandle } from './components/HexBoard';
 import { UpgradeTabs } from './components/UpgradeTabs';
 import { UpgradeList, createInitialSeedsState, createInitialHarvestState, createInitialCropsState, getSeedLevelFromHighestPlant, getBonusSeedChance, getSeedSurplusValue, getSeedStorageMax, getCropYieldPerHarvest, getHarvestSpeedLevel, getMergeHarvestChance, getGoalLoadingSeconds, getMarketValueMultiplier, getPremiumOrdersMinLevel, getSurplusSalesMultiplier, isSurplusSalesUnlocked, getHappyCustomerChance, HarvestState, UpgradeState, RewardedOffer, getLevelUnlockInfo, MAX_LEVEL_WITH_CUSTOM_UNLOCK_POPUP, isCustomerSpeedMaxed } from './components/UpgradeList';
+import {
+  PLANT_COLLECTION_UI_UNLOCK_LEVEL,
+  PLANT_COLLECTION_FTUE_INTRO_DISPLAY_PLAYER_LEVEL,
+  TASKS_FLOATING_BUTTON_UNLOCK_LEVEL,
+  GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL,
+  STARTER_PACK_FORCE_POPUP_LEVEL,
+} from './constants/playerLevelUnlocks';
 import { Navbar } from './components/Navbar';
 import { StoreScreen } from './components/StoreScreen';
 import { SideAction } from './components/SideAction';
 import { FloatingButton } from './components/FloatingButton';
 import { FloatingButtonStack } from './components/FloatingButtonStack';
-import { FloatingButtonStarterPack } from './components/FloatingButtonStarterPack';
+import { FarmLeftFloatingButtonStack } from './components/FarmLeftFloatingButtonStack';
 import { Projectile } from './components/Projectile';
 import { LeafBurst, LEAF_BURST_BASELINE_COUNT, LEAF_BURST_SMALL_COUNT } from './components/LeafBurst';
 import { AmbientFallingLeaves } from './components/AmbientFallingLeaves';
@@ -77,6 +84,13 @@ import {
   pickStoreDurationOfferId,
   getStorePurchaseBoostGrants,
   STORE_STARTER_PACK_COUNTDOWN_END_MS_KEY,
+  STORE_STARTER_PACK_PURCHASED_KEY,
+  STORE_STARTER_PACK_UNLOCKED_KEY,
+  markStarterPackPurchased,
+  markStarterPackUnlocked,
+  readStarterPackPurchased,
+  readStarterPackUnlocked,
+  restoreStarterPackOfferAfterClearBoosts,
   type StoreBundleOfferConfig,
   type StoreCoinOfferConfig,
 } from './offers';
@@ -90,6 +104,13 @@ import {
   deriveGoalDiscoveryLightGreenActive,
 } from './utils/gameSave';
 import { createPostFtueCleanSave } from './utils/postFtueCleanSave';
+import {
+  getLimitedOfferAutoPopupPool,
+  getNextLimitedOfferIntroPopup,
+  isLimitedOfferIntroCycleComplete,
+  markLimitedOfferIntroPopupSeen,
+  syncLimitedOfferIntroCyclePersistedState,
+} from './utils/limitedOfferIntroCycle';
 import { isOfflineCoinEarningsBlockedByFtue, simulateOfflineSeedHarvest, simulateWildGrowthOffline } from './utils/offlineSimulate';
 import {
   getWildGrowthIntervalMsForLevel,
@@ -128,11 +149,8 @@ function firstThreePlantGoalSlotsFilled(slots: ('empty' | 'loading' | 'green' | 
   return [0, 1, 2].every((i) => (slots[i] ?? 'empty') !== 'empty');
 }
 
-/** Plant Collection barn UI (shelves, mastery bar, bonuses button) — navigation stays open; data keeps updating while locked. */
-const PLANT_COLLECTION_UI_UNLOCK_LEVEL = 5;
-/** Collection FTUE: fake full bar (15/15) until intro clears; icon shows this level instead of real player level. */
+/** Collection FTUE: fake full bar (15/15) until intro clears; icon shows intro display level instead of real player level. */
 const PLANT_COLLECTION_FTUE_INTRO_BAR_TOTAL = 15;
-const PLANT_COLLECTION_FTUE_INTRO_DISPLAY_PLAYER_LEVEL = 4;
 /** Collection FTUE: after “View Collection”, defer hole + finger until barn slide finishes. */
 const COLLECTION_FTUE_INTRO_CTA_OVERLAY_DELAY_MS = 600;
 
@@ -1095,6 +1113,10 @@ export default function App() {
   const [activeScreen, setActiveScreen] = useState<ScreenType>('FARM');
   const activeScreenRef = useRef<ScreenType>(activeScreen);
   activeScreenRef.current = activeScreen;
+  const [storeScrollToCoinSectionRequest, setStoreScrollToCoinSectionRequest] = useState(0);
+  const [starterPackPurchased, setStarterPackPurchased] = useState(readStarterPackPurchased);
+  const [starterPackUnlocked, setStarterPackUnlocked] = useState(readStarterPackUnlocked);
+  const [starterPackCountdownRefreshKey, setStarterPackCountdownRefreshKey] = useState(0);
   const [isExpanded, setIsExpanded] = useState(false);
   const panelHeight = useAnimatedPanelHeight(isExpanded);
   const [money, setMoney] = useState(0);
@@ -1138,7 +1160,7 @@ export default function App() {
   const [goldenPotBonusRevealTier, setGoldenPotBonusRevealTier] = useState<number | null>(null);
   const goldenPotTierUnlockPopupTimeoutRef = useRef<number | null>(null);
   const goldenPotCountForTierPopupRef = useRef<number | null>(null);
-  /** First-time collection flow after level 5 (golden pot + bonuses + garden hint). */
+  /** First-time collection flow after Plant Collection unlock (golden pot + bonuses + garden hint). */
   const [collectionFtuePhase, setCollectionFtuePhase] = useState<CollectionFtuePhase | null>(null);
   const [collectionFtueCompleted, setCollectionFtueCompleted] = useState(false);
   const [collectionFtueHoleRect, setCollectionFtueHoleRect] = useState<{
@@ -1283,6 +1305,8 @@ export default function App() {
   const suppressGameSaveRef = useRef(false);
   /** Only allow writing progress to localStorage after FTUE 11 is fully closed. */
   const ftue11PersistenceEnabledRef = useRef(false);
+  /** Farm floating buttons (left + right) — hidden until FTUE 11 “Lets Get Gardening!” */
+  const [farmFloatingButtonsVisible, setFarmFloatingButtonsVisible] = useState(false);
   /** After spamming Unlock plant, show discovery only for this level when pause closes */
   const discoveryLevelAfterPauseCloseRef = useRef<number | null>(null);
 
@@ -1863,6 +1887,8 @@ export default function App() {
   const nextWalletBurstIdRef = useRef(0);
   const nextGoalCoinBurstIdRef = useRef(0);
   const levelUpGuardRef = useRef(false);
+  /** Completes level-up after Starter Pack IAP closes (level 4 uses IAP instead of level-up popup). */
+  const pendingLevelUpAfterStarterPackRef = useRef<number | null>(null);
   const walletFlashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Batch coin panel impacts (many harvests) to one setState flush per frame for FPS. */
   const pendingCoinImpactRef = useRef({ total: 0, scheduled: false });
@@ -2299,11 +2325,33 @@ export default function App() {
       STORE_COIN_OFFERS.find((c) => c.id === offerId) ??
       STORE_BUNDLE_OFFERS.find((c) => c.id === offerId);
     if (!config) return;
+    if (offerId === STORE_IAP_OFFER_STARTER_PACK_ID) {
+      markStarterPackPurchased();
+      setStarterPackPurchased(true);
+    }
     pendingPurchaseBoostsRef.current = getStorePurchaseBoostGrants(config);
     setPurchaseSuccessfulUi({
       headerImageSrc: assetPath(config.headerIcon),
       rewards: buildPurchaseSuccessRewards(config),
     });
+  }, []);
+
+  const showLevelUpForNextLevel = useCallback((nextLevel: number) => {
+    if (nextLevel === STARTER_PACK_FORCE_POPUP_LEVEL) {
+      markStarterPackUnlocked();
+      setStarterPackUnlocked(true);
+      pendingLevelUpAfterStarterPackRef.current = nextLevel;
+      setIapOfferUi({ offerId: STORE_IAP_OFFER_STARTER_PACK_ID });
+      return;
+    }
+    if (nextLevel <= MAX_LEVEL_WITH_CUSTOM_UNLOCK_POPUP) {
+      setLevelUpPopup({ isVisible: true, level: nextLevel });
+    } else {
+      setPlayerLevel((l) => l + 1);
+      setTimeout(() => {
+        levelUpGuardRef.current = false;
+      }, 0);
+    }
   }, []);
 
   const canOpenLimitedOfferRewardPopup = useCallback(() => {
@@ -2313,19 +2361,51 @@ export default function App() {
     return true;
   }, [offlineEarningsUi?.open]);
 
-  // Auto-trigger limited offer popup: Rule 1 max 1 per 90s, Rule 2 never same twice in a row, Rule 3 after 90s pick best trigger else at 120s random, Rule 4 level >= 2 only
+  /** After intro cycle: yellow upgrade-row hint only (open panel, scroll, flash) — no interrupt popup. */
+  const notifyLimitedOfferSoft = useCallback(
+    (offerId: string) => {
+      const offerConfig = getOfferById(offerId);
+      if (!offerConfig || isStorePremiumOnlyOfferId(offerId)) return;
+      setRewardedOffers((prev) => {
+        if (prev.some((o) => o.id === offerId)) return prev;
+        return [
+          ...prev,
+          {
+            id: offerConfig.id,
+            name: offerConfig.title,
+            icon: offerConfig.headerIcon,
+            description: offerConfig.description,
+            tab: offerConfig.upgradeTab,
+            timeRemaining: 60,
+          },
+        ];
+      });
+      if (ftueUpgradePanelVisible) {
+        setIsExpanded(true);
+        setActiveTab(offerConfig.upgradeTab);
+        setPendingOfferHighlightId(offerId);
+      }
+      window.setTimeout(() => setPendingOfferHighlightId(null), 2500);
+    },
+    [ftueUpgradePanelVisible],
+  );
+
+  // Auto-trigger limited offers: intro cycle shows each unique popup once, then soft-only upgrade hints.
   useEffect(() => {
     if (playerLevel < 2 || LIMITED_OFFERS.length === 0) return;
+    if (!farmFloatingButtonsVisible || activeFtueStage !== null) return;
     if (!limitedOfferCooldownInitializedRef.current) {
       limitedOfferCooldownInitializedRef.current = true;
       lastLimitedOfferShownAtRef.current = Date.now();
     }
+
     const interval = setInterval(() => {
+      syncLimitedOfferIntroCyclePersistedState();
+      const introCycleComplete = isLimitedOfferIntroCycleComplete();
+      const autoPopupPool = getLimitedOfferAutoPopupPool();
       if (limitedOfferPopup?.isVisible) return;
-      if (showFakeAdRef.current) return; // never show limited offer while fake ad is on screen
-      // Only auto-show rewarded / limited offers on the garden screen (not Store or Barn)
+      if (showFakeAdRef.current) return;
       if (activeScreen !== 'FARM') return;
-      // Don't show limited offer while another popup is on screen
       if (offlineEarningsUi?.open) return;
       if (lastOfflineEarningsClosedAtRef.current > 0 && Date.now() - lastOfflineEarningsClosedAtRef.current < 10000) return;
       if (levelUpPopup?.isVisible) return;
@@ -2335,67 +2415,91 @@ export default function App() {
       if (iapOfferUi) return;
       if (plantInfoPopup?.isVisible) return;
       const now = Date.now();
-      // Don't show another popup for 10s after user just closed one
-      if (lastLimitedOfferClosedAtRef.current && (now - lastLimitedOfferClosedAtRef.current) < 10000) return;
-      if (lastFakeAdClosedAtRef.current && (now - lastFakeAdClosedAtRef.current) < 10000) return;
-      // Wait 7.5s after user closed level up / discovery / plant info before showing limited offer
-      if (lastOtherPopupClosedAtRef.current && (now - lastOtherPopupClosedAtRef.current) < 7500) return;
+      if (lastLimitedOfferClosedAtRef.current && now - lastLimitedOfferClosedAtRef.current < 10000) return;
+      if (lastFakeAdClosedAtRef.current && now - lastFakeAdClosedAtRef.current < 10000) return;
+      if (lastOtherPopupClosedAtRef.current && now - lastOtherPopupClosedAtRef.current < 7500) return;
       const elapsed = now - lastLimitedOfferShownAtRef.current;
-      if (elapsed < 90000) return; // Rule 1: 90s cooldown
-      const unlockedCount = grid.filter(c => !c.locked).length;
-      const filledCount = grid.filter(c => !c.locked && c.item != null).length;
+      if (elapsed < 90000) return;
+      const unlockedCount = grid.filter((c) => !c.locked).length;
+      const filledCount = grid.filter((c) => !c.locked && c.item != null).length;
       const gardenFillPercent = unlockedCount > 0 ? filledCount / unlockedCount : 0;
       const lastId = lastShownOfferIdRef.current;
       const lastTab = lastShownOfferTabRef.current;
-      // Eligible: trigger matches and not same as last
-      const hasGoalAvailable = goalSlots.some(s => s === 'green' || s === 'loading');
-      const eligible = LIMITED_OFFERS.filter(o => {
-        if (isStorePremiumOnlyOfferId(o.id)) return false;
-        if (isCoinMultiplierBoostId(o.id)) return false;
-        if (o.id === lastId) return false;
+      const hasGoalAvailable = goalSlots.some((s) => s === 'green' || s === 'loading');
+
+      const matchesTrigger = (o: (typeof LIMITED_OFFERS)[0]) => {
         if (o.trigger === 'garden_fill_max_50') return gardenFillPercent <= 0.5;
         if (o.trigger === 'wallet_empty') return money === 0;
         if (o.trigger === 'anytime') return true;
         if (o.trigger === 'order_speed_not_maxed') return !isCustomerSpeedMaxed(harvestState, goldenPotCount);
         if (o.trigger === 'has_goal_available') return hasGoalAvailable;
         return false;
-      });
-      // Prefer a different category (tab) from the previous offer for variety
-      const pickFrom = (list: typeof LIMITED_OFFERS) => {
+      };
+
+      const pickFrom = (list: typeof autoPopupPool) => {
         if (list.length === 0) return null;
-        const differentTab = list.filter(o => o.upgradeTab !== lastTab);
+        const differentTab = list.filter((o) => o.upgradeTab !== lastTab);
         const pool = differentTab.length > 0 ? differentTab : list;
         return pool[Math.floor(Math.random() * pool.length)];
       };
-      let offerToShow: typeof LIMITED_OFFERS[0] | null = null;
-      if (eligible.length > 0) {
-        offerToShow = pickFrom(eligible);
-      } else if (elapsed >= 120000) {
-        const other = LIMITED_OFFERS.filter(o => {
-          if (isStorePremiumOnlyOfferId(o.id)) return false;
-          if (isCoinMultiplierBoostId(o.id)) return false;
-          if (o.id === lastId) return false;
-          if (o.trigger === 'garden_fill_max_50') return gardenFillPercent <= 0.5;
-          if (o.trigger === 'wallet_empty') return money === 0;
-          if (o.trigger === 'anytime') return true;
-          if (o.trigger === 'order_speed_not_maxed') return !isCustomerSpeedMaxed(harvestState, goldenPotCount);
-          if (o.trigger === 'has_goal_available') return hasGoalAvailable;
-          return false;
-        });
-        offerToShow = pickFrom(other);
+
+      let offerToShow: (typeof autoPopupPool)[0] | null = null;
+
+      if (!introCycleComplete) {
+        // Intro: show every current auto-popup offer once (no trigger gate).
+        offerToShow = getNextLimitedOfferIntroPopup();
+      } else {
+        const eligible = autoPopupPool.filter(
+          (o) => matchesTrigger(o) && o.id !== lastId,
+        );
+        if (eligible.length > 0) {
+          offerToShow = pickFrom(eligible);
+        } else if (elapsed >= 120000) {
+          const other = autoPopupPool.filter(
+            (o) => matchesTrigger(o) && o.id !== lastId,
+          );
+          offerToShow = pickFrom(other);
+        }
       }
-      if (offerToShow) {
+
+      if (!offerToShow) return;
+
+      lastShownOfferIdRef.current = offerToShow.id;
+      lastShownOfferTabRef.current = offerToShow.upgradeTab;
+      lastLimitedOfferShownAtRef.current = now;
+
+      if (!introCycleComplete) {
         const state = buildLimitedOfferPopupState(offerToShow.id, { highestPlantEver });
         if (state) {
+          markLimitedOfferIntroPopupSeen(offerToShow.id);
           setLimitedOfferPopup(state);
-          lastShownOfferIdRef.current = offerToShow.id;
-          lastShownOfferTabRef.current = offerToShow.upgradeTab;
-          // 90s cooldown starts when user closes popup (timer starts), not when we show it
         }
+      } else {
+        notifyLimitedOfferSoft(offerToShow.id);
       }
     }, 2000);
     return () => clearInterval(interval);
-  }, [playerLevel, grid, money, limitedOfferPopup?.isVisible, goalSlots, harvestState, highestPlantEver, levelUpPopup?.isVisible, discoveryPopup?.isVisible, goldenPotBonusesPopupOpen, purchaseSuccessfulUi, iapOfferUi, plantInfoPopup?.isVisible, offlineEarningsUi?.open, activeScreen, goldenPotCount]);
+  }, [
+    playerLevel,
+    grid,
+    money,
+    limitedOfferPopup?.isVisible,
+    goalSlots,
+    harvestState,
+    highestPlantEver,
+    levelUpPopup?.isVisible,
+    discoveryPopup?.isVisible,
+    goldenPotBonusesPopupOpen,
+    purchaseSuccessfulUi,
+    iapOfferUi,
+    plantInfoPopup?.isVisible,
+    offlineEarningsUi?.open,
+    activeScreen,
+    goldenPotCount,
+    farmFloatingButtonsVisible,
+    activeFtueStage,
+    notifyLimitedOfferSoft,
+  ]);
 
   // Derive which tabs have offers (for tab notification coloring)
   const tabsWithOffers = new Set(rewardedOffers.map(o => o.tab));
@@ -5062,6 +5166,7 @@ export default function App() {
     }
 
     ftue11PersistenceEnabledRef.current = true;
+    setFarmFloatingButtonsVisible(true);
     const totalOffline = hydrateFromSave(save);
     setIsExpanded(false);
     setActiveScreen('FARM');
@@ -5118,6 +5223,7 @@ export default function App() {
         setActiveScreen('FARM');
       } else {
         ftue11PersistenceEnabledRef.current = true;
+        setFarmFloatingButtonsVisible(true);
         const totalOffline = hydrateFromSave(save);
         setIsExpanded(false);
         setActiveScreen('FARM');
@@ -5420,6 +5526,10 @@ export default function App() {
                 storeSlotCooldownEnds={storeSlotCooldownEnds}
                 onStoreSlotCooldownEnded={handleStoreSlotCooldownEnded}
                 onStoreCoinPurchase={completePremiumStorePurchase}
+                scrollToCoinSectionRequest={storeScrollToCoinSectionRequest}
+                starterPackPurchased={starterPackPurchased}
+                starterPackUnlocked={starterPackUnlocked}
+                starterPackCountdownRefreshKey={starterPackCountdownRefreshKey}
               />
             </div>
 
@@ -5492,10 +5602,8 @@ export default function App() {
                           if (!levelUpGuardRef.current) {
                             levelUpGuardRef.current = true;
                             const nextLevel = playerLevel + 1;
-                            if (nextLevel <= MAX_LEVEL_WITH_CUSTOM_UNLOCK_POPUP) {
-                              setLevelUpPopup({ isVisible: true, level: nextLevel });
-                            } else {
-                              setPlayerLevel((l) => l + 1);
+                            showLevelUpForNextLevel(nextLevel);
+                            if (nextLevel > MAX_LEVEL_WITH_CUSTOM_UNLOCK_POPUP) {
                               setTimeout(() => { levelUpGuardRef.current = false; }, 0);
                               return 0;
                             }
@@ -5633,10 +5741,8 @@ export default function App() {
                           if (!levelUpGuardRef.current) {
                             levelUpGuardRef.current = true;
                             const nextLevel = playerLevel + 1;
-                            if (nextLevel <= MAX_LEVEL_WITH_CUSTOM_UNLOCK_POPUP) {
-                              setLevelUpPopup({ isVisible: true, level: nextLevel });
-                            } else {
-                              setPlayerLevel((l) => l + 1);
+                            showLevelUpForNextLevel(nextLevel);
+                            if (nextLevel > MAX_LEVEL_WITH_CUSTOM_UNLOCK_POPUP) {
                               setTimeout(() => { levelUpGuardRef.current = false; }, 0);
                               return 0;
                             }
@@ -5880,32 +5986,47 @@ export default function App() {
                 </div>
               </div>
 
-              {activeScreen === 'FARM' ? (
+              {activeScreen === 'FARM' && farmFloatingButtonsVisible ? (
                 <>
-                  <FloatingButtonStack side="left">
-                    <FloatingButtonStarterPack
-                      onClick={() => {
-                        playSfx(SFX_IDS.uiConfirmNormal);
-                        setIapOfferUi({ offerId: STORE_IAP_OFFER_STARTER_PACK_ID });
-                      }}
-                    />
-                    <FloatingButton
-                      title="NO ADS"
-                      iconSrc={assetPath('/assets/icons/icon_fb_noads.png')}
-                      onClick={() => {
-                        playSfx(SFX_IDS.uiConfirmNormal);
-                        setIapOfferUi({ offerId: STORE_IAP_OFFER_REMOVE_ADS_ID });
-                      }}
-                    />
-                  </FloatingButtonStack>
+                  <FarmLeftFloatingButtonStack
+                    activeBoosts={activeBoosts}
+                    starterPackPurchased={starterPackPurchased}
+                    starterPackUnlocked={starterPackUnlocked}
+                    starterPackCountdownRefreshKey={starterPackCountdownRefreshKey}
+                    onStarterPackClick={() => {
+                      playSfx(SFX_IDS.uiConfirmNormal);
+                      setIapOfferUi({ offerId: STORE_IAP_OFFER_STARTER_PACK_ID });
+                    }}
+                    onNoAdsClick={() => {
+                      playSfx(SFX_IDS.uiConfirmNormal);
+                      setIapOfferUi({ offerId: STORE_IAP_OFFER_REMOVE_ADS_ID });
+                    }}
+                    onCoinBoostClick={() => {
+                      playSfx(SFX_IDS.uiConfirmNormal);
+                      setActiveScreen('STORE');
+                      setStoreScrollToCoinSectionRequest((n) => n + 1);
+                    }}
+                  />
                   <FloatingButtonStack side="right">
                     <FloatingButton
                       title="TASKS"
-                      iconSrc={assetPath('/assets/icons/icon_fb_tasks_normal.png')}
+                      locked={playerLevel < TASKS_FLOATING_BUTTON_UNLOCK_LEVEL}
+                      unlockLevel={TASKS_FLOATING_BUTTON_UNLOCK_LEVEL}
+                      iconSrc={assetPath(
+                        playerLevel >= TASKS_FLOATING_BUTTON_UNLOCK_LEVEL
+                          ? '/assets/icons/icon_fb_tasks_normal.png'
+                          : '/assets/icons/icon_fb_tasks_locked.png',
+                      )}
                     />
                     <FloatingButton
                       title="Gardens"
-                      iconSrc={assetPath('/assets/icons/icon_fb_gardens.png')}
+                      locked={playerLevel < GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL}
+                      unlockLevel={GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL}
+                      iconSrc={assetPath(
+                        playerLevel >= GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL
+                          ? '/assets/icons/icon_fb_gardens.png'
+                          : '/assets/icons/icon_fb_gardens_locked.png',
+                      )}
                     />
                   </FloatingButtonStack>
                 </>
@@ -7179,6 +7300,7 @@ export default function App() {
                   playSfx(SFX_IDS.uiConfirmNormal);
                   // FTUE 11 is fully closed: from now on we save progress + allow offline earnings.
                   ftue11PersistenceEnabledRef.current = true;
+                  setFarmFloatingButtonsVisible(true);
                   persistGameSnapshotRef.current();
                   setActiveFtueStage(null);
                   setFtue11ThreePlantGoalWindowActive(true);
@@ -7356,10 +7478,10 @@ export default function App() {
                     ) : undefined
                   }
                   buttonText={unlockInfo.levelUpButtonText}
-                  showGoldenPotAvailableRow={levelUpPopup.level >= 6}
+                  showGoldenPotAvailableRow={levelUpPopup.level >= PLANT_COLLECTION_UI_UNLOCK_LEVEL}
                   onUnlockNowImmediate={({ startPoint }) => {
                     playSfx(SFX_IDS.uiConfirmReward);
-                    if (levelUpPopup.level < 6 || !containerRef.current) return;
+                    if (levelUpPopup.level < PLANT_COLLECTION_UI_UNLOCK_LEVEL || !containerRef.current) return;
                     const cr = containerRef.current.getBoundingClientRect();
                     const scale = appScaleRef.current || 1;
                     setActiveBarnParticles((prev) => [
@@ -7397,18 +7519,6 @@ export default function App() {
                       if (!collectionFtueCompleted) {
                         setCollectionFtuePhase('intro_cta');
                       }
-                    }
-                    if (unlockInfo.upgradeId === 'seed_surplus') {
-                      setSeedsState((prev) => ({
-                        ...prev,
-                        seed_surplus: { level: 1, progress: 0 },
-                      }));
-                    }
-                    if (unlockInfo.upgradeId === 'merge_harvest') {
-                      setCropsState((prev) => ({
-                        ...prev,
-                        merge_harvest: { level: 1, progress: 0 },
-                      }));
                     }
                     if (unlockInfo.tab && ftueUpgradePanelVisible && !unlockInfo.navigateToBarnOnUnlock) {
                       setIsExpanded(true);
@@ -7588,18 +7698,26 @@ export default function App() {
                     isStarterPackPopup ? 'starter' : isRemoveAdsPopup ? 'removeAds' : undefined
                   }
                   limitedOfferCountdownStorageKey={
-                    isStarterPackPopup
+                    isStarterPackPopup && readStarterPackUnlocked()
                       ? (config as StoreBundleOfferConfig).limitedOfferCountdownStorageKey
                       : undefined
                   }
                   limitedOfferCountdownDurationMs={
-                    isStarterPackPopup
+                    isStarterPackPopup && readStarterPackUnlocked()
                       ? (config as StoreBundleOfferConfig).limitedOfferCountdownDurationMs
                       : undefined
                   }
                   onClose={() => {
                     lastOtherPopupClosedAtRef.current = Date.now();
                     setIapOfferUi(null);
+                    const pendingLevel = pendingLevelUpAfterStarterPackRef.current;
+                    if (pendingLevel != null) {
+                      pendingLevelUpAfterStarterPackRef.current = null;
+                      setPlayerLevel(pendingLevel);
+                      setPlayerLevelProgress(0);
+                      setPlayerLevelFlashTrigger((t) => t + 1);
+                      levelUpGuardRef.current = false;
+                    }
                   }}
                   onPurchase={() => {
                     completePremiumStorePurchase(iapOfferUi.offerId);
@@ -7761,29 +7879,8 @@ export default function App() {
                 closeOnButtonClick={false}
                 onCloseButtonClick={() => {
                   if (limitedOfferPopup.activeBoostEndTime != null) return;
-                  // Open upgrade panel, scroll to offer, flash yellow (popup unmount + cooldown refs run in onClose after fade-out)
                   if (limitedOfferPopup.offerId) {
-                    const offerId = limitedOfferPopup.offerId;
-                    const offerConfig = getOfferById(offerId);
-                    if (offerConfig && !isStorePremiumOnlyOfferId(offerId)) {
-                      setRewardedOffers(prev => {
-                        if (prev.some(o => o.id === offerId)) return prev;
-                        return [...prev, {
-                          id: offerConfig.id,
-                          name: offerConfig.title,
-                          icon: offerConfig.headerIcon,
-                          description: offerConfig.description,
-                          tab: offerConfig.upgradeTab,
-                          timeRemaining: 60,
-                        }];
-                      });
-                      if (ftueUpgradePanelVisible) {
-                        setIsExpanded(true);
-                        setActiveTab(offerConfig.upgradeTab);
-                        setPendingOfferHighlightId(offerId);
-                      }
-                    }
-                    setTimeout(() => setPendingOfferHighlightId(null), 2500);
+                    notifyLimitedOfferSoft(limitedOfferPopup.offerId);
                   }
                 }}
                 title={limitedOfferPopup.title}
@@ -7949,6 +8046,14 @@ export default function App() {
                 setActiveBoosts([]);
                 setStoreFreeOfferSlots(pickInitialStoreFreeOfferSlots());
                 setStoreSlotCooldownEnds([0, 0]);
+                if (starterPackUnlocked && !readStarterPackUnlocked()) {
+                  markStarterPackUnlocked();
+                }
+                if (restoreStarterPackOfferAfterClearBoosts()) {
+                  setStarterPackPurchased(false);
+                  setStarterPackUnlocked(true);
+                  setStarterPackCountdownRefreshKey((k) => k + 1);
+                }
               }}
               onResetProgress={() => {
                 if (
@@ -7989,6 +8094,13 @@ export default function App() {
               onLevelUpClick={() => {
                 playSfx(SFX_IDS.uiConfirmNormal);
                 const nextLevel = playerLevel + 1;
+                if (nextLevel === STARTER_PACK_FORCE_POPUP_LEVEL) {
+                  markStarterPackUnlocked();
+                  setStarterPackUnlocked(true);
+                  pendingLevelUpAfterStarterPackRef.current = nextLevel;
+                  setIapOfferUi({ offerId: STORE_IAP_OFFER_STARTER_PACK_ID });
+                  return;
+                }
                 setPlayerLevel(nextLevel);
                 setPlayerLevelProgress(0);
                 setPlayerLevelFlashTrigger((t) => t + 1);
@@ -8025,6 +8137,11 @@ export default function App() {
                 suppressGameSaveRef.current = true;
                 setAutoMergeMode(false);
                 try { localStorage.removeItem(STORE_STARTER_PACK_COUNTDOWN_END_MS_KEY); } catch { /* ignore */ }
+                try { localStorage.removeItem(STORE_STARTER_PACK_UNLOCKED_KEY); } catch { /* ignore */ }
+                try { localStorage.removeItem(STORE_STARTER_PACK_PURCHASED_KEY); } catch { /* ignore */ }
+                setStarterPackUnlocked(false);
+                setStarterPackPurchased(false);
+                setStarterPackCountdownRefreshKey((k) => k + 1);
                 persistGameSave(createPostFtueCleanSave());
                 window.location.reload();
               }}

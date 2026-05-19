@@ -1,27 +1,25 @@
 import React from 'react';
 import { FloatingButton } from './FloatingButton';
-import { useLimitedOfferCountdown } from '../hooks/useLimitedOfferCountdown';
+import { useStarterPackCountdown } from '../hooks/useStarterPackCountdown';
 import { formatBundleLimitedCountdown } from '../utils/limitedOfferCountdown';
 import { assetPath } from '../utils/assetPath';
-import { STORE_BUNDLE_OFFERS, STORE_IAP_OFFER_STARTER_PACK_ID } from '../offers';
-
-const STARTER_PACK_OFFER = STORE_BUNDLE_OFFERS.find((offer) => offer.id === STORE_IAP_OFFER_STARTER_PACK_ID);
 
 export interface FloatingButtonStarterPackProps {
+  starterPackUnlocked: boolean;
+  starterPackCountdownRefreshKey?: number;
   onClick?: () => void;
   className?: string;
   style?: React.CSSProperties;
 }
 
 export const FloatingButtonStarterPack: React.FC<FloatingButtonStarterPackProps> = ({
+  starterPackUnlocked,
+  starterPackCountdownRefreshKey = 0,
   onClick,
   className,
   style,
 }) => {
-  const remainingMs = useLimitedOfferCountdown(
-    STARTER_PACK_OFFER?.limitedOfferCountdownStorageKey,
-    STARTER_PACK_OFFER?.limitedOfferCountdownDurationMs,
-  );
+  const remainingMs = useStarterPackCountdown(starterPackUnlocked, starterPackCountdownRefreshKey);
   const pillLabel = formatBundleLimitedCountdown(remainingMs);
 
   return (

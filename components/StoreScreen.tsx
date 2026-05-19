@@ -3,7 +3,14 @@ import { PageHeader } from './PageHeader';
 import { assetPath } from '../utils/assetPath';
 import type { ActiveBoostData } from './ActiveBoostIndicator';
 import { ACTIVE_BOOST_INDICATOR_SIZE_PX } from './ActiveBoostIndicator';
-import { getOfferById, STORE_BUNDLE_OFFERS, STORE_COIN_OFFERS, STORE_FREE_OFFER_HEADER_ICON_PX } from '../offers';
+import {
+  getOfferById,
+  STORE_BUNDLE_OFFERS,
+  STORE_COIN_OFFERS,
+  STORE_FREE_OFFER_HEADER_ICON_PX,
+  STORE_IAP_OFFER_STARTER_PACK_ID,
+} from '../offers';
+import { useStarterPackCountdown } from '../hooks/useStarterPackCountdown';
 import { StoreBundleOffer } from './StoreBundleOffer';
 import { StoreCoinOffer } from './StoreCoinOffer';
 
@@ -27,6 +34,9 @@ const STORE_TOP_CHROME_BELOW_HEADER_PX = 10;
 const STORE_MASK_LINE_ABOVE_SCROLL_PX = 3;
 /** Extra space below the last store row when scrolled to the end. */
 const STORE_SCROLL_CONTENT_PADDING_BOTTOM_PX = 10;
+/** Wait for farm → store horizontal slide before programmatic scroll. */
+const STORE_SCROLL_TO_COIN_SECTION_DELAY_MS = 720;
+const STORE_SCROLL_TO_COIN_SECTION_DURATION_MS = 650;
 const STORE_TOP_CHROME_BROWN = '#432f2a';
 const STORE_MASK_LINE_COLOR = '#775041';
 
@@ -287,6 +297,13 @@ interface StoreScreenProps {
   onStoreSlotCooldownEnded?: (slotIndex: number) => void;
   /** Real-money coin pack row (IAP placeholder). */
   onStoreCoinPurchase?: (offerId: string) => void;
+  /** Increment to animate scroll to the coin IAP section (e.g. Coin Boost floating button). */
+  scrollToCoinSectionRequest?: number;
+  /** When true, starter pack bundle row is hidden (purchased only). */
+  starterPackPurchased?: boolean;
+  /** After level-4 unlock popup; enables the 24h countdown in store + farm FB. */
+  starterPackUnlocked?: boolean;
+  starterPackCountdownRefreshKey?: number;
 }
 
 export const StoreScreen: React.FC<StoreScreenProps> = ({
@@ -304,15 +321,84 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
   storeSlotCooldownEnds = [0, 0],
   onStoreSlotCooldownEnded,
   onStoreCoinPurchase,
+  scrollToCoinSectionRequest = 0,
+  starterPackPurchased = false,
+  starterPackUnlocked = false,
+  starterPackCountdownRefreshKey = 0,
 }) => {
+  const starterPackRemainingMs = useStarterPackCountdown(
+    starterPackUnlocked,
+    starterPackCountdownRefreshKey,
+  );
+  const visibleBundleOffers = React.useMemo(
+    () =>
+      STORE_BUNDLE_OFFERS.filter((o) => {
+        if (o.id !== STORE_IAP_OFFER_STARTER_PACK_ID) return true;
+        if (starterPackPurchased) return false;
+        return starterPackUnlocked && starterPackRemainingMs > 0;
+      }),
+    [starterPackPurchased, starterPackUnlocked, starterPackRemainingMs],
+  );
   // Store scroll: reuse Shed/Barn-style momentum drag, but move the store top-ui list with transforms.
   // This avoids relying on native scroll (which isn't responding correctly on mobile in this screen).
   const storeScrollRef = useRef<HTMLDivElement | null>(null);
   const storeContentRef = useRef<HTMLDivElement | null>(null);
+  const storeCoinSectionRef = useRef<HTMLDivElement | null>(null);
 
   const [storeScrollY, setStoreScrollY] = useState(0);
   const storeScrollYRef = useRef(0);
   storeScrollYRef.current = storeScrollY;
+
+  const getStoreMaxScroll = () => {
+    const el = storeScrollRef.current;
+    const contentEl = storeContentRef.current;
+    if (!el || !contentEl) return 0;
+    return Math.max(0, contentEl.offsetHeight - el.clientHeight);
+  };
+
+  useEffect(() => {
+    if (!scrollToCoinSectionRequest) return;
+
+    let rafId: number | undefined;
+    const timer = window.setTimeout(() => {
+      const maxScroll = getStoreMaxScroll();
+      const coinSection = storeCoinSectionRef.current;
+      const viewportHeight = storeScrollRef.current?.clientHeight ?? 0;
+      let targetScroll = maxScroll;
+      if (coinSection && viewportHeight > 0) {
+        const coinTop = coinSection.offsetTop;
+        const coinHeight = coinSection.offsetHeight;
+        targetScroll = Math.min(
+          maxScroll,
+          Math.max(0, coinTop - Math.max(0, viewportHeight - coinHeight)),
+        );
+      }
+
+      const startScroll = storeScrollYRef.current;
+      const distance = targetScroll - startScroll;
+      if (Math.abs(distance) < 1) {
+        storeScrollYRef.current = targetScroll;
+        setStoreScrollY(targetScroll);
+        return;
+      }
+
+      const startTime = performance.now();
+      const tick = (now: number) => {
+        const t = Math.min(1, (now - startTime) / STORE_SCROLL_TO_COIN_SECTION_DURATION_MS);
+        const eased = 1 - (1 - t) ** 3;
+        const next = startScroll + distance * eased;
+        storeScrollYRef.current = next;
+        setStoreScrollY(next);
+        if (t < 1) rafId = requestAnimationFrame(tick);
+      };
+      rafId = requestAnimationFrame(tick);
+    }, STORE_SCROLL_TO_COIN_SECTION_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+      if (rafId) cancelAnimationFrame(rafId);
+    };
+  }, [scrollToCoinSectionRequest]);
 
   useEffect(() => {
     const el = storeScrollRef.current;
@@ -581,17 +667,29 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
               />
             </div>
 
-            {/* Blue divider between mediums and large */}
+            {/* Purple divider between mediums and large */}
             <img
-              src={assetPath('/assets/popups/popup_divider_blue.png')}
+              src={assetPath('/assets/popups/popup_divider_purple.png')}
               alt=""
               className="w-[300px] max-w-none h-auto mt-1 mb-1"
             />
 
             {/* Store bundles (`ui_store_large`) — overlay layout matches coin booster rows. */}
             <div className="flex flex-col items-center gap-0 w-full mt-0">
-              {STORE_BUNDLE_OFFERS.map((config) => (
-                <StoreBundleOffer key={config.id} config={config} onPurchase={onStoreCoinPurchase} />
+              {visibleBundleOffers.map((config) => (
+                <StoreBundleOffer
+                  key={config.id}
+                  config={config}
+                  onPurchase={onStoreCoinPurchase}
+                  limitedOfferCountdownEnabled={
+                    config.id !== STORE_IAP_OFFER_STARTER_PACK_ID || starterPackUnlocked
+                  }
+                  limitedOfferCountdownRefreshKey={
+                    config.id === STORE_IAP_OFFER_STARTER_PACK_ID
+                      ? starterPackCountdownRefreshKey
+                      : 0
+                  }
+                />
               ))}
             </div>
 
@@ -603,7 +701,7 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
             />
 
             {/* Coin IAP rows — order = `STORE_COIN_OFFERS` in offers.ts (shuffle freely). */}
-            <div className="flex flex-col items-center gap-0 w-full mt-0">
+            <div ref={storeCoinSectionRef} className="flex flex-col items-center gap-0 w-full mt-0">
               {STORE_COIN_OFFERS.map((config) => (
                 <StoreCoinOffer key={config.id} config={config} onPurchase={onStoreCoinPurchase} />
               ))}

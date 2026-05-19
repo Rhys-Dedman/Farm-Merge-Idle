@@ -13,10 +13,21 @@ export function formatBundleLimitedCountdown(remainingMs: number): string {
   return `${sec}s`;
 }
 
-export function readLimitedOfferCountdownEndMs(storageKey: string, durationMs: number): number {
+export type ReadLimitedOfferCountdownOptions = {
+  /** When false, returns 0 if no end timestamp exists yet (does not start the timer). Default true. */
+  autoStart?: boolean;
+};
+
+export function readLimitedOfferCountdownEndMs(
+  storageKey: string,
+  durationMs: number,
+  options?: ReadLimitedOfferCountdownOptions,
+): number {
+  const autoStart = options?.autoStart !== false;
   try {
     const raw = localStorage.getItem(storageKey);
     if (raw == null) {
+      if (!autoStart) return 0;
       const endMs = Date.now() + durationMs;
       localStorage.setItem(storageKey, String(endMs));
       return endMs;

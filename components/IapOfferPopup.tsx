@@ -349,7 +349,7 @@ export const IapOfferPopup: React.FC<IapOfferPopupProps> = ({
   return (
     <div 
       className="fixed inset-0 flex items-center justify-center"
-      style={{ zIndex: 115, overflow: 'hidden', paddingTop: 'clamp(28px, 5vh, 52px)', pointerEvents: isPreflight ? 'none' : 'auto' }}
+      style={{ zIndex: 100, overflow: 'hidden', paddingTop: 'clamp(28px, 5vh, 52px)', pointerEvents: isPreflight ? 'none' : 'auto' }}
     >
 {/* Backdrop - not scaled, covers full screen */}
       <div
@@ -362,6 +362,7 @@ export const IapOfferPopup: React.FC<IapOfferPopupProps> = ({
           backgroundColor: 'rgba(0, 0, 0, 0.7)',
           opacity: isLeaving || isPreflight ? 0 : 1,
         }}
+        onClick={dismissPopup}
         aria-hidden
       />
 

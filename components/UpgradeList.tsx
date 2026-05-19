@@ -5,9 +5,12 @@ import { assetPath } from '../utils/assetPath';
 import { playSfx, SFX_IDS } from '../utils/sfx';
 import { getPlantCoinValue } from '../utils/plantValue';
 import {
+  MAX_LEVEL_WITH_CUSTOM_UNLOCK_POPUP,
+  WILD_GROWTH_UNLOCK_PLAYER_LEVEL,
+} from '../constants/playerLevelUnlocks';
+import {
   getWildGrowthDisplaySecForLevel,
   isWildGrowthMaxLevel,
-  WILD_GROWTH_UNLOCK_PLAYER_LEVEL,
 } from '../utils/wildGrowth';
 import { PlantWithPot } from './PlantWithPot';
 import { hasGoldenPotHarvest150, hasGoldenPotProduction150 } from '../constants/goldenPotBonuses';
@@ -244,24 +247,22 @@ const SEEDS_UPGRADES: UpgradeDef[] = [
 
 const SEEDS_UNLOCK_LEVELS: Record<string, number> = {
   seed_production: 1,
-  seed_storage: 2, // Storage Capacity: unlocks at level 2
-  double_seeds: 4,
-  bonus_seeds: 8,
+  double_seeds: 6,
+  bonus_seeds: 9,
 };
 
 const CROPS_UNLOCK_LEVELS: Record<string, number> = {
   harvest_speed: 1,
   plot_expansion: 2,
   wild_growth: WILD_GROWTH_UNLOCK_PLAYER_LEVEL,
-  crop_value: 9,
-  merge_harvest: 10,
+  crop_value: 11,
 };
 
 const HARVEST_UNLOCK_LEVELS: Record<string, number> = {
   customer_speed: 1,
   market_value: 3,
-  seed_surplus: 7,
-  happy_customer: 10,
+  seed_surplus: 3,
+  happy_customer: 12,
 };
 
 /** Pricing tier: controls per-purchase scaling multiplier. */
@@ -363,8 +364,7 @@ export function calculateUpgradeCost(upgradeId: string, currentLevel: number): n
   return cost;
 }
 
-/** Highest player level that shows a scripted unlock popup (Plant Collection at 5 … Happy Customers at 11). */
-export const MAX_LEVEL_WITH_CUSTOM_UNLOCK_POPUP = 10;
+export { MAX_LEVEL_WITH_CUSTOM_UNLOCK_POPUP };
 
 export type LevelUnlockInfo = {
   title: string;
@@ -397,9 +397,18 @@ export const getLevelUnlockInfo = (level: number): LevelUnlockInfo => {
   const allUnlocks: Row[] = [
     { level: 2, upgradeId: 'plot_expansion', tab: 'CROPS', name: 'Garden Expansion', description: 'Unlock additional plots in the garden', icon: 'icon_plotexpansion.png', popupDescription: 'You can now unlock additional plots in the garden' },
     { level: 3, upgradeId: 'market_value', tab: 'HARVEST', name: 'Market Value', description: 'Increase the coins earned when completing orders', icon: 'icon_marketvalue.png', popupDescription: 'You can now increase the coins earned when completing orders' },
-    { level: 4, upgradeId: 'double_seeds', tab: 'SEEDS', name: 'Double Seeds', description: 'Increase chance to spawn 2 seeds at a time', icon: 'icon_seedquality.png', popupDescription: 'Increase chance to spawn 2 seeds at a time' },
     {
       level: 5,
+      upgradeId: '',
+      tab: 'SEEDS',
+      name: 'Daily Tasks',
+      description: 'Complete daily tasks for rewards.',
+      icon: 'icon_fb_tasks_normal.png',
+      popupDescription: 'Daily Tasks are now available.',
+    },
+    { level: 6, upgradeId: 'double_seeds', tab: 'SEEDS', name: 'Double Seeds', description: 'Increase chance to spawn 2 seeds at a time', icon: 'icon_seedquality.png', popupDescription: 'Increase chance to spawn 2 seeds at a time' },
+    {
+      level: 7,
       upgradeId: '',
       tab: 'CROPS',
       name: 'Plant Collection',
@@ -410,11 +419,19 @@ export const getLevelUnlockInfo = (level: number): LevelUnlockInfo => {
       navigateToBarnOnUnlock: true,
       buttonText: 'View Collection',
     },
-    { level: 6, upgradeId: 'wild_growth', tab: 'CROPS', name: 'Wild Growth', description: 'Plants automatically duplicate over time', icon: 'icon_luckymerge.png', popupDescription: 'Plants in your garden will now automatically duplicate over time' },
-    { level: 7, upgradeId: 'seed_surplus', tab: 'HARVEST', name: 'Surplus Recharges', description: 'Increase coins gained from extra seed and harvest recharges', icon: 'icon_seedsurplus.png', popupDescription: 'Increase coins gained from extra seed and harvest recharges' },
-    { level: 8, upgradeId: 'bonus_seeds', tab: 'SEEDS', name: 'Lucky Seed', description: 'Increase chance to produce a bonus higher level seed', icon: 'icon_luckyseed.png', popupDescription: 'Seeds now have a chance to produce an extra higher level plant' },
-    { level: 9, upgradeId: 'crop_value', tab: 'CROPS', name: 'Crop Yield', description: 'Increase how many crops your plants produce when harvesting', icon: 'icon_cropvalue.png', popupDescription: 'You can now increase how many crops your plants produce when harvesting' },
-    { level: 10, upgradeId: 'happy_customer', tab: 'HARVEST', name: 'Happy Customers', description: 'Increase chance that customers pay double for orders', icon: 'icon_happycustomer.png', popupDescription: 'You can now increase the chance for customers to pay double coins for orders' },
+    { level: 8, upgradeId: 'wild_growth', tab: 'CROPS', name: 'Wild Growth', description: 'Plants automatically duplicate over time', icon: 'icon_luckymerge.png', popupDescription: 'Plants in your garden will now automatically duplicate over time' },
+    { level: 9, upgradeId: 'bonus_seeds', tab: 'SEEDS', name: 'Lucky Seed', description: 'Increase chance to produce a bonus higher level seed', icon: 'icon_luckyseed.png', popupDescription: 'Seeds now have a chance to produce an extra higher level plant' },
+    {
+      level: 10,
+      upgradeId: '',
+      tab: 'CROPS',
+      name: 'Gardens',
+      description: 'New garden areas to explore.',
+      icon: 'icon_fb_gardens.png',
+      popupDescription: 'New Gardens are now available.',
+    },
+    { level: 11, upgradeId: 'crop_value', tab: 'CROPS', name: 'Crop Yield', description: 'Increase how many crops your plants produce when harvesting', icon: 'icon_cropvalue.png', popupDescription: 'You can now increase how many crops your plants produce when harvesting' },
+    { level: 12, upgradeId: 'happy_customer', tab: 'HARVEST', name: 'Happy Customers', description: 'Increase chance that customers pay double for orders', icon: 'icon_happycustomer.png', popupDescription: 'You can now increase the chance for customers to pay double coins for orders' },
   ];
   const match = allUnlocks.find((u) => u.level === level);
   if (match) {
