@@ -312,7 +312,7 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
           }}
         >
           <img
-            src={assetPath('/assets/icons/icon_coin.png')}
+            src={assetPath('/assets/icons/coins/icon_coin.png')}
             alt=""
             className="w-full h-full object-contain"
             aria-hidden

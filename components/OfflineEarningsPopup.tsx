@@ -14,7 +14,7 @@ import {
   REWARD_PILL_STROKE_WIDTH_PX,
 } from './Reward';
 
-const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_1.png'), assetPath('/assets/vfx/particle_leaf_2.png')];
+const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_green_1.png'), assetPath('/assets/vfx/particle_leaf_green_2.png')];
 
 /** Same as Discovery popup coin reward row (`DiscoveryPopup`). */
 const DISCOVERY_COIN_REWARD_ICON_PX = Math.round(40 * 1.15);
@@ -249,7 +249,7 @@ export const OfflineEarningsPopup: React.FC<OfflineEarningsPopupProps> = ({
   const yellowPressed = '#f0c840';
   const yellowText = '#e6803a';
 
-  const headerIconSrc = assetPath('/assets/icons/icon_happycustomer.png');
+  const headerIconSrc = assetPath('/assets/icons/upgrades/icon_happycustomer.png');
 
   return (
     <div
@@ -354,7 +354,7 @@ export const OfflineEarningsPopup: React.FC<OfflineEarningsPopupProps> = ({
             style={{ width: '120px', height: '120px', top: '-20px', zIndex: 104 }}
           >
             <img
-              src={assetPath('/assets/popups/popup_header.png')}
+              src={assetPath('/assets/ui/popup_header.png')}
               alt=""
               className="absolute inset-0 w-full h-full object-contain"
               style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.25))' }}
@@ -410,7 +410,7 @@ export const OfflineEarningsPopup: React.FC<OfflineEarningsPopupProps> = ({
                   Welcome Back!
                 </h3>
                 <div className="w-full flex items-center justify-center" style={{ marginTop: '8px', marginBottom: '24px' }}>
-                  <img src={assetPath('/assets/popups/popup_divider.png')} alt="" className="h-auto object-contain" style={{ width: '520px' }} />
+                  <img src={assetPath('/assets/ui/popup_divider.png')} alt="" className="h-auto object-contain" style={{ width: '520px' }} />
                 </div>
                 <p
                   className="font-medium text-center leading-relaxed italic w-full"
@@ -448,7 +448,7 @@ export const OfflineEarningsPopup: React.FC<OfflineEarningsPopupProps> = ({
                   >
                     <img
                       ref={rewardCoinRef}
-                      src={assetPath('/assets/icons/icon_coin_small.png')}
+                      src={assetPath('/assets/icons/coins/icon_coin_small.png')}
                       alt=""
                       className="object-contain shrink-0"
                       style={{ width: `${DISCOVERY_COIN_REWARD_ICON_PX}px`, height: `${DISCOVERY_COIN_REWARD_ICON_PX}px` }}
@@ -491,7 +491,7 @@ export const OfflineEarningsPopup: React.FC<OfflineEarningsPopupProps> = ({
                     }}
                   >
                     <img
-                      src={assetPath('/assets/icons/icon_watchad.png')}
+                      src={assetPath('/assets/icons/generic_buttons/icon_watchad.png')}
                       alt=""
                       style={{
                         width: '60px',

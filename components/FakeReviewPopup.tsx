@@ -10,7 +10,7 @@ import { POPUP_PREFLIGHT_MIN_MS } from '../hooks/usePopupPreflightEnter';
 const GAME_DESIGN_WIDTH = 448;
 const GAME_DESIGN_HEIGHT = 796;
 const STAR_COUNT = 5;
-const STAR_ICON_GOLD = assetPath('/assets/icons/icon_star_gold.png');
+const STAR_ICON_GOLD = assetPath('/assets/icons/rateus/icon_star_gold.png');
 
 const GRADIENT_TOP = '#d4ec7a';
 const GRADIENT_BOTTOM = '#7cb342';

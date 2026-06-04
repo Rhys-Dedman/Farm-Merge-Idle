@@ -17,7 +17,7 @@ import {
   REWARD_PILL_STROKE_WIDTH_PX,
 } from './Reward';
 
-const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_1.png'), assetPath('/assets/vfx/particle_leaf_2.png')];
+const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_green_1.png'), assetPath('/assets/vfx/particle_leaf_green_2.png')];
 
 /** Coin icon in scaled panel — 15% larger than prior 40px (pre-scale coords). */
 const DISCOVERY_COIN_REWARD_ICON_PX = Math.round(40 * 1.15);
@@ -463,7 +463,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
         >
           {/* Header background sprite */}
           <img 
-            src={assetPath('/assets/popups/popup_header.png')} 
+            src={assetPath('/assets/ui/popup_header.png')} 
             alt="" 
             className="absolute inset-0 w-full h-full object-contain"
             style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.25))' }}
@@ -554,7 +554,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
           {/* Divider */}
           <div className="w-full flex items-center justify-center" style={{ marginTop: '8px', marginBottom: '24px' }}>
             <img 
-              src={assetPath('/assets/popups/popup_divider.png')} 
+              src={assetPath('/assets/ui/popup_divider.png')} 
               alt="" 
               className="h-auto object-contain"
               style={{ 
@@ -597,7 +597,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
             >
               <img
                 ref={rewardCoinRef}
-                src={assetPath('/assets/icons/icon_coin_small.png')}
+                src={assetPath('/assets/icons/coins/icon_coin_small.png')}
                 alt=""
                 className="object-contain shrink-0"
                 style={{ width: `${DISCOVERY_COIN_REWARD_ICON_PX}px`, height: `${DISCOVERY_COIN_REWARD_ICON_PX}px` }}

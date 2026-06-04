@@ -34,16 +34,16 @@ const PURCHASE_POPUP_REWARD_STACK_STEP_PX =
   REWARD_PILL_HEIGHT_PX * PURCHASE_POPUP_REWARD_SCALE + PURCHASE_POPUP_REWARD_PILL_GAP_PX;
 
 const DEFAULT_IAP_LEAF_BURST_SPRITES = [
-  assetPath('/assets/vfx/particle_leaf_1.png'),
-  assetPath('/assets/vfx/particle_leaf_2.png'),
+  assetPath('/assets/vfx/particle_leaf_green_1.png'),
+  assetPath('/assets/vfx/particle_leaf_green_2.png'),
 ];
 const STARTER_PACK_IAP_LEAF_BURST_SPRITES = [
-  assetPath('/assets/vfx/particle_leaf_11.png'),
-  assetPath('/assets/vfx/particle_leaf_12.png'),
+  assetPath('/assets/vfx/particle_leaf_purple_1.png'),
+  assetPath('/assets/vfx/particle_leaf_purple_2.png'),
 ];
 const REMOVE_ADS_IAP_LEAF_BURST_SPRITES = [
-  assetPath('/assets/vfx/particle_leaf_9.png'),
-  assetPath('/assets/vfx/particle_leaf_10.png'),
+  assetPath('/assets/vfx/particle_leaf_red_1.png'),
+  assetPath('/assets/vfx/particle_leaf_red_2.png'),
 ];
 
 interface LeafParticle {
@@ -195,7 +195,7 @@ export const IapOfferPopup: React.FC<IapOfferPopupProps> = ({
     Boolean(limitedOfferCountdownStorageKey && limitedOfferCountdownDurationMs) &&
     limitedOfferRemainingMs > 0;
 
-  const headerRing = headerRingSrc ?? assetPath('/assets/popups/popup_header.png');
+  const headerRing = headerRingSrc ?? assetPath('/assets/ui/popup_header.png');
   const [animState, setAnimState] = useState<PopupAnimWithPreflight>('hidden');
   const [assetsReady, setAssetsReady] = useState(false);
   const [leaves, setLeaves] = useState<LeafParticle[]>([]);

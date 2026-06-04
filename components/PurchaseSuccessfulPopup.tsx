@@ -25,7 +25,7 @@ const PURCHASE_POPUP_REWARD_PILL_GAP_PX = 4;
 const PURCHASE_POPUP_REWARD_STACK_STEP_PX =
   REWARD_PILL_HEIGHT_PX * PURCHASE_POPUP_REWARD_SCALE + PURCHASE_POPUP_REWARD_PILL_GAP_PX;
 
-const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_1.png'), assetPath('/assets/vfx/particle_leaf_2.png')];
+const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_green_1.png'), assetPath('/assets/vfx/particle_leaf_green_2.png')];
 
 interface LeafParticle {
   id: number;
@@ -398,7 +398,7 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
         >
           {/* Header background sprite */}
           <img 
-            src={assetPath('/assets/popups/popup_header.png')} 
+            src={assetPath('/assets/ui/popup_header.png')} 
             alt="" 
             className="absolute inset-0 w-full h-full object-contain"
             style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.25))' }}
@@ -455,7 +455,7 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
           {/* Divider */}
           <div className="w-full flex items-center justify-center" style={{ marginTop: '8px', marginBottom: '24px' }}>
             <img 
-              src={assetPath('/assets/popups/popup_divider.png')} 
+              src={assetPath('/assets/ui/popup_divider.png')} 
               alt="" 
               className="h-auto object-contain"
               style={{ 

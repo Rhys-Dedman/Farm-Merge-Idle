@@ -61,7 +61,7 @@ export const CollectionGardenNavFinger: React.FC<CollectionGardenNavFingerProps>
         }
       `}</style>
       <img
-        src={assetPath('/assets/icons/icon_finger.png')}
+        src={assetPath('/assets/ui/ui_finger.png')}
         alt=""
         className="w-full h-full object-contain"
         draggable={false}

@@ -27,9 +27,9 @@ export interface UpgradeTabsRef {
 }
 
 const TAB_ICONS: Record<TabType, string> = {
-  SEEDS: assetPath('/assets/icons/emoji_seed.png'),
-  CROPS: assetPath('/assets/icons/emoji_sunflower.png'),
-  HARVEST: assetPath('/assets/icons/emoji_coin.png'),
+  SEEDS: assetPath('/assets/icons/generic_buttons/emoji_seed.png'),
+  CROPS: assetPath('/assets/icons/generic_buttons/emoji_sunflower.png'),
+  HARVEST: assetPath('/assets/icons/generic_buttons/emoji_coin.png'),
 };
 
 const TAB_LABELS: Record<TabType, string> = {

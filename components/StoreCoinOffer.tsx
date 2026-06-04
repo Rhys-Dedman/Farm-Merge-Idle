@@ -22,7 +22,7 @@ import {
 /** Space below each row in the layout flow. */
 const STORE_SMALL_ROW_MARGIN_BOTTOM_PX = 0;
 
-const STORE_COIN_ROW_BACKGROUND_DEFAULT = '/assets/topui/ui_store_small.png';
+const STORE_COIN_ROW_BACKGROUND_DEFAULT = '/assets/ui/ui_store_small.png';
 
 export interface StoreCoinOfferProps {
   config: StoreCoinOfferConfig;

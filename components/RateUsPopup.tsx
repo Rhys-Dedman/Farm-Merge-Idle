@@ -8,8 +8,8 @@ import { LeafBurst, LEAF_BURST_SMALL_COUNT } from './LeafBurst';
 import { PopupVectorBackground } from './PopupVectorBackground';
 
 const LEAF_SPRITES = [
-  assetPath('/assets/vfx/particle_leaf_3.png'),
-  assetPath('/assets/vfx/particle_leaf_4.png'),
+  assetPath('/assets/vfx/particle_leaf_yellow_1.png'),
+  assetPath('/assets/vfx/particle_leaf_yellow_2.png'),
 ];
 
 interface LeafParticle {
@@ -78,9 +78,9 @@ function createPopupLeaves(): LeafParticle[] {
   });
 }
 
-const STAR_ICON_BROWN = assetPath('/assets/icons/icon_star_brown.png');
-const STAR_ICON_GOLD = assetPath('/assets/icons/icon_star_gold.png');
-const HEADER_ICON = assetPath('/assets/icons/icon_star_gold.png');
+const STAR_ICON_BROWN = assetPath('/assets/icons/rateus/icon_star_brown.png');
+const STAR_ICON_GOLD = assetPath('/assets/icons/rateus/icon_star_gold.png');
+const HEADER_ICON = assetPath('/assets/icons/rateus/icon_star_gold.png');
 const HEADER_ICON_PX = 70;
 const STAR_ICON_PX = 90;
 const STAR_COUNT = 5;
@@ -490,7 +490,7 @@ export const RateUsPopup: React.FC<RateUsPopupProps> = ({
             }}
           >
             <img
-              src={assetPath('/assets/popups/popup_header_yellow.png')}
+              src={assetPath('/assets/ui/popup_header_yellow.png')}
               alt=""
               decoding="sync"
               className="absolute inset-0 w-full h-full object-contain"
@@ -553,7 +553,7 @@ export const RateUsPopup: React.FC<RateUsPopupProps> = ({
                   }}
                 >
                   <img
-                    src={assetPath('/assets/popups/popup_divider_yellow.png')}
+                    src={assetPath('/assets/ui/popup_divider_yellow.png')}
                     alt=""
                     decoding="sync"
                     className="h-auto object-contain"

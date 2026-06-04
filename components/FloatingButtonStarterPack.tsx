@@ -27,7 +27,7 @@ export const FloatingButtonStarterPack: React.FC<FloatingButtonStarterPackProps>
       title="Starter Pack"
       pillLabel={pillLabel}
       pillUppercase={false}
-      iconSrc={assetPath('/assets/icons/icon_fb_starterpack.png')}
+      iconSrc={assetPath('/assets/icons/floating_buttons/icon_fb_starterpack.png')}
       aria-label={`Starter Pack, ${pillLabel} remaining`}
       onClick={onClick}
       className={className}

@@ -332,7 +332,7 @@ function normalizeBoostOfferIdForMerge(offerId: string | undefined): string | un
 function boostIconForOfferId(offerId: string, fallbackIcon?: string): string {
   if (isCoinMultiplierBoostId(offerId)) return DOUBLE_COINS_HEADER_ICON;
   const o = getOfferById(offerId);
-  return o?.headerIcon ?? fallbackIcon ?? '/assets/icons/icon_seedproduction.png';
+  return o?.headerIcon ?? fallbackIcon ?? '/assets/icons/upgrades/icon_seedproduction.png';
 }
 
 function predictBoostParticleTargetSlot(prev: ActiveBoostData[], offerId: string | undefined): number {
@@ -361,7 +361,7 @@ function applyBoostParticleImpact(prev: ActiveBoostData[], data: BoostParticleDa
         id: `boost-${now}`,
         endTime: now + added,
         durationMs: added,
-        icon: data.icon ?? '/assets/icons/icon_seedproduction.png',
+        icon: data.icon ?? '/assets/icons/upgrades/icon_seedproduction.png',
         offerId: data.offerId,
       },
     ];
@@ -682,13 +682,13 @@ function useAnimatedPanelHeight(isExpanded: boolean) {
 
 // Preload popup assets on module load to prevent flash of unstyled content
 const POPUP_ASSETS_TO_PRELOAD = [
-  assetPath('/assets/popups/popup_header.png'),
-  assetPath('/assets/popups/popup_divider.png'),
-  assetPath('/assets/vfx/particle_leaf_1.png'),
-  assetPath('/assets/vfx/particle_leaf_2.png'),
-  assetPath('/assets/plants/plant_pot.png'),
-  assetPath('/assets/plants/plant_pot_m1.png'),
-  ...([1, 2, 3, 4, 5].map((n) => assetPath(`/assets/icons/icons_goals/icon_goal_${n}.png`))),
+  assetPath('/assets/ui/popup_header.png'),
+  assetPath('/assets/ui/popup_divider.png'),
+  assetPath('/assets/vfx/particle_leaf_green_1.png'),
+  assetPath('/assets/vfx/particle_leaf_green_2.png'),
+  assetPath('/assets/plants/pots/plant_pot.png'),
+  assetPath('/assets/plants/pots/plant_pot_m1.png'),
+  ...([1, 2, 3, 4, 5].map((n) => assetPath(`/assets/icons/goals/garden_1/icon_goal_${n}.png`))),
 ];
 
 POPUP_ASSETS_TO_PRELOAD.forEach((src) => {
@@ -698,7 +698,7 @@ POPUP_ASSETS_TO_PRELOAD.forEach((src) => {
 
 /** Goal icon for plant level: plant_N uses icon_goal_N.png (plants 1-24) */
 const getGoalIconForPlantLevel = (plantLevel: number): string =>
-  assetPath(`/assets/icons/icons_goals/icon_goal_${Math.max(1, Math.min(24, plantLevel))}.png`);
+  assetPath(`/assets/icons/goals/garden_1/icon_goal_${Math.max(1, Math.min(24, plantLevel))}.png`);
 
 /** Load + decode icon before goal bounce/transition so the sprite does not pop in mid-animation. */
 function preloadGoalOrderIcon(plantLevel: number): Promise<void> {
@@ -5584,7 +5584,7 @@ export default function App() {
               {/* 2. Background sprite: primary, on top of bleed; center pinned to hex grid; transition matches upgrade panel (700ms, cubic-bezier) */}
               <div className="absolute inset-0 pointer-events-none overflow-hidden z-[5]">
                 <img
-                  src={assetPath('/assets/background/background_grass.png')}
+                  src={assetPath('/assets/background/background_garden_1.png')}
                   alt=""
                   className="absolute flex-shrink-0 flex-grow-0"
                   style={{
@@ -5606,7 +5606,7 @@ export default function App() {
                 style={{ height: '280px' }}
               >
                 <img
-                  src={assetPath('/assets/topui/topui_gradient.png')}
+                  src={assetPath('/assets/ui/topui_gradient.png')}
                   alt=""
                   className="block w-full h-full"
                   style={{
@@ -5881,10 +5881,10 @@ export default function App() {
                     >
                       {showSlot && (
                         <>
-                          <img src={assetPath('/assets/goals/goal_shadow.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top transition-opacity duration-100" style={{ zIndex: 1, opacity: greenOpacity }} />
-                          <img src={assetPath('/assets/goals/goal_loading.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top transition-opacity duration-100" style={{ zIndex: 2, opacity: loadingOpacity }} />
+                          <img src={assetPath('/assets/ui/goal_shadow.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top transition-opacity duration-100" style={{ zIndex: 1, opacity: greenOpacity }} />
+                          <img src={assetPath('/assets/ui/goal_loading.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top transition-opacity duration-100" style={{ zIndex: 2, opacity: loadingOpacity }} />
                           <img
-                            src={assetPath('/assets/goals/goal_green.png')}
+                            src={assetPath('/assets/ui/goal_green.png')}
                             alt=""
                             className="absolute inset-0 w-full h-full object-contain object-top transition-opacity duration-100"
                             style={{
@@ -5892,9 +5892,9 @@ export default function App() {
                               opacity: greenOpacity * (showLightGreenDiscoveryFrame ? 0 : 1),
                             }}
                           />
-                          <img src={assetPath('/assets/goals/goal_yellow.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top" style={{ zIndex: 4, opacity: 0 }} />
+                          <img src={assetPath('/assets/ui/goal_yellow.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top" style={{ zIndex: 4, opacity: 0 }} />
                           <img
-                            src={assetPath('/assets/goals/goal_lightgreen.png')}
+                            src={assetPath('/assets/ui/goal_lightgreen.png')}
                             alt=""
                             className={`absolute inset-0 w-full h-full object-contain object-top ${goalImpactActive ? 'goal-impact-lightgreen' : ''}`}
                             style={{
@@ -5902,7 +5902,7 @@ export default function App() {
                               opacity: goalImpactActive ? undefined : showLightGreenDiscoveryFrame ? greenOpacity : 0,
                             }}
                           />
-                          <img src={assetPath('/assets/goals/goal_cream.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top" style={{ zIndex: 5, opacity: isCompletedState ? 1 : 0 }} />
+                          <img src={assetPath('/assets/ui/goal_cream.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top" style={{ zIndex: 5, opacity: isCompletedState ? 1 : 0 }} />
                           {showGreenContent && !showCompletedContent && (
                             <>
                               <img
@@ -5933,7 +5933,7 @@ export default function App() {
                           )}
                           {showCompletedContent && (
                             <>
-                              <img ref={goalIconRefs[slotIdx]} src={assetPath('/assets/icons/icon_coin.png')} alt="" className={`absolute left-1/2 object-contain pointer-events-none ${isBouncing ? 'goal-icon-bounce' : ''}`} style={{ zIndex: 6, bottom: '71%', width: 40, height: 40, transform: 'translate(-50%, -2px)' }} />
+                              <img ref={goalIconRefs[slotIdx]} src={assetPath('/assets/icons/coins/icon_coin.png')} alt="" className={`absolute left-1/2 object-contain pointer-events-none ${isBouncing ? 'goal-icon-bounce' : ''}`} style={{ zIndex: 6, bottom: '71%', width: 40, height: 40, transform: 'translate(-50%, -2px)' }} />
                               <span className="absolute left-1/2 font-bold pointer-events-none" style={{ zIndex: 6, bottom: '62%', color: '#c99959', fontSize: '15px', transform: 'translate(-50%, -1px)' }}>{formatCompactNumber(applyDoubleCoinsVisualAmount((goalCompletedValues[slotIdx] ?? 0) * (activeBoosts.some(b => b.offerId === 'happiest_customers') ? 2 : 1), activeBoosts))}</span>
                             </>
                           )}
@@ -6001,8 +6001,8 @@ export default function App() {
                       });
                     }}
                   >
-                    <img src={assetPath('/assets/goals/goal_shadow.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top" style={{ zIndex: 1, opacity: 0.4 }} />
-                    <img src={assetPath('/assets/goals/goal_yellow.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top" style={{ zIndex: 2 }} />
+                    <img src={assetPath('/assets/ui/goal_shadow.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top" style={{ zIndex: 1, opacity: 0.4 }} />
+                    <img src={assetPath('/assets/ui/goal_yellow.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top" style={{ zIndex: 2 }} />
                     <div className="absolute left-1/2 pointer-events-none" style={{ zIndex: 6, bottom: '70%', width: 42, height: 42, transform: 'translate(-50%, -1px)' }}>
                       <svg width="42" height="42" viewBox="0 0 42 42" className="absolute left-0 top-0 block" style={{ transform: 'rotate(-90deg)' }}>
                         <circle cx="21" cy="21" r="20" fill="transparent" stroke="#ea9940" strokeWidth="2.5" />
@@ -6018,7 +6018,7 @@ export default function App() {
                           style={{ strokeDashoffset: 2 * Math.PI * 20 * (1 - Math.max(0, coinGoalTimeRemaining) / 30), transition: 'stroke-dashoffset 0.2s linear' }}
                         />
                       </svg>
-                      <img ref={coinGoalIconRef} src={assetPath('/assets/icons/icon_coin_watchad.png')} alt="" className="object-contain absolute z-[1]" style={{ left: 1, top: 1, width: 40, height: 40, pointerEvents: 'none' }} />
+                      <img ref={coinGoalIconRef} src={assetPath('/assets/icons/coins/icon_coin_watchad.png')} alt="" className="object-contain absolute z-[1]" style={{ left: 1, top: 1, width: 40, height: 40, pointerEvents: 'none' }} />
                     </div>
                     <span className="absolute left-1/2 font-bold pointer-events-none" style={{ zIndex: 6, bottom: '62%', color: '#c77d34', fontSize: '13px', transform: 'translate(-50%, -1px)' }}>{formatCompactNumber(coinGoalValue * (activeBoosts.some(b => b.offerId === 'happiest_customers') ? 2 : 1))}</span>
                   </div>
@@ -6054,8 +6054,8 @@ export default function App() {
                       unlockLevel={TASKS_FLOATING_BUTTON_UNLOCK_LEVEL}
                       iconSrc={assetPath(
                         playerLevel >= TASKS_FLOATING_BUTTON_UNLOCK_LEVEL
-                          ? '/assets/icons/icon_fb_tasks_normal.png'
-                          : '/assets/icons/icon_fb_tasks_locked.png',
+                          ? '/assets/icons/floating_buttons/icon_fb_tasks_normal.png'
+                          : '/assets/icons/floating_buttons/icon_fb_tasks_locked.png',
                       )}
                     />
                     <FloatingButton
@@ -6064,8 +6064,8 @@ export default function App() {
                       unlockLevel={GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL}
                       iconSrc={assetPath(
                         playerLevel >= GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL
-                          ? '/assets/icons/icon_fb_gardens.png'
-                          : '/assets/icons/icon_fb_gardens_locked.png',
+                          ? '/assets/icons/floating_buttons/icon_fb_gardens.png'
+                          : '/assets/icons/floating_buttons/icon_fb_gardens_locked.png',
                       )}
                     />
                   </FloatingButtonStack>
@@ -6127,7 +6127,7 @@ export default function App() {
                     )}
 <SideAction
                         label="Plant"
-                        icon={assetPath(`/assets/plants/plant_${seedLevel}.png`)}
+                        icon={assetPath(`/assets/plants/garden_1/plant_${seedLevel}.png`)}
                         iconNode={<PlantWithPot level={seedLevel} mastered={plantMastery.unlockedLevels.includes(seedLevel)} wrapperClassName="h-full w-full" />}
                         iconScale={1.35}
                         iconOffsetY={-1}
@@ -6177,7 +6177,7 @@ export default function App() {
                     )}
                      <SideAction 
                         label="Harvest" 
-                        icon={assetPath('/assets/icons/icon_harvest.png')} 
+                        icon={assetPath('/assets/icons/upgrades/icon_harvest.png')} 
                         progress={harvestFreeMode ? 0 : harvestProgress / 100}
                         progressRef={harvestProgressRef}
                         color="#a7c957"
@@ -6358,14 +6358,14 @@ export default function App() {
               {/* Ambient leaves: two identical emitters (leaf 8 below, leaf 7 above); upgrade panel z-60 stays on top */}
               <AmbientFallingLeaves
                 enabled={!isLoading && activeScreen === 'FARM'}
-                spriteUrl={assetPath('/assets/vfx/particle_leaf_8.png')}
+                spriteUrl={assetPath('/assets/vfx/particle_leaf_background_shadow.png')}
                 zIndex={54}
                 spawnIntervalMs={6000}
                 noiseStrength={0.5}
               />
               <AmbientFallingLeaves
                 enabled={!isLoading && activeScreen === 'FARM'}
-                spriteUrl={assetPath('/assets/vfx/particle_leaf_7.png')}
+                spriteUrl={assetPath('/assets/vfx/particle_leaf_background_green.png')}
                 zIndex={55}
                 spawnIntervalMs={5000}
               />
@@ -6401,13 +6401,13 @@ export default function App() {
                 >
                   <div className="relative">
                     <img
-                      src={assetPath('/assets/topui/ui_upgradepanel_open.png')}
+                      src={assetPath('/assets/ui/ui_upgradepanel_open.png')}
                       alt=""
                       className="block"
                       style={{ width: 120, height: 'auto' }}
                     />
                     <img
-                      src={assetPath('/assets/topui/ui_upgradepanel_arrow.png')}
+                      src={assetPath('/assets/ui/ui_upgradepanel_arrow.png')}
                       alt=""
                       className="absolute left-1/2 top-1/2"
                       style={{
@@ -6572,7 +6572,7 @@ export default function App() {
                   {/* Background sprite: fixed size, centered behind content */}
                   <div className="absolute pointer-events-none" style={{ zIndex: 0, left: '50%', top: 0, transform: 'translateX(-50%)', overflow: 'visible' }}>
                     <img
-                      src={assetPath('/assets/background/background_barn.png')}
+                      src={assetPath('/assets/collection/background_collection.png')}
                       alt=""
                       style={{
                         width: '2000px',
@@ -6585,7 +6585,7 @@ export default function App() {
                   {/* Barn roof at the top - fixed pixel size, centered */}
                   <div className="relative pointer-events-none" style={{ zIndex: 1, overflow: 'visible' }}>
                     <img
-                      src={assetPath('/assets/barn/barn_roof.png')}
+                      src={assetPath('/assets/collection/collection_roof.png')}
                       alt="Barn Roof"
                       style={{
                         width: '800px',
@@ -6607,8 +6607,8 @@ export default function App() {
                       <img
                         src={
                           isPlantCollectionUiUnlocked
-                            ? assetPath('/assets/topui/ui_plantmastery.png')
-                            : assetPath('/assets/topui/ui_plantmastery_locked.png')
+                            ? assetPath('/assets/ui/ui_plantmastery.png')
+                            : assetPath('/assets/ui/ui_plantmastery_locked.png')
                         }
                         alt="Plant Collection"
                         style={{
@@ -6641,8 +6641,8 @@ export default function App() {
                             src={
                               assetPath(
                                 isPlantCollectionUiUnlocked
-                                  ? '/assets/popups/popup_divider.png'
-                                  : '/assets/popups/popup_divider_blue.png'
+                                  ? '/assets/ui/popup_divider.png'
+                                  : '/assets/ui/popup_divider_blue.png'
                               )
                             }
                             alt=""
@@ -6676,7 +6676,7 @@ export default function App() {
                                 style={{ marginLeft: 7, marginRight: -9, transform: 'translate(1px, -1px)' }}
                               >
                                 <img
-                                  src={assetPath('/assets/icons/icon_level.png')}
+                                  src={assetPath('/assets/ui/ui_level.png')}
                                   alt=""
                                   className="w-10 h-10 object-contain"
                                   draggable={false}
@@ -6884,7 +6884,7 @@ export default function App() {
                           }}
                         >
                           <img
-                            src={assetPath('/assets/barn/barn_shelf.png')}
+                            src={assetPath('/assets/collection/collection_shelf.png')}
                             alt={`Shelf ${shelfIndex + 1}`}
                             className="pointer-events-none"
                             style={{ width: '100%', height: 'auto' }}
@@ -7183,7 +7183,7 @@ export default function App() {
                   setFtue2FadingOut(false);
                 }}
                 blockBackdropClick={true}
-                header={{ icon: assetPath('/assets/icons/icon_happycustomer.png') }}
+                header={{ icon: assetPath('/assets/icons/upgrades/icon_happycustomer.png') }}
                 title="Welcome Gardener!"
                 showDivider={true}
                 description="Lets plant some seeds, grow some crops & make the customers happy"
@@ -7618,7 +7618,7 @@ export default function App() {
                   });
                 }}
                 title="New Discovery"
-                imageSrc={assetPath(`/assets/plants/plant_${Math.max(1, Math.min(24, discoveryPopup.level))}.png`)}
+                imageSrc={assetPath(`/assets/plants/garden_1/plant_${Math.max(1, Math.min(24, discoveryPopup.level))}.png`)}
                 imageLevel={discoveryPopup.level}
                 subtitle={getPlantData(discoveryPopup.level).name}
                 description={getPlantData(discoveryPopup.level).description}
@@ -7717,9 +7717,9 @@ export default function App() {
                   }
                   headerRingSrc={
                     isRemoveAdsPopup
-                      ? assetPath('/assets/popups/popup_header_red.png')
+                      ? assetPath('/assets/ui/popup_header_red.png')
                       : usesPremiumIapOfferChrome
-                        ? assetPath('/assets/popups/popup_header_purple.png')
+                        ? assetPath('/assets/ui/popup_header_purple.png')
                         : undefined
                   }
                   titleOffsetYPx={usesPremiumIapOfferChrome ? -10 : undefined}

@@ -353,7 +353,7 @@ export const CoinPanel: React.FC<CoinPanelProps> = ({
             }}
           >
             <img
-              src={assetPath('/assets/icons/icon_coin.png')}
+              src={assetPath('/assets/icons/coins/icon_coin.png')}
               alt=""
               className="shrink-0 object-contain"
               aria-hidden

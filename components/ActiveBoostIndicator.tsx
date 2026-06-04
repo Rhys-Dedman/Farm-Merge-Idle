@@ -4,6 +4,7 @@
  */
 import React, { useEffect, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { iconAssetPath } from '../utils/iconAssetPath';
 import { shouldTick10 } from '../utils/raf60';
 
 const INNER_RADIUS = 9;
@@ -72,7 +73,9 @@ export const ActiveBoostIndicator: React.FC<ActiveBoostIndicatorProps> = ({ data
 
   const iconSrc = data.icon.startsWith('http')
     ? data.icon
-    : assetPath(data.icon.startsWith('/') ? data.icon : `/assets/icons/${data.icon}.png`);
+    : data.icon.startsWith('/')
+      ? assetPath(data.icon)
+      : iconAssetPath(data.icon.endsWith('.png') ? data.icon : `${data.icon}.png`);
 
   const centerPx = SIZE_PX / 2; // 13
   const innerCircleTotalPx = INNER_RADIUS * 2 + STROKE_PX * 2; // 22

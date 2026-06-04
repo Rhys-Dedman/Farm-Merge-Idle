@@ -17,7 +17,7 @@ import {
 /** Match DiscoveryPopup coin reward icon size (2× layout space). */
 const LEVEL_UP_REWARD_ICON_PX = Math.round(40 * 1.15);
 
-const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_5.png'), assetPath('/assets/vfx/particle_leaf_6.png')];
+const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_blue_1.png'), assetPath('/assets/vfx/particle_leaf_blue_2.png')];
 
 interface LeafParticle {
   id: number;
@@ -384,7 +384,7 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
             }}
           >
             <img
-              src={assetPath('/assets/popups/popup_header_blue.png')}
+              src={assetPath('/assets/ui/popup_header_blue.png')}
               alt=""
               className="absolute inset-0 w-full h-full object-contain"
               style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.25))' }}
@@ -482,7 +482,7 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
                 {/* Divider - popup_divider_Blue */}
                 <div className="w-full flex items-center justify-center" style={{ marginTop: '8px', marginBottom: '24px' }}>
                   <img
-                    src={assetPath('/assets/popups/popup_divider_blue.png')}
+                    src={assetPath('/assets/ui/popup_divider_blue.png')}
                     alt=""
                     className="h-auto object-contain"
                     style={{ width: '520px' }}
@@ -521,7 +521,7 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
                     >
                       <img
                         ref={goldenPotRewardIconRef}
-                        src={assetPath('/assets/icons/icon_goldenpot.png')}
+                        src={assetPath('/assets/icons/collection/icon_goldenpot.png')}
                         alt=""
                         className="object-contain shrink-0"
                         style={{

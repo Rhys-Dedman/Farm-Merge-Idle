@@ -109,7 +109,7 @@ export const Ftue4Overlay: React.FC<Ftue4OverlayProps> = ({
       >
         <div className="w-full flex items-center justify-center" style={{ marginBottom: FTUE_TEXTBOX_DIVIDER_MARGIN_BOTTOM }}>
           <img
-            src={assetPath('/assets/popups/popup_divider.png')}
+            src={assetPath('/assets/ui/popup_divider.png')}
             alt=""
             className="h-auto object-contain"
             style={{ width: '100%' }}

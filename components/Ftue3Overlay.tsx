@@ -168,7 +168,7 @@ export const Ftue3Overlay: React.FC<Ftue3OverlayProps> = ({
           }}
         >
           <img
-            src={assetPath('/assets/icons/icon_finger.png')}
+            src={assetPath('/assets/ui/ui_finger.png')}
             alt=""
             className="w-full h-full object-contain"
             style={{ filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.3))' }}
@@ -188,7 +188,7 @@ export const Ftue3Overlay: React.FC<Ftue3OverlayProps> = ({
         >
           <div className="w-full flex items-center justify-center" style={{ marginBottom: FTUE_TEXTBOX_DIVIDER_MARGIN_BOTTOM }}>
             <img
-              src={assetPath('/assets/popups/popup_divider.png')}
+              src={assetPath('/assets/ui/popup_divider.png')}
               alt=""
               className="h-auto object-contain"
               style={{ width: '100%' }}

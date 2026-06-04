@@ -1,7 +1,7 @@
 import React from 'react';
 import { assetPath } from '../utils/assetPath';
 
-const FLOATING_BUTTON_LOCK_ICON = assetPath('/assets/icons/icon_lock.png');
+const FLOATING_BUTTON_LOCK_ICON = assetPath('/assets/icons/generic_buttons/icon_lock.png');
 
 export const FLOATING_BUTTON_PILL_GRADIENT_TOP = '#efe5ba';
 export const FLOATING_BUTTON_PILL_GRADIENT_BOTTOM = '#c1cd67';

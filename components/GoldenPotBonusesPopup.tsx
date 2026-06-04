@@ -13,7 +13,7 @@ import {
   REWARD_PILL_STROKE_WIDTH_PX,
 } from './Reward';
 
-const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_1.png'), assetPath('/assets/vfx/particle_leaf_2.png')];
+const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_green_1.png'), assetPath('/assets/vfx/particle_leaf_green_2.png')];
 
 const GOLDEN_POT_ICON_PX = Math.round(40 * 1.15) + 2;
 
@@ -497,7 +497,7 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
             }}
           >
             <img
-              src={assetPath('/assets/popups/popup_header.png')}
+              src={assetPath('/assets/ui/popup_header.png')}
               alt=""
               className="absolute inset-0 w-full h-full object-contain"
               style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.25))' }}
@@ -548,7 +548,7 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
 
                 <div className="w-full flex items-center justify-center" style={{ marginTop: '8px', marginBottom: '24px' }}>
                   <img
-                    src={assetPath('/assets/popups/popup_divider.png')}
+                    src={assetPath('/assets/ui/popup_divider.png')}
                     alt=""
                     className="h-auto object-contain"
                     style={{ width: '520px' }}
@@ -583,7 +583,7 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
                     }}
                   >
                     <img
-                      src={assetPath('/assets/icons/icon_goldenpot.png')}
+                      src={assetPath('/assets/icons/collection/icon_goldenpot.png')}
                       alt=""
                       className="object-contain shrink-0"
                       style={{ width: `${GOLDEN_POT_ICON_PX}px`, height: `${GOLDEN_POT_ICON_PX}px` }}
@@ -614,8 +614,8 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
                       unlockedByCount;
                     const showAsUnlocked = unlockedByCount && (!isStagedRevealRow || tierRevealArmed);
                     const bonusSprite = showAsUnlocked
-                      ? assetPath('/assets/popups/popup_bonuses_enabled.png')
-                      : assetPath('/assets/popups/popup_bonuses_disabled.png');
+                      ? assetPath('/assets/ui/popup_bonuses_enabled.png')
+                      : assetPath('/assets/ui/popup_bonuses_disabled.png');
                     const numberColor = showAsUnlocked ? BONUS_ENABLED_NUMBER_COLOR : BONUS_DISABLED_NUMBER_COLOR;
                     const descColor = showAsUnlocked ? BONUS_ENABLED_DESC_COLOR : BONUS_DISABLED_DESC_COLOR;
                     const playRowPop = isStagedRevealRow && tierRevealArmed;

@@ -173,7 +173,7 @@ export const StoreBundleOffer: React.FC<StoreBundleOfferProps> = ({
       >
         <div className="relative max-w-full flex-shrink-0" style={{ width: CARD_WIDTH_PX, overflow: 'visible' }}>
         <img
-          src={assetPath('/assets/topui/ui_store_large.png')}
+          src={assetPath('/assets/ui/ui_store_large.png')}
           alt=""
           className="w-full h-auto block pointer-events-none select-none"
         />

@@ -241,7 +241,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   const visibleBoostSlice = activeBoosts.slice(0, displayBoostCount);
   const hiddenBoostSlice = activeBoosts.slice(displayBoostCount);
 
-  const bgUrl = assetPath('/assets/topui/topui_bg.png');
+  const bgUrl = assetPath('/assets/ui/topui_bg.png');
 
   // Sprite: 600×180
   // Left cap: 0–184px (184px wide)
@@ -368,7 +368,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                 className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center justify-center leading-none -ml-3 pointer-events-none"
                 aria-hidden
               >
-                <img key={bounceKey} src={assetPath('/assets/icons/icon_coin.png')} alt="" className={`w-[30px] h-[30px] object-contain object-left outline-none border-0 ${bounceKey > 0 ? 'coin-bounce' : ''}`} style={{ outline: 'none', border: 'none' }} />
+                <img key={bounceKey} src={assetPath('/assets/icons/coins/icon_coin.png')} alt="" className={`w-[30px] h-[30px] object-contain object-left outline-none border-0 ${bounceKey > 0 ? 'coin-bounce' : ''}`} style={{ outline: 'none', border: 'none' }} />
               </span>
               {/* Text centered in fixed 85px width */}
               <span
@@ -409,7 +409,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                   }}
                 >
                   <span className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center justify-center leading-none -ml-3 pointer-events-none z-10 w-[30px] h-[30px]">
-                    <img src={assetPath('/assets/icons/icon_level.png')} alt="" className="w-[30px] h-[30px] object-contain object-left" />
+                    <img src={assetPath('/assets/ui/ui_level.png')} alt="" className="w-[30px] h-[30px] object-contain object-left" />
                     <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center font-black leading-none" style={{ color: '#c8e9eb', fontSize: 12, WebkitTextStroke: '1px rgba(0,0,0,0.5)', paintOrder: 'stroke fill' }}>{playerLevel}</span>
                   </span>
                   {/* Progress bar: 1px padding top/right/bottom, 4px left; track #775041; fill has 1px inner stroke */}
@@ -535,7 +535,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
               className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center justify-center leading-none -ml-3 pointer-events-none"
               aria-hidden
             >
-              <img key={bounceKey} src={assetPath('/assets/icons/icon_coin.png')} alt="" className={`w-[30px] h-[30px] object-contain object-left outline-none border-0 ${bounceKey > 0 ? 'coin-bounce' : ''}`} style={{ outline: 'none', border: 'none' }} />
+              <img key={bounceKey} src={assetPath('/assets/icons/coins/icon_coin.png')} alt="" className={`w-[30px] h-[30px] object-contain object-left outline-none border-0 ${bounceKey > 0 ? 'coin-bounce' : ''}`} style={{ outline: 'none', border: 'none' }} />
             </span>
             <span
               key={bounceKey}

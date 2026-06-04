@@ -144,7 +144,7 @@ const StoreFreeOffer: React.FC<{
           style={{ width: STORE_FREE_OFFER_LAYOUT_W_PX }}
         >
           <img
-            src={assetPath('/assets/topui/ui_store_medium.png')}
+            src={assetPath('/assets/ui/ui_store_medium.png')}
             alt=""
             className="w-full h-auto block pointer-events-none select-none"
           />
@@ -249,7 +249,7 @@ const StoreFreeOffer: React.FC<{
                 ) : (
                   <>
                     <img
-                      src={assetPath('/assets/icons/icon_watchad.png')}
+                      src={assetPath('/assets/icons/generic_buttons/icon_watchad.png')}
                       alt=""
                       className="object-contain flex-shrink-0"
                       style={{
@@ -594,7 +594,7 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
               bottom: -220,
               zIndex: 0,
               pointerEvents: 'none',
-              backgroundImage: `url(${assetPath('/assets/topui/ui_pattern.png')})`,
+              backgroundImage: `url(${assetPath('/assets/ui/ui_pattern.png')})`,
               backgroundRepeat: 'repeat',
               // Smaller tiles than the source texture.
               backgroundSize: '120px 120px',
@@ -669,7 +669,7 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
 
             {/* Purple divider between mediums and large */}
             <img
-              src={assetPath('/assets/popups/popup_divider_purple.png')}
+              src={assetPath('/assets/ui/popup_divider_purple.png')}
               alt=""
               className="w-[300px] max-w-none h-auto mt-1 mb-1"
             />
@@ -695,7 +695,7 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
 
             {/* Divider between large and small */}
             <img
-              src={assetPath('/assets/popups/popup_divider.png')}
+              src={assetPath('/assets/ui/popup_divider.png')}
               alt=""
               className="w-[300px] max-w-none h-auto mt-1 mb-1"
             />

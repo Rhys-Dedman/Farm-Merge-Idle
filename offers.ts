@@ -16,7 +16,7 @@ export interface LimitedOfferConfig {
   id: string;
   title: string;
   description: string;
-  /** Asset path for header (popup + upgrade panel), e.g. '/assets/icons/icon_seedproduction.png' */
+  /** Asset path for header (popup + upgrade panel), e.g. '/assets/icons/upgrades/icon_seedproduction.png' */
   headerIcon: string;
   /** Duration in minutes when active; null = N/A (hide duration in popup) */
   durationMinutes: number | null;
@@ -30,19 +30,19 @@ export interface LimitedOfferConfig {
 
 /** Single IAP / boost-bar entry for all coin multiplier packs (time stacks). */
 export const DOUBLE_COINS_OFFER_ID = 'double_coins';
-export const DOUBLE_COINS_HEADER_ICON = '/assets/icons/icon_coinmultiplier_1.png';
+export const DOUBLE_COINS_HEADER_ICON = '/assets/icons/store/icon_coinmultiplier_1.png';
 
 /** Store IAP no-ads row — stacks on boost bar (timer only; ad removal is game feature TBD). */
 export const REMOVE_ADS_OFFER_ID = 'remove_ads';
-export const REMOVE_ADS_HEADER_ICON = '/assets/icons/icon_noads.png';
+export const REMOVE_ADS_HEADER_ICON = '/assets/icons/store/icon_noads.png';
 /** Store small-row id for Remove Ads IAP — also used by **`IapOfferPopup`** (“Remove Ads popup”). */
 export const STORE_IAP_OFFER_REMOVE_ADS_ID = 'store_no_ads' as const;
 /** Bundle row id for Starter Pack — also used by **`IapOfferPopup`** (“Starter Pack popup”). */
 export const STORE_IAP_OFFER_STARTER_PACK_ID = 'store_bundle_starter_pack' as const;
 /** Bundle main-column art (top of stacked pair). */
-export const STARTER_PACK_HEADER_ICON = '/assets/icons/icon_starterpack.png';
-export const HARVESTER_PACK_HEADER_ICON = '/assets/icons/icon_farmerpack.png';
-export const STORE_NO_ADS_ROW_BACKGROUND = '/assets/topui/ui_store_noads.png';
+export const STARTER_PACK_HEADER_ICON = '/assets/icons/store/icon_starterpack.png';
+export const HARVESTER_PACK_HEADER_ICON = '/assets/icons/store/icon_farmerpack.png';
+export const STORE_NO_ADS_ROW_BACKGROUND = '/assets/ui/ui_store_noads.png';
 
 /** Old save / particle ids — treated as `double_coins` for stacking + UI. */
 export const LEGACY_COIN_MULTIPLIER_OFFER_IDS = ['coin_multiplier_30m', 'coin_multiplier_2h', 'coin_multiplier_24h'] as const;
@@ -60,7 +60,7 @@ export const LIMITED_OFFERS: LimitedOfferConfig[] = [
     id: 'seed_storm',
     title: 'Seed Storm',
     description: 'Instantly fill your empty cells with plants',
-    headerIcon: '/assets/icons/icon_seedstorm.png',
+    headerIcon: '/assets/icons/upgrades/icon_seedstorm.png',
     durationMinutes: null,
     upgradeTab: 'SEEDS',
     trigger: 'garden_fill_max_50',
@@ -69,7 +69,7 @@ export const LIMITED_OFFERS: LimitedOfferConfig[] = [
     id: 'rapid_seeds',
     title: 'Rapid Seeds',
     description: 'Super fast seed production speed',
-    headerIcon: '/assets/icons/icon_seedproduction.png',
+    headerIcon: '/assets/icons/upgrades/icon_seedproduction.png',
     durationMinutes: null,
     durationSeconds: 90,
     upgradeTab: 'SEEDS',
@@ -79,7 +79,7 @@ export const LIMITED_OFFERS: LimitedOfferConfig[] = [
     id: 'double_harvest',
     title: 'Double Harvest',
     description: 'Get 2x the crops every harvest',
-    headerIcon: '/assets/icons/icon_cropvalue.png',
+    headerIcon: '/assets/icons/upgrades/icon_cropvalue.png',
     durationMinutes: null,
     durationSeconds: 120,
     upgradeTab: 'CROPS',
@@ -89,7 +89,7 @@ export const LIMITED_OFFERS: LimitedOfferConfig[] = [
     id: 'special_delivery',
     title: 'Special Delivery',
     description: 'Instantly generate a high level plant',
-    headerIcon: '/assets/plants/plant_1.png',
+    headerIcon: '/assets/plants/garden_1/plant_1.png',
     durationMinutes: null,
     upgradeTab: 'SEEDS',
     trigger: 'anytime',
@@ -98,7 +98,7 @@ export const LIMITED_OFFERS: LimitedOfferConfig[] = [
     id: 'rapid_harvest',
     title: 'Rapid Harvest',
     description: 'Super fast harvest cycle speed',
-    headerIcon: '/assets/icons/icon_harvestspeed.png',
+    headerIcon: '/assets/icons/upgrades/icon_harvestspeed.png',
     durationMinutes: null,
     durationSeconds: 60,
     upgradeTab: 'CROPS',
@@ -108,7 +108,7 @@ export const LIMITED_OFFERS: LimitedOfferConfig[] = [
     id: 'rush_orders',
     title: 'Rush Orders',
     description: 'Instantly generate new orders',
-    headerIcon: '/assets/icons/icon_customerspeed.png',
+    headerIcon: '/assets/icons/upgrades/icon_customerspeed.png',
     durationMinutes: null,
     durationSeconds: 90,
     upgradeTab: 'HARVEST',
@@ -118,7 +118,7 @@ export const LIMITED_OFFERS: LimitedOfferConfig[] = [
     id: 'happiest_customers',
     title: 'Happiest Customers',
     description: 'All orders will now give 2x coins',
-    headerIcon: '/assets/icons/icon_happycustomer.png',
+    headerIcon: '/assets/icons/upgrades/icon_happycustomer.png',
     durationMinutes: null,
     durationSeconds: 120,
     upgradeTab: 'HARVEST',
@@ -322,7 +322,7 @@ export const STORE_COIN_OFFERS: StoreCoinOfferConfig[] = [
   {
     id: 'store_coin_boost',
     title: 'Coin Boost',
-    headerIcon: '/assets/icons/icon_coinmultiplier_1.png',
+    headerIcon: '/assets/icons/store/icon_coinmultiplier_1.png',
     offerLineText: 'Double Coins',
     durationText: '30m',
     priceLabel: '$5.99',
@@ -332,7 +332,7 @@ export const STORE_COIN_OFFERS: StoreCoinOfferConfig[] = [
   {
     id: 'store_coin_mega_boost',
     title: 'Coin Mega Boost',
-    headerIcon: '/assets/icons/icon_coinmultiplier_2.png',
+    headerIcon: '/assets/icons/store/icon_coinmultiplier_2.png',
     offerLineText: 'Double Coins',
     durationText: '2hr',
     priceLabel: '$9.99',
@@ -342,7 +342,7 @@ export const STORE_COIN_OFFERS: StoreCoinOfferConfig[] = [
   {
     id: 'store_coin_ultra_boost',
     title: 'Coin Ultra Boost',
-    headerIcon: '/assets/icons/icon_coinmultiplier_3.png',
+    headerIcon: '/assets/icons/store/icon_coinmultiplier_3.png',
     offerLineText: 'Double Coins',
     durationText: '24hr',
     priceLabel: '$79.99',
@@ -437,7 +437,7 @@ export const STORE_BUNDLE_OFFERS: StoreBundleOfferConfig[] = [
       {
         offerLineText: 'Rapid Harvest',
         durationText: '30m',
-        coinIconPath: '/assets/icons/icon_harvestspeed.png',
+        coinIconPath: '/assets/icons/upgrades/icon_harvestspeed.png',
         coinIconScale: 0.95,
       },
     ],
@@ -447,7 +447,7 @@ export const STORE_BUNDLE_OFFERS: StoreBundleOfferConfig[] = [
       {
         offerId: 'rapid_harvest',
         durationMs: 30 * 60 * 1000,
-        icon: '/assets/icons/icon_harvestspeed.png',
+        icon: '/assets/icons/upgrades/icon_harvestspeed.png',
       },
     ],
     priceLabel: '$9.99',
@@ -470,7 +470,7 @@ export const STORE_BUNDLE_OFFERS: StoreBundleOfferConfig[] = [
       {
         offerLineText: 'Rapid Seeds',
         durationText: '2hr',
-        coinIconPath: '/assets/icons/icon_seedproduction.png',
+        coinIconPath: '/assets/icons/upgrades/icon_seedproduction.png',
         coinIconScale: 0.95,
       },
     ],
@@ -480,7 +480,7 @@ export const STORE_BUNDLE_OFFERS: StoreBundleOfferConfig[] = [
       {
         offerId: 'rapid_seeds',
         durationMs: 2 * 60 * 60 * 1000,
-        icon: '/assets/icons/icon_seedproduction.png',
+        icon: '/assets/icons/upgrades/icon_seedproduction.png',
       },
     ],
     priceLabel: '$29.99',

@@ -16,7 +16,7 @@ import {
   REWARD_PILL_STROKE_WIDTH_PX,
 } from './Reward';
 
-const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_3.png'), assetPath('/assets/vfx/particle_leaf_4.png')];
+const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_yellow_1.png'), assetPath('/assets/vfx/particle_leaf_yellow_2.png')];
 
 interface LeafParticle {
   id: number;
@@ -488,7 +488,7 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
         >
           {/* Header background sprite */}
           <img
-            src={assetPath('/assets/popups/popup_header_yellow.png')}
+            src={assetPath('/assets/ui/popup_header_yellow.png')}
             alt=""
             className="absolute inset-0 w-full h-full object-contain"
             style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.25))' }}
@@ -588,7 +588,7 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
 {/* Divider */}
           <div className="w-full flex items-center justify-center" style={{ marginTop: '8px', marginBottom: '24px' }}>
             <img
-              src={assetPath('/assets/popups/popup_divider_yellow.png')}
+              src={assetPath('/assets/ui/popup_divider_yellow.png')}
               alt=""
               className="h-auto object-contain"
               style={{
@@ -669,7 +669,7 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
           >
             {!isActiveBoostView && (
               <img
-                src={assetPath('/assets/icons/icon_watchad.png')}
+                src={assetPath('/assets/icons/generic_buttons/icon_watchad.png')}
                 alt=""
                 style={{
                   width: '60px',

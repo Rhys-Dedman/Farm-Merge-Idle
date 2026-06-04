@@ -17,7 +17,7 @@ Do not rebuild from scratch. Extend `FloatingButton` / stack props or add layout
 
 - `FloatingButton`: one control (icon + bottom-center pill). Pill is above the icon (`z-10` vs `z-0`).
 - `FloatingButtonStack`: absolute stack under the farm top bar + goals (`z-[15]`, below header/goals). `side="left"` or `side="right"`; children stack vertically.
-- Mount stacks in the farm column after the goals row, before the hex area. Use `assetPath()` for icons under `/assets/icons/icon_fb_<name>.png`.
+- Mount stacks in the farm column after the goals row, before the hex area. Use `assetPath()` for icons under `/assets/icons/floating_buttons/icon_fb_<name>.png`.
 
 ## Visual spec
 
@@ -36,6 +36,6 @@ Do not rebuild from scratch. Extend `FloatingButton` / stack props or add layout
 
 ```tsx
 <FloatingButtonStack side="left">
-  <FloatingButton title="Gardens" iconSrc={assetPath('/assets/icons/icon_fb_gardens.png')} />
+  <FloatingButton title="Gardens" iconSrc={assetPath('/assets/icons/floating_buttons/icon_fb_gardens.png')} />
 </FloatingButtonStack>
 ```

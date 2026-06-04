@@ -9,7 +9,7 @@
   "theme_color": "#92c14c",
   "icons": [
     {
-      "src": "./assets/plants/plant_1.png",
+      "src": "./assets/plants/garden_1/plant_1.png",
       "sizes": "128x128",
       "type": "image/png",
       "purpose": "any"

@@ -112,7 +112,7 @@ export const CollectionFtueOverlay: React.FC<CollectionFtueOverlayProps> = ({
             }
           `}</style>
           <img
-            src={assetPath('/assets/icons/icon_finger.png')}
+            src={assetPath('/assets/ui/ui_finger.png')}
             alt=""
             className="w-full h-full object-contain"
             style={{ filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.3))' }}
@@ -139,7 +139,7 @@ export const CollectionFtueOverlay: React.FC<CollectionFtueOverlayProps> = ({
             }
           `}</style>
           <img
-            src={assetPath('/assets/icons/icon_finger.png')}
+            src={assetPath('/assets/ui/ui_finger.png')}
             alt=""
             className="w-full h-full object-contain"
             style={{ filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.3))' }}
@@ -167,7 +167,7 @@ export const CollectionFtueOverlay: React.FC<CollectionFtueOverlayProps> = ({
             }
           `}</style>
           <img
-            src={assetPath('/assets/icons/icon_finger.png')}
+            src={assetPath('/assets/ui/ui_finger.png')}
             alt=""
             className="w-full h-full object-contain"
             style={{ filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.3))' }}

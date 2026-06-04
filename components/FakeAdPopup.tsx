@@ -90,7 +90,7 @@ export const FakeAdPopup: React.FC<FakeAdPopupProps> = ({ isVisible, onComplete,
           <div className="flex-1 flex flex-col items-center justify-center w-full min-h-0">
             {/* Center: large watch ad icon */}
             <img
-              src={assetPath('/assets/icons/icon_watchad_large.png')}
+              src={assetPath('/assets/icons/generic_buttons/icon_watchad_large.png')}
               alt=""
               className="object-contain select-none"
               style={{

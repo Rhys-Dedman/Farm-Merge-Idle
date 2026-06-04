@@ -8,8 +8,8 @@ import { PopupVectorBackground } from './PopupVectorBackground';
 import { playSfx, SFX_IDS } from '../utils/sfx';
 
 const LEAF_SPRITES = [
-  assetPath('/assets/vfx/particle_leaf_3.png'),
-  assetPath('/assets/vfx/particle_leaf_4.png'),
+  assetPath('/assets/vfx/particle_leaf_yellow_1.png'),
+  assetPath('/assets/vfx/particle_leaf_yellow_2.png'),
 ];
 
 interface LeafParticle {
@@ -78,7 +78,7 @@ function createPopupLeaves(): LeafParticle[] {
   });
 }
 
-const HEADER_ICON = assetPath('/assets/icons/icon_star_gold_completed.png');
+const HEADER_ICON = assetPath('/assets/icons/rateus/icon_star_gold_completed.png');
 const HEADER_ICON_PX = 70;
 const TITLE_TEXT = 'Thank You';
 const DESCRIPTION_TEXT = 'We appreciate your feedback!';
@@ -398,7 +398,7 @@ export const RateUsThankYouPopup: React.FC<RateUsThankYouPopupProps> = ({
             }}
           >
             <img
-              src={assetPath('/assets/popups/popup_header_yellow.png')}
+              src={assetPath('/assets/ui/popup_header_yellow.png')}
               alt=""
               decoding="sync"
               className="absolute inset-0 w-full h-full object-contain"
@@ -461,7 +461,7 @@ export const RateUsThankYouPopup: React.FC<RateUsThankYouPopupProps> = ({
                   }}
                 >
                   <img
-                    src={assetPath('/assets/popups/popup_divider_yellow.png')}
+                    src={assetPath('/assets/ui/popup_divider_yellow.png')}
                     alt=""
                     decoding="sync"
                     className="h-auto object-contain"

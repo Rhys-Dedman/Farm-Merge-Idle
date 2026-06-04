@@ -46,7 +46,7 @@ export const FarmLeftFloatingButtonStack: React.FC<FarmLeftFloatingButtonStackPr
       <FloatingButton
         key="coin-boost"
         title="BOOST"
-        iconSrc={assetPath('/assets/icons/icon_coin_boost.png')}
+        iconSrc={assetPath('/assets/icons/coins/icon_coin_boost.png')}
         aria-label="Coin Boost"
         onClick={onCoinBoostClick}
       />
@@ -70,7 +70,7 @@ export const FarmLeftFloatingButtonStack: React.FC<FarmLeftFloatingButtonStackPr
         <FloatingButton
           key="no-ads"
           title="NO ADS"
-          iconSrc={assetPath('/assets/icons/icon_fb_noads.png')}
+          iconSrc={assetPath('/assets/icons/floating_buttons/icon_fb_noads.png')}
           onClick={onNoAdsClick}
         />,
       );

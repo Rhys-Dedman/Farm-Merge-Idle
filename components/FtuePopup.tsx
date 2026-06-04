@@ -7,7 +7,7 @@ import { assetPath } from '../utils/assetPath';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
 import { PopupVectorBackground } from './PopupVectorBackground';
 
-const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_1.png'), assetPath('/assets/vfx/particle_leaf_2.png')];
+const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_green_1.png'), assetPath('/assets/vfx/particle_leaf_green_2.png')];
 
 interface LeafParticle {
   id: number;
@@ -340,7 +340,7 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
               style={{ width: '120px', height: '120px', top: '-20px', zIndex: 104 }}
             >
               <img
-                src={assetPath('/assets/popups/popup_header.png')}
+                src={assetPath('/assets/ui/popup_header.png')}
                 alt=""
                 className="absolute inset-0 w-full h-full object-contain"
                 style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.25))' }}
@@ -398,7 +398,7 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
                 {showDivider && (
                   <div className="w-full flex items-center justify-center" style={{ marginTop: '8px', marginBottom: '24px' }}>
                     <img
-                      src={assetPath('/assets/popups/popup_divider.png')}
+                      src={assetPath('/assets/ui/popup_divider.png')}
                       alt=""
                       className="h-auto object-contain"
                       style={{ width: '520px' }}

@@ -97,7 +97,7 @@ export interface RewardProps {
 export const Reward: React.FC<RewardProps> = ({
   offerLineText,
   durationText,
-  coinIconPath = '/assets/icons/icon_coin.png',
+  coinIconPath = '/assets/icons/coins/icon_coin.png',
   coinIconScale = 1,
   className = '',
   layout = 'storeCard',

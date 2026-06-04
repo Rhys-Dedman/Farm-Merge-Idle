@@ -5,7 +5,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { assetPath } from '../utils/assetPath';
 
-const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_1.png'), assetPath('/assets/vfx/particle_leaf_2.png')];
+const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_green_1.png'), assetPath('/assets/vfx/particle_leaf_green_2.png')];
 
 /** Full cone aperture in degrees */
 const CONE_DEG = 45;

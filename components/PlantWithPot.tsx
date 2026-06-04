@@ -10,11 +10,11 @@ export const MAX_PLANT_SPRITE_LEVEL = 24;
 
 export function getPlantSpritePath(level: number): string {
   const spriteLevel = Math.min(Math.max(1, level), MAX_PLANT_SPRITE_LEVEL);
-  return assetPath(`/assets/plants/plant_${spriteLevel}.png`);
+  return assetPath(`/assets/plants/garden_1/plant_${spriteLevel}.png`);
 }
 
-export const PLANT_POT_SRC = assetPath('/assets/plants/plant_pot.png');
-export const PLANT_POT_M1_SRC = assetPath('/assets/plants/plant_pot_m1.png');
+export const PLANT_POT_SRC = assetPath('/assets/plants/pots/plant_pot.png');
+export const PLANT_POT_M1_SRC = assetPath('/assets/plants/pots/plant_pot_m1.png');
 
 export interface PlantWithPotProps {
   level: number;

@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { TabType } from '../types';
 import { assetPath } from '../utils/assetPath';
+import { iconAssetPath } from '../utils/iconAssetPath';
 import { getRewardedOfferTimeRemainingSec } from '../utils/rewardedOfferPanel';
 import { playSfx, SFX_IDS } from '../utils/sfx';
 import { getPlantCoinValue } from '../utils/plantValue';
@@ -243,9 +244,9 @@ const formatCost = (cost: number): string => {
 
 /** Seeds tab list order (must match SEEDS_UNLOCK_LEVELS + level-up rows for that tab). */
 const SEEDS_UPGRADES: UpgradeDef[] = [
-  { id: 'seed_production', name: 'Production Speed', icon: assetPath('/assets/icons/icon_seedproduction.png'), description: 'Increase how fast seeds are produced' },
-  { id: 'double_seeds', name: 'DOUBLE SEEDS', icon: assetPath('/assets/icons/icon_seedquality.png'), description: 'Increase chance to spawn 2 seeds at a time' },
-  { id: 'bonus_seeds', name: 'Lucky Seed', icon: assetPath('/assets/icons/icon_luckyseed.png'), description: 'Increase chance to produce a bonus higher level seed' },
+  { id: 'seed_production', name: 'Production Speed', icon: assetPath('/assets/icons/upgrades/icon_seedproduction.png'), description: 'Increase how fast seeds are produced' },
+  { id: 'double_seeds', name: 'DOUBLE SEEDS', icon: assetPath('/assets/icons/upgrades/icon_seedquality.png'), description: 'Increase chance to spawn 2 seeds at a time' },
+  { id: 'bonus_seeds', name: 'Lucky Seed', icon: assetPath('/assets/icons/upgrades/icon_luckyseed.png'), description: 'Increase chance to produce a bonus higher level seed' },
 ];
 
 const SEEDS_UNLOCK_LEVELS: Record<string, number> = {
@@ -443,7 +444,7 @@ export const getLevelUnlockInfo = (level: number): LevelUnlockInfo => {
     return {
       title: match.name,
       description: desc,
-      icon: assetPath(`/assets/icons/${match.icon}`),
+      icon: iconAssetPath(match.icon),
       upgradeId: match.upgradeId || undefined,
       tab: match.upgradeId ? match.tab : undefined,
       plantCollectionHeader: match.plantCollectionHeader,
@@ -454,29 +455,29 @@ export const getLevelUnlockInfo = (level: number): LevelUnlockInfo => {
   return {
     title: `Level ${level}`,
     description: "You've reached a new level!",
-    icon: assetPath('/assets/icons/icon_level.png'),
+    icon: assetPath('/assets/ui/ui_level.png'),
     upgradeId: undefined,
     tab: undefined,
   };
 };
 
-const ICON_LOCK = assetPath('/assets/icons/icon_lock.png');
-const ICON_COIN_SMALL = assetPath('/assets/icons/icon_coin_small.png');
+const ICON_LOCK = assetPath('/assets/icons/generic_buttons/icon_lock.png');
+const ICON_COIN_SMALL = assetPath('/assets/icons/coins/icon_coin_small.png');
 
 /** Crops tab list order (must match CROPS_UNLOCK_LEVELS + level-up rows for that tab). */
 const CROPS_UPGRADES: UpgradeDef[] = [
-  { id: 'harvest_speed', name: 'Harvest Speed', icon: assetPath('/assets/icons/icon_harvestspeed.png'), description: 'Increase automatic harvest cycle speed' },
-  { id: 'plot_expansion', name: 'Garden Expansion', icon: assetPath('/assets/icons/icon_plotexpansion.png'), description: 'Unlock additional plots in the garden' },
-  { id: 'wild_growth', name: 'Wild Growth', icon: assetPath('/assets/icons/icon_luckymerge.png'), description: 'Plants automatically duplicate over time' },
-  { id: 'crop_value', name: 'Crop Yield', icon: assetPath('/assets/icons/icon_cropvalue.png'), description: 'Plants produce more crops per harvest' },
+  { id: 'harvest_speed', name: 'Harvest Speed', icon: assetPath('/assets/icons/upgrades/icon_harvestspeed.png'), description: 'Increase automatic harvest cycle speed' },
+  { id: 'plot_expansion', name: 'Garden Expansion', icon: assetPath('/assets/icons/upgrades/icon_plotexpansion.png'), description: 'Unlock additional plots in the garden' },
+  { id: 'wild_growth', name: 'Wild Growth', icon: assetPath('/assets/icons/upgrades/icon_luckymerge.png'), description: 'Plants automatically duplicate over time' },
+  { id: 'crop_value', name: 'Crop Yield', icon: assetPath('/assets/icons/upgrades/icon_cropvalue.png'), description: 'Plants produce more crops per harvest' },
 ];
 
 /** Harvest tab order = vertical list order. Unlock scroll uses `upgradeRowRefs[upgrade.id]` — keep in sync with HARVEST_UNLOCK_LEVELS / getLevelUnlockInfo. */
 const HARVEST_UPGRADES: UpgradeDef[] = [
-  { id: 'customer_speed', name: 'Order Speed', icon: assetPath('/assets/icons/icon_customerspeed.png'), description: 'Reduce the time it takes for new orders to appear' },
-  { id: 'market_value', name: 'Market Value', icon: assetPath('/assets/icons/icon_marketvalue.png'), description: 'Increase the coins earned when completing orders' },
-  { id: 'seed_surplus', name: 'SURPLUS RECHARGES', icon: assetPath('/assets/icons/icon_seedsurplus.png'), description: 'Extra Harvest & Seed recharges sell for more coins' },
-  { id: 'happy_customer', name: 'Happy Customer', icon: assetPath('/assets/icons/icon_happycustomer.png'), description: 'Increase chance that customers pay double for orders' },
+  { id: 'customer_speed', name: 'Order Speed', icon: assetPath('/assets/icons/upgrades/icon_customerspeed.png'), description: 'Reduce the time it takes for new orders to appear' },
+  { id: 'market_value', name: 'Market Value', icon: assetPath('/assets/icons/upgrades/icon_marketvalue.png'), description: 'Increase the coins earned when completing orders' },
+  { id: 'seed_surplus', name: 'SURPLUS RECHARGES', icon: assetPath('/assets/icons/upgrades/icon_seedsurplus.png'), description: 'Extra Harvest & Seed recharges sell for more coins' },
+  { id: 'happy_customer', name: 'Happy Customer', icon: assetPath('/assets/icons/upgrades/icon_happycustomer.png'), description: 'Increase chance that customers pay double for orders' },
 ];
 
 const getUpgradesForTab = (tab: TabType): UpgradeDef[] => {
@@ -1110,7 +1111,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
           >
             {/* Watch Ad Icon - 1.2x scale (base 18px * 1.2 = ~22px); 3px gap before timer */}
             <img
-              src={assetPath('/assets/icons/icon_watchad.png')}
+              src={assetPath('/assets/icons/generic_buttons/icon_watchad.png')}
               alt=""
               style={{
                 width: '22px',

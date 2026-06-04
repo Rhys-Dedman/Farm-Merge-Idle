@@ -273,7 +273,7 @@ export const Projectile: React.FC<ProjectileProps> = ({ data, onImpact, onComple
               }}
             >
               <img
-                src={assetPath('/assets/icons/emoji_seed.png')}
+                src={assetPath('/assets/icons/generic_buttons/emoji_seed.png')}
                 alt=""
                 draggable={false}
                 className="pointer-events-none select-none w-[12px] h-[12px] object-contain filter saturate-[0.8] drop-shadow-sm"

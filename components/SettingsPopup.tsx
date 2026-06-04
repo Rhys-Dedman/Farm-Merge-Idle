@@ -200,7 +200,7 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
                 Settings
               </h2>
               <div className="w-full flex items-center justify-center" style={{ marginTop: '8px', marginBottom: '14px' }}>
-                <img src={assetPath('/assets/popups/popup_divider.png')} alt="" className="h-auto object-contain" style={{ width: '100%', maxWidth: '220px' }} />
+                <img src={assetPath('/assets/ui/popup_divider.png')} alt="" className="h-auto object-contain" style={{ width: '100%', maxWidth: '220px' }} />
               </div>
               <div className="flex flex-col items-center gap-3 w-full" style={{ maxWidth: '200px' }}>
                 <button

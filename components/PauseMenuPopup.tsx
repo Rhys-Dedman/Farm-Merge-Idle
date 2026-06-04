@@ -237,7 +237,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
               {/* Green divider - same as discovery popup */}
               <div className="w-full flex items-center justify-center" style={{ marginTop: '8px', marginBottom: '12px' }}>
                 <img
-                  src={assetPath('/assets/popups/popup_divider.png')}
+                  src={assetPath('/assets/ui/popup_divider.png')}
                   alt=""
                   className="h-auto object-contain"
                   style={{ width: '100%', maxWidth: '220px' }}

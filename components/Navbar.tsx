@@ -40,9 +40,9 @@ export const Navbar: React.FC<NavbarProps> = ({
     ? 1 
     : Math.min(1, viewportWidth / navDesignWidth);
   const items: { id: ScreenType; label: string; icon: string }[] = [
-    { id: 'STORE', label: 'STORE', icon: assetPath('/assets/icons/icon_market.png') },
-    { id: 'FARM', label: 'GARDEN', icon: assetPath('/assets/icons/icon_farm.png') },
-    { id: 'BARN', label: 'COLLECTION', icon: assetPath('/assets/icons/icon_barn.png') },
+    { id: 'STORE', label: 'STORE', icon: assetPath('/assets/icons/generic_buttons/icon_market.png') },
+    { id: 'FARM', label: 'GARDEN', icon: assetPath('/assets/icons/generic_buttons/icon_farm.png') },
+    { id: 'BARN', label: 'COLLECTION', icon: assetPath('/assets/icons/generic_buttons/icon_barn.png') },
   ];
 
   return (

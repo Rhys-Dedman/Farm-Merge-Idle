@@ -9,7 +9,7 @@ import { PopupVectorBackground } from './PopupVectorBackground';
 import { PlantWithPot } from './PlantWithPot';
 import { formatCompactNumber } from '../utils/formatCompactNumber';
 
-const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_1.png'), assetPath('/assets/vfx/particle_leaf_2.png')];
+const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_green_1.png'), assetPath('/assets/vfx/particle_leaf_green_2.png')];
 
 interface LeafParticle {
   id: number;
@@ -374,7 +374,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
         >
           {/* Header background sprite */}
           <img 
-            src={assetPath('/assets/popups/popup_header.png')} 
+            src={assetPath('/assets/ui/popup_header.png')} 
             alt="" 
             className="absolute inset-0 w-full h-full object-contain"
             style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.25))' }}
@@ -433,7 +433,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
               {/* Divider */}
               <div className="w-full flex items-center justify-center" style={{ marginTop: '8px', marginBottom: '24px' }}>
                 <img 
-                  src={assetPath('/assets/popups/popup_divider.png')} 
+                  src={assetPath('/assets/ui/popup_divider.png')} 
                   alt="" 
                   className="h-auto object-contain"
                   style={{ width: '520px' }}
@@ -510,7 +510,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
                       <>
                         <span>Golden Pot</span>
                         <img
-                          src={assetPath('/assets/icons/icon_coin.png')}
+                          src={assetPath('/assets/icons/coins/icon_coin.png')}
                           alt=""
                           className="object-contain shrink-0"
                           style={{ width: 40, height: 40 }}
