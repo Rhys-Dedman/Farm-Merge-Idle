@@ -37,8 +37,11 @@ import { PlantInfoPopup } from './components/PlantInfoPopup';
 import { PlantWithPot } from './components/PlantWithPot';
 import { LimitedOfferPopup } from './components/LimitedOfferPopup';
 import { FakeAdPopup } from './components/FakeAdPopup';
+import { FakeReviewPopup } from './components/FakeReviewPopup';
 import { PauseMenuPopup } from './components/PauseMenuPopup';
 import { SettingsPopup } from './components/SettingsPopup';
+import { RateUsPopup } from './components/RateUsPopup';
+import { RateUsThankYouPopup } from './components/RateUsThankYouPopup';
 import { BoostParticle, BoostParticleData } from './components/BoostParticle';
 import { ActiveBoostData, ACTIVE_BOOST_INDICATOR_SIZE_PX } from './components/ActiveBoostIndicator';
 import { UpgradeTabsRef } from './components/UpgradeTabs';
@@ -111,6 +114,14 @@ import {
   markLimitedOfferIntroPopupSeen,
   syncLimitedOfferIntroCyclePersistedState,
 } from './utils/limitedOfferIntroCycle';
+import {
+  createRewardedOfferPanelEntry,
+  hasActiveRewardedOfferInPanel,
+  normalizeRewardedOfferForSave,
+  normalizeRewardedOffersForLoad,
+  pruneExpiredRewardedOffers,
+} from './utils/rewardedOfferPanel';
+import { markRateUsPermanentlyDismissed } from './utils/rateUsDismiss';
 import { isOfflineCoinEarningsBlockedByFtue, simulateOfflineSeedHarvest, simulateWildGrowthOffline } from './utils/offlineSimulate';
 import {
   getWildGrowthIntervalMsForLevel,
@@ -1215,6 +1226,8 @@ export default function App() {
   const limitedOfferCooldownInitializedRef = useRef(false);
   // Rewarded offers shown in upgrade list (when player declines popup)
   const [rewardedOffers, setRewardedOffers] = useState<RewardedOffer[]>([]);
+  const rewardedOffersRef = useRef<RewardedOffer[]>([]);
+  rewardedOffersRef.current = rewardedOffers;
   // Discovery reward particles: fly from discovery popup reward icon to wallet.
   const [activeDiscoveryCoinParticles, setActiveDiscoveryCoinParticles] = useState<GoalCoinParticleData[]>([]);
   // Discovery CTA particle: fly from popup button to Collection nav button.
@@ -1273,6 +1286,9 @@ export default function App() {
   const [pendingOfferHighlightId, setPendingOfferHighlightId] = useState<string | null>(null);
   // Pause menu (opened from settings/gear button)
   const [pauseMenuOpen, setPauseMenuOpen] = useState(false);
+  const [rateUsPopupOpen, setRateUsPopupOpen] = useState(false);
+  const [showFakeReview, setShowFakeReview] = useState(false);
+  const [rateUsThankYouOpen, setRateUsThankYouOpen] = useState(false);
   const [devToolsOpen, setDevToolsOpen] = useState(false);
   const [musicEnabled, setMusicEnabled] = useState(_earlyAudio.musicEnabled);
   const [sfxEnabled, setSfxEnabled] = useState(_earlyAudio.sfxEnabled);
@@ -1318,6 +1334,7 @@ export default function App() {
     goldenPot: false,
     purchaseSuccess: false,
     iapOffer: false,
+    rateUs: false,
   });
   useEffect(() => {
     setAudioSettings({ musicEnabled, sfxEnabled });
@@ -1686,6 +1703,7 @@ export default function App() {
     const isGoldenPotOpen = goldenPotBonusesPopupOpen;
     const isPurchaseSuccessOpen = !!purchaseSuccessfulUi;
     const isIapOfferOpen = !!iapOfferUi;
+    const isRateUsOpen = rateUsPopupOpen;
 
     if (!was.levelUp && isLevelUpOpen) playSfx(SFX_IDS.popupLevelUp);
     if (!was.discovery && isDiscoveryOpen) playSfx(SFX_IDS.popupPlantDiscovery);
@@ -1694,6 +1712,7 @@ export default function App() {
     if (!was.goldenPot && isGoldenPotOpen) playSfx(SFX_IDS.popupNormal);
     if (!was.purchaseSuccess && isPurchaseSuccessOpen) playSfx(SFX_IDS.popupNormal);
     if (!was.iapOffer && isIapOfferOpen) playSfx(SFX_IDS.popupNormal);
+    if (!was.rateUs && isRateUsOpen) playSfx(SFX_IDS.popupNormal);
 
     prevPopupOpenRef.current = {
       levelUp: isLevelUpOpen,
@@ -1703,8 +1722,9 @@ export default function App() {
       goldenPot: isGoldenPotOpen,
       purchaseSuccess: isPurchaseSuccessOpen,
       iapOffer: isIapOfferOpen,
+      rateUs: isRateUsOpen,
     };
-  }, [levelUpPopup, discoveryPopup, limitedOfferPopup, plantInfoPopup, goldenPotBonusesPopupOpen, purchaseSuccessfulUi, iapOfferUi]);
+  }, [levelUpPopup, discoveryPopup, limitedOfferPopup, plantInfoPopup, goldenPotBonusesPopupOpen, purchaseSuccessfulUi, iapOfferUi, rateUsPopupOpen]);
   /** FTUE: current stage (e.g. 'welcome' after splash); null when not in FTUE */
   const [activeFtueStage, setActiveFtueStage] = useState<FtueStageId | null>(null);
   const prevWelcomeFtueOpenRef = useRef(false);
@@ -2273,25 +2293,38 @@ export default function App() {
     };
   }, []);
 
-// Countdown timer for rewarded offers (1 second tick). Don't remove an offer at 0s while its popup is open. Pause while fake ad is visible.
+  // Upgrade-panel offer expiry uses wall clock (runs while app is closed / unfocused).
   const protectedOfferId = limitedOfferPopup?.isVisible ? (limitedOfferPopup?.offerId ?? null) : null;
   useEffect(() => {
+    const tickExpiry = () => {
+      const now = Date.now();
+      setRewardedOffers((prev) => {
+        const pruned = pruneExpiredRewardedOffers(prev, now, protectedOfferId);
+        if (pruned.length === 0) return prev.length === 0 ? prev : pruned;
+        // Re-render each tick so the wall-clock countdown label updates.
+        return pruned;
+      });
+    };
+
     if (rewardedOffers.length === 0) return;
 
+    tickExpiry();
     const interval = setInterval(() => {
       if (showFakeAdRef.current) return;
-      setRewardedOffers(prev => {
-        const updated = prev.map(offer => ({
-          ...offer,
-          timeRemaining: offer.timeRemaining !== undefined ? Math.max(0, offer.timeRemaining - 1) : undefined
-        }));
-
-        // Remove expired offers (timer reached 0), unless that offer's popup is currently open
-        return updated.filter(o => o.timeRemaining === undefined || o.timeRemaining > 0 || (protectedOfferId != null && o.id === protectedOfferId));
-      });
+      tickExpiry();
     }, 1000);
 
-    return () => clearInterval(interval);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') tickExpiry();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', tickExpiry);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('focus', tickExpiry);
+    };
   }, [rewardedOffers.length > 0, protectedOfferId]);
 
   useEffect(() => {
@@ -2366,19 +2399,12 @@ export default function App() {
     (offerId: string) => {
       const offerConfig = getOfferById(offerId);
       if (!offerConfig || isStorePremiumOnlyOfferId(offerId)) return;
+      const now = Date.now();
       setRewardedOffers((prev) => {
-        if (prev.some((o) => o.id === offerId)) return prev;
-        return [
-          ...prev,
-          {
-            id: offerConfig.id,
-            name: offerConfig.title,
-            icon: offerConfig.headerIcon,
-            description: offerConfig.description,
-            tab: offerConfig.upgradeTab,
-            timeRemaining: 60,
-          },
-        ];
+        const active = pruneExpiredRewardedOffers(prev, now);
+        if (hasActiveRewardedOfferInPanel(active, now)) return active;
+        if (active.some((o) => o.id === offerId)) return active;
+        return [createRewardedOfferPanelEntry(offerConfig, now)];
       });
       if (ftueUpgradePanelVisible) {
         setIsExpanded(true);
@@ -2414,6 +2440,7 @@ export default function App() {
       if (purchaseSuccessfulUi) return;
       if (iapOfferUi) return;
       if (plantInfoPopup?.isVisible) return;
+      if (rateUsPopupOpen || showFakeReview || rateUsThankYouOpen) return;
       const now = Date.now();
       if (lastLimitedOfferClosedAtRef.current && now - lastLimitedOfferClosedAtRef.current < 10000) return;
       if (lastFakeAdClosedAtRef.current && now - lastFakeAdClosedAtRef.current < 10000) return;
@@ -2464,6 +2491,10 @@ export default function App() {
 
       if (!offerToShow) return;
 
+      if (introCycleComplete && hasActiveRewardedOfferInPanel(rewardedOffersRef.current, now)) {
+        return;
+      }
+
       lastShownOfferIdRef.current = offerToShow.id;
       lastShownOfferTabRef.current = offerToShow.upgradeTab;
       lastLimitedOfferShownAtRef.current = now;
@@ -2493,6 +2524,7 @@ export default function App() {
     purchaseSuccessfulUi,
     iapOfferUi,
     plantInfoPopup?.isVisible,
+    rateUsPopupOpen,
     offlineEarningsUi?.open,
     activeScreen,
     goldenPotCount,
@@ -4830,11 +4862,11 @@ export default function App() {
     if (isLoading) return;
     if (activeFtueStage !== null || ftue11StartQueued) return;
     // Never merge while Settings is open (user should see the board when merges run).
-    if (pauseMenuOpen) return;
+    if (pauseMenuOpen || rateUsPopupOpen || showFakeReview || rateUsThankYouOpen) return;
     // Intentionally allow auto-merge while discovery / level-up are open so merge chains do not stall
     // (e.g. L2+L2→L3 opens discovery while two L1 pairs are still on the board).
     if (offlineEarningsUi?.open) return;
-    if (showFakeAd) return;
+    if (showFakeAd || showFakeReview) return;
     if (purchaseSuccessfulUi) return;
     if (iapOfferUi) return;
     if (limitedOfferPopup?.isVisible) return;
@@ -4877,6 +4909,9 @@ export default function App() {
     activeFtueStage,
     ftue11StartQueued,
     pauseMenuOpen,
+    rateUsPopupOpen,
+    rateUsThankYouOpen,
+    showFakeReview,
     offlineEarningsUi?.open,
     showFakeAd,
     purchaseSuccessfulUi,
@@ -4905,9 +4940,9 @@ export default function App() {
     if (prevAutoMergeCapRef.current === cap) return;
     prevAutoMergeCapRef.current = cap;
     if (!autoMergeSetting || !getAutoMergeMode()) return;
-    if (pauseMenuOpen || isLoading) return;
+    if (pauseMenuOpen || rateUsPopupOpen || showFakeReview || rateUsThankYouOpen || isLoading) return;
     scheduleAutoMergeRecheck(0);
-  }, [goalPlantTypes, goalSlots, goalCounts, autoMergeSetting, pauseMenuOpen, isLoading, scheduleAutoMergeRecheck]);
+  }, [goalPlantTypes, goalSlots, goalCounts, autoMergeSetting, pauseMenuOpen, rateUsPopupOpen, showFakeReview, rateUsThankYouOpen, isLoading, scheduleAutoMergeRecheck]);
 
   useEffect(() => {
     if (!autoMergeSetting) return;
@@ -4926,13 +4961,13 @@ export default function App() {
   /** Cancel delayed rechecks while Settings is open; when it closes (or load finishes), try once so merges can start. */
   useEffect(() => {
     if (isLoading) return;
-    if (pauseMenuOpen) {
+    if (pauseMenuOpen || rateUsPopupOpen || showFakeReview || rateUsThankYouOpen) {
       clearAutoMergeRecheckTimeout();
       return;
     }
     if (!autoMergeSetting || !getAutoMergeMode()) return;
     scheduleAutoMergeRecheck(0);
-  }, [pauseMenuOpen, autoMergeSetting, isLoading, clearAutoMergeRecheckTimeout, scheduleAutoMergeRecheck]);
+  }, [pauseMenuOpen, rateUsPopupOpen, showFakeReview, rateUsThankYouOpen, autoMergeSetting, isLoading, clearAutoMergeRecheckTimeout, scheduleAutoMergeRecheck]);
 
   useEffect(() => () => clearAutoMergeRecheckTimeout(), [clearAutoMergeRecheckTimeout]);
 
@@ -4997,7 +5032,12 @@ export default function App() {
       save.collectionFtueCompleted ? null : parseCollectionFtuePhase(save.collectionFtuePhase) ?? null
     );
     setActiveTab(save.activeTab);
-    setRewardedOffers(save.rewardedOffers.filter((o) => !isStorePremiumOnlyOfferId(o.id)));
+    setRewardedOffers(
+      normalizeRewardedOffersForLoad(
+        save.rewardedOffers.filter((o) => !isStorePremiumOnlyOfferId(o.id)),
+        Date.now(),
+      ),
+    );
     setBarnNotification(save.barnNotification);
     const goldenPotN = (save.plantMasteryUnlockedLevels ?? []).length;
     goldenPotCountForTierPopupRef.current = goldenPotN;
@@ -5295,7 +5335,7 @@ export default function App() {
       activeTab,
       activeScreen,
       isExpanded,
-      rewardedOffers,
+      rewardedOffers: rewardedOffers.map((o) => normalizeRewardedOfferForSave(o)),
       barnNotification,
       barnShelvesUnlocked: normalizeBarnShelvesUnlocked(),
       goalSlots,
@@ -5918,7 +5958,7 @@ export default function App() {
                       zIndex: 10,
                     }}
                     onClick={() => {
-                      if (showFakeAd) return;
+                      if (showFakeAd || showFakeReview) return;
                       playSfx(SFX_IDS.uiConfirmReward);
                       pendingAdSourceRef.current = 'coinGoal';
                       setShowFakeAd(true);
@@ -8012,9 +8052,61 @@ export default function App() {
               }}
             />
 
+            <FakeReviewPopup
+              isVisible={showFakeReview}
+              appScale={appScale}
+              onComplete={() => {
+                setShowFakeReview(false);
+                setRateUsThankYouOpen(true);
+                // TODO: replace FakeReviewPopup with real store review URL navigation.
+              }}
+            />
+
+            <RateUsThankYouPopup
+              isVisible={rateUsThankYouOpen}
+              onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
+              onDismissForever={() => {
+                markRateUsPermanentlyDismissed();
+                lastOtherPopupClosedAtRef.current = Date.now();
+              }}
+              onClose={() => setRateUsThankYouOpen(false)}
+              closeOnBackdropClick
+              appScale={appScale}
+            />
+
+            <RateUsPopup
+              isVisible={rateUsPopupOpen}
+              onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
+              onDismissWithoutComplete={() => {
+                // TODO: schedule Rate Us popup to return later (timing TBD).
+              }}
+              onFifthStarChosen={() => {
+                playSfx(SFX_IDS.uiConfirmNormal);
+                setRateUsPopupOpen(false);
+                setShowFakeReview(true);
+              }}
+              onLowRatingRateNow={() => {
+                playSfx(SFX_IDS.uiConfirmNormal);
+                setRateUsPopupOpen(false);
+                setRateUsThankYouOpen(true);
+              }}
+              onClose={() => {
+                setRateUsPopupOpen(false);
+                lastOtherPopupClosedAtRef.current = Date.now();
+              }}
+              closeOnBackdropClick
+              appScale={appScale}
+            />
+
             <SettingsPopup
               isVisible={pauseMenuOpen}
               onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
+              onRateUs={() => {
+                playSfx(SFX_IDS.uiConfirmNormal);
+                setRateUsPopupOpen(true);
+                setPauseMenuOpen(false);
+                setSettingsOpenedFromFtue(false);
+              }}
               showAutoMergeSetting={goldenPotCount >= 24}
               onAutoMergeChange={setAutoMergeSetting}
               showDevToolsButton={!settingsOpenedFromFtue}

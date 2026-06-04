@@ -18,6 +18,7 @@ interface SettingsPopupProps {
   onSfxEnabledChange: (enabled: boolean) => void;
   onClearBoosts?: () => void;
   onResetProgress?: () => void;
+  onRateUs?: () => void;
   showAutoMergeSetting?: boolean;
   onAutoMergeChange?: (enabled: boolean) => void;
   closeOnBackdropClick?: boolean;
@@ -93,6 +94,7 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
   onSfxEnabledChange,
   onClearBoosts,
   onResetProgress,
+  onRateUs,
   showAutoMergeSetting = false,
   onAutoMergeChange,
   closeOnBackdropClick = true,
@@ -104,6 +106,7 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
   const [devToolsPressed, setDevToolsPressed] = useState(false);
   const [clearBoostsPressed, setClearBoostsPressed] = useState(false);
   const [resetPressed, setResetPressed] = useState(false);
+  const [rateUsPressed, setRateUsPressed] = useState(false);
   const popupCardLayoutRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -262,6 +265,25 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
                   >
                     <span className="font-bold tracking-tight" style={labelStyle(PALETTES.green)}>
                       Auto Merge {autoMergeMode ? 'ON' : 'OFF'}
+                    </span>
+                  </button>
+                ) : null}
+
+                {onRateUs ? (
+                  <button
+                    type="button"
+                    onMouseDown={() => setRateUsPressed(true)}
+                    onMouseUp={() => setRateUsPressed(false)}
+                    onMouseLeave={() => setRateUsPressed(false)}
+                    onClick={() => {
+                      onAnyButtonClick?.();
+                      onRateUs();
+                    }}
+                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                    style={btnStyle(PALETTES.blue, rateUsPressed)}
+                  >
+                    <span className="font-bold tracking-tight" style={labelStyle(PALETTES.blue)}>
+                      Rate Us
                     </span>
                   </button>
                 ) : null}

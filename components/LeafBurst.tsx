@@ -48,6 +48,10 @@ interface LeafBurstProps {
   spriteVariant?: 'default' | 'gold';
   /** Scale multiplier for burst size (default: 1) */
   burstScale?: number;
+  /** Stacking order for fixed burst root (default: 70) */
+  zIndex?: number;
+  /** Vertical shift applied to burst origin (default: plant spawn offset). Pass 0 to center on `x`/`y`. */
+  spawnOffsetUpPx?: number;
 }
 
 function createLeaves(count: number, sprites: string[] = LEAF_SPRITES): LeafParticle[] {
@@ -64,7 +68,19 @@ function createLeaves(count: number, sprites: string[] = LEAF_SPRITES): LeafPart
   }));
 }
 
-export const LeafBurst: React.FC<LeafBurstProps> = ({ x, y, startTime, onComplete, particleCount = LEAF_BURST_BASELINE_COUNT, useCircle = false, appScale = 1, spriteVariant = 'default', burstScale = 1 }) => {
+export const LeafBurst: React.FC<LeafBurstProps> = ({
+  x,
+  y,
+  startTime,
+  onComplete,
+  particleCount = LEAF_BURST_BASELINE_COUNT,
+  useCircle = false,
+  appScale = 1,
+  spriteVariant = 'default',
+  burstScale = 1,
+  zIndex = 70,
+  spawnOffsetUpPx = SPAWN_OFFSET_UP_PX,
+}) => {
   const sprites = spriteVariant === 'gold' ? LEAF_SPRITES_GOLD : LEAF_SPRITES;
   const [leaves] = useState<LeafParticle[]>(() => createLeaves(particleCount, sprites));
   const [positions, setPositions] = useState<{ x: number; y: number; opacity: number; rotation: number; scale: number }[]>(
@@ -176,12 +192,12 @@ export const LeafBurst: React.FC<LeafBurstProps> = ({ x, y, startTime, onComplet
       style={{
         position: 'fixed',
         left: x,
-        top: y - SPAWN_OFFSET_UP_PX * appScale,
+        top: y - spawnOffsetUpPx * appScale,
         width: 1,
         height: 1,
         transform: `translate(-50%, -50%) scale(${appScale * burstScale})`,
         transformOrigin: 'center center',
-        zIndex: 70,
+        zIndex,
       }}
     >
       {leaves.map((leaf, i) => (

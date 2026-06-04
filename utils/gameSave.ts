@@ -23,6 +23,7 @@ import {
   LIMITED_OFFER_INTRO_CYCLE_COMPLETE_KEY,
   LIMITED_OFFER_INTRO_CYCLE_SEEN_IDS_KEY,
 } from './limitedOfferIntroCycle';
+import { RATE_US_PERMANENTLY_DISMISSED_KEY } from './rateUsDismiss';
 
 function normalizePlantMasteryUnlockPending(raw: unknown): number[] {
   if (!Array.isArray(raw)) return [];
@@ -308,6 +309,7 @@ export function clearGameSave(): void {
   }
   try {
     localStorage.removeItem(LIMITED_OFFER_INTRO_CYCLE_COMPLETE_KEY);
+    localStorage.removeItem(RATE_US_PERMANENTLY_DISMISSED_KEY);
   } catch {
     /* ignore */
   }

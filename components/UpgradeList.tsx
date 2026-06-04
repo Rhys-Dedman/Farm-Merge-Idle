@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { TabType } from '../types';
 import { assetPath } from '../utils/assetPath';
+import { getRewardedOfferTimeRemainingSec } from '../utils/rewardedOfferPanel';
 import { playSfx, SFX_IDS } from '../utils/sfx';
 import { getPlantCoinValue } from '../utils/plantValue';
 import {
@@ -155,7 +156,9 @@ export interface RewardedOffer {
   description: string;
   /** Which tab this offer appears in */
   tab: TabType;
-  /** Time remaining in seconds (optional, for countdown display) */
+  /** Wall-clock expiry for upgrade-panel row (runs while app is closed). */
+  expiresAtMs?: number;
+  /** @deprecated Legacy saves — migrated to `expiresAtMs` on load. */
   timeRemaining?: number;
 }
 
@@ -1032,10 +1035,10 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
   };
 
   const renderRewardedOfferItem = (offer: RewardedOffer) => {
-    const formatTime = (seconds: number) => {
-      const s = Math.max(0, seconds);
-      return `${s}s`;
-    };
+    const panelSecondsRemaining =
+      typeof offer.expiresAtMs === 'number' || typeof offer.timeRemaining === 'number'
+        ? getRewardedOfferTimeRemainingSec(offer)
+        : null;
 
     // Light yellow default (#fde8a1); full yellow only during temporary flash when scroll lands
     const isFlashingYellow = offerFlashIds.has(offer.id);
@@ -1119,7 +1122,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
               }}
             />
             {/* Timer - sits next to icon, no fixed width */}
-            {offer.timeRemaining !== undefined && (
+            {panelSecondsRemaining != null && (
               <span 
                 className="text-[13px] font-black tracking-tighter"
                 style={{ 
@@ -1127,7 +1130,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
                   flexShrink: 0,
                 }}
               >
-                {formatTime(offer.timeRemaining)}
+                {`${panelSecondsRemaining}s`}
               </span>
             )}
           </button>
