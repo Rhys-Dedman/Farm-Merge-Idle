@@ -22,6 +22,8 @@ interface PauseMenuPopupProps {
   onAddMoney?: (amount: number) => void;
   /** Reset economy + progression to post–FTUE 11, level 1 (no tutorial replay). */
   onClearProgress?: () => void;
+  /** Reset daily task seed progress and claims for the current day. */
+  onResetTasksClick?: () => void;
   /** Lock every shed shelf again (no collection unlocks). */
   onClearShed?: () => void;
   /** When false, Unlock Plant button is disabled (all plants unlocked) */
@@ -99,6 +101,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   onGoldenPotClick,
   onAddMoney,
   onClearProgress,
+  onResetTasksClick,
   onClearShed,
   canUnlockPlant = true,
   closeOnBackdropClick = true,
@@ -111,6 +114,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   const [goldenPotPressed, setGoldenPotPressed] = useState(false);
   const [addCoinsPressed, setAddCoinsPressed] = useState(false);
   const [clearProgressPressed, setClearProgressPressed] = useState(false);
+  const [resetTasksPressed, setResetTasksPressed] = useState(false);
   const [clearShedPressed, setClearShedPressed] = useState(false);
   const popupCardLayoutRef = useRef<HTMLDivElement>(null);
 
@@ -360,6 +364,21 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                   >
                     <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.red)}>
                       Clear Shed
+                    </span>
+                  </button>
+                ) : null}
+                {onResetTasksClick ? (
+                  <button
+                    type="button"
+                    onMouseDown={() => setResetTasksPressed(true)}
+                    onMouseUp={() => setResetTasksPressed(false)}
+                    onMouseLeave={() => setResetTasksPressed(false)}
+                    onClick={() => onResetTasksClick()}
+                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.yellow, resetTasksPressed)}
+                  >
+                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.yellow)}>
+                      Reset tasks
                     </span>
                   </button>
                 ) : null}

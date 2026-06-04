@@ -19,6 +19,7 @@ import { FloatingButtonStack } from './components/FloatingButtonStack';
 import { FarmLeftFloatingButtonStack } from './components/FarmLeftFloatingButtonStack';
 import { Projectile } from './components/Projectile';
 import { LeafBurst, LEAF_BURST_BASELINE_COUNT, LEAF_BURST_SMALL_COUNT } from './components/LeafBurst';
+import { PopupRectLeafBurst } from './components/PopupRectLeafBurst';
 import { AmbientFallingLeaves } from './components/AmbientFallingLeaves';
 import { UnlockBurst } from './components/UnlockBurst';
 import { CellHighlightBeam } from './components/CellHighlightBeam';
@@ -42,6 +43,26 @@ import { PauseMenuPopup } from './components/PauseMenuPopup';
 import { SettingsPopup } from './components/SettingsPopup';
 import { RateUsPopup } from './components/RateUsPopup';
 import { RateUsThankYouPopup } from './components/RateUsThankYouPopup';
+import { DailyTasksPopup } from './components/DailyTasksPopup';
+import { type DailyTaskClaimFx, type DailyTaskDefinition } from './components/DailyTaskRow';
+import {
+  buildDailyTaskRows,
+  clearDailyTasksProgressStorage,
+  findNewlyCompletedDailyTasks,
+  markDailyTaskClaimed,
+  recordDailyTaskSeedPlanted,
+  resetDailyTasksProgressForDay,
+  type DailyTaskId,
+} from './utils/dailyTasksProgress';
+import { useDailyTasksCountdown } from './hooks/useDailyTasksCountdown';
+import { FloatingButtonTasks } from './components/FloatingButtonTasks';
+import {
+  DAILY_TASKS_COUNTDOWN_END_MS_KEY,
+  DAILY_TASKS_UNLOCKED_KEY,
+  markDailyTasksUnlocked,
+  readDailyTasksUnlocked,
+  rollDailyTasksPeriodIfExpired,
+} from './utils/dailyTasksCountdown';
 import { BoostParticle, BoostParticleData } from './components/BoostParticle';
 import { ActiveBoostData, ACTIVE_BOOST_INDICATOR_SIZE_PX } from './components/ActiveBoostIndicator';
 import { UpgradeTabsRef } from './components/UpgradeTabs';
@@ -256,6 +277,8 @@ function isDiscoveryLightGreenEligible(
 
 /** Double Coins duration when granted from a limited-offer / upgrade-panel rewarded ad (offer has no duration in config). */
 const REWARDED_DOUBLE_COINS_AD_DURATION_MS = 30 * 60 * 1000;
+/** Pause after fake ad closes before daily-task 2× claim VFX (lets ad dismiss finish). */
+const DAILY_TASK_2X_CLAIM_AFTER_AD_MS = 750;
 
 function buildPurchaseSuccessRewards(config: StoreCoinOfferConfig): PurchaseSuccessfulRewardRow[] {
   const rows: PurchaseSuccessfulRewardRow[] = [
@@ -1128,6 +1151,7 @@ export default function App() {
   const [starterPackPurchased, setStarterPackPurchased] = useState(readStarterPackPurchased);
   const [starterPackUnlocked, setStarterPackUnlocked] = useState(readStarterPackUnlocked);
   const [starterPackCountdownRefreshKey, setStarterPackCountdownRefreshKey] = useState(0);
+  const [dailyTasksCountdownRefreshKey, setDailyTasksCountdownRefreshKey] = useState(0);
   const [isExpanded, setIsExpanded] = useState(false);
   const panelHeight = useAnimatedPanelHeight(isExpanded);
   const [money, setMoney] = useState(0);
@@ -1289,6 +1313,29 @@ export default function App() {
   const [rateUsPopupOpen, setRateUsPopupOpen] = useState(false);
   const [showFakeReview, setShowFakeReview] = useState(false);
   const [rateUsThankYouOpen, setRateUsThankYouOpen] = useState(false);
+  const [dailyTasksPopupOpen, setDailyTasksPopupOpen] = useState(false);
+  const [dailyTaskRows, setDailyTaskRows] = useState<DailyTaskDefinition[]>(() => {
+    rollDailyTasksPeriodIfExpired();
+    return buildDailyTaskRows();
+  });
+  const dailyTaskRowsRef = useRef(dailyTaskRows);
+  dailyTaskRowsRef.current = dailyTaskRows;
+  const [tasksFbReadyBounceNonce, setTasksFbReadyBounceNonce] = useState(0);
+  const [tasksFbLeafBursts, setTasksFbLeafBursts] = useState<
+    { id: string; x: number; y: number; startTime: number }[]
+  >([]);
+  const tasksFloatingButtonRef = useRef<HTMLDivElement>(null);
+  const nextTasksFbLeafBurstIdRef = useRef(0);
+  const dailyTasksPeriodRolledRef = useRef(false);
+  const [dailyTaskClaimBounceId, setDailyTaskClaimBounceId] = useState<string | null>(null);
+  const [dailyTaskLeafBursts, setDailyTaskLeafBursts] = useState<
+    { id: string; x: number; y: number; rectWidth: number; rectHeight: number }[]
+  >([]);
+  const pendingDailyTaskClaimRef = useRef<{
+    taskId: string;
+    fx: DailyTaskClaimFx;
+    coinMultiplier: number;
+  } | null>(null);
   const [devToolsOpen, setDevToolsOpen] = useState(false);
   const [musicEnabled, setMusicEnabled] = useState(_earlyAudio.musicEnabled);
   const [sfxEnabled, setSfxEnabled] = useState(_earlyAudio.sfxEnabled);
@@ -1335,6 +1382,7 @@ export default function App() {
     purchaseSuccess: false,
     iapOffer: false,
     rateUs: false,
+    dailyTasks: false,
   });
   useEffect(() => {
     setAudioSettings({ musicEnabled, sfxEnabled });
@@ -1421,7 +1469,9 @@ export default function App() {
   const coinGoalIconRef = useRef<HTMLImageElement>(null);
   const lastCoinGoalHiddenAtRef = useRef<number>(Date.now());
   const nextCoinGoalDelayRef = useRef<number>(30000 + Math.random() * 30000); // 30–60s until next spawn, new random each hide
-  const pendingAdSourceRef = useRef<'limitedOffer' | 'upgradeList' | 'coinGoal' | 'offlineEarnings' | 'storeFreeOffer' | null>(null);
+  const pendingAdSourceRef = useRef<
+    'limitedOffer' | 'upgradeList' | 'coinGoal' | 'offlineEarnings' | 'storeFreeOffer' | 'dailyTaskClaim2x' | null
+  >(null);
   const pendingOfferIdRef = useRef<string | null>(null); // for boost particle: only shoot if offer has duration
   const [activePlantPanels, setActivePlantPanels] = useState<PlantPanelData[]>([]);
   const [fertilizingCellIndices, setFertilizingCellIndices] = useState<number[]>([]); // Cells currently playing fertilize animation
@@ -1464,7 +1514,9 @@ export default function App() {
   const [sourceCellFadeOutIdx, setSourceCellFadeOutIdx] = useState<number | null>(null);
   const [newCellImpactIdx, setNewCellImpactIdx] = useState<number | null>(null);
   const [leafBursts, setLeafBursts] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
-  const [leafBurstsSmall, setLeafBurstsSmall] = useState<{ id: string; x: number; y: number; startTime: number; particleCount?: number; useCircle?: boolean }[]>([]);
+  const [leafBurstsSmall, setLeafBurstsSmall] = useState<
+    { id: string; x: number; y: number; startTime: number; particleCount?: number; useCircle?: boolean; burstScale?: number }[]
+  >([]);
   const [unlockBursts, setUnlockBursts] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
   const [masteryPurchaseConeBursts, setMasteryPurchaseConeBursts] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
   const [buttonLeafBursts, setButtonLeafBursts] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
@@ -1600,6 +1652,123 @@ export default function App() {
     });
   }, [playerLevel]);
 
+  const dailyTasksUnlocked = playerLevel >= TASKS_FLOATING_BUTTON_UNLOCK_LEVEL;
+  const dailyTasksRemainingMs = useDailyTasksCountdown(
+    dailyTasksUnlocked && readDailyTasksUnlocked(),
+    dailyTasksCountdownRefreshKey,
+  );
+
+  useEffect(() => {
+    if (playerLevel >= TASKS_FLOATING_BUTTON_UNLOCK_LEVEL) {
+      markDailyTasksUnlocked();
+      setDailyTasksCountdownRefreshKey((k) => k + 1);
+    }
+  }, [playerLevel]);
+
+  useEffect(() => {
+    if (!dailyTasksUnlocked || !readDailyTasksUnlocked()) return;
+    if (dailyTasksRemainingMs > 0) {
+      dailyTasksPeriodRolledRef.current = false;
+      return;
+    }
+    if (dailyTasksPeriodRolledRef.current) return;
+    dailyTasksPeriodRolledRef.current = true;
+    if (rollDailyTasksPeriodIfExpired()) {
+      setDailyTaskRows(buildDailyTaskRows());
+      setDailyTasksCountdownRefreshKey((k) => k + 1);
+    }
+  }, [dailyTasksUnlocked, dailyTasksRemainingMs]);
+
+  const triggerTasksFloatingButtonReadyFx = useCallback(() => {
+    setTasksFbReadyBounceNonce((n) => n + 1);
+    if (getPerformanceMode()) return;
+    const el = tasksFloatingButtonRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setTasksFbLeafBursts((prev) => [
+      ...prev,
+      {
+        id: `tasks-fb-lb-${nextTasksFbLeafBurstIdRef.current++}`,
+        x: r.left + r.width / 2,
+        y: r.top + r.height / 2 + 30,
+        startTime: Date.now(),
+      },
+    ]);
+  }, []);
+
+  const applyDailyTaskSeedProgress = useCallback(() => {
+    const prev = dailyTaskRowsRef.current;
+    const next = recordDailyTaskSeedPlanted();
+    dailyTaskRowsRef.current = next;
+    if (findNewlyCompletedDailyTasks(prev, next)) {
+      window.setTimeout(() => triggerTasksFloatingButtonReadyFx(), 0);
+    }
+    setDailyTaskRows(next);
+  }, [triggerTasksFloatingButtonReadyFx]);
+
+  const handleDailyTaskClaim2x = useCallback((taskId: string, fx: DailyTaskClaimFx) => {
+    const task = dailyTaskRows.find((t) => t.id === taskId);
+    if (!task || task.state !== 'complete') return;
+    playSfx(SFX_IDS.uiConfirmNormal);
+    pendingDailyTaskClaimRef.current = { taskId, fx, coinMultiplier: 2 };
+    pendingAdSourceRef.current = 'dailyTaskClaim2x';
+    setPendingAdComplete(null);
+    setShowFakeAd(true);
+  }, [dailyTaskRows]);
+
+  const performDailyTaskClaim = useCallback(
+    (taskId: string, fx: DailyTaskClaimFx, coinMultiplier = 1) => {
+      const task = dailyTaskRows.find((t) => t.id === taskId);
+      if (!task || task.state !== 'complete') return;
+
+      setShowFakeAd(false);
+      pendingAdSourceRef.current = null;
+      pendingDailyTaskClaimRef.current = null;
+      setPendingAdComplete(null);
+      playSfx(SFX_IDS.uiConfirmReward);
+
+      setDailyTaskRows(markDailyTaskClaimed(taskId as DailyTaskId));
+      setDailyTaskClaimBounceId(taskId);
+      window.setTimeout(() => setDailyTaskClaimBounceId((id) => (id === taskId ? null : id)), 200);
+
+      if (!getPerformanceMode()) {
+        setDailyTaskLeafBursts((prev) => [
+          ...prev,
+          {
+            id: `daily-task-claim-${taskId}-${Date.now()}`,
+            x: fx.rowCenter.x,
+            y: fx.rowCenter.y,
+            rectWidth: fx.rowWidth,
+            rectHeight: fx.rowHeight,
+          },
+        ]);
+      }
+
+      const layer = discoveryRewardFxLayerRef.current;
+      if (layer) {
+        const lr = layer.getBoundingClientRect();
+        const payout = task.rewardCoins * coinMultiplier;
+        setActiveDiscoveryCoinParticles((prev) => [
+          ...prev,
+          {
+            id: `daily-task-reward-${taskId}-${Date.now()}`,
+            startX: fx.rewardCenter.x - lr.left,
+            startY: fx.rewardCenter.y - lr.top,
+            value: payout,
+          },
+        ]);
+      }
+    },
+    [dailyTaskRows],
+  );
+
+  const handleDailyTaskClaim = useCallback(
+    (taskId: string, fx: DailyTaskClaimFx) => {
+      performDailyTaskClaim(taskId, fx);
+    },
+    [performDailyTaskClaim],
+  );
+
   // Testing cheat: instantly complete the current mastery segment.
   const completeMasterySegmentCheat = useCallback(() => {
     const seg = PLANT_MASTERY_ORDERS_PER_SEGMENT;
@@ -1704,6 +1873,7 @@ export default function App() {
     const isPurchaseSuccessOpen = !!purchaseSuccessfulUi;
     const isIapOfferOpen = !!iapOfferUi;
     const isRateUsOpen = rateUsPopupOpen;
+    const isDailyTasksOpen = dailyTasksPopupOpen;
 
     if (!was.levelUp && isLevelUpOpen) playSfx(SFX_IDS.popupLevelUp);
     if (!was.discovery && isDiscoveryOpen) playSfx(SFX_IDS.popupPlantDiscovery);
@@ -1713,6 +1883,7 @@ export default function App() {
     if (!was.purchaseSuccess && isPurchaseSuccessOpen) playSfx(SFX_IDS.popupNormal);
     if (!was.iapOffer && isIapOfferOpen) playSfx(SFX_IDS.popupNormal);
     if (!was.rateUs && isRateUsOpen) playSfx(SFX_IDS.popupNormal);
+    if (!was.dailyTasks && isDailyTasksOpen) playSfx(SFX_IDS.popupNormal);
 
     prevPopupOpenRef.current = {
       levelUp: isLevelUpOpen,
@@ -1723,8 +1894,9 @@ export default function App() {
       purchaseSuccess: isPurchaseSuccessOpen,
       iapOffer: isIapOfferOpen,
       rateUs: isRateUsOpen,
+      dailyTasks: isDailyTasksOpen,
     };
-  }, [levelUpPopup, discoveryPopup, limitedOfferPopup, plantInfoPopup, goldenPotBonusesPopupOpen, purchaseSuccessfulUi, iapOfferUi, rateUsPopupOpen]);
+  }, [levelUpPopup, discoveryPopup, limitedOfferPopup, plantInfoPopup, goldenPotBonusesPopupOpen, purchaseSuccessfulUi, iapOfferUi, rateUsPopupOpen, dailyTasksPopupOpen]);
   /** FTUE: current stage (e.g. 'welcome' after splash); null when not in FTUE */
   const [activeFtueStage, setActiveFtueStage] = useState<FtueStageId | null>(null);
   const prevWelcomeFtueOpenRef = useRef(false);
@@ -2440,7 +2612,7 @@ export default function App() {
       if (purchaseSuccessfulUi) return;
       if (iapOfferUi) return;
       if (plantInfoPopup?.isVisible) return;
-      if (rateUsPopupOpen || showFakeReview || rateUsThankYouOpen) return;
+      if (rateUsPopupOpen || showFakeReview || rateUsThankYouOpen || dailyTasksPopupOpen) return;
       const now = Date.now();
       if (lastLimitedOfferClosedAtRef.current && now - lastLimitedOfferClosedAtRef.current < 10000) return;
       if (lastFakeAdClosedAtRef.current && now - lastFakeAdClosedAtRef.current < 10000) return;
@@ -2905,8 +3077,9 @@ export default function App() {
         ...(isLuckyGrowth ? { isLuckyGrowth: true } : {}),
       };
       setActiveProjectiles(prev => [...prev, newProj]);
+      applyDailyTaskSeedProgress();
     }
-  }, []);
+  }, [applyDailyTaskSeedProgress]);
 
   const wildGrowthUpgradeLevel = cropsState.wild_growth?.level ?? 0;
   useEffect(() => {
@@ -4862,7 +5035,7 @@ export default function App() {
     if (isLoading) return;
     if (activeFtueStage !== null || ftue11StartQueued) return;
     // Never merge while Settings is open (user should see the board when merges run).
-    if (pauseMenuOpen || rateUsPopupOpen || showFakeReview || rateUsThankYouOpen) return;
+    if (pauseMenuOpen || rateUsPopupOpen || showFakeReview || rateUsThankYouOpen || dailyTasksPopupOpen) return;
     // Intentionally allow auto-merge while discovery / level-up are open so merge chains do not stall
     // (e.g. L2+L2→L3 opens discovery while two L1 pairs are still on the board).
     if (offlineEarningsUi?.open) return;
@@ -4911,6 +5084,7 @@ export default function App() {
     pauseMenuOpen,
     rateUsPopupOpen,
     rateUsThankYouOpen,
+    dailyTasksPopupOpen,
     showFakeReview,
     offlineEarningsUi?.open,
     showFakeAd,
@@ -4940,9 +5114,9 @@ export default function App() {
     if (prevAutoMergeCapRef.current === cap) return;
     prevAutoMergeCapRef.current = cap;
     if (!autoMergeSetting || !getAutoMergeMode()) return;
-    if (pauseMenuOpen || rateUsPopupOpen || showFakeReview || rateUsThankYouOpen || isLoading) return;
+    if (pauseMenuOpen || rateUsPopupOpen || showFakeReview || rateUsThankYouOpen || dailyTasksPopupOpen || isLoading) return;
     scheduleAutoMergeRecheck(0);
-  }, [goalPlantTypes, goalSlots, goalCounts, autoMergeSetting, pauseMenuOpen, rateUsPopupOpen, showFakeReview, rateUsThankYouOpen, isLoading, scheduleAutoMergeRecheck]);
+  }, [goalPlantTypes, goalSlots, goalCounts, autoMergeSetting, pauseMenuOpen, rateUsPopupOpen, showFakeReview, rateUsThankYouOpen, dailyTasksPopupOpen, isLoading, scheduleAutoMergeRecheck]);
 
   useEffect(() => {
     if (!autoMergeSetting) return;
@@ -4961,13 +5135,13 @@ export default function App() {
   /** Cancel delayed rechecks while Settings is open; when it closes (or load finishes), try once so merges can start. */
   useEffect(() => {
     if (isLoading) return;
-    if (pauseMenuOpen || rateUsPopupOpen || showFakeReview || rateUsThankYouOpen) {
+    if (pauseMenuOpen || rateUsPopupOpen || showFakeReview || rateUsThankYouOpen || dailyTasksPopupOpen) {
       clearAutoMergeRecheckTimeout();
       return;
     }
     if (!autoMergeSetting || !getAutoMergeMode()) return;
     scheduleAutoMergeRecheck(0);
-  }, [pauseMenuOpen, rateUsPopupOpen, showFakeReview, rateUsThankYouOpen, autoMergeSetting, isLoading, clearAutoMergeRecheckTimeout, scheduleAutoMergeRecheck]);
+  }, [pauseMenuOpen, rateUsPopupOpen, showFakeReview, rateUsThankYouOpen, dailyTasksPopupOpen, autoMergeSetting, isLoading, clearAutoMergeRecheckTimeout, scheduleAutoMergeRecheck]);
 
   useEffect(() => () => clearAutoMergeRecheckTimeout(), [clearAutoMergeRecheckTimeout]);
 
@@ -6048,16 +6222,20 @@ export default function App() {
                     }}
                   />
                   <FloatingButtonStack side="right">
-                    <FloatingButton
-                      title="TASKS"
-                      locked={playerLevel < TASKS_FLOATING_BUTTON_UNLOCK_LEVEL}
-                      unlockLevel={TASKS_FLOATING_BUTTON_UNLOCK_LEVEL}
-                      iconSrc={assetPath(
-                        playerLevel >= TASKS_FLOATING_BUTTON_UNLOCK_LEVEL
-                          ? '/assets/icons/floating_buttons/icon_fb_tasks_normal.png'
-                          : '/assets/icons/floating_buttons/icon_fb_tasks_locked.png',
-                      )}
-                    />
+                    <div ref={tasksFloatingButtonRef} className="inline-block">
+                      <FloatingButtonTasks
+                        tasksUnlocked={dailyTasksUnlocked}
+                        unlockLevel={TASKS_FLOATING_BUTTON_UNLOCK_LEVEL}
+                        tasks={dailyTaskRows}
+                        readyBounceNonce={tasksFbReadyBounceNonce}
+                        onClick={() => {
+                          playSfx(SFX_IDS.uiConfirmNormal);
+                          rollDailyTasksPeriodIfExpired();
+                          setDailyTaskRows(buildDailyTaskRows());
+                          setDailyTasksPopupOpen(true);
+                        }}
+                      />
+                    </div>
                     <FloatingButton
                       title="Gardens"
                       locked={playerLevel < GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL}
@@ -7077,6 +7255,7 @@ export default function App() {
                 startTime={b.startTime}
                 particleCount={b.particleCount ?? LEAF_BURST_SMALL_COUNT}
                 useCircle={b.useCircle}
+                burstScale={b.burstScale}
                 appScale={appScale}
                 onComplete={() => setLeafBurstsSmall((prev) => prev.filter((x) => x.id !== b.id))}
               />
@@ -7123,6 +7302,18 @@ export default function App() {
                 spriteVariant="gold"
                 burstScale={1.25}
                 onComplete={() => setGoalCoinLeafBursts((prev) => prev.filter((x) => x.id !== b.id))}
+              />
+            ))}
+            {tasksFbLeafBursts.map((b) => (
+              <LeafBurst
+                key={b.id}
+                x={b.x}
+                y={b.y}
+                startTime={b.startTime}
+                particleCount={LEAF_BURST_BASELINE_COUNT}
+                appScale={appScale}
+                burstScale={1.25}
+                onComplete={() => setTasksFbLeafBursts((prev) => prev.filter((x) => x.id !== b.id))}
               />
             ))}
             {boostBursts.map((b) => (
@@ -7484,6 +7675,17 @@ export default function App() {
         {/* Modals (level up, discovery, offers, pause): above surplus coin panels */}
         {createPortal(
           <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 220 }}>
+            {dailyTaskLeafBursts.map((b) => (
+              <PopupRectLeafBurst
+                key={b.id}
+                centerX={b.x}
+                centerY={b.y}
+                rectWidth={b.rectWidth}
+                rectHeight={b.rectHeight}
+                zIndex={221}
+                onComplete={() => setDailyTaskLeafBursts((prev) => prev.filter((x) => x.id !== b.id))}
+              />
+            ))}
             {/* Level Up Popup */}
             {levelUpPopup && (() => {
               const unlockInfo = getLevelUnlockInfo(levelUpPopup.level);
@@ -8013,6 +8215,7 @@ export default function App() {
               onActivateRewardClick={(buttonRect) => {
                 if (pendingAdSourceRef.current === 'offlineEarnings') return;
                 if (pendingAdSourceRef.current === 'coinGoal') return;
+                if (pendingAdSourceRef.current === 'dailyTaskClaim2x') return;
                 const offerId = pendingOfferIdRef.current;
                 const offer = offerId ? getOfferById(offerId) : null;
                 const hasDuration = offer && (offer.durationMinutes != null || (offer.durationSeconds != null && offer.durationSeconds > 0));
@@ -8044,10 +8247,23 @@ export default function App() {
               }}
               onComplete={() => {
                 lastFakeAdClosedAtRef.current = Date.now();
+                const adSource = pendingAdSourceRef.current;
+                pendingAdSourceRef.current = null;
+                setShowFakeAd(false);
+
+                if (adSource === 'dailyTaskClaim2x') {
+                  const pending = pendingDailyTaskClaimRef.current;
+                  pendingDailyTaskClaimRef.current = null;
+                  if (pending) {
+                    window.setTimeout(() => {
+                      performDailyTaskClaim(pending.taskId, pending.fx, pending.coinMultiplier);
+                    }, DAILY_TASK_2X_CLAIM_AFTER_AD_MS);
+                  }
+                  return;
+                }
+
                 const applyReward = pendingAdComplete;
                 setPendingAdComplete(null);
-                setShowFakeAd(false);
-                pendingAdSourceRef.current = null;
                 setTimeout(() => applyReward?.(), 250);
               }}
             />
@@ -8060,6 +8276,24 @@ export default function App() {
                 setRateUsThankYouOpen(true);
                 // TODO: replace FakeReviewPopup with real store review URL navigation.
               }}
+            />
+
+            <DailyTasksPopup
+              isVisible={dailyTasksPopupOpen}
+              onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
+              onClose={() => {
+                setDailyTasksPopupOpen(false);
+                setDailyTaskClaimBounceId(null);
+                lastOtherPopupClosedAtRef.current = Date.now();
+              }}
+              closeOnBackdropClick
+              appScale={appScale}
+              tasks={dailyTaskRows}
+              claimBounceTaskId={dailyTaskClaimBounceId}
+              onClaimTask={handleDailyTaskClaim}
+              onClaim2xTask={handleDailyTaskClaim2x}
+              tasksUnlocked={playerLevel >= TASKS_FLOATING_BUTTON_UNLOCK_LEVEL}
+              countdownRefreshKey={dailyTasksCountdownRefreshKey}
             />
 
             <RateUsThankYouPopup
@@ -8215,6 +8449,11 @@ export default function App() {
                 playSfx(SFX_IDS.uiConfirmNormal);
                 completeMasterySegmentCheat();
               }}
+              onResetTasksClick={() => {
+                playSfx(SFX_IDS.uiConfirmNormal);
+                setDailyTaskRows(resetDailyTasksProgressForDay());
+                setDailyTaskClaimBounceId(null);
+              }}
               onAddMoney={(amount) => {
                 playSfx(SFX_IDS.uiConfirmNormal);
                 setMoney((prev) => prev + amount);
@@ -8231,9 +8470,13 @@ export default function App() {
                 try { localStorage.removeItem(STORE_STARTER_PACK_COUNTDOWN_END_MS_KEY); } catch { /* ignore */ }
                 try { localStorage.removeItem(STORE_STARTER_PACK_UNLOCKED_KEY); } catch { /* ignore */ }
                 try { localStorage.removeItem(STORE_STARTER_PACK_PURCHASED_KEY); } catch { /* ignore */ }
+                try { localStorage.removeItem(DAILY_TASKS_COUNTDOWN_END_MS_KEY); } catch { /* ignore */ }
+                try { localStorage.removeItem(DAILY_TASKS_UNLOCKED_KEY); } catch { /* ignore */ }
+                clearDailyTasksProgressStorage();
                 setStarterPackUnlocked(false);
                 setStarterPackPurchased(false);
                 setStarterPackCountdownRefreshKey((k) => k + 1);
+                setDailyTasksCountdownRefreshKey((k) => k + 1);
                 persistGameSave(createPostFtueCleanSave());
                 window.location.reload();
               }}

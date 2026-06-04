@@ -22,6 +22,7 @@ const ASSETS_TO_PRELOAD = [
   // Goal icons (orders/discovery goals – preload all so new goals don’t load images on demand)
   ...Array.from({ length: 24 }, (_, i) => `/assets/icons/goals/garden_1/icon_goal_${i + 1}.png`),
   // Icons
+  '/assets/icons/floating_buttons/icon_tasks.png',
   '/assets/icons/generic_buttons/icon_barn.png',
   '/assets/icons/generic_buttons/icon_farm.png',
   '/assets/icons/generic_buttons/icon_market.png',

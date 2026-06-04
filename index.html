@@ -255,6 +255,24 @@
             animation: mastery-unlock-purchase-bounce 500ms ease-in-out forwards;
             transform-origin: 50% 50%;
         }
+        @keyframes daily-task-claim-bounce {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        .daily-task-claim-bounce {
+            animation: daily-task-claim-bounce 200ms ease-in-out forwards;
+            transform-origin: 50% 50%;
+        }
+        @keyframes floating-button-ready-bounce {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+            100% { transform: scale(1); }
+        }
+        .floating-button-ready-bounce {
+            animation: floating-button-ready-bounce 200ms ease-in-out forwards;
+            transform-origin: 50% 50%;
+        }
         @keyframes mastery-unlock-white-flash {
             0% { filter: brightness(1) saturate(1); opacity: 1; }
             12% { filter: brightness(3.4) saturate(0.03) contrast(1.15); opacity: 1; }

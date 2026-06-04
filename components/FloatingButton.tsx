@@ -28,6 +28,8 @@ export interface FloatingButtonProps {
   /** Shown on the pill as "LEVEL N" when `locked` is true. */
   unlockLevel?: number;
   onClick?: () => void;
+  /** 200ms 1→1.1→1 bounce on the button (e.g. tasks ready to claim). */
+  readyBounceActive?: boolean;
   className?: string;
   style?: React.CSSProperties;
   'aria-label'?: string;
@@ -41,6 +43,7 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
   locked = false,
   unlockLevel,
   onClick,
+  readyBounceActive = false,
   className = '',
   style,
   'aria-label': ariaLabel,
@@ -63,7 +66,7 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
       onClick={locked ? undefined : onClick}
       aria-label={resolvedAriaLabel}
       aria-disabled={locked || undefined}
-      className={`relative inline-block overflow-visible border-0 bg-transparent p-0 outline-none select-none transition-transform duration-150 ${locked ? 'cursor-default' : 'active:scale-95'} ${className}`}
+      className={`relative inline-block overflow-visible border-0 bg-transparent p-0 outline-none select-none transition-transform duration-150 ${locked ? 'cursor-default' : 'active:scale-95'} ${readyBounceActive ? 'floating-button-ready-bounce' : ''} ${className}`}
       style={{
         width: FLOATING_BUTTON_ICON_SIZE_PX,
         height: FLOATING_BUTTON_ICON_SIZE_PX,

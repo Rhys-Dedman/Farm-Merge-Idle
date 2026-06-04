@@ -132,7 +132,6 @@ export const LeafBurst: React.FC<LeafBurstProps> = ({
           p.x += p.vx * dtSec;
           p.y += p.vy * dtSec;
         } else {
-          // Use circle or ellipse based on prop
           const boundaryDist = useCircle 
             ? Math.sqrt(p.x ** 2 + p.y ** 2) / ELLIPSE_A
             : Math.sqrt((p.x / ELLIPSE_A) ** 2 + (p.y / ELLIPSE_B) ** 2);
