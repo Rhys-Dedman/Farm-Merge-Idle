@@ -1,7 +1,7 @@
 /**
  * Goal coin particle: flies from completed goal icon or popup reward to wallet.
  * - `variant="goal"` — classic orders/goals: trough arc + original ease/speed/size (unchanged from pre–popup work).
- * - `variant="popupReward"` — discovery / offline: left-then-up path + punchier end ease + larger VFX.
+ * - `variant="popupReward"` — discovery / offline / task claim: left-then-up path + punchier end ease.
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { assetPath } from '../utils/assetPath';
@@ -64,10 +64,10 @@ interface GoalCoinParticleProps {
   activeCount?: number;
   /**
    * `goal` — coin goals / plant orders → wallet (classic trough + easing).
-   * `popupReward` — discovery & offline earnings (left-up path + punchier easing + scale).
+   * `popupReward` — discovery, offline earnings, daily task claim (left-up path + punchier easing).
    */
   variant?: 'goal' | 'popupReward';
-  /** Only for `popupReward`; default 1.5. Ignored for `goal` (always 1×). */
+  /** Only for `popupReward`; default 1 (same coin/trail size as `goal`). */
   popupVisualScale?: number;
 }
 
@@ -81,7 +81,7 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
   appScale = 1,
   activeCount = 1,
   variant = 'goal',
-  popupVisualScale = 1.5,
+  popupVisualScale = 1,
 }) => {
   const isPopupReward = variant === 'popupReward';
   const durationMul = isPopupReward ? 0.75 : 1; // 25% faster for popup coins only

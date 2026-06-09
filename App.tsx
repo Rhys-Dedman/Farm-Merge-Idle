@@ -11,6 +11,7 @@ import {
   GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL,
   STARTER_PACK_FORCE_POPUP_LEVEL,
 } from './constants/playerLevelUnlocks';
+import { TASKS_FTUE_FLOATING_BUTTON_ID } from './constants/tasksFtue';
 import { Navbar } from './components/Navbar';
 import { StoreScreen } from './components/StoreScreen';
 import { SideAction } from './components/SideAction';
@@ -46,23 +47,43 @@ import { RateUsThankYouPopup } from './components/RateUsThankYouPopup';
 import { DailyTasksPopup } from './components/DailyTasksPopup';
 import { type DailyTaskClaimFx, type DailyTaskDefinition } from './components/DailyTaskRow';
 import {
-  buildDailyTaskRows,
   clearDailyTasksProgressStorage,
+  ensureDailyTasksDay,
   findNewlyCompletedDailyTasks,
+  getDailyTaskRollContext,
   markDailyTaskClaimed,
+  markDailyTasksClaimed,
+  completeNextDailyTaskForDev,
+  recordDailyTaskBoosterActivated,
+  recordDailyTaskCoinOrder,
+  recordDailyTaskFreeOfferClaimed,
+  recordDailyTaskGoldenPot,
+  recordDailyTaskHarvestCrops,
+  recordDailyTaskHarvestThreeCells,
+  recordDailyTaskLevelUp,
+  recordDailyTaskMerge,
+  recordDailyTaskMergeCoins,
+  recordDailyTaskMergeHarvestCrops,
+  recordDailyTaskNewDiscovery,
+  recordDailyTaskOrderComplete,
   recordDailyTaskSeedPlanted,
-  resetDailyTasksProgressForDay,
-  type DailyTaskId,
+  recordDailyTaskUpgradePurchased,
+  resetDailyTasksForDev,
+  rollDailyTasksNextPeriod,
+  syncDailyTasksGrid,
+  tickDailyTaskPlaytime,
 } from './utils/dailyTasksProgress';
 import { useDailyTasksCountdown } from './hooks/useDailyTasksCountdown';
 import { FloatingButtonTasks } from './components/FloatingButtonTasks';
 import {
+  DAILY_TASKS_AUTO_CLAIM_BEFORE_END_MS,
   DAILY_TASKS_COUNTDOWN_END_MS_KEY,
   DAILY_TASKS_UNLOCKED_KEY,
   markDailyTasksUnlocked,
   readDailyTasksUnlocked,
   rollDailyTasksPeriodIfExpired,
 } from './utils/dailyTasksCountdown';
+import { getDailyTaskClaimFxFromDom } from './utils/dailyTaskClaimFx';
 import { BoostParticle, BoostParticleData } from './components/BoostParticle';
 import { ActiveBoostData, ACTIVE_BOOST_INDICATOR_SIZE_PX } from './components/ActiveBoostIndicator';
 import { UpgradeTabsRef } from './components/UpgradeTabs';
@@ -168,7 +189,10 @@ import { CollectionFtueOverlay } from './components/CollectionFtueOverlay';
 import type { CollectionFtuePhase } from './constants/collectionFtue';
 import { COLLECTION_FTUE_BLOCKER_TINT, parseCollectionFtuePhase } from './constants/collectionFtue';
 import { formatCompactNumber } from './utils/formatCompactNumber';
+import { getPlantData } from './constants/plantData';
 import { getPlantCoinValue } from './utils/plantValue';
+import { getGoalsRequiredForLevel } from './utils/playerLevelGoals';
+import { getGoalIconForPlantLevel } from './utils/plantGoalIcons';
 
 /** Coin per plant level (economy). */
 export function getCoinValueForLevel(level: number): number {
@@ -188,16 +212,6 @@ const COLLECTION_FTUE_INTRO_CTA_OVERLAY_DELAY_MS = 600;
 
 /** Merge with no matching goal: coin panel uses seed-surplus scale (default cream panel bg). */
 const MERGE_COIN_HARVEST_PANEL_SCALE = 1.5;
-
-/** Goals to complete at each player level before leveling up: 8…30, then 30 forever. */
-const GOALS_TO_LEVEL_UP_TABLE = [8, 10, 12, 15, 20, 25, 30] as const;
-const GOALS_TO_LEVEL_UP_CAP = 30;
-
-const getGoalsRequiredForLevel = (level: number): number => {
-  const L = Math.max(1, Math.floor(level));
-  if (L > GOALS_TO_LEVEL_UP_TABLE.length) return GOALS_TO_LEVEL_UP_CAP;
-  return GOALS_TO_LEVEL_UP_TABLE[L - 1];
-};
 
 /** Goal difficulty scaling: 0.9 = easier, 1.0 = normal, 1.1 = harder, 1.2 = much harder */
 const GOAL_DIFFICULTY_SCALING = 1.0;
@@ -278,7 +292,7 @@ function isDiscoveryLightGreenEligible(
 /** Double Coins duration when granted from a limited-offer / upgrade-panel rewarded ad (offer has no duration in config). */
 const REWARDED_DOUBLE_COINS_AD_DURATION_MS = 30 * 60 * 1000;
 /** Pause after fake ad closes before daily-task 2× claim VFX (lets ad dismiss finish). */
-const DAILY_TASK_2X_CLAIM_AFTER_AD_MS = 750;
+const DAILY_TASK_2X_CLAIM_AFTER_AD_MS = 250;
 
 function buildPurchaseSuccessRewards(config: StoreCoinOfferConfig): PurchaseSuccessfulRewardRow[] {
   const rows: PurchaseSuccessfulRewardRow[] = [
@@ -719,10 +733,6 @@ POPUP_ASSETS_TO_PRELOAD.forEach((src) => {
   img.src = src;
 });
 
-/** Goal icon for plant level: plant_N uses icon_goal_N.png (plants 1-24) */
-const getGoalIconForPlantLevel = (plantLevel: number): string =>
-  assetPath(`/assets/icons/goals/garden_1/icon_goal_${Math.max(1, Math.min(24, plantLevel))}.png`);
-
 /** Load + decode icon before goal bounce/transition so the sprite does not pop in mid-animation. */
 function preloadGoalOrderIcon(plantLevel: number): Promise<void> {
   const url = getGoalIconForPlantLevel(plantLevel);
@@ -751,43 +761,6 @@ type PlantMasterySlice = {
   /** First barn visit from L5: fake 4 + 15/15 bar, then real L5 + 0/20 after intro clears. */
   plantMasteryIntroBarComplete: boolean;
 };
-
-/** Plant names and descriptions for discovery popups */
-const PLANT_DATA: Record<number, { name: string; description: string }> = {
-  1: { name: 'Tiny Sprout', description: 'A tiny green shoot just starting out, doing its best to look important.' },
-  2: { name: 'Young Sapling', description: 'A small tree in the making that already seems quite proud of itself.' },
-  3: { name: 'Wild Fern', description: 'A cheerful tangle of leaves growing in whatever direction feels right today.' },
-  4: { name: 'Rosette Succulent', description: 'A neat spiral of sturdy leaves best admired from a respectful distance.' },
-  5: { name: 'Little Daisy', description: 'A simple little flower with an open face that\'s always happy to be included.' },
-  6: { name: 'Spring Daffodil', description: 'Shows up early every year and behaves like it deserves the credit.' },
-  // Swap text only between levels 7–9 (sprites/icons unchanged):
-  // 7 ← 9, 8 ← 7, 9 ← 8
-  7: { name: 'Fresh Lavender', description: 'Soft little flowers with a gentle scent that quietly spreads whether invited or not.' },
-  8: { name: 'Pink Tulip', description: 'A tidy upright bloom that looks like it prefers things done properly.' },
-  9: { name: 'Chrysanthemum', description: 'An impressive number of petals with no clear signs of stopping.' },
-  10: { name: 'Thorny Rose', description: 'A beautiful bloom that encourages admiration at a sensible distance.' },
-  11: { name: 'Cherry Blossom', description: 'Delicate petals that look ready to drift away the moment you get attached.' },
-  12: { name: 'Blooming Iris', description: 'Wide elegant petals arranged like they know they turned out well.' },
-  13: { name: 'Sacred Lotus', description: 'Perfect layered petals resting peacefully as if the rest of the garden can sort itself out.' },
-  14: { name: 'Golden Sunflower', description: 'A shining bloom that never seems to get tired of being in the spotlight.' },
-  15: { name: 'Corn Cobb', description: 'Kernels lined up in perfect rows like they practiced beforehand.' },
-  16: { name: 'Sweet Strawberry', description: 'Bright little berries that rarely survive long enough to be shared.' },
-  17: { name: 'Crunchy Carrot', description: 'Bright orange and pointy, making it a popular choice with snowmen.' },
-  18: { name: 'Glossy Eggplant', description: 'A polished fruit that looks like it expects compliments.' },
-  19: { name: 'Juicy Tomato', description: 'Round fruits gathering together like they have important things to discuss.' },
-  20: { name: 'Sour Lemon', description: 'Bright and beautiful on the outside with a surprisingly bitter attitude.' },
-  21: { name: 'Plump Pumpkin', description: 'A steady grower that never seems embarrassed about taking up space.' },
-  22: { name: 'Garden Grapes', description: 'Clusters of fruit packed tightly together with no concern for personal space.' },
-  23: { name: 'Crisp Apple', description: 'The most recognizable fruit and clearly aware of it.' },
-  24: { name: 'Tree Star', description: 'A rare leafy treat that has remained popular since the age of dinosaurs.' },
-};
-
-function getPlantData(level: number): { name: string; description: string } {
-  return PLANT_DATA[level] ?? { 
-    name: `Plant Lv.${level}`, 
-    description: 'A mysterious new plant species.' 
-  };
-}
 
 // Helper to calculate hex distance from center (0,0) in axial coordinates
 const getHexDistance = (q: number, r: number): number => {
@@ -1198,6 +1171,17 @@ export default function App() {
   /** First-time collection flow after Plant Collection unlock (golden pot + bonuses + garden hint). */
   const [collectionFtuePhase, setCollectionFtuePhase] = useState<CollectionFtuePhase | null>(null);
   const [collectionFtueCompleted, setCollectionFtueCompleted] = useState(false);
+  const [tasksFtueStarted, setTasksFtueStarted] = useState(false);
+  const [tasksFtueUnlockRevealed, setTasksFtueUnlockRevealed] = useState(false);
+  const [tasksFtueCompleted, setTasksFtueCompleted] = useState(false);
+  const [tasksFtueHoleRect, setTasksFtueHoleRect] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const pendingTasksFtueRevealRef = useRef(false);
+  const tasksFtueRevealPlayedRef = useRef(false);
   const [collectionFtueHoleRect, setCollectionFtueHoleRect] = useState<{
     left: number;
     top: number;
@@ -1314,10 +1298,9 @@ export default function App() {
   const [showFakeReview, setShowFakeReview] = useState(false);
   const [rateUsThankYouOpen, setRateUsThankYouOpen] = useState(false);
   const [dailyTasksPopupOpen, setDailyTasksPopupOpen] = useState(false);
-  const [dailyTaskRows, setDailyTaskRows] = useState<DailyTaskDefinition[]>(() => {
-    rollDailyTasksPeriodIfExpired();
-    return buildDailyTaskRows();
-  });
+  const dailyTasksPopupOpenRef = useRef(dailyTasksPopupOpen);
+  dailyTasksPopupOpenRef.current = dailyTasksPopupOpen;
+  const [dailyTaskRows, setDailyTaskRows] = useState<DailyTaskDefinition[]>([]);
   const dailyTaskRowsRef = useRef(dailyTaskRows);
   dailyTaskRowsRef.current = dailyTaskRows;
   const [tasksFbReadyBounceNonce, setTasksFbReadyBounceNonce] = useState(0);
@@ -1327,7 +1310,9 @@ export default function App() {
   const tasksFloatingButtonRef = useRef<HTMLDivElement>(null);
   const nextTasksFbLeafBurstIdRef = useRef(0);
   const dailyTasksPeriodRolledRef = useRef(false);
-  const [dailyTaskClaimBounceId, setDailyTaskClaimBounceId] = useState<string | null>(null);
+  const dailyTasksAutoClaimedAt1sRef = useRef(false);
+  const lastDailyPlaytimeTickRef = useRef<number | null>(null);
+  const [dailyTaskClaimBounceIds, setDailyTaskClaimBounceIds] = useState<string[]>([]);
   const [dailyTaskLeafBursts, setDailyTaskLeafBursts] = useState<
     { id: string; x: number; y: number; rectWidth: number; rectHeight: number }[]
   >([]);
@@ -1543,6 +1528,33 @@ export default function App() {
   const goldenPotCount = plantMastery.unlockedLevels.length;
   const goldenPotCountRef = useRef(goldenPotCount);
   goldenPotCountRef.current = goldenPotCount;
+
+  const dailyTaskUpgradeCtxRef = useRef({
+    playerLevel: 1,
+    playerLevelProgress: 0,
+    lockedCellCount: 0,
+    goldenPotCount: 0,
+    plantMasteryUnlockPendingCount: 0,
+    seedsState: createInitialSeedsState(),
+    harvestState: createInitialHarvestState(),
+    cropsState: createInitialCropsState(),
+  });
+  dailyTaskUpgradeCtxRef.current = {
+    playerLevel,
+    playerLevelProgress,
+    lockedCellCount,
+    goldenPotCount,
+    plantMasteryUnlockPendingCount: plantMastery.unlockPending.length,
+    seedsState,
+    harvestState,
+    cropsState,
+  };
+  const getDailyTasksCtx = () =>
+    getDailyTaskRollContext(
+      gridRef.current,
+      highestPlantEverRef.current,
+      dailyTaskUpgradeCtxRef.current,
+    );
   /** Defer starting loading in plant goal slot 3 until player returns to FARM (see fourth-slot unlock flow). */
   const pendingFourthPlantGoalSlotRef = useRef(false);
 
@@ -1665,19 +1677,12 @@ export default function App() {
     }
   }, [playerLevel]);
 
-  useEffect(() => {
-    if (!dailyTasksUnlocked || !readDailyTasksUnlocked()) return;
-    if (dailyTasksRemainingMs > 0) {
-      dailyTasksPeriodRolledRef.current = false;
-      return;
-    }
-    if (dailyTasksPeriodRolledRef.current) return;
-    dailyTasksPeriodRolledRef.current = true;
-    if (rollDailyTasksPeriodIfExpired()) {
-      setDailyTaskRows(buildDailyTaskRows());
-      setDailyTasksCountdownRefreshKey((k) => k + 1);
-    }
-  }, [dailyTasksUnlocked, dailyTasksRemainingMs]);
+  const triggerDailyTaskClaimBounce = useCallback((taskId: string) => {
+    setDailyTaskClaimBounceIds((prev) => [...prev, taskId]);
+    window.setTimeout(() => {
+      setDailyTaskClaimBounceIds((prev) => prev.filter((id) => id !== taskId));
+    }, 200);
+  }, []);
 
   const triggerTasksFloatingButtonReadyFx = useCallback(() => {
     setTasksFbReadyBounceNonce((n) => n + 1);
@@ -1696,40 +1701,63 @@ export default function App() {
     ]);
   }, []);
 
-  const applyDailyTaskSeedProgress = useCallback(() => {
-    const prev = dailyTaskRowsRef.current;
-    const next = recordDailyTaskSeedPlanted();
-    dailyTaskRowsRef.current = next;
-    if (findNewlyCompletedDailyTasks(prev, next)) {
-      window.setTimeout(() => triggerTasksFloatingButtonReadyFx(), 0);
-    }
-    setDailyTaskRows(next);
+  const playTasksFtueUnlockReveal = useCallback(() => {
+    if (tasksFtueRevealPlayedRef.current) return;
+    tasksFtueRevealPlayedRef.current = true;
+    setTasksFtueUnlockRevealed(true);
+    triggerTasksFloatingButtonReadyFx();
   }, [triggerTasksFloatingButtonReadyFx]);
 
-  const handleDailyTaskClaim2x = useCallback((taskId: string, fx: DailyTaskClaimFx) => {
-    const task = dailyTaskRows.find((t) => t.id === taskId);
-    if (!task || task.state !== 'complete') return;
-    playSfx(SFX_IDS.uiConfirmNormal);
-    pendingDailyTaskClaimRef.current = { taskId, fx, coinMultiplier: 2 };
-    pendingAdSourceRef.current = 'dailyTaskClaim2x';
-    setPendingAdComplete(null);
-    setShowFakeAd(true);
-  }, [dailyTaskRows]);
+  const spawnTasksFbCoinToWallet = useCallback((value: number) => {
+    if (value <= 0) return;
+    const container = containerRef.current;
+    const walletIcon = walletIconRef.current;
+    const wallet = walletRef.current;
+    const fbEl = tasksFloatingButtonRef.current;
+    if (!container || !fbEl || !(walletIcon || wallet)) return;
 
-  const performDailyTaskClaim = useCallback(
-    (taskId: string, fx: DailyTaskClaimFx, coinMultiplier = 1) => {
-      const task = dailyTaskRows.find((t) => t.id === taskId);
-      if (!task || task.state !== 'complete') return;
+    const scale = appScaleRef.current;
+    const containerRect = container.getBoundingClientRect();
+    const fbRect = fbEl.getBoundingClientRect();
+    const startX = (fbRect.left + fbRect.width / 2 - containerRect.left) / scale;
+    const startY = (fbRect.top + fbRect.height / 2 - containerRect.top) / scale;
+    const panelHeightPx = 14;
+    const offsetUp = (panelHeightPx / 2 + 4) * 0.8;
+    const hoverY = startY - offsetUp;
 
-      setShowFakeAd(false);
-      pendingAdSourceRef.current = null;
-      pendingDailyTaskClaimRef.current = null;
-      setPendingAdComplete(null);
-      playSfx(SFX_IDS.uiConfirmReward);
+    setActiveCoinPanels((prev) => [
+      ...prev,
+      {
+        id: `tasks-period-auto-claim-${Date.now()}`,
+        value,
+        startX,
+        startY,
+        hoverX: startX,
+        hoverY,
+        moveToWalletDelayMs: 0,
+      },
+    ]);
+  }, []);
 
-      setDailyTaskRows(markDailyTaskClaimed(taskId as DailyTaskId));
-      setDailyTaskClaimBounceId(taskId);
-      window.setTimeout(() => setDailyTaskClaimBounceId((id) => (id === taskId ? null : id)), 200);
+  const finishDailyTasksPeriodRoll = useCallback(() => {
+    const next = rollDailyTasksNextPeriod(getDailyTasksCtx());
+    dailyTaskRowsRef.current = next;
+    setDailyTaskRows(next);
+    setDailyTasksCountdownRefreshKey((k) => k + 1);
+  }, []);
+
+  const playDailyTaskClaimPresentation = useCallback(
+    (
+      taskId: string,
+      payout: number,
+      fx: DailyTaskClaimFx,
+      options?: { playSfx?: boolean },
+    ) => {
+      if (options?.playSfx !== false) {
+        playSfx(SFX_IDS.uiConfirmReward);
+      }
+
+      triggerDailyTaskClaimBounce(taskId);
 
       if (!getPerformanceMode()) {
         setDailyTaskLeafBursts((prev) => [
@@ -1747,7 +1775,6 @@ export default function App() {
       const layer = discoveryRewardFxLayerRef.current;
       if (layer) {
         const lr = layer.getBoundingClientRect();
-        const payout = task.rewardCoins * coinMultiplier;
         setActiveDiscoveryCoinParticles((prev) => [
           ...prev,
           {
@@ -1759,7 +1786,244 @@ export default function App() {
         ]);
       }
     },
-    [dailyTaskRows],
+    [triggerDailyTaskClaimBounce],
+  );
+
+  const autoClaimCompleteTasksInPopup = useCallback(() => {
+    const ctx = getDailyTasksCtx();
+    const rows = dailyTaskRowsRef.current;
+    const unclaimedComplete = rows.filter((t) => t.state === 'complete');
+    if (unclaimedComplete.length === 0) return;
+
+    const claimSnapshots: { task: DailyTaskDefinition; fx: DailyTaskClaimFx }[] = [];
+    for (const task of unclaimedComplete) {
+      const fx = getDailyTaskClaimFxFromDom(task.id);
+      if (fx) claimSnapshots.push({ task, fx });
+    }
+
+    const claimedRows = markDailyTasksClaimed(
+      unclaimedComplete.map((t) => t.id),
+      ctx,
+    );
+    dailyTaskRowsRef.current = claimedRows;
+    setDailyTaskRows(claimedRows);
+
+    if (claimSnapshots.length > 0) {
+      playSfx(SFX_IDS.uiConfirmReward);
+    }
+    for (const { task, fx } of claimSnapshots) {
+      playDailyTaskClaimPresentation(task.id, task.rewardCoins, fx, { playSfx: false });
+    }
+
+    const fxTaskIds = new Set(claimSnapshots.map(({ task }) => task.id));
+    const missingPayout = unclaimedComplete
+      .filter((task) => !fxTaskIds.has(task.id))
+      .reduce((sum, task) => sum + task.rewardCoins, 0);
+    if (missingPayout > 0) {
+      setMoney((m) => m + missingPayout);
+    }
+  }, [playDailyTaskClaimPresentation]);
+
+  const executeDailyTasksPeriodRollover = useCallback(
+    (options?: { forcePopupOpen?: boolean }) => {
+      if (!rollDailyTasksPeriodIfExpired()) return;
+
+      const popupOpen = options?.forcePopupOpen ?? dailyTasksPopupOpenRef.current;
+      const ctx = getDailyTasksCtx();
+      const rows = dailyTaskRowsRef.current;
+      const unclaimedComplete = rows.filter((t) => t.state === 'complete');
+      const totalPayout = unclaimedComplete.reduce((sum, t) => sum + t.rewardCoins, 0);
+
+      if (popupOpen) {
+        if (unclaimedComplete.length > 0) {
+          autoClaimCompleteTasksInPopup();
+        }
+        finishDailyTasksPeriodRoll();
+        return;
+      }
+
+      if (unclaimedComplete.length > 0) {
+        const claimedRows = markDailyTasksClaimed(
+          unclaimedComplete.map((t) => t.id),
+          ctx,
+        );
+        dailyTaskRowsRef.current = claimedRows;
+        setDailyTaskRows(claimedRows);
+
+        triggerTasksFloatingButtonReadyFx();
+        if (totalPayout > 0) {
+          spawnTasksFbCoinToWallet(totalPayout);
+        }
+      }
+
+      finishDailyTasksPeriodRoll();
+    },
+    [
+      autoClaimCompleteTasksInPopup,
+      finishDailyTasksPeriodRoll,
+      spawnTasksFbCoinToWallet,
+      triggerTasksFloatingButtonReadyFx,
+    ],
+  );
+
+  useEffect(() => {
+    if (dailyTasksRemainingMs > DAILY_TASKS_AUTO_CLAIM_BEFORE_END_MS) {
+      dailyTasksAutoClaimedAt1sRef.current = false;
+    }
+  }, [dailyTasksRemainingMs]);
+
+  useEffect(() => {
+    if (!dailyTasksUnlocked || !readDailyTasksUnlocked()) return;
+    if (!dailyTasksPopupOpen) return;
+    if (
+      dailyTasksRemainingMs <= 0 ||
+      dailyTasksRemainingMs > DAILY_TASKS_AUTO_CLAIM_BEFORE_END_MS
+    ) {
+      return;
+    }
+    if (dailyTasksAutoClaimedAt1sRef.current) return;
+    dailyTasksAutoClaimedAt1sRef.current = true;
+    autoClaimCompleteTasksInPopup();
+  }, [
+    autoClaimCompleteTasksInPopup,
+    dailyTasksPopupOpen,
+    dailyTasksRemainingMs,
+    dailyTasksUnlocked,
+  ]);
+
+  useEffect(() => {
+    if (!dailyTasksUnlocked || !readDailyTasksUnlocked()) return;
+    if (dailyTasksRemainingMs > 0) {
+      dailyTasksPeriodRolledRef.current = false;
+      return;
+    }
+    if (dailyTasksPeriodRolledRef.current) return;
+    dailyTasksPeriodRolledRef.current = true;
+    executeDailyTasksPeriodRollover();
+  }, [dailyTasksUnlocked, dailyTasksRemainingMs, executeDailyTasksPeriodRollover]);
+
+  const applyDailyTaskRowsUpdate = useCallback(
+    (next: DailyTaskDefinition[]) => {
+      const prev = dailyTaskRowsRef.current;
+      dailyTaskRowsRef.current = next;
+      if (findNewlyCompletedDailyTasks(prev, next)) {
+        window.setTimeout(() => triggerTasksFloatingButtonReadyFx(), 0);
+      }
+      setDailyTaskRows(next);
+    },
+    [triggerTasksFloatingButtonReadyFx],
+  );
+
+  const applyDailyTaskSeedProgress = useCallback(() => {
+    applyDailyTaskRowsUpdate(recordDailyTaskSeedPlanted(getDailyTasksCtx()));
+  }, [applyDailyTaskRowsUpdate]);
+
+  const recordDailyTaskPlayerLeveledUp = useCallback(() => {
+    applyDailyTaskRowsUpdate(recordDailyTaskLevelUp(getDailyTasksCtx()));
+  }, [applyDailyTaskRowsUpdate]);
+
+  const recordDailyTaskBoostUsed = useCallback(() => {
+    applyDailyTaskRowsUpdate(recordDailyTaskBoosterActivated(getDailyTasksCtx()));
+  }, [applyDailyTaskRowsUpdate]);
+
+  useEffect(() => {
+    if (isLoading || !dailyTasksUnlocked || !readDailyTasksUnlocked()) return;
+    rollDailyTasksPeriodIfExpired();
+    const next = ensureDailyTasksDay(getDailyTasksCtx());
+    dailyTaskRowsRef.current = next;
+    setDailyTaskRows(next);
+  }, [isLoading, dailyTasksUnlocked, playerLevel]);
+
+  useEffect(() => {
+    if (isLoading || !dailyTasksUnlocked || !readDailyTasksUnlocked()) return;
+    setDailyTaskRows((prev) => {
+      const next = syncDailyTasksGrid(getDailyTasksCtx());
+      dailyTaskRowsRef.current = next;
+      if (findNewlyCompletedDailyTasks(prev, next)) {
+        window.setTimeout(() => triggerTasksFloatingButtonReadyFx(), 0);
+      }
+      return next;
+    });
+  }, [grid, isLoading, dailyTasksUnlocked, triggerTasksFloatingButtonReadyFx]);
+
+  useEffect(() => {
+    if (isLoading || !dailyTasksUnlocked || !readDailyTasksUnlocked()) return;
+
+    const resetPlaytimeClock = () => {
+      lastDailyPlaytimeTickRef.current = Date.now();
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        resetPlaytimeClock();
+      } else {
+        lastDailyPlaytimeTickRef.current = null;
+      }
+    };
+
+    if (document.visibilityState === 'visible') {
+      resetPlaytimeClock();
+    }
+
+    const TICK_MS = 1000;
+
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+
+      const now = Date.now();
+      const last = lastDailyPlaytimeTickRef.current;
+      if (last == null) {
+        lastDailyPlaytimeTickRef.current = now;
+        return;
+      }
+      lastDailyPlaytimeTickRef.current = now;
+      const deltaMs = Math.min(Math.max(0, now - last), 60_000);
+      if (deltaMs === 0) return;
+
+      const prev = dailyTaskRowsRef.current;
+      const next = tickDailyTaskPlaytime(getDailyTasksCtx(), deltaMs);
+      dailyTaskRowsRef.current = next;
+      if (findNewlyCompletedDailyTasks(prev, next)) {
+        window.setTimeout(() => triggerTasksFloatingButtonReadyFx(), 0);
+      }
+      setDailyTaskRows(next);
+    }, TICK_MS);
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      lastDailyPlaytimeTickRef.current = null;
+    };
+  }, [isLoading, dailyTasksUnlocked, triggerTasksFloatingButtonReadyFx]);
+
+  const handleDailyTaskClaim2x = useCallback((taskId: string, fx: DailyTaskClaimFx) => {
+    const task = dailyTaskRows.find((t) => t.id === taskId);
+    if (!task || task.state !== 'complete') return;
+    playSfx(SFX_IDS.uiConfirmNormal);
+    pendingDailyTaskClaimRef.current = { taskId, fx, coinMultiplier: 2 };
+    pendingAdSourceRef.current = 'dailyTaskClaim2x';
+    setPendingAdComplete(null);
+    setShowFakeAd(true);
+  }, [dailyTaskRows]);
+
+  const performDailyTaskClaim = useCallback(
+    (taskId: string, fx: DailyTaskClaimFx, coinMultiplier = 1) => {
+      const task = dailyTaskRowsRef.current.find((t) => t.id === taskId);
+      if (!task || task.state !== 'complete') return;
+
+      setShowFakeAd(false);
+      pendingAdSourceRef.current = null;
+      pendingDailyTaskClaimRef.current = null;
+      setPendingAdComplete(null);
+
+      const next = markDailyTaskClaimed(taskId, getDailyTasksCtx());
+      dailyTaskRowsRef.current = next;
+      setDailyTaskRows(next);
+      playDailyTaskClaimPresentation(taskId, task.rewardCoins * coinMultiplier, fx);
+    },
+    [playDailyTaskClaimPresentation],
   );
 
   const handleDailyTaskClaim = useCallback(
@@ -1809,6 +2073,9 @@ export default function App() {
         if (!prev.unlockPending.includes(level)) return prev;
         if (money < cost) return prev;
         setMoney((m) => m - cost);
+        queueMicrotask(() => {
+          applyDailyTaskRowsUpdate(recordDailyTaskGoldenPot(getDailyTasksCtx()));
+        });
         return {
           ...prev,
           unlockPending: prev.unlockPending.filter((x) => x !== level),
@@ -1818,7 +2085,7 @@ export default function App() {
         };
       });
     },
-    [money]
+    [money, applyDailyTaskRowsUpdate],
   );
 
   const triggerMasteryPurchaseReveal = useCallback((level: number) => {
@@ -1907,6 +2174,27 @@ export default function App() {
     }
     prevWelcomeFtueOpenRef.current = isWelcomeOpen;
   }, [activeFtueStage]);
+
+  useEffect(() => {
+    if (tasksFtueCompleted || tasksFtueUnlockRevealed) {
+      pendingTasksFtueRevealRef.current = false;
+      return;
+    }
+    if (levelUpPopup?.isVisible) return;
+    const pendingReveal = pendingTasksFtueRevealRef.current;
+    if (!pendingReveal && !tasksFtueStarted) return;
+    if (!pendingReveal && activeScreen !== 'FARM') return;
+    pendingTasksFtueRevealRef.current = false;
+    playTasksFtueUnlockReveal();
+  }, [
+    activeScreen,
+    levelUpPopup?.isVisible,
+    tasksFtueCompleted,
+    tasksFtueStarted,
+    tasksFtueUnlockRevealed,
+    playTasksFtueUnlockReveal,
+  ]);
+
   useLayoutEffect(() => {
     if (activeFtueStage == null) {
       setFtueSettingsButtonRect(null);
@@ -2174,6 +2462,43 @@ export default function App() {
     collectionFtueIntroCtaOverlayReady,
   ]);
 
+  useLayoutEffect(() => {
+    const tasksFtueOverlayActive =
+      tasksFtueStarted &&
+      tasksFtueUnlockRevealed &&
+      !tasksFtueCompleted &&
+      activeScreen === 'FARM';
+    if (!tasksFtueOverlayActive) {
+      setTasksFtueHoleRect(null);
+      return;
+    }
+    const container = document.getElementById('game-container');
+    const scale = appScaleRef.current || 1;
+    const apply = () => {
+      const el = document.getElementById(TASKS_FTUE_FLOATING_BUTTON_ID);
+      if (!el || !container) {
+        setTasksFtueHoleRect(null);
+        return;
+      }
+      const cr = container.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
+      setTasksFtueHoleRect({
+        left: (r.left - cr.left) / scale,
+        top: (r.top - cr.top) / scale,
+        width: r.width / scale,
+        height: r.height / scale,
+      });
+    };
+    apply();
+    const t = window.setTimeout(apply, 120);
+    const onResize = () => apply();
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.clearTimeout(t);
+    };
+  }, [tasksFtueStarted, tasksFtueUnlockRevealed, tasksFtueCompleted, activeScreen]);
+
   useEffect(() => {
     return () => {
       if (ftue11Delay1Ref.current) clearTimeout(ftue11Delay1Ref.current);
@@ -2235,13 +2560,18 @@ export default function App() {
   const goalsPendingCompletionRef = useRef<Set<number>>(new Set());
   /** Crop amount already flying to each goal slot (mid-air panels); subtract on impact so rapid harvest taps can't over-commit */
   const goalInFlightHarvestBySlotRef = useRef<Record<number, number>>({});
+  /** Per open order: manual vs merge-sourced crops contributed (for Merge Order daily task). */
+  const goalOrderHarvestSourcesRef = useRef<Record<number, { manual: number; merge: number }>>({});
   const nextRewardedAdOfferIndexRef = useRef(0);
   activeBoostsRef.current = activeBoosts;
 
   useEffect(() => {
     goalSlots.forEach((s, i) => {
       if (s === 'green') goalsPendingCompletionRef.current.delete(i);
-      if (s !== 'green') goalInFlightHarvestBySlotRef.current[i] = 0;
+      if (s !== 'green') {
+        goalInFlightHarvestBySlotRef.current[i] = 0;
+        delete goalOrderHarvestSourcesRef.current[i];
+      }
     });
   }, [goalSlots]);
 
@@ -2553,11 +2883,12 @@ export default function App() {
       setLevelUpPopup({ isVisible: true, level: nextLevel });
     } else {
       setPlayerLevel((l) => l + 1);
+      recordDailyTaskPlayerLeveledUp();
       setTimeout(() => {
         levelUpGuardRef.current = false;
       }, 0);
     }
-  }, []);
+  }, [recordDailyTaskPlayerLeveledUp]);
 
   const canOpenLimitedOfferRewardPopup = useCallback(() => {
     if (offlineEarningsUi?.open) return false;
@@ -2750,6 +3081,14 @@ export default function App() {
       : 0;
   const isPlantCollectionUiUnlocked = playerLevel >= PLANT_COLLECTION_UI_UNLOCK_LEVEL;
   const collectionFtueActive = collectionFtuePhase != null && !collectionFtueCompleted;
+  const tasksFtueHoldLockedVisual =
+    dailyTasksUnlocked && !tasksFtueUnlockRevealed && !tasksFtueCompleted;
+  const tasksFtueActive =
+    tasksFtueStarted &&
+    tasksFtueUnlockRevealed &&
+    !tasksFtueCompleted &&
+    activeScreen === 'FARM' &&
+    !isLoading;
   const hideBonusesForCollectionFtue =
     collectionFtueActive &&
     (collectionFtuePhase === 'intro_cta' || collectionFtuePhase === 'point_unlock');
@@ -4577,6 +4916,12 @@ export default function App() {
         }
       });
 
+      if (harvestCellIndices.length >= 3) {
+        applyDailyTaskRowsUpdate(
+          recordDailyTaskHarvestThreeCells(getDailyTasksCtx(), harvestCellIndices.length),
+        );
+      }
+
       setTimeout(() => {
         setHarvestBounceCellIndices(harvestCellIndices);
         setTimeout(() => setHarvestBounceCellIndices([]), 250);
@@ -4635,7 +4980,7 @@ export default function App() {
         }
       }, delayMs);
     }
-  }, [grid, cropsState, goalSlots, goalCounts, goalPlantTypes, harvestState, playerLevel, activeFtueStage, activeBoosts]);
+  }, [grid, cropsState, goalSlots, goalCounts, goalPlantTypes, harvestState, playerLevel, activeFtueStage, activeBoosts, applyDailyTaskRowsUpdate]);
 
   // Perform merge harvest: roll chance per adjacent cell to harvest (spawn coin or plant panel) without removing plant
   const performMergeHarvest = useCallback((centerCellIdx: number, chancePercent: number, excludeCellIdx?: number) => {
@@ -4738,6 +5083,7 @@ export default function App() {
             hoverX,
             hoverY,
             moveToTargetDelayMs: 0,
+            fromMergeHarvest: true,
             ...(activeFtueStage === 'first_harvest' ? { visualScale: 2 } : {}),
           },
         });
@@ -4760,6 +5106,7 @@ export default function App() {
             hoverY,
             moveToWalletDelayMs: 0,
             scale: MERGE_COIN_HARVEST_PANEL_SCALE,
+            dailyTaskCoinKind: 'merge',
           },
         });
       }
@@ -4816,7 +5163,7 @@ export default function App() {
 
     setHarvestBounceCellIndices(triggeredCells);
     setTimeout(() => setHarvestBounceCellIndices([]), 250);
-  }, [grid, goalSlots, goalCounts, goalPlantTypes, harvestState, playerLevel, activeFtueStage, goldenPotCount]);
+  }, [grid, goalSlots, goalCounts, goalPlantTypes, harvestState, playerLevel, activeFtueStage, goldenPotCount, applyDailyTaskRowsUpdate]);
 
   // Called by HexBoard when starting a merge to calculate level increase
   const getMergeLevelIncrease = useCallback((_currentPlantLevel: number) => {
@@ -4899,6 +5246,9 @@ export default function App() {
     // Update highest plant ever if we created a new record and show discovery popup.
     // Use ref (not state) so we always reset the discovery counter even if state is stale/batched.
     if (newLevel != null && newLevel > highestPlantEverRef.current) {
+      applyDailyTaskRowsUpdate(
+        recordDailyTaskNewDiscovery(getDailyTasksCtx(), newLevel),
+      );
       setHighestPlantEver(newLevel);
       highestPlantEverRef.current = newLevel; // Sync ref so next goal spawn sees new level immediately
       discoveryGoalsRemainingRef.current = getDiscoveryGoalBuffer(newLevel);
@@ -4910,7 +5260,13 @@ export default function App() {
     }
     
     // Chain Harvest: per-cell chance to instantly harvest adjacent crops (without removing them)
-    if (willMerge) {
+    if (willMerge && source.item && target.item) {
+      applyDailyTaskRowsUpdate(
+        recordDailyTaskMerge(getDailyTasksCtx(), {
+          mergedPlantLevel: source.item.level,
+          resultPlantLevel: newLevel ?? undefined,
+        }),
+      );
       const mergeHarvestChance = getMergeHarvestChance(cropsState);
       if (mergeHarvestChance > 0) {
         performMergeHarvest(targetIdx, mergeHarvestChance, sourceIdx);
@@ -5205,6 +5561,17 @@ export default function App() {
     setCollectionFtuePhase(
       save.collectionFtueCompleted ? null : parseCollectionFtuePhase(save.collectionFtuePhase) ?? null
     );
+    const tasksFtueStartedLoaded = save.tasksFtueStarted === true;
+    const tasksFtueCompletedLoaded = save.tasksFtueCompleted === true;
+    setTasksFtueStarted(tasksFtueStartedLoaded);
+    setTasksFtueCompleted(tasksFtueCompletedLoaded);
+    const tasksFtueUnlockRevealedLoaded =
+      save.tasksFtueUnlockRevealed === true ||
+      tasksFtueCompletedLoaded ||
+      (!tasksFtueStartedLoaded &&
+        save.playerLevel >= TASKS_FLOATING_BUTTON_UNLOCK_LEVEL);
+    setTasksFtueUnlockRevealed(tasksFtueUnlockRevealedLoaded);
+    tasksFtueRevealPlayedRef.current = tasksFtueUnlockRevealedLoaded;
     setActiveTab(save.activeTab);
     setRewardedOffers(
       normalizeRewardedOffersForLoad(
@@ -5506,6 +5873,9 @@ export default function App() {
       plantMasteryIntroBarComplete: plantMastery.plantMasteryIntroBarComplete,
       collectionFtueCompleted,
       collectionFtuePhase: collectionFtueCompleted ? null : collectionFtuePhase,
+      tasksFtueStarted,
+      tasksFtueUnlockRevealed,
+      tasksFtueCompleted,
       activeTab,
       activeScreen,
       isExpanded,
@@ -6168,6 +6538,7 @@ export default function App() {
                             },
                           ]);
                         }
+                        applyDailyTaskRowsUpdate(recordDailyTaskCoinOrder(getDailyTasksCtx()));
                         lastCoinGoalHiddenAtRef.current = Date.now();
                         nextCoinGoalDelayRef.current = 30000 + Math.random() * 30000;
                         setCoinGoalVisible(false);
@@ -6222,16 +6593,34 @@ export default function App() {
                     }}
                   />
                   <FloatingButtonStack side="right">
-                    <div ref={tasksFloatingButtonRef} className="inline-block">
+                    <div
+                      id={TASKS_FTUE_FLOATING_BUTTON_ID}
+                      ref={tasksFloatingButtonRef}
+                      className="inline-block"
+                    >
                       <FloatingButtonTasks
                         tasksUnlocked={dailyTasksUnlocked}
                         unlockLevel={TASKS_FLOATING_BUTTON_UNLOCK_LEVEL}
                         tasks={dailyTaskRows}
                         readyBounceNonce={tasksFbReadyBounceNonce}
+                        forceLockedVisual={tasksFtueHoldLockedVisual}
                         onClick={() => {
                           playSfx(SFX_IDS.uiConfirmNormal);
-                          rollDailyTasksPeriodIfExpired();
-                          setDailyTaskRows(buildDailyTaskRows());
+                          if (!tasksFtueCompleted) {
+                            setTasksFtueCompleted(true);
+                          }
+                          if (dailyTasksRemainingMs <= 0) {
+                            if (!dailyTasksPeriodRolledRef.current) {
+                              dailyTasksPopupOpenRef.current = true;
+                              dailyTasksPeriodRolledRef.current = true;
+                              executeDailyTasksPeriodRollover({ forcePopupOpen: true });
+                            } else {
+                              setDailyTaskRows(ensureDailyTasksDay(getDailyTasksCtx()));
+                            }
+                          } else {
+                            rollDailyTasksPeriodIfExpired();
+                            setDailyTaskRows(ensureDailyTasksDay(getDailyTasksCtx()));
+                          }
                           setDailyTasksPopupOpen(true);
                         }}
                       />
@@ -6476,6 +6865,7 @@ export default function App() {
                               hoverX,
                               hoverY,
                               moveToTargetDelayMs: 0,
+                              fromMergeHarvest: true,
                               ...(activeFtueStage === 'first_harvest' ? { visualScale: 2 } : {}),
                             },
                           ]);
@@ -6498,6 +6888,7 @@ export default function App() {
                               hoverY,
                               moveToWalletDelayMs: 0,
                               scale: MERGE_COIN_HARVEST_PANEL_SCALE,
+                              dailyTaskCoinKind: 'merge',
                             },
                           ]);
                         }
@@ -6642,8 +7033,11 @@ export default function App() {
                       activeTab === 'SEEDS'
                     }
                     goldenPotCount={goldenPotCount}
-                    onUpgradePurchase={(upgradeId) => {
+                    onUpgradePurchase={(upgradeId, purchaseTab) => {
                       playSfx(SFX_IDS.uiConfirmReward);
+                      applyDailyTaskRowsUpdate(
+                        recordDailyTaskUpgradePurchased(getDailyTasksCtx(), upgradeId, purchaseTab),
+                      );
                       if (upgradeId === 'harvest_speed' && activeFtueStage === 'first_upgrade') {
                         // FTUE 10: on purchase, bounce Harvest button like a tap.
                         setHarvestBounceTrigger((t) => t + 1);
@@ -6711,6 +7105,7 @@ export default function App() {
                               icon: DOUBLE_COINS_HEADER_ICON,
                             })
                           );
+                          recordDailyTaskBoostUsed();
                         }
                       });
                     }}
@@ -7205,6 +7600,7 @@ export default function App() {
             BARN: barnNotification,
           }}
           collectionFtueGardenFinger={collectionFtuePhase === 'point_garden_nav' && !collectionFtueCompleted}
+          blockInput={tasksFtueActive}
         />
 
         {/* Leaf burst: portal to body so never clipped; viewport coords */}
@@ -7635,6 +8031,15 @@ export default function App() {
                   holePaddingPx={6}
                 />
               )}
+            {tasksFtueActive && (
+              <CollectionFtueOverlay
+                active
+                holeRect={tasksFtueHoleRect}
+                fingerStyle="point_right"
+                blockerTint={COLLECTION_FTUE_BLOCKER_TINT}
+                holePaddingPx={8}
+              />
+            )}
           </div>,
           document.body
         )}
@@ -7738,9 +8143,22 @@ export default function App() {
                   }}
                   onUnlockNow={() => {
                     suppressLevelUpDeclineSfxRef.current = true;
+                    if (
+                      levelUpPopup.level === TASKS_FLOATING_BUTTON_UNLOCK_LEVEL &&
+                      !tasksFtueCompleted
+                    ) {
+                      setTasksFtueStarted(true);
+                      pendingTasksFtueRevealRef.current = true;
+                    }
                     // Settings "Level Up" already advances `playerLevel` before showing the popup.
                     // Only increment here if the player is still below the popup level.
-                    setPlayerLevel((l) => (l < levelUpPopup.level ? l + 1 : l));
+                    setPlayerLevel((l) => {
+                      if (l < levelUpPopup.level) {
+                        recordDailyTaskPlayerLeveledUp();
+                        return l + 1;
+                      }
+                      return l;
+                    });
                     setPlayerLevelProgress(0);
                     if (unlockInfo.navigateToBarnOnUnlock) {
                       setActiveScreen('BARN');
@@ -7956,6 +8374,7 @@ export default function App() {
                     if (pendingLevel != null) {
                       pendingLevelUpAfterStarterPackRef.current = null;
                       setPlayerLevel(pendingLevel);
+                      recordDailyTaskPlayerLeveledUp();
                       setPlayerLevelProgress(0);
                       setPlayerLevelFlashTrigger((t) => t + 1);
                       levelUpGuardRef.current = false;
@@ -8202,6 +8621,7 @@ export default function App() {
                           icon: DOUBLE_COINS_HEADER_ICON,
                         })
                       );
+                      recordDailyTaskBoostUsed();
                     }
                   });
                 }}
@@ -8262,6 +8682,10 @@ export default function App() {
                   return;
                 }
 
+                if (adSource === 'storeFreeOffer') {
+                  applyDailyTaskRowsUpdate(recordDailyTaskFreeOfferClaimed(getDailyTasksCtx()));
+                }
+
                 const applyReward = pendingAdComplete;
                 setPendingAdComplete(null);
                 setTimeout(() => applyReward?.(), 250);
@@ -8283,13 +8707,13 @@ export default function App() {
               onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
               onClose={() => {
                 setDailyTasksPopupOpen(false);
-                setDailyTaskClaimBounceId(null);
+                setDailyTaskClaimBounceIds([]);
                 lastOtherPopupClosedAtRef.current = Date.now();
               }}
               closeOnBackdropClick
               appScale={appScale}
               tasks={dailyTaskRows}
-              claimBounceTaskId={dailyTaskClaimBounceId}
+              claimBounceTaskIds={dailyTaskClaimBounceIds}
               onClaimTask={handleDailyTaskClaim}
               onClaim2xTask={handleDailyTaskClaim2x}
               tasksUnlocked={playerLevel >= TASKS_FLOATING_BUTTON_UNLOCK_LEVEL}
@@ -8428,6 +8852,7 @@ export default function App() {
                   return;
                 }
                 setPlayerLevel(nextLevel);
+                recordDailyTaskPlayerLeveledUp();
                 setPlayerLevelProgress(0);
                 setPlayerLevelFlashTrigger((t) => t + 1);
                 if (nextLevel <= MAX_LEVEL_WITH_CUSTOM_UNLOCK_POPUP) {
@@ -8449,10 +8874,20 @@ export default function App() {
                 playSfx(SFX_IDS.uiConfirmNormal);
                 completeMasterySegmentCheat();
               }}
+              onCompleteTaskClick={() => {
+                playSfx(SFX_IDS.uiConfirmNormal);
+                if (playerLevel >= TASKS_FLOATING_BUTTON_UNLOCK_LEVEL) {
+                  markDailyTasksUnlocked();
+                }
+                applyDailyTaskRowsUpdate(completeNextDailyTaskForDev(getDailyTasksCtx()));
+              }}
               onResetTasksClick={() => {
                 playSfx(SFX_IDS.uiConfirmNormal);
-                setDailyTaskRows(resetDailyTasksProgressForDay());
-                setDailyTaskClaimBounceId(null);
+                if (playerLevel >= TASKS_FLOATING_BUTTON_UNLOCK_LEVEL) {
+                  markDailyTasksUnlocked();
+                }
+                applyDailyTaskRowsUpdate(resetDailyTasksForDev(getDailyTasksCtx()));
+                setDailyTaskClaimBounceIds([]);
               }}
               onAddMoney={(amount) => {
                 playSfx(SFX_IDS.uiConfirmNormal);
@@ -8473,6 +8908,11 @@ export default function App() {
                 try { localStorage.removeItem(DAILY_TASKS_COUNTDOWN_END_MS_KEY); } catch { /* ignore */ }
                 try { localStorage.removeItem(DAILY_TASKS_UNLOCKED_KEY); } catch { /* ignore */ }
                 clearDailyTasksProgressStorage();
+                setTasksFtueStarted(false);
+                setTasksFtueUnlockRevealed(false);
+                setTasksFtueCompleted(false);
+                tasksFtueRevealPlayedRef.current = false;
+                pendingTasksFtueRevealRef.current = false;
                 setStarterPackUnlocked(false);
                 setStarterPackPurchased(false);
                 setStarterPackCountdownRefreshKey((k) => k + 1);
@@ -8549,7 +8989,6 @@ export default function App() {
                   walletIconRef={walletIconRef}
                   appScale={1}
                   variant="popupReward"
-                  popupVisualScale={1.5}
                   activeCount={activeDiscoveryCoinParticles.length}
                   onImpact={(value) => {
                     setMoney((prev) => prev + value);
@@ -8677,6 +9116,11 @@ export default function App() {
                     appScale={appScale}
                     activePanelCount={activeCoinPanels.length}
                     onImpact={(value) => {
+                      if (coin.dailyTaskCoinKind === 'merge') {
+                        applyDailyTaskRowsUpdate(
+                          recordDailyTaskMergeCoins(getDailyTasksCtx(), value),
+                        );
+                      }
                       playSfx(SFX_IDS.coinImpact);
                       pendingCoinImpactRef.current.total += value;
                         if (!pendingCoinImpactRef.current.scheduled) {
@@ -8711,6 +9155,20 @@ export default function App() {
               appScale={appScale}
               onImpact={(goalSlotIdx, amount) => {
                 playSfx(SFX_IDS.goalImpact);
+                if (amount > 0) {
+                  applyDailyTaskRowsUpdate(
+                    recordDailyTaskHarvestCrops(getDailyTasksCtx(), amount),
+                  );
+                  if (panel.fromMergeHarvest) {
+                    applyDailyTaskRowsUpdate(
+                      recordDailyTaskMergeHarvestCrops(getDailyTasksCtx(), amount),
+                    );
+                  }
+                }
+                const harvestSources = goalOrderHarvestSourcesRef.current[goalSlotIdx] ?? { manual: 0, merge: 0 };
+                if (panel.fromMergeHarvest) harvestSources.merge += amount;
+                else harvestSources.manual += amount;
+                goalOrderHarvestSourcesRef.current[goalSlotIdx] = harvestSources;
                 const plantLevelAtHit = goalPlantTypes[goalSlotIdx] ?? goalSlotIdx + 1;
                 const hHit = highestPlantEverRef.current;
                 const eligibleHit =
@@ -8741,6 +9199,9 @@ export default function App() {
                 goalsPendingCompletionRef.current.delete(goalSlotIdx);
                 setGoalBounceSlots((prev) => prev.includes(goalSlotIdx) ? prev : [...prev, goalSlotIdx]);
                 setGoalImpactSlots((prev) => prev.includes(goalSlotIdx) ? prev : [...prev, goalSlotIdx]);
+                const prevGoalCount = goalCounts[goalSlotIdx] ?? 0;
+                const nextGoalCount = Math.max(0, prevGoalCount - amount);
+                const orderFulfilled = nextGoalCount === 0 && prevGoalCount > 0;
                 setGoalCounts((c) => {
                   const next = [...c];
                   const prevCount = next[goalSlotIdx] ?? 0;
@@ -8767,6 +9228,14 @@ export default function App() {
                   }
                   return next;
                 });
+
+                if (orderFulfilled && goalSlotIdx !== 4) {
+                  const taskCtx = getDailyTasksCtx();
+                  const sources = goalOrderHarvestSourcesRef.current[goalSlotIdx] ?? { manual: 0, merge: 0 };
+                  const mergeOnlyOrder = sources.merge > 0 && sources.manual === 0;
+                  delete goalOrderHarvestSourcesRef.current[goalSlotIdx];
+                  applyDailyTaskRowsUpdate(recordDailyTaskOrderComplete(taskCtx, { mergeOnly: mergeOnlyOrder }));
+                }
 
                 window.setTimeout(() => {
                   setGoalBounceSlots((prev) => prev.filter((s) => s !== goalSlotIdx));
@@ -8849,6 +9318,7 @@ export default function App() {
                       }
                       playSfx(SFX_IDS.coinImpact);
                       setActiveBoosts((prev) => applyBoostParticleImpact(prev, data));
+                      recordDailyTaskBoostUsed();
                     }}
                     onComplete={() => setBoostParticles((prev) => prev.filter((p) => p.id !== particle.id))}
                   />
@@ -8887,6 +9357,7 @@ export default function App() {
                       }
                       playSfx(SFX_IDS.coinImpact);
                       setActiveBoosts((prev) => applyBoostParticleImpact(prev, data));
+                      recordDailyTaskBoostUsed();
                     }}
                     onComplete={() => setBoostParticles((prev) => prev.filter((p) => p.id !== particle.id))}
                   />

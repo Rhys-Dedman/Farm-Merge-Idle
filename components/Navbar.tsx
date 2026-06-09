@@ -14,6 +14,8 @@ interface NavbarProps {
   };
   /** Collection FTUE: non-blocking hint on Garden tab until player visits garden. */
   collectionFtueGardenFinger?: boolean;
+  /** Block nav taps (e.g. daily tasks FTUE on farm). */
+  blockInput?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -22,6 +24,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   barnButtonRef,
   notifications = {},
   collectionFtueGardenFinger = false,
+  blockInput = false,
 }) => {
   // Track viewport width for responsive scaling
   const [viewportWidth, setViewportWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 420);
@@ -47,6 +50,9 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <div id="navbar-root" className="relative shrink-0 overflow-visible z-50" style={{ height: '60px' }}>
+      {blockInput ? (
+        <div className="absolute inset-0 z-[200] pointer-events-auto" aria-hidden />
+      ) : null}
       <nav 
         className="absolute inset-0 flex items-start justify-center overflow-visible"
         style={{ 

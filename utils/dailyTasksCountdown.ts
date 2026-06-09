@@ -1,10 +1,12 @@
 import { formatBundleLimitedCountdown } from './limitedOfferCountdown';
-import { resetDailyTasksProgressForDay } from './dailyTasksProgress';
 
 export const DAILY_TASKS_UNLOCKED_KEY = 'daily-tasks-unlocked';
 export const DAILY_TASKS_COUNTDOWN_END_MS_KEY = 'daily-tasks-countdown-end-ms';
 
 export const DAILY_TASKS_COUNTDOWN_DURATION_MS = 24 * 60 * 60 * 1000;
+
+/** When the daily-tasks popup is open, auto-claim completed tasks this many ms before period end. */
+export const DAILY_TASKS_AUTO_CLAIM_BEFORE_END_MS = 1000;
 
 export function readDailyTasksCountdownEndMs(): number | null {
   try {
@@ -59,12 +61,11 @@ export function formatDailyTasksCountdown(remainingMs: number): string {
   return formatBundleLimitedCountdown(remainingMs);
 }
 
-/** When the 24h window ends: reset task progress/claims and start the next period. */
+/** When the 24h window ends: start the next period (caller rolls new tasks). */
 export function rollDailyTasksPeriodIfExpired(atTimeMs = Date.now()): boolean {
   if (!readDailyTasksUnlocked()) return false;
   const endMs = readDailyTasksCountdownEndMs();
   if (endMs == null || atTimeMs < endMs) return false;
-  resetDailyTasksProgressForDay();
   startDailyTasksCountdown(atTimeMs);
   return true;
 }

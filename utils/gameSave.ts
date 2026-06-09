@@ -105,6 +105,12 @@ export interface GameSaveV1 {
   collectionFtueCompleted?: boolean;
   /** Resumable step for collection FTUE; cleared when completed. */
   collectionFtuePhase?: string | null;
+  /** Daily tasks FTUE started (level 5 unlock now tapped); cleared when completed. */
+  tasksFtueStarted?: boolean;
+  /** Tasks floating button swapped from locked to normal (bounce played). */
+  tasksFtueUnlockRevealed?: boolean;
+  /** Daily tasks FTUE finished (player opened tasks popup). */
+  tasksFtueCompleted?: boolean;
   activeTab: TabType;
   activeScreen: ScreenType;
   isExpanded: boolean;

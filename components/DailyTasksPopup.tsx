@@ -7,7 +7,6 @@ import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPrefli
 import { PopupVectorBackground } from './PopupVectorBackground';
 import { PopupRectLeafBurst } from './PopupRectLeafBurst';
 import { DailyTaskRow, type DailyTaskClaimFx, type DailyTaskDefinition } from './DailyTaskRow';
-import { buildDailyTaskRows } from '../utils/dailyTasksProgress';
 import { DailyTasksTimerPanel } from './DailyTasksTimerPanel';
 
 const POPUP_CLOSE_MS = 200;
@@ -50,7 +49,7 @@ export interface DailyTasksPopupProps {
   /** Task rows; defaults to preview template rows when omitted. */
   children?: React.ReactNode;
   tasks?: DailyTaskDefinition[];
-  claimBounceTaskId?: string | null;
+  claimBounceTaskIds?: string[];
   onClaimTask?: (taskId: string, fx: DailyTaskClaimFx) => void;
   onClaim2xTask?: (taskId: string, fx: DailyTaskClaimFx) => void;
   /** When true, 24h reset timer runs (starts once at tasks unlock). */
@@ -66,7 +65,7 @@ export const DailyTasksPopup: React.FC<DailyTasksPopupProps> = ({
   appScale = 1,
   children,
   tasks,
-  claimBounceTaskId = null,
+  claimBounceTaskIds = [],
   onClaimTask,
   onClaim2xTask,
   tasksUnlocked = false,
@@ -280,11 +279,11 @@ export const DailyTasksPopup: React.FC<DailyTasksPopupProps> = ({
                   aria-label="Daily tasks list"
                 >
                   {children ??
-                    (tasks ?? buildDailyTaskRows()).map((task) => (
+                    (tasks ?? []).map((task) => (
                       <DailyTaskRow
                         key={task.id}
                         {...task}
-                        claimBounceActive={claimBounceTaskId === task.id}
+                        claimBounceActive={claimBounceTaskIds.includes(task.id)}
                         onClaim={(fx) => onClaimTask?.(task.id, fx)}
                         onClaim2x={(fx) => onClaim2xTask?.(task.id, fx)}
                       />

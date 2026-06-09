@@ -50,6 +50,8 @@ export interface CoinPanelData {
   scale?: number;
   /** Optional rectangle panel background (default cream). Merge coin harvest uses yellow. */
   panelBg?: string;
+  /** When set, wallet impact credits the Merge Coins daily task. */
+  dailyTaskCoinKind?: 'merge';
 }
 
 interface CoinPanelProps {

@@ -4,8 +4,6 @@
  */
 import React, { useRef, useState } from 'react';
 import { assetPath } from '../utils/assetPath';
-import { REWARD_PILL_FILL_COLOR, REWARD_PILL_STROKE_COLOR } from './Reward';
-
 export type DailyTaskRowState = 'in_progress' | 'complete' | 'claimed';
 
 export interface DailyTaskClaimFx {
@@ -17,9 +15,12 @@ export interface DailyTaskClaimFx {
 }
 
 export interface DailyTaskRowProps {
+  id?: string;
   state: DailyTaskRowState;
   title: string;
   description: string;
+  /** Placeholder values for `{n}` / `{s}` / `{p}` tokens — rendered green & bold. */
+  descriptionValues?: Record<string, number | string>;
   progressCurrent: number;
   progressTotal: number;
   rewardCoins: number;
@@ -43,6 +44,25 @@ const CARD_BORDER_RADIUS_PX = s(60);
 const ICON_BOX_BORDER_RADIUS_PX = s(40);
 const BROWN_ACCENT = '#765041';
 const PROGRESS_GREEN = '#62863b';
+const DESCRIPTION_HIGHLIGHT_GREEN = PROGRESS_GREEN;
+
+function renderTaskDescription(
+  template: string,
+  values?: Record<string, number | string>,
+): React.ReactNode {
+  const segments = template.split(/(\{[a-z]+\})/g);
+  return segments.map((segment, i) => {
+    const match = segment.match(/^\{([a-z]+)\}$/);
+    if (match && values && values[match[1]] != null) {
+      return (
+        <span key={i} style={{ color: DESCRIPTION_HIGHLIGHT_GREEN, fontWeight: 700 }}>
+          {values[match[1]]}
+        </span>
+      );
+    }
+    return <React.Fragment key={i}>{segment}</React.Fragment>;
+  });
+}
 
 const PROGRESS_PILL = {
   bg: '#c5db6e',
@@ -54,16 +74,16 @@ const PROGRESS_PILL = {
 
 const IN_PROGRESS_THEME = {
   cardBorder: '#e9dcaf',
-  cardFill: 'transparent',
+  cardFill: '#f4e6b9',
   title: BROWN_ACCENT,
   description: '#c2b280',
   iconBg: BROWN_ACCENT,
   iconBorder: '#e9dcaf',
-  progressFill: REWARD_PILL_FILL_COLOR,
-  progressBorder: REWARD_PILL_STROKE_COLOR,
+  progressFill: '#fcf0c7',
+  progressBorder: '#e8dbae',
   progressText: BROWN_ACCENT,
-  rewardFill: REWARD_PILL_FILL_COLOR,
-  rewardBorder: REWARD_PILL_STROKE_COLOR,
+  rewardFill: '#fcf0c7',
+  rewardBorder: '#e8dbae',
   rewardText: BROWN_ACCENT,
 } as const;
 
@@ -77,8 +97,8 @@ const COMPLETE_THEME = {
   progressFill: '#c9dc62',
   progressBorder: '#9eb643',
   progressText: PROGRESS_GREEN,
-  rewardFill: '#f4e6b9',
-  rewardBorder: '#dbc899',
+  rewardFill: '#fcf0c7',
+  rewardBorder: '#c9dc62',
   rewardText: BROWN_ACCENT,
 } as const;
 
@@ -149,6 +169,9 @@ const PILL_BORDER_PX = s(5);
 const PILL_ICON_PX = s(44);
 const REWARD_COIN_ICON_PX = s(Math.round(44 * 1.18));
 const PILL_TICK_PX = s(Math.round(22 * 1.3 * 1.35 * 1.1));
+/** Claimed-state large tick — 10% smaller than default slot, nudged right. */
+const CLAIMED_TICK_SIZE_SCALE = 0.8 * 0.9;
+const CLAIMED_TICK_NUDGE_X_PX = s(10);
 const PILL_FONT_PX = s(40);
 const PILL_PAD_X_LEFT_PX = s(12);
 const PILL_PAD_X_RIGHT_PX = s(24);
@@ -203,9 +226,11 @@ function labelStyle(color: string, fontPx: number): React.CSSProperties {
 }
 
 export const DailyTaskRow: React.FC<DailyTaskRowProps> = ({
+  id,
   state,
   title,
   description,
+  descriptionValues,
   progressCurrent,
   progressTotal,
   rewardCoins,
@@ -273,6 +298,7 @@ export const DailyTaskRow: React.FC<DailyTaskRowProps> = ({
   return (
     <article
       ref={rowRef}
+      data-daily-task-id={id}
       className={`relative flex w-full flex-col box-border ${claimBounceActive ? 'daily-task-claim-bounce' : ''} ${isClaimed ? 'pointer-events-none' : ''}`}
       style={{
         padding: `${cardPadPx}px`,
@@ -337,7 +363,7 @@ export const DailyTaskRow: React.FC<DailyTaskRowProps> = ({
                 lineHeight: 1.25,
               }}
             >
-              {description}
+              {renderTaskDescription(description, descriptionValues)}
             </p>
           </div>
         </div>
@@ -393,6 +419,7 @@ export const DailyTaskRow: React.FC<DailyTaskRowProps> = ({
 
         <div
           ref={rewardPillRef}
+          data-daily-task-reward
           style={{
             ...sharedPillStyle,
             backgroundColor: theme.rewardFill,
@@ -432,9 +459,10 @@ export const DailyTaskRow: React.FC<DailyTaskRowProps> = ({
             draggable={false}
             aria-hidden
             style={{
-              width: Math.round(BUTTON_W_PX * 0.8),
-              height: Math.round(buttonColHeightPx * 0.8),
+              width: Math.round(BUTTON_W_PX * CLAIMED_TICK_SIZE_SCALE),
+              height: Math.round(buttonColHeightPx * CLAIMED_TICK_SIZE_SCALE),
               maxHeight: '100%',
+              transform: `translateX(${CLAIMED_TICK_NUDGE_X_PX}px)`,
             }}
           />
         ) : (
@@ -504,7 +532,8 @@ export const DAILY_TASK_ROW_PREVIEW: DailyTaskDefinition[] = [
     id: 'preview-starter-pack',
     state: 'claimed',
     title: 'Starter Pack',
-    description: 'Collect 5 thorny rose crops in 1 round.',
+    description: 'Collect {n} thorny rose crops in 1 round.',
+    descriptionValues: { n: 5 },
     progressCurrent: 5,
     progressTotal: 5,
     rewardCoins: 1000,
@@ -514,7 +543,8 @@ export const DAILY_TASK_ROW_PREVIEW: DailyTaskDefinition[] = [
     id: 'preview-harvest-boost',
     state: 'complete',
     title: 'Harvest Boost',
-    description: 'Harvest 10 crops from your garden.',
+    description: 'Harvest {n} crops from your garden.',
+    descriptionValues: { n: 10 },
     progressCurrent: 10,
     progressTotal: 10,
     rewardCoins: 500,
@@ -524,7 +554,8 @@ export const DAILY_TASK_ROW_PREVIEW: DailyTaskDefinition[] = [
     id: 'preview-lucky-seed',
     state: 'in_progress',
     title: 'Lucky Seed',
-    description: 'Merge 3 seeds in a single session.',
+    description: 'Merge {n} seeds in a single session.',
+    descriptionValues: { n: 3 },
     progressCurrent: 1,
     progressTotal: 3,
     rewardCoins: 250,

@@ -47,6 +47,8 @@ export interface PlantPanelData {
   moveToTargetDelayMs: number;
   /** Optional scale for panel + trail (e.g. 2 for FTUE 5) */
   visualScale?: number;
+  /** Goal crop from merge (chain harvest or merge-into-goal), not manual harvest button. */
+  fromMergeHarvest?: boolean;
 }
 
 interface PlantPanelProps {

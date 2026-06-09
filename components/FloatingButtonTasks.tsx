@@ -14,6 +14,8 @@ export interface FloatingButtonTasksProps {
   tasks: DailyTaskDefinition[];
   /** Increment to replay ready bounce (even if icon stays on "claim"). */
   readyBounceNonce?: number;
+  /** FTUE: keep locked chrome until unlock bounce reveals the normal icon. */
+  forceLockedVisual?: boolean;
   onClick?: () => void;
   className?: string;
   style?: React.CSSProperties;
@@ -24,11 +26,14 @@ export const FloatingButtonTasks: React.FC<FloatingButtonTasksProps> = ({
   unlockLevel = TASKS_FLOATING_BUTTON_UNLOCK_LEVEL,
   tasks,
   readyBounceNonce = 0,
+  forceLockedVisual = false,
   onClick,
   className,
   style,
 }) => {
-  const visual: TasksFloatingButtonVisual = getTasksFloatingButtonVisual(tasksUnlocked, tasks);
+  const visual: TasksFloatingButtonVisual = forceLockedVisual
+    ? 'locked'
+    : getTasksFloatingButtonVisual(tasksUnlocked, tasks);
   const locked = visual === 'locked';
   const [readyBounceActive, setReadyBounceActive] = useState(false);
 

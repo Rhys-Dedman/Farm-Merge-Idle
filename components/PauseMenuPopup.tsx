@@ -24,6 +24,8 @@ interface PauseMenuPopupProps {
   onClearProgress?: () => void;
   /** Reset daily task seed progress and claims for the current day. */
   onResetTasksClick?: () => void;
+  /** Dev: complete slot 1, then 2, then 3 (one per tap). */
+  onCompleteTaskClick?: () => void;
   /** Lock every shed shelf again (no collection unlocks). */
   onClearShed?: () => void;
   /** When false, Unlock Plant button is disabled (all plants unlocked) */
@@ -102,6 +104,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   onAddMoney,
   onClearProgress,
   onResetTasksClick,
+  onCompleteTaskClick,
   onClearShed,
   canUnlockPlant = true,
   closeOnBackdropClick = true,
@@ -115,6 +118,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   const [addCoinsPressed, setAddCoinsPressed] = useState(false);
   const [clearProgressPressed, setClearProgressPressed] = useState(false);
   const [resetTasksPressed, setResetTasksPressed] = useState(false);
+  const [completeTaskPressed, setCompleteTaskPressed] = useState(false);
   const [clearShedPressed, setClearShedPressed] = useState(false);
   const popupCardLayoutRef = useRef<HTMLDivElement>(null);
 
@@ -367,6 +371,21 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                     </span>
                   </button>
                 ) : null}
+                {onCompleteTaskClick ? (
+                  <button
+                    type="button"
+                    onMouseDown={() => setCompleteTaskPressed(true)}
+                    onMouseUp={() => setCompleteTaskPressed(false)}
+                    onMouseLeave={() => setCompleteTaskPressed(false)}
+                    onClick={() => onCompleteTaskClick()}
+                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.blue, completeTaskPressed)}
+                  >
+                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.blue)}>
+                      Complete task
+                    </span>
+                  </button>
+                ) : null}
                 {onResetTasksClick ? (
                   <button
                     type="button"
@@ -375,9 +394,9 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                     onMouseLeave={() => setResetTasksPressed(false)}
                     onClick={() => onResetTasksClick()}
                     className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.yellow, resetTasksPressed)}
+                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.blue, resetTasksPressed)}
                   >
-                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.yellow)}>
+                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.blue)}>
                       Reset tasks
                     </span>
                   </button>

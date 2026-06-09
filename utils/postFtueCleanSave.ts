@@ -123,6 +123,9 @@ export function createPostFtueCleanSave(): GameSaveV1 {
     sfxEnabled: true,
     pendingUnlockUpgradeId: null,
     levelUpPopupQueue: [],
+    tasksFtueStarted: false,
+    tasksFtueUnlockRevealed: false,
+    tasksFtueCompleted: false,
     wildGrowthAccumulatorMs: 0,
     barnShelvesUnlocked: normalizeBarnShelvesUnlocked(),
   };

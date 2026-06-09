@@ -217,7 +217,7 @@ interface UpgradeListProps {
    */
   ftue10DisableSeedProductionPurchase?: boolean;
   /** Called after an upgrade is purchased (for FTUE 10 completion) */
-  onUpgradePurchase?: (upgradeId: string) => void;
+  onUpgradePurchase?: (upgradeId: string, tab: TabType) => void;
   /** Golden pots unlocked — some tiers supersede upgrade visuals and caps. */
   goldenPotCount?: number;
 }
@@ -1032,7 +1032,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
       
       return { ...prev, [id]: { level: newLevel, progress: 0 } };
     });
-    onUpgradePurchase?.(id);
+    onUpgradePurchase?.(id, category);
   };
 
   const renderRewardedOfferItem = (offer: RewardedOffer) => {

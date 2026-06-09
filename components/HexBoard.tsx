@@ -657,11 +657,11 @@ export const HexBoard = forwardRef<HexBoardHandle, HexBoardProps>(function HexBo
           animation: impactPulse 150ms ease-out;
         }
         @keyframes plantSpawnBounce {
-          0% { opacity: 0; transform: scale(0.25); }
-          25% { opacity: 1; transform: scale(1.5); }
-          50% { transform: scale(0.8); }
-          75% { transform: scale(1.1); }
-          100% { opacity: 1; transform: scale(1); }
+          0% { opacity: 0; transform: translateY(-5.5px) scale(0.375); }
+          25% { opacity: 1; transform: translateY(-5.5px) scale(2.25); }
+          50% { transform: translateY(-5.5px) scale(1.2); }
+          75% { transform: translateY(-5.5px) scale(1.65); }
+          100% { opacity: 1; transform: translateY(-5.5px) scale(1.5); }
         }
         .plant-spawn-bounce {
           animation: plantSpawnBounce 300ms ease-out forwards;
@@ -944,11 +944,14 @@ export const HexBoard = forwardRef<HexBoardHandle, HexBoardProps>(function HexBo
                 const transform = isDragged
                   ? `translate(calc(-50% + ${x}px), calc(-50% + ${y}px)) translate(${dragOffsetX}px, ${dragOffsetY}px)`
                   : `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+                const isSpawnImpact = isImpacted && !isDragged;
                 const innerTransform = isDragged && isImpact
                   ? 'translateY(-5.5px)' // keyframes control scale
-                  : isDragged
-                    ? `translateY(${dragTranslateY}px) scale(${scale})`
-                    : `translateY(-5.5px) scale(${scale})`;
+                  : isSpawnImpact
+                    ? 'translateY(-5.5px)' // keyframes control scale
+                    : isDragged
+                      ? `translateY(${dragTranslateY}px) scale(${scale})`
+                      : `translateY(-5.5px) scale(${scale})`;
                 // Don't apply harvest bounce to plants being dragged (would glitch mid-air)
                 const isHarvestBounce = !isDragged && harvestBounceCellIndices.includes(i);
                 // Check if this cell has a swap impact animation (Plant B landing)
@@ -960,8 +963,8 @@ export const HexBoard = forwardRef<HexBoardHandle, HexBoardProps>(function HexBo
                   isSwapImpactA ? 'plant-impact-scale' : '',
                   isSwapImpactB ? 'plant-impact-scale-soft' : '',
                   isHarvestBounce ? 'plant-harvest-bounce' : '',
+                  isSpawnImpact ? 'plant-spawn-bounce' : '',
                 ].filter(Boolean).join(' ');
-                const spawnBounceClass = isImpacted && !isDragged ? 'plant-spawn-bounce' : '';
 
                 const outerStyle: React.CSSProperties = {
                   left: centerX,
@@ -1006,8 +1009,6 @@ export const HexBoard = forwardRef<HexBoardHandle, HexBoardProps>(function HexBo
                           mastered={masteredPlantLevels.includes(level)}
                           className="h-[70%] w-[70%] drop-shadow-[0_4px_8px_rgba(0,0,0,0.4)]"
                           wrapperClassName="h-full w-full"
-                          potClassName={spawnBounceClass}
-                          plantClassName={spawnBounceClass}
                           alt={`Plant ${level}`}
                           draggable={false}
                           onContextMenu={(e) => e.preventDefault()}
