@@ -17,6 +17,10 @@ interface FakeAdPopupProps {
   onActivateRewardClick?: (buttonRect: DOMRect) => void;
   /** Scale factor so ad matches game area size (same as app scale) */
   appScale?: number;
+  /** Logical game width in design px (448 on phones; wider on tablets). */
+  gameDesignWidth?: number;
+  /** Logical game height in design px (796 on tablets; taller on phones). */
+  gameDesignHeight?: number;
 }
 
 const GRADIENT_TOP = '#ffd554';
@@ -26,7 +30,14 @@ const BUTTON_BORDER = '#f59d42';
 const BUTTON_TEXT_COLOR = '#e6803a';
 const BUTTON_PRESSED_BG = '#f0c840';
 
-export const FakeAdPopup: React.FC<FakeAdPopupProps> = ({ isVisible, onComplete, onActivateRewardClick, appScale = 1 }) => {
+export const FakeAdPopup: React.FC<FakeAdPopupProps> = ({
+  isVisible,
+  onComplete,
+  onActivateRewardClick,
+  appScale = 1,
+  gameDesignWidth = GAME_DESIGN_WIDTH,
+  gameDesignHeight = GAME_DESIGN_HEIGHT,
+}) => {
   const [buttonPressed, setButtonPressed] = useState(false);
   const [layoutReady, setLayoutReady] = useState(false);
 
@@ -61,8 +72,8 @@ export const FakeAdPopup: React.FC<FakeAdPopupProps> = ({ isVisible, onComplete,
 
   if (!isVisible) return null;
 
-  const gameWidth = GAME_DESIGN_WIDTH * appScale;
-  const gameHeight = GAME_DESIGN_HEIGHT * appScale;
+  const gameWidth = gameDesignWidth * appScale;
+  const gameHeight = gameDesignHeight * appScale;
 
   return (
     <>

@@ -23,12 +23,18 @@ interface FakeReviewPopupProps {
   isVisible: boolean;
   onComplete: () => void;
   appScale?: number;
+  /** Logical game width in design px (448 on phones; wider on tablets). */
+  gameDesignWidth?: number;
+  /** Logical game height in design px (796 on tablets; taller on phones). */
+  gameDesignHeight?: number;
 }
 
 export const FakeReviewPopup: React.FC<FakeReviewPopupProps> = ({
   isVisible,
   onComplete,
   appScale = 1,
+  gameDesignWidth = GAME_DESIGN_WIDTH,
+  gameDesignHeight = GAME_DESIGN_HEIGHT,
 }) => {
   const [buttonPressed, setButtonPressed] = useState(false);
   const [layoutReady, setLayoutReady] = useState(false);
@@ -64,8 +70,8 @@ export const FakeReviewPopup: React.FC<FakeReviewPopupProps> = ({
 
   if (!isVisible) return null;
 
-  const gameWidth = GAME_DESIGN_WIDTH * appScale;
-  const gameHeight = GAME_DESIGN_HEIGHT * appScale;
+  const gameWidth = gameDesignWidth * appScale;
+  const gameHeight = gameDesignHeight * appScale;
 
   return (
     <div

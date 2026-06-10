@@ -71,7 +71,13 @@ const ASSETS_TO_PRELOAD = [
   // Backgrounds
   '/assets/collection/background_collection.png',
   '/assets/background/background_loading.png',
-  '/assets/background/background_garden_1.png',
+  '/assets/background/garden_1/background_grass.png',
+  '/assets/background/garden_1/background_bottom.png',
+  '/assets/background/garden_1/background_left.png',
+  '/assets/background/garden_1/background_right.png',
+  '/assets/background/garden_1/background_center.png',
+  '/assets/background/garden_1/background_centertop.png',
+  '/assets/background/garden_1/background_gradient.png',
   // Top UI
   '/assets/ui/topui_bg.png',
   '/assets/ui/topui_gradient.png',

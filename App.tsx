@@ -200,6 +200,12 @@ export function getCoinValueForLevel(level: number): number {
 }
 
 /** Max plant goal slots: 3 until 4 golden pots; 4 after Golden Pot bonus. Index 4 (5th slot) is coin goal only. */
+const GOALS_AREA_LEFT_MARGIN_PX = 20;
+const GOALS_AREA_RIGHT_MARGIN_PX = 40;
+const GOALS_SLOT_STEP_PX = 75;
+const COIN_GOAL_SLOT_INDEX = 4;
+/** Wide layouts: if a 6th slot would fit, pin coin goal to the far right instead of slot 5. */
+const COIN_GOAL_PIN_RIGHT_MIN_TRACK_PX = (COIN_GOAL_SLOT_INDEX + 2) * GOALS_SLOT_STEP_PX;
 
 function firstThreePlantGoalSlotsFilled(slots: ('empty' | 'loading' | 'green' | 'completed')[]): boolean {
   return [0, 1, 2].every((i) => (slots[i] ?? 'empty') !== 'empty');
@@ -683,19 +689,38 @@ const easeOutOpen = (t: number) => (t < 0.5 ? 1 - Math.pow(1 - t * 2, 5) : 1);
 const easeOutClose = (t: number) => 1 - Math.pow(1 - t, 3);
 
 /** Animate height with JS for reliable easing (CSS transitions weren't applying curve on open) */
-function useAnimatedPanelHeight(isExpanded: boolean) {
-  const [height, setHeight] = useState(isExpanded ? 279 : 50);
+const UPGRADE_PANEL_COLLAPSED_HEIGHT_PX = 50;
+const UPGRADE_PANEL_EXPANDED_HEIGHT_PX = 279;
+
+const GARDEN_1_BG = {
+  grass: '/assets/background/garden_1/background_grass.png',
+  bottom: '/assets/background/garden_1/background_bottom.png',
+  left: '/assets/background/garden_1/background_left.png',
+  right: '/assets/background/garden_1/background_right.png',
+  center: '/assets/background/garden_1/background_center.png',
+  centerTop: '/assets/background/garden_1/background_centertop.png',
+  gradient: '/assets/background/garden_1/background_gradient.png',
+} as const;
+/** Shared scale for bottom / left / right / gradient garden sprites (relative to each other). */
+const GARDEN_SIDE_SPRITE_SCALE = 0.6;
+
+const UPGRADE_PANEL_OPEN_DURATION_MS = 1400;
+const UPGRADE_PANEL_CLOSE_DURATION_MS = 350;
+
+/** Upgrade panel height — rAF eased open/close. */
+function useUpgradePanelAnimation(isExpanded: boolean) {
+  const [height, setHeight] = useState(isExpanded ? UPGRADE_PANEL_EXPANDED_HEIGHT_PX : UPGRADE_PANEL_COLLAPSED_HEIGHT_PX);
   const heightRef = useRef(height);
   heightRef.current = height;
   const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const target = isExpanded ? 279 : 50;
+    const target = isExpanded ? UPGRADE_PANEL_EXPANDED_HEIGHT_PX : UPGRADE_PANEL_COLLAPSED_HEIGHT_PX;
     const from = heightRef.current;
     if (Math.abs(from - target) < 1) return;
 
     const startTime = Date.now();
-    const duration = isExpanded ? 1400 : 350;
+    const duration = isExpanded ? UPGRADE_PANEL_OPEN_DURATION_MS : UPGRADE_PANEL_CLOSE_DURATION_MS;
     const ease = isExpanded ? easeOutOpen : easeOutClose;
 
     const tick = () => {
@@ -1126,7 +1151,9 @@ export default function App() {
   const [starterPackCountdownRefreshKey, setStarterPackCountdownRefreshKey] = useState(0);
   const [dailyTasksCountdownRefreshKey, setDailyTasksCountdownRefreshKey] = useState(0);
   const [isExpanded, setIsExpanded] = useState(false);
-  const panelHeight = useAnimatedPanelHeight(isExpanded);
+  const panelHeight = useUpgradePanelAnimation(isExpanded);
+  /** Lifts garden bg so its bottom aligns with the SEEDS/GARDEN/MARKET tab underline. */
+  const [gardenGrassLiftPx, setGardenGrassLiftPx] = useState(0);
   const [money, setMoney] = useState(0);
   // Used for synchronous updates during pagehide/unload so persisted snapshots are correct.
   const moneyRef = useRef<number>(money);
@@ -2548,7 +2575,12 @@ export default function App() {
     }, 500);
   }, [activeFtueStage]);
   const farmColumnRef = useRef<HTMLDivElement>(null);
+  const upgradePanelRef = useRef<HTMLDivElement>(null);
+  /** Natural pixel height of garden_1 gradient sprite (fixed vertical size; width stretches). */
+  const [gardenGradientHeightPx, setGardenGradientHeightPx] = useState<number | null>(null);
+  const hexGridBgRef = useRef<HTMLDivElement>(null);
   const hexAreaRef = useRef<HTMLDivElement>(null);
+  const [gardenCenterBgPos, setGardenCenterBgPos] = useState({ left: 0, top: 0 });
   const walletRef = useRef<HTMLButtonElement>(null);
   const walletIconRef = useRef<HTMLSpanElement>(null);
   const barnButtonRef = useRef<HTMLButtonElement>(null);
@@ -2752,8 +2784,6 @@ export default function App() {
   }, [activeFtueStage, ftue9FadingOut]);
 
   const prevSeedLevelRef = useRef(0);
-
-  const [spriteCenter, setSpriteCenter] = useState({ x: 50, y: 50 }); // % relative to column, for sprite center
 
   // Track viewport dimensions for responsive scaling
   // Use visualViewport when available (more accurate on mobile when browser chrome shows/hides)
@@ -3039,21 +3069,22 @@ export default function App() {
   // Derive which tabs have offers (for tab notification coloring)
   const tabsWithOffers = new Set(rewardedOffers.map(o => o.tab));
   
-  // Calculate scale to fit 9:16 app into viewport
-  // Base dimensions match the original max-w-md (448px) with 9:16 aspect
+  // Adaptive scale: grow canvas on the axis that would letterbox (width on iPad, height on phones).
   const baseWidth = 448;
-  const baseHeight = 796; // 448 * 16/9
+  const baseHeight = 796;
   const mobileBreakpoint = 500;
-  const safeTop = viewportWidth < mobileBreakpoint ? Math.max(viewportOffsetTop, 50) : 0;
+  const safeTop = viewportWidth < mobileBreakpoint ? viewportOffsetTop : 0;
   const availableHeight = viewportHeight - safeTop;
   const scaleX = viewportWidth / baseWidth;
   const scaleY = availableHeight / baseHeight;
-  const fitScale = Math.min(scaleX, scaleY);
-  // Same as splash: scale to fit viewport (height or width). Wide browser = fill height, pillarbox on sides.
-  const appScale = fitScale;
+  const isWideViewport = scaleX > scaleY;
+  const appScale = isWideViewport ? scaleY : scaleX;
+  const designWidth = isWideViewport ? viewportWidth / appScale : baseWidth;
+  const designHeight = isWideViewport ? baseHeight : availableHeight / appScale;
   const appScaleRef = useRef(appScale);
   appScaleRef.current = appScale;
-  
+  const goalsTrackWidthPx = designWidth - GOALS_AREA_LEFT_MARGIN_PX;
+  const coinGoalPinnedRight = goalsTrackWidthPx >= COIN_GOAL_PIN_RIGHT_MIN_TRACK_PX;
   // Calculate barn scale: only apply on narrow mobile screens (below 500px)
   // On wider screens, use scale 1 (no scaling)
   const barnDesignWidth = 470;
@@ -3109,42 +3140,37 @@ export default function App() {
     (level) => !seenMasteryUnlockLevels.includes(level)
   );
 
-  const updateSpriteCenter = useCallback(() => {
+  const updateGardenBgLayout = useCallback(() => {
     const col = farmColumnRef.current;
-    const area = hexAreaRef.current;
-    if (!col || !area) return;
+    const tabLine = document.getElementById('upgrade-panel-tab-line');
+    const grid = hexGridBgRef.current;
+    if (!col) return;
+    const scale = appScaleRef.current || 1;
     const colRect = col.getBoundingClientRect();
-    const areaRect = area.getBoundingClientRect();
-    const centerX = (areaRect.left + areaRect.width / 2 - colRect.left) / colRect.width * 100;
-    const centerY = (areaRect.top + areaRect.height / 2 - colRect.top) / colRect.height * 100;
-    setSpriteCenter({ x: centerX, y: centerY });
+    if (tabLine) {
+      const lineRect = tabLine.getBoundingClientRect();
+      setGardenGrassLiftPx(Math.max(0, (colRect.bottom - lineRect.bottom) / scale));
+    }
+    if (grid) {
+      const gridRect = grid.getBoundingClientRect();
+      const HEX_GRID_CENTER_Y_RATIO = 0.48;
+      setGardenCenterBgPos({
+        left: (gridRect.left + gridRect.width / 2 - colRect.left) / scale,
+        top: (gridRect.top + gridRect.height * HEX_GRID_CENTER_Y_RATIO - colRect.top) / scale,
+      });
+    }
   }, []);
 
-  useEffect(() => {
-    updateSpriteCenter();
+  useLayoutEffect(() => {
+    updateGardenBgLayout();
     const col = farmColumnRef.current;
-    const area = hexAreaRef.current;
-    if (!col || !area) return;
-    const ro = new ResizeObserver(updateSpriteCenter);
+    const grid = hexGridBgRef.current;
+    if (!col) return;
+    const ro = new ResizeObserver(updateGardenBgLayout);
     ro.observe(col);
-    ro.observe(area);
+    if (grid) ro.observe(grid);
     return () => ro.disconnect();
-  }, [updateSpriteCenter]);
-
-  // When panel opens/closes, drive sprite position every frame (1400ms for open, 700ms for close)
-  useEffect(() => {
-    let rafId: number;
-    let endAt = 0;
-    const tick = () => {
-      if (Date.now() < endAt) {
-        updateSpriteCenter();
-        rafId = requestAnimationFrame(tick);
-      }
-    };
-    endAt = Date.now() + (isExpanded ? 1400 : 350);
-    rafId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafId);
-  }, [isExpanded, updateSpriteCenter]);
+  }, [updateGardenBgLayout, panelHeight, designWidth, designHeight, appScale]);
 
   const [plantCollectionViewBonusesPressed, setPlantCollectionViewBonusesPressed] = useState(false);
   const [collectionFtueCtaPressed, setCollectionFtueCtaPressed] = useState(false);
@@ -6019,36 +6045,37 @@ export default function App() {
       )}
       <div
         ref={viewportWrapperRef}
-        className={`fixed inset-0 flex justify-center bg-[#050608] items-center overflow-hidden`}
+        className="fixed inset-0 flex justify-center items-center overflow-hidden bg-black"
         style={{
           opacity: gameOpacity,
-          // Keep layout height aligned with appScale (which is based on visualViewport when available).
-          // This prevents the whole game from drifting up/down when CSS vh and visualViewport diverge.
           height: viewportHeight,
           minHeight: viewportHeight,
-          paddingTop: viewportWidth < mobileBreakpoint ? Math.max(viewportOffsetTop, 50) : 0,
           boxSizing: 'border-box',
         }}
       >
       <div
-        className="relative"
+        className="relative flex items-center justify-center overflow-hidden shrink-0 box-border w-full h-full"
         style={{
-          // IMPORTANT: transforms don't affect layout size. We size this wrapper to the *scaled* size
-          // and absolutely-position the unscaled game inside it, so the page never gets accidental overflow
-          // that can cause the "drift up" while resizing.
-          width: 448 * appScale,
-          height: 796 * appScale,
-          flexShrink: 0,
-          overflow: 'hidden',
+          width: viewportWidth,
+          height: viewportHeight,
+          paddingTop: `max(${safeTop}px, env(safe-area-inset-top, 0px))`,
+          paddingBottom: `env(safe-area-inset-bottom, 0px)`,
+        }}
+      >
+      <div
+        className="relative overflow-hidden shrink-0"
+        style={{
+          width: designWidth * appScale,
+          height: designHeight * appScale,
         }}
       >
       <div
         ref={containerRef}
         id="game-container"
-        className="absolute left-0 top-0 shadow-[0_0_100px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col select-none font-['Inter'] bg-[#0c0d12]"
+        className="absolute left-0 top-0 overflow-hidden flex flex-col select-none font-['Inter'] bg-black"
         style={{
-          width: '448px',
-          height: '796px',
+          width: `${designWidth}px`,
+          height: `${designHeight}px`,
           transform: `scale(${appScale})`,
           transformOrigin: 'top left',
         }}
@@ -6117,34 +6144,126 @@ export default function App() {
               />
             </div>
 
-            <div ref={farmColumnRef} className="w-1/3 h-full flex flex-col relative overflow-hidden grass-texture">
-              {/* Grass Detail Overlay */}
-              <div className="absolute inset-0 pointer-events-none grass-blades opacity-40 z-[1]"></div>
-              {/* 1. Bleed: flat #3d8f38, full column, behind sprite (visible behind upgrade curve) */}
+            <div ref={farmColumnRef} className="w-1/3 h-full flex flex-col relative overflow-hidden bg-black">
+              {/* Grass: bottom at navbar top; height-scaled; lifts with upgrade panel */}
               <div
-                className="absolute inset-0 pointer-events-none z-0"
-                style={{ background: '#3d8f38' }}
-              />
-              {/* 2. Background sprite: primary, on top of bleed; center pinned to hex grid; transition matches upgrade panel (700ms, cubic-bezier) */}
-              <div className="absolute inset-0 pointer-events-none overflow-hidden z-[5]">
-                <img
-                  src={assetPath('/assets/background/background_garden_1.png')}
-                  alt=""
-                  className="absolute flex-shrink-0 flex-grow-0"
+                className="absolute inset-0 pointer-events-none overflow-hidden z-[5]"
+                style={{ transform: `translateY(-${gardenGrassLiftPx}px)` }}
+                aria-hidden
+              >
+                <div
+                  className="absolute inset-0 bg-no-repeat"
                   style={{
-                    left: `${spriteCenter.x}%`,
-                    top: `${spriteCenter.y}%`,
-                    width: 'auto',
-                    height: 'auto',
-                    maxWidth: 'none',
-                    maxHeight: 'none',
-                    objectFit: 'none',
-                    transform: 'translate(-50%, -50%) scale(0.65)',
+                    backgroundImage: `url(${assetPath(GARDEN_1_BG.grass)})`,
+                    backgroundSize: 'auto 100%',
+                    backgroundPosition: 'bottom center',
                   }}
                 />
               </div>
 
-              {/* 3. Top UI gradient: above grass, below top UI & hex; top pinned; full sprite visible, stretched horizontally */}
+              {/* Center: pinned to hex grid; above grass, below bottom/left/right/gradient */}
+              <img
+                src={assetPath(GARDEN_1_BG.center)}
+                alt=""
+                className="absolute pointer-events-none z-[5] max-w-none"
+                draggable={false}
+                style={{
+                  left: gardenCenterBgPos.left,
+                  top: gardenCenterBgPos.top,
+                  width: 'auto',
+                  height: 'auto',
+                  transform: 'translate(-50%, -50%) scale(0.75)',
+                }}
+                aria-hidden
+              />
+
+              {/* Bottom accent: bottom-center pinned; above center, below left/right */}
+              <img
+                src={assetPath(GARDEN_1_BG.bottom)}
+                alt=""
+                className="absolute bottom-0 left-1/2 pointer-events-none z-[6] max-w-none"
+                draggable={false}
+                style={{
+                  width: 'auto',
+                  height: 'auto',
+                  transformOrigin: 'bottom center',
+                  transform: `translate(-50%, -${gardenGrassLiftPx}px) scale(${GARDEN_SIDE_SPRITE_SCALE})`,
+                }}
+                aria-hidden
+              />
+
+              {/* Side sprites: bottom corners; above bottom, below gradient */}
+              <img
+                src={assetPath(GARDEN_1_BG.left)}
+                alt=""
+                className="absolute bottom-0 left-0 pointer-events-none z-[7] max-w-none"
+                draggable={false}
+                style={{
+                  width: 'auto',
+                  height: 'auto',
+                  transformOrigin: 'bottom left',
+                  transform: `translateY(-${gardenGrassLiftPx}px) scale(${GARDEN_SIDE_SPRITE_SCALE})`,
+                }}
+                aria-hidden
+              />
+              <img
+                src={assetPath(GARDEN_1_BG.right)}
+                alt=""
+                className="absolute bottom-0 right-0 pointer-events-none z-[7] max-w-none"
+                draggable={false}
+                style={{
+                  width: 'auto',
+                  height: 'auto',
+                  transformOrigin: 'bottom right',
+                  transform: `translateY(-${gardenGrassLiftPx}px) scale(${GARDEN_SIDE_SPRITE_SCALE})`,
+                }}
+                aria-hidden
+              />
+
+              {/* Center top: same hex anchor as center; above bottom/left/right, below gradient */}
+              <img
+                src={assetPath(GARDEN_1_BG.centerTop)}
+                alt=""
+                className="absolute pointer-events-none z-[7] max-w-none"
+                draggable={false}
+                style={{
+                  left: gardenCenterBgPos.left,
+                  top: gardenCenterBgPos.top,
+                  width: 'auto',
+                  height: 'auto',
+                  transform: 'translate(-50%, -50%) scale(0.75)',
+                }}
+                aria-hidden
+              />
+
+              {/* Bottom gradient: same scale as bottom/left/right; full width stretch; height not stretched */}
+              <div
+                className="absolute left-0 right-0 bottom-0 pointer-events-none overflow-hidden z-[8]"
+                style={{ transform: `translateY(-${gardenGrassLiftPx}px)` }}
+                aria-hidden
+              >
+                <img
+                  src={assetPath(GARDEN_1_BG.gradient)}
+                  alt=""
+                  className="block w-full max-w-none"
+                  draggable={false}
+                  style={{
+                    width: '100%',
+                    height:
+                      gardenGradientHeightPx != null
+                        ? gardenGradientHeightPx * GARDEN_SIDE_SPRITE_SCALE
+                        : 'auto',
+                    objectFit: 'fill',
+                    objectPosition: 'bottom center',
+                  }}
+                  onLoad={(e) => {
+                    const h = e.currentTarget.naturalHeight;
+                    if (h > 0) setGardenGradientHeightPx(h);
+                  }}
+                />
+              </div>
+
+              {/* Top UI gradient: above grass, below top UI & hex; top pinned; full sprite visible, stretched horizontally */}
               <div
                 className="absolute left-0 right-0 top-0 pointer-events-none z-[6] overflow-hidden"
                 style={{ height: '280px' }}
@@ -6243,7 +6362,7 @@ export default function App() {
               {/* Goals Area - 5 goals, overlapping, left justified; compact when one completes (slide-over) */}
               <div 
                 className="relative w-full z-20 flex-shrink-0 pointer-events-none"
-                style={{ height: '85px', marginLeft: 20 }}
+                style={{ height: '85px', marginLeft: GOALS_AREA_LEFT_MARGIN_PX }}
               >
                 <div 
                   className="absolute left-0 right-0 overflow-hidden"
@@ -6402,7 +6521,6 @@ export default function App() {
                       }, totalSlideMs);
                     }, 500);
                   };
-                  const SLOT_STEP_PX = 75;
                   const slideDelayMs = goalCompactionStagger && goalCompactionStagger.oldDisplayIndices[slotIdx] > goalCompactionStagger.completedPosition
                     ? (goalCompactionStagger.isOverlapping ? 0 : (goalCompactionStagger.oldDisplayIndices[slotIdx] - goalCompactionStagger.completedPosition - 1) * 75)
                     : 0;
@@ -6416,7 +6534,7 @@ export default function App() {
                         height: '210px',
                         marginRight: '-30px',
                         marginTop: '-25px',
-                        left: goalDisplayIndex >= 0 ? goalDisplayIndex * SLOT_STEP_PX : -9999,
+                        left: goalDisplayIndex >= 0 ? goalDisplayIndex * GOALS_SLOT_STEP_PX : -9999,
                         opacity: isFtue7Hidden ? 0 : (isFadingIn ? undefined : (showSlot ? 1 : 0)),
                         visibility: goalDisplayIndex >= 0 ? 'visible' : 'hidden',
                         transitionDelay: slideDelayMs ? `${slideDelayMs}ms` : undefined,
@@ -6489,16 +6607,18 @@ export default function App() {
                     </div>
                   );
                 })}
-                {/* Coin goal: always 5th slot (index 4), yellow bg, 30s radial, tap → fake ad → explode to wallet */}
+                {/* Coin goal: slot 5 on phone; far-right (mirrors left margin) on wide layouts with room for a 6th slot */}
                 {coinGoalVisible && playerLevel >= 2 && !ftueHideGoals && (
                   <div
                     className={`absolute goal-slide-over ${coinGoalExitAnim ? 'goal-slide-up-exit' : 'pointer-events-auto cursor-pointer'} ${coinGoalExitAnim ? '' : coinGoalBounce ? 'goal-bounce' : ''}`}
                     style={{
                       width: '105px',
                       height: '210px',
-                      marginRight: '-30px',
+                      marginRight: coinGoalPinnedRight ? 0 : '-30px',
                       marginTop: '-25px',
-                      left: 4 * 75,
+                      ...(coinGoalPinnedRight
+                        ? { left: 'auto', right: GOALS_AREA_RIGHT_MARGIN_PX }
+                        : { left: COIN_GOAL_SLOT_INDEX * GOALS_SLOT_STEP_PX }),
                       zIndex: 10,
                     }}
                     onClick={() => {
@@ -6655,11 +6775,7 @@ export default function App() {
                   aria-label="Close upgrade panel"
                 />
                 <div 
-                  className="absolute bottom-4 w-full px-3 flex justify-between items-end z-20 pointer-events-none transition-all"
-                  style={{ 
-                    transitionDuration: isExpanded ? '1400ms' : '350ms',
-                    transitionTimingFunction: isExpanded ? 'cubic-bezier(0.05, 0, 0, 1)' : 'cubic-bezier(0.22, 0, 0.12, 1)',
-                  }}
+                  className="absolute bottom-4 w-full px-3 flex justify-between items-end z-20 pointer-events-none"
                 >
                    <div
                      className="pointer-events-auto relative flex items-center justify-center"
@@ -6764,7 +6880,12 @@ export default function App() {
                 </div>
 
                 {/* Reduced height from 340px to 323px (5% smaller); pointer-events-none so taps on background close upgrade panel */}
-                <div className="relative w-full flex items-center justify-center h-[323px] overflow-visible pointer-events-none" style={{ marginBottom: '35px' }}>
+                <div
+                  ref={hexGridBgRef}
+                  className="relative w-full flex items-center justify-center h-[323px] overflow-visible pointer-events-none"
+                  style={{ marginBottom: '35px' }}
+                >
+                  <div className="relative w-full pointer-events-auto">
                   <HexBoard
                     ref={hexBoardRef}
                     isActive={activeTab === 'CROPS' && isExpanded}
@@ -6921,6 +7042,7 @@ export default function App() {
                       });
                     }}
                   />
+                  </div>
                 </div>
               </div>
 
@@ -6940,6 +7062,7 @@ export default function App() {
               />
 
               <div 
+                ref={upgradePanelRef}
                 onClick={(e) => e.stopPropagation()}
                 className="flex flex-col overflow-visible relative z-[60] flex-shrink-0 shadow-[0_-15px_50px_rgba(0,0,0,0.15)] rounded-t-[32px]"
                 style={{
@@ -8632,6 +8755,8 @@ export default function App() {
             <FakeAdPopup
               isVisible={showFakeAd}
               appScale={appScale}
+              gameDesignWidth={designWidth}
+              gameDesignHeight={designHeight}
               onActivateRewardClick={(buttonRect) => {
                 if (pendingAdSourceRef.current === 'offlineEarnings') return;
                 if (pendingAdSourceRef.current === 'coinGoal') return;
@@ -8695,6 +8820,8 @@ export default function App() {
             <FakeReviewPopup
               isVisible={showFakeReview}
               appScale={appScale}
+              gameDesignWidth={designWidth}
+              gameDesignHeight={designHeight}
               onComplete={() => {
                 setShowFakeReview(false);
                 setRateUsThankYouOpen(true);
@@ -9367,6 +9494,7 @@ export default function App() {
 
         </div>
 
+      </div>
       </div>
       </div>
       </div>
