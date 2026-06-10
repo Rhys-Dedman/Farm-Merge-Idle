@@ -12,8 +12,15 @@ interface LoadingScreenProps {
   onQuickResumeHydrate?: () => void;
 }
 
-const DESIGN_WIDTH = 448;
-const DESIGN_HEIGHT = 796;
+/** Base padding below safe-area for splash chrome (logo top, progress bottom). */
+const SPLASH_LOGO_PAD_PX = 28;
+const SPLASH_PROGRESS_PAD_PX = 72;
+
+/** Original splash progress pill (50% of 448px design width × 38px tall). */
+const SPLASH_PROGRESS_DESIGN_WIDTH = 224;
+const SPLASH_PROGRESS_DESIGN_HEIGHT = 38;
+const SPLASH_PROGRESS_DESIGN_BORDER = 3;
+const SPLASH_PROGRESS_DESIGN_FONT_PX = 14;
 
 const ASSETS_TO_PRELOAD = [
   // Plants (discovery + grid); plant_0 unused — pot-only when undiscovered
@@ -112,7 +119,17 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
     variant === 'quick' ? 'loading' : 'boot'
   );
   const [blackOpacity, setBlackOpacity] = useState(1);
-  const [viewportSize, setViewportSize] = useState({ width: window.innerWidth, height: window.innerHeight });
+  const readViewportSize = () => {
+    const vv = window.visualViewport;
+    if (vv) {
+      return {
+        width: Math.min(vv.width, window.innerWidth),
+        height: vv.height,
+      };
+    }
+    return { width: window.innerWidth, height: window.innerHeight };
+  };
+  const [viewportSize, setViewportSize] = useState(readViewportSize);
 
   const targetProgressRef = useRef(0);
   const displayProgressRef = useRef(0);
@@ -148,20 +165,35 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
     return () => { if (progressRafRef.current) cancelAnimationFrame(progressRafRef.current); };
   }, [variant]);
 
-  // Calculate scale to fit 9:16 container in viewport
-  const appScale = useMemo(() => {
-    const scaleX = viewportSize.width / DESIGN_WIDTH;
-    const scaleY = viewportSize.height / DESIGN_HEIGHT;
-    return Math.min(scaleX, scaleY);
+  const splashUiMetrics = useMemo(() => {
+    const w = viewportSize.width;
+    // Scale with viewport width so tablets (e.g. iPad Pro) don't look tiny vs iPad Mini.
+    // Not DPR — both were hitting the same px caps (340 / 240) on any tablet width ≥ ~650.
+    const logoMaxWidth = Math.min(Math.max(w * 0.44, 260), 520);
+    const progressWidth = Math.min(Math.max(w * 0.38, 200), 400);
+    const progressScale = progressWidth / SPLASH_PROGRESS_DESIGN_WIDTH;
+    return {
+      logoMaxWidth,
+      progressWidth,
+      progressHeight: SPLASH_PROGRESS_DESIGN_HEIGHT * progressScale,
+      progressFontPx: SPLASH_PROGRESS_DESIGN_FONT_PX * progressScale,
+      progressBorderPx: SPLASH_PROGRESS_DESIGN_BORDER * progressScale,
+      progressShadowY: 4 * progressScale,
+      progressShadowBlur: 12 * progressScale,
+    };
   }, [viewportSize]);
 
-  // Listen for viewport resize
+  // Listen for viewport resize (visualViewport on mobile / device emulation)
   useEffect(() => {
-    const handleResize = () => {
-      setViewportSize({ width: window.innerWidth, height: window.innerHeight });
-    };
+    const handleResize = () => setViewportSize(readViewportSize());
+    handleResize();
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    const vv = window.visualViewport;
+    if (vv) vv.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (vv) vv.removeEventListener('resize', handleResize);
+    };
   }, []);
 
   const preloadCriticalSplashAssets = useCallback(async () => {
@@ -314,95 +346,107 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
     );
   }
 
+  const splashBackgroundUrl = assetPath('/assets/background/background_loading.png');
+
   return (
     <div 
-      className="fixed inset-0 z-[1000] flex items-center justify-center bg-[#050608]"
+      className="fixed inset-0 z-[1000] overflow-hidden"
       onClick={handleTap}
-      style={{ cursor: phase === 'ready' ? 'pointer' : 'default' }}
+      style={{ cursor: phase === 'ready' ? 'pointer' : 'default', backgroundColor: '#2a4a28' }}
     >
-      {/* 9:16 container with scaling */}
+      {/* Full-viewport background — cover (zoom/crop), no letterbox bars */}
       <div
-        className="relative overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.9)]"
+        className="absolute inset-0 pointer-events-none bg-no-repeat"
         style={{
-          width: `${DESIGN_WIDTH}px`,
-          height: `${DESIGN_HEIGHT}px`,
-          transform: `scale(${appScale})`,
-          transformOrigin: 'center center',
+          backgroundImage: `url(${splashBackgroundUrl})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center center',
+        }}
+        aria-hidden
+      />
+
+      {/* Logo — pinned to top of viewport (safe-area + padding) */}
+      <div
+        className="absolute left-0 right-0 flex justify-center pointer-events-none"
+        style={{
+          top: 0,
+          paddingTop: `max(${SPLASH_LOGO_PAD_PX}px, env(safe-area-inset-top, 0px))`,
         }}
       >
-        {/* Background image - 1:1 aspect ratio, height fills container, excess bleeds off sides */}
-        <div 
-          className="absolute top-0 bg-no-repeat"
-          style={{ 
-            left: '50%',
-            transform: 'translateX(-50%)',
-            height: `${DESIGN_HEIGHT}px`,
-            width: `${DESIGN_HEIGHT}px`,
-            backgroundImage: `url(${assetPath('/assets/background/background_loading.png')})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center center',
+        <img
+          src={assetPath('/assets/ui/ui_logo.png')}
+          alt="Logo"
+          className="object-contain select-none"
+          draggable={false}
+          style={{
+            width: splashUiMetrics.logoMaxWidth,
+            maxWidth: '78vw',
+            height: 'auto',
           }}
         />
+      </div>
 
-        {/* Logo in top 1/3 of screen */}
-        <div className="absolute top-0 left-0 right-0 h-1/3 flex items-center justify-center" style={{ marginTop: '60px' }}>
-          <img 
-            src={assetPath('/assets/ui/ui_logo.png')}
-            alt="Logo"
-            className="object-contain"
-            style={{ transform: 'scale(0.65)' }}
-          />
-        </div>
-
-        {/* Content container - positioned at bottom */}
-        <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center px-8 pb-16">
-          {/* Progress bar outer container with stroke */}
-          <div 
-            className="relative w-[50%] h-[38px] rounded-full overflow-hidden mb-8"
+      {/* Progress / tap — pinned to bottom of viewport (safe-area + padding) */}
+      <div
+        className="absolute left-0 right-0 flex justify-center pointer-events-none"
+        style={{
+          bottom: 0,
+          paddingBottom: `max(${SPLASH_PROGRESS_PAD_PX}px, env(safe-area-inset-bottom, 0px))`,
+        }}
+      >
+        <div
+          className="relative rounded-full overflow-hidden shrink-0"
+          style={{
+            width: splashUiMetrics.progressWidth,
+            height: splashUiMetrics.progressHeight,
+            border: `${splashUiMetrics.progressBorderPx}px solid rgba(14, 63, 53, 0.5)`,
+            backgroundColor: 'rgba(0,0,0,0.4)',
+            boxShadow: `0 ${splashUiMetrics.progressShadowY}px ${splashUiMetrics.progressShadowBlur}px rgba(0,0,0,0.25)`,
+          }}
+        >
+          <div
+            className="h-full rounded-full"
             style={{
-              border: '3px solid rgba(14, 63, 53, 0.5)',
-              backgroundColor: 'rgba(0,0,0,0.4)',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+              width: `${phase === 'ready' ? 100 : displayProgress}%`,
+              background: 'linear-gradient(to bottom, #fcea3f, #f7911d)',
+              boxShadow: `inset 0 0 0 ${splashUiMetrics.progressBorderPx}px rgba(239, 71, 35, 0.5)`,
+              transition: phase === 'ready' ? 'width 200ms ease-out' : 'none',
             }}
-          >
-            {/* Progress bar fill with inner stroke */}
-            <div 
-              className="h-full rounded-full"
-              style={{ 
-                width: `${phase === 'ready' ? 100 : displayProgress}%`,
-                background: 'linear-gradient(to bottom, #fcea3f, #f7911d)',
-                boxShadow: 'inset 0 0 0 3px rgba(239, 71, 35, 0.5)',
-                transition: phase === 'ready' ? 'width 200ms ease-out' : 'none',
-              }}
-            />
-            {/* Text centered inside progress bar */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              {phase === 'loading' && (
-                <p 
-                  className="text-white text-sm font-bold tracking-wide"
-                  style={{ textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}
-                >
-                  LOADING {displayProgress}%
-                </p>
-              )}
-              {phase === 'ready' && (
-                <p 
-                  className="text-xs font-bold tracking-wide animate-pulse"
-                  style={{ color: '#ce6232' }}
-                >
-                  TAP TO CONTINUE
-                </p>
-              )}
-            </div>
+          />
+          <div className="absolute inset-0 flex items-center justify-center">
+            {phase === 'loading' && (
+              <p
+                className="font-bold tracking-wide"
+                style={{
+                  color: '#ffffff',
+                  fontSize: `${splashUiMetrics.progressFontPx}px`,
+                  textShadow: '0 2px 4px rgba(0,0,0,0.5)',
+                }}
+              >
+                LOADING {displayProgress}%
+              </p>
+            )}
+            {phase === 'ready' && (
+              <p
+                className="font-bold tracking-wide animate-pulse"
+                style={{
+                  color: '#ce6232',
+                  fontSize: `${splashUiMetrics.progressFontPx}px`,
+                }}
+              >
+                TAP TO CONTINUE
+              </p>
+            )}
           </div>
         </div>
-
-        {/* Black overlay for fade transitions - inside the container */}
-        <div 
-          className="absolute inset-0 bg-black pointer-events-none"
-          style={{ opacity: blackOpacity }}
-        />
       </div>
+
+      {/* Full-viewport fade (tap-to-continue → game handoff) */}
+      <div
+        className="absolute inset-0 bg-black pointer-events-none"
+        style={{ opacity: blackOpacity }}
+        aria-hidden
+      />
     </div>
   );
 };
