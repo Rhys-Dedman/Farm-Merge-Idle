@@ -8,6 +8,7 @@ import {
   PLANT_COLLECTION_UI_UNLOCK_LEVEL,
   PLANT_COLLECTION_FTUE_INTRO_DISPLAY_PLAYER_LEVEL,
   FLOATING_BUTTONS_UNLOCK_LEVEL,
+  shouldShowFarmFloatingButtons,
   GARDENS_FLOATING_BUTTON_UI_VISIBLE,
   TASKS_FLOATING_BUTTON_UNLOCK_LEVEL,
   GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL,
@@ -2971,10 +2972,14 @@ export default function App() {
 
   useEffect(() => {
     if (activeFtueStage !== null) return;
+    if (activeGardenId !== DEFAULT_GARDEN_ID) {
+      setFarmFloatingButtonsVisible(true);
+      return;
+    }
     if (levelUpPopup?.isVisible && levelUpPopup.level >= FLOATING_BUTTONS_UNLOCK_LEVEL) {
       setFarmFloatingButtonsVisible(true);
     }
-  }, [activeFtueStage, levelUpPopup]);
+  }, [activeFtueStage, activeGardenId, levelUpPopup]);
 
   useEffect(() => {
     if (!farmFloatingButtonsVisible) {
@@ -5886,7 +5891,9 @@ export default function App() {
       if (targetId === DEFAULT_GARDEN_ID) {
         setGarden1PlayerLevel(flat.playerLevel);
       }
-      setFarmFloatingButtonsVisible(flat.playerLevel >= FLOATING_BUTTONS_UNLOCK_LEVEL);
+      setFarmFloatingButtonsVisible(
+        shouldShowFarmFloatingButtons(targetId, flat.playerLevel),
+      );
       setIsExpanded(false);
       setActiveScreen('FARM');
       setOfflineEarningsUi(null);
@@ -5939,7 +5946,9 @@ export default function App() {
 
     ftue11PersistenceEnabledRef.current = true;
     const totalOffline = hydrateFromSave(save);
-    if (save.playerLevel >= FLOATING_BUTTONS_UNLOCK_LEVEL) {
+    const v2AfterLoad = loadGameSaveV2();
+    const gardenId = v2AfterLoad?.activeGardenId ?? DEFAULT_GARDEN_ID;
+    if (shouldShowFarmFloatingButtons(gardenId, save.playerLevel)) {
       setFarmFloatingButtonsVisible(true);
     }
     setIsExpanded(false);
@@ -5999,7 +6008,9 @@ export default function App() {
       } else {
         ftue11PersistenceEnabledRef.current = true;
         const totalOffline = hydrateFromSave(save);
-        if (save.playerLevel >= FLOATING_BUTTONS_UNLOCK_LEVEL) {
+        const v2AfterLoad = loadGameSaveV2();
+        const gardenId = v2AfterLoad?.activeGardenId ?? DEFAULT_GARDEN_ID;
+        if (shouldShowFarmFloatingButtons(gardenId, save.playerLevel)) {
           setFarmFloatingButtonsVisible(true);
         }
         setIsExpanded(false);

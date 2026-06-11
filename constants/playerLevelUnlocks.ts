@@ -1,3 +1,5 @@
+import { DEFAULT_GARDEN_ID, type GardenId } from './gardens';
+
 /** Player level at which barn Plant Collection UI unlocks (FTUE + shelves). */
 export const PLANT_COLLECTION_UI_UNLOCK_LEVEL = 7;
 
@@ -5,8 +7,14 @@ export const PLANT_COLLECTION_UI_UNLOCK_LEVEL = 7;
 export const PLANT_COLLECTION_FTUE_INTRO_DISPLAY_PLAYER_LEVEL =
   PLANT_COLLECTION_UI_UNLOCK_LEVEL - 1;
 
-/** Farm floating buttons (left + right stacks) fade in when the level-up popup reaches this level. */
+/** Farm floating buttons (left + right stacks) fade in when the level-up popup reaches this level (garden 1 only). */
 export const FLOATING_BUTTONS_UNLOCK_LEVEL = 2;
+
+/** Garden 2+ show floating buttons immediately; garden 1 waits until `FLOATING_BUTTONS_UNLOCK_LEVEL`. */
+export function shouldShowFarmFloatingButtons(gardenId: GardenId, playerLevel: number): boolean {
+  if (gardenId !== DEFAULT_GARDEN_ID) return true;
+  return playerLevel >= FLOATING_BUTTONS_UNLOCK_LEVEL;
+}
 
 /** Farm floating button: Tasks (no popup yet). */
 export const TASKS_FLOATING_BUTTON_UNLOCK_LEVEL = 5;
