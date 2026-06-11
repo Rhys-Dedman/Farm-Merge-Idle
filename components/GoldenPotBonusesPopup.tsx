@@ -185,14 +185,16 @@ const SUBTITLE_COLOR = '#5c4a32';
 /** Left column tier number (scaled inner coords). */
 const BONUS_TIER_NUMBER_REM = 1.25;
 
-/** Display order: 4 golden pots at top → 24 at bottom (matches `constants/goldenPotBonuses` thresholds). */
+import { MAX_PLANT_TIER } from '../constants/plants';
+
+/** Display order: 4 golden pots at top → max tier at bottom (matches `constants/goldenPotBonuses` thresholds). */
 const GOLD_POT_BONUS_TIERS: readonly { potCount: number; description: string }[] = [
   { potCount: 4, description: '4th Order Slot' },
   { potCount: 8, description: '2x Offline Earnings' },
   { potCount: 12, description: '2x Merge Coins' },
   { potCount: 16, description: '150% Production' },
-  { potCount: 20, description: '150% Harvest' },
-  { potCount: 24, description: 'Auto Merge' },
+  { potCount: 18, description: '150% Harvest' },
+  { potCount: MAX_PLANT_TIER, description: 'Auto Merge' },
 ];
 
 const BONUS_DISABLED_NUMBER_COLOR = '#dcc999';
@@ -207,7 +209,7 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
   onClose,
   onUserDismiss,
   goldenPotCount,
-  maxGoldenPots = 24,
+  maxGoldenPots = MAX_PLANT_TIER,
   appScale = 1,
   revealTierPotCount = null,
 }) => {

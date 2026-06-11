@@ -5,8 +5,10 @@
 import React from 'react';
 import { assetPath } from '../utils/assetPath';
 
-/** Highest plant level with a `plant_N.png` in `/assets/plants/` (game has 24 tiers). */
-export const MAX_PLANT_SPRITE_LEVEL = 24;
+import { MAX_PLANT_TIER } from '../constants/plants';
+
+/** Highest plant level with a `plant_N.png` in `/assets/plants/` per garden. */
+export const MAX_PLANT_SPRITE_LEVEL = MAX_PLANT_TIER;
 
 export function getPlantSpritePath(level: number): string {
   const spriteLevel = Math.min(Math.max(1, level), MAX_PLANT_SPRITE_LEVEL);

@@ -1,3 +1,5 @@
+import { MAX_PLANT_TIER } from './plants';
+
 /** Completed customer orders needed to fill one plant mastery segment. */
 export const PLANT_MASTERY_ORDERS_PER_SEGMENT = 50;
 
@@ -10,7 +12,7 @@ export function getMaxStoredOrdersProgressForTarget(
   seg: number = PLANT_MASTERY_ORDERS_PER_SEGMENT,
   introBarComplete?: boolean,
 ): number {
-  if (targetLevel >= 24) return seg;
+  if (targetLevel >= MAX_PLANT_TIER) return seg;
   if (targetLevel === 1 && introBarComplete) return seg;
   return seg - 1;
 }
@@ -38,14 +40,10 @@ const PLANT_MASTERY_UNLOCK_COSTS: Readonly<Record<number, number>> = {
   18: 230_000,
   19: 290_000,
   20: 360_000,
-  21: 475_000,
-  22: 600_000,
-  23: 750_000,
-  24: 1_000_000,
 };
 
 /** Mastery coin cost for unlocking the golden pot on `level` (1-based plant tier). Plant 1 is 0 (free purchase flow). */
 export function getPlantMasteryUnlockCost(level: number): number {
-  const safeLevel = Math.max(1, Math.min(24, Math.floor(level)));
+  const safeLevel = Math.max(1, Math.min(MAX_PLANT_TIER, Math.floor(level)));
   return PLANT_MASTERY_UNLOCK_COSTS[safeLevel] ?? 0;
 }

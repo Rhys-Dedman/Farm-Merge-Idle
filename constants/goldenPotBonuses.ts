@@ -1,16 +1,18 @@
+import { MAX_PLANT_TIER } from './plants';
+
 /**
- * Golden pot count = `plantMastery.unlockedLevels.length` (tiers 1–24).
- * Thresholds match `GOLD_POT_BONUS_TIERS` in GoldenPotBonusesPopup (4 at top → 24 at bottom).
+ * Golden pot count = `plantMastery.unlockedLevels.length` (tiers 1–`MAX_PLANT_TIER`).
+ * Thresholds match `GOLD_POT_BONUS_TIERS` in GoldenPotBonusesPopup (4 at top → 20 at bottom).
  */
 export const GOLDEN_POT_BONUS_FOURTH_ORDER_SLOT_AT = 4;
 export const GOLDEN_POT_BONUS_OFFLINE_2X_AT = 8;
 export const GOLDEN_POT_BONUS_MERGE_COINS_2X_AT = 12;
 export const GOLDEN_POT_BONUS_PRODUCTION_150_AT = 16;
-export const GOLDEN_POT_BONUS_HARVEST_150_AT = 20;
-export const GOLDEN_POT_BONUS_AUTO_MERGE_AT = 24;
+export const GOLDEN_POT_BONUS_HARVEST_150_AT = 18;
+export const GOLDEN_POT_BONUS_AUTO_MERGE_AT = MAX_PLANT_TIER;
 
 /** Thresholds in display order (top → bottom of bonuses popup). */
-export const GOLDEN_POT_BONUS_TIER_THRESHOLDS = [4, 8, 12, 16, 20, 24] as const;
+export const GOLDEN_POT_BONUS_TIER_THRESHOLDS = [4, 8, 12, 16, 18, MAX_PLANT_TIER] as const;
 
 /** If `newCount` just crossed a bonus tier (was strictly below, now at or above), return that tier's pot count; else null. */
 export function getGoldenPotBonusTierJustUnlocked(prevCount: number, newCount: number): number | null {

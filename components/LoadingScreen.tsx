@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { MAX_PLANT_TIER } from '../constants/plants';
 import { assetPath } from '../utils/assetPath';
 import { preloadSfxAssets, SFX_PRELOAD_STEP_COUNT, applySavedAudioSettingsEarly } from '../utils/sfx';
 
@@ -24,10 +25,10 @@ const SPLASH_PROGRESS_DESIGN_FONT_PX = 14;
 
 const ASSETS_TO_PRELOAD = [
   // Plants (discovery + grid); plant_0 unused — pot-only when undiscovered
-  ...Array.from({ length: 24 }, (_, i) => `/assets/plants/garden_1/plant_${i + 1}.png`),
+  ...Array.from({ length: MAX_PLANT_TIER }, (_, i) => `/assets/plants/garden_1/plant_${i + 1}.png`),
   '/assets/plants/pots/plant_pot.png',
   // Goal icons (orders/discovery goals – preload all so new goals don’t load images on demand)
-  ...Array.from({ length: 24 }, (_, i) => `/assets/icons/goals/garden_1/icon_goal_${i + 1}.png`),
+  ...Array.from({ length: MAX_PLANT_TIER }, (_, i) => `/assets/icons/goals/garden_1/icon_goal_${i + 1}.png`),
   // Icons
   '/assets/icons/floating_buttons/icon_tasks.png',
   '/assets/icons/generic_buttons/icon_barn.png',

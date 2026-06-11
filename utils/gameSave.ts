@@ -25,6 +25,7 @@ import {
 } from './limitedOfferIntroCycle';
 import { RATE_US_PERMANENTLY_DISMISSED_KEY } from './rateUsDismiss';
 import { DEFAULT_GARDEN_ID, type GardenId } from '../constants/gardens';
+import { MAX_PLANT_TIER } from '../constants/plants';
 import {
   flattenV2ToV1,
   GAME_SAVE_V2_VERSION,
@@ -42,7 +43,7 @@ function normalizePlantMasteryUnlockPending(raw: unknown): number[] {
     const n = typeof x === 'number' ? x : Number.parseInt(String(x), 10);
     if (Number.isFinite(n)) {
       const k = Math.floor(n);
-      if (k >= 1 && k <= 24) set.add(k);
+      if (k >= 1 && k <= MAX_PLANT_TIER) set.add(k);
     }
   }
   return [...set].sort((a, b) => a - b);
@@ -55,7 +56,7 @@ function normalizePlantMasteryUnlockedLevels(raw: unknown): number[] {
     const n = typeof x === 'number' ? x : Number.parseInt(String(x), 10);
     if (Number.isFinite(n)) {
       const k = Math.floor(n);
-      if (k >= 1 && k <= 24) set.add(k);
+      if (k >= 1 && k <= MAX_PLANT_TIER) set.add(k);
     }
   }
   return [...set].sort((a, b) => a - b);
@@ -189,7 +190,7 @@ export function deriveGoalDiscoveryLightGreenActive(
   highestPlantEver: number
 ): boolean[] {
   const h = Math.max(0, Math.floor(highestPlantEver));
-  if (h >= 24) return [false, false, false, false, false];
+  if (h >= MAX_PLANT_TIER) return [false, false, false, false, false];
   const discoveryTier = h + 1;
   return [0, 1, 2, 3, 4].map((i) => {
     const st = goalSlots[i];
@@ -258,7 +259,10 @@ export function normalizeGameSaveV1(data: GameSaveV1): GameSaveV1 {
     if (typeof data.plantMasteryTargetLevel !== 'number' || !Number.isFinite(data.plantMasteryTargetLevel)) {
       data.plantMasteryTargetLevel = 1;
     }
-    data.plantMasteryTargetLevel = Math.max(1, Math.min(24, Math.floor(data.plantMasteryTargetLevel)));
+    data.plantMasteryTargetLevel = Math.max(1, Math.min(MAX_PLANT_TIER, Math.floor(data.plantMasteryTargetLevel)));
+    if (typeof data.highestPlantEver === 'number' && Number.isFinite(data.highestPlantEver)) {
+      data.highestPlantEver = Math.min(MAX_PLANT_TIER, Math.max(0, Math.floor(data.highestPlantEver)));
+    }
     data.plantMasteryUnlockPending = normalizePlantMasteryUnlockPending(data.plantMasteryUnlockPending);
     data.plantMasteryUnlockedLevels = normalizePlantMasteryUnlockedLevels(
       (data as GameSaveV1 & { plantMasteryUnlockedLevels?: unknown }).plantMasteryUnlockedLevels

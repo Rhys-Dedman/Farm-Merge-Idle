@@ -4,6 +4,7 @@ import { BoardCell, Item, DragState } from '../types';
 import { PLANT_CONTAINER_WIDTH, PLANT_CONTAINER_HEIGHT } from '../constants/boardLayout';
 import { assetPath } from '../utils/assetPath';
 import { PlantWithPot } from './PlantWithPot';
+import { MAX_PLANT_TIER } from '../constants/plants';
 
 /** Set to false to disable swapping plants (drop on non-match just returns to original cell) */
 const ENABLE_SWAP = false;
@@ -263,7 +264,7 @@ export const HexBoard = forwardRef<HexBoardHandle, HexBoardProps>(function HexBo
         if (!cell?.item || cell.locked) return false;
         if (!tcell?.item || tcell.locked) return false;
         if (tcell.item.level !== cell.item.level || tcell.item.type !== cell.item.type) return false;
-        if (cell.item.level >= 24) return false;
+        if (cell.item.level >= MAX_PLANT_TIER) return false;
         const levelIncrease = getMergeLevelIncrease?.(cell.item.level) ?? 1;
         const origin = getHexCenterInContainer(sourceIdx);
         const curX = origin.x;
@@ -365,7 +366,7 @@ export const HexBoard = forwardRef<HexBoardHandle, HexBoardProps>(function HexBo
           !isLocked &&
           targetCell?.item &&
           targetCell.item.level === dragState.item.level;
-        const isMaxTierMergeAttempt = isSameLevelMerge && dragState.item.level >= 24;
+        const isMaxTierMergeAttempt = isSameLevelMerge && dragState.item.level >= MAX_PLANT_TIER;
         const isValidMerge = isSameLevelMerge && !isMaxTierMergeAttempt;
         const isEmptyCell = targetIdx != null && targetIdx !== dragState.cellIdx && !isLocked && targetCell?.item == null;
         const droppedOnSameCell = targetIdx === dragState.cellIdx;

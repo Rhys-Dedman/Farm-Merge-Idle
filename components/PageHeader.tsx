@@ -3,6 +3,7 @@
  * Reference UI: size/position locked — see docs/UI-REFERENCE-TOP-BAR.md.
  */
 import React, { useEffect, useRef, useState, type MutableRefObject } from 'react';
+import { MAX_PLANT_TIER } from '../constants/plants';
 import { assetPath } from '../utils/assetPath';
 import { getTickCount60 } from '../utils/raf60';
 import { getPerformanceMode } from '../utils/performanceMode';
@@ -570,7 +571,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
               title="Last committed goal plant tier (debug)"
             >
               Last:{' '}
-              {debugLastGoalLevel >= 1 && debugLastGoalLevel <= 24
+              {debugLastGoalLevel >= 1 && debugLastGoalLevel <= MAX_PLANT_TIER
                 ? `Plant ${debugLastGoalLevel}`
                 : '—'}
             </span>

@@ -16,6 +16,7 @@ import {
 } from '../utils/wildGrowth';
 import { PlantWithPot } from './PlantWithPot';
 import { hasGoldenPotHarvest150, hasGoldenPotProduction150 } from '../constants/goldenPotBonuses';
+import { MAX_PLANT_TIER } from '../constants/plants';
 
 export interface UpgradeState {
   level: number;
@@ -34,13 +35,13 @@ export type SeedsState = Record<string, UpgradeState>;
  * - Plant 16 → seed 6
  * - Plant 19 → seed 7
  * - Plant 22 → seed 8
- * - Plant 24 → seed 9
+ * - Plant 20 → seed 9
  */
 export const getSeedLevelFromHighestPlant = (highestPlant: number): number => {
   const hp = Math.max(1, Math.floor(highestPlant));
-  if (hp >= 24) return 9;
-  if (hp >= 22) return 8;
-  if (hp >= 19) return 7;
+  if (hp >= 20) return 9;
+  if (hp >= 18) return 8;
+  if (hp >= 15) return 7;
   if (hp >= 16) return 6;
   if (hp >= 13) return 5;
   if (hp >= 10) return 4;
@@ -1065,8 +1066,8 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
             {offer.id === 'special_delivery' ? (
               <div className="relative" style={{ width: 30, height: 34, marginTop: 2 }}>
                 <PlantWithPot
-                  level={Math.max(1, Math.min(24, highestPlantEver - 1))}
-                  mastered={masteredPlantLevels.includes(Math.max(1, Math.min(24, highestPlantEver - 1)))}
+                  level={Math.max(1, Math.min(MAX_PLANT_TIER, highestPlantEver - 1))}
+                  mastered={masteredPlantLevels.includes(Math.max(1, Math.min(MAX_PLANT_TIER, highestPlantEver - 1)))}
                   wrapperClassName="h-full w-full"
                 />
               </div>

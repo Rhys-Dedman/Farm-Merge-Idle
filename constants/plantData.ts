@@ -20,10 +20,6 @@ export const PLANT_DATA: Record<number, { name: string; description: string }> =
   18: { name: 'Glossy Eggplant', description: 'A polished fruit that looks like it expects compliments.' },
   19: { name: 'Juicy Tomato', description: 'Round fruits gathering together like they have important things to discuss.' },
   20: { name: 'Sour Lemon', description: 'Bright and beautiful on the outside with a surprisingly bitter attitude.' },
-  21: { name: 'Plump Pumpkin', description: 'A steady grower that never seems embarrassed about taking up space.' },
-  22: { name: 'Garden Grapes', description: 'Clusters of fruit packed tightly together with no concern for personal space.' },
-  23: { name: 'Crisp Apple', description: 'The most recognizable fruit and clearly aware of it.' },
-  24: { name: 'Tree Star', description: 'A rare leafy treat that has remained popular since the age of dinosaurs.' },
 };
 
 export function getPlantData(level: number): { name: string; description: string } {

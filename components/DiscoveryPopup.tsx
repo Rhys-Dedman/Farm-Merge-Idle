@@ -8,6 +8,7 @@ import { assetPath } from '../utils/assetPath';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
 import { PopupVectorBackground } from './PopupVectorBackground';
 import { formatCompactNumber } from '../utils/formatCompactNumber';
+import { MAX_PLANT_TIER } from '../constants/plants';
 import { PlantWithPot } from './PlantWithPot';
 import {
   REWARD_OFFER_LINE_TEXT_COLOR,
@@ -480,7 +481,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
               }}
             >
               <PlantWithPot
-                level={Math.max(1, Math.min(24, imageLevel))}
+                level={Math.max(1, Math.min(MAX_PLANT_TIER, imageLevel))}
                 wrapperClassName="h-full w-full"
               />
             </div>

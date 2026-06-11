@@ -190,6 +190,7 @@ import {
 } from './utils/wildGrowth';
 import { OfflineEarningsPopup } from './components/OfflineEarningsPopup';
 import { BARN_SHELF_COUNT, normalizeBarnShelvesUnlocked } from './constants/barnShelves';
+import { MAX_PLANT_TIER } from './constants/plants';
 import {
   PLANT_MASTERY_GLOW_MS,
   PLANT_MASTERY_ORDERS_PER_SEGMENT,
@@ -289,7 +290,7 @@ function finalizeDiscoveryGoalPlantLevelForSpawn(
 ): number {
   if (!dueDiscovery) return plantLevel;
   const h = effectiveHighestPlantEverForDiscovery(mergeRef, stateRef);
-  if (h >= 24) return plantLevel;
+  if (h >= MAX_PLANT_TIER) return plantLevel;
   const slots = goalSlotsRef.current;
   const types = goalPlantTypesRef.current;
   if (hasActiveDiscoveryGoalOnBoard(slots, types, loadingIdx, h)) return plantLevel;
@@ -313,7 +314,7 @@ function isDiscoveryLightGreenEligible(
 ): boolean {
   if (!postFtue11) return false;
   if (ftue11ThreePlantWindow) return plantLevel === 3 && highestPlantEver < 3;
-  return plantLevel === highestPlantEver + 1 && highestPlantEver < 24;
+  return plantLevel === highestPlantEver + 1 && highestPlantEver < MAX_PLANT_TIER;
 }
 
 /** Double Coins duration when granted from a limited-offer / upgrade-panel rewarded ad (offer has no duration in config). */
@@ -367,7 +368,7 @@ function buildLimitedOfferPopupState(
   if (!offer) return null;
   const specialDeliveryLevel =
     offer.id === 'special_delivery' && overrides?.highestPlantEver != null
-      ? Math.max(1, Math.min(24, overrides.highestPlantEver - 1))
+      ? Math.max(1, Math.min(MAX_PLANT_TIER, overrides.highestPlantEver - 1))
       : null;
   const imageSrc = assetPath(offer.headerIcon);
   const isCoinMult = isCoinMultiplierBoostId(resolvedOfferId);
@@ -563,7 +564,7 @@ function hasActiveDiscoveryGoalOnBoard(
   exceptSlotIdx: number,
   highestPlantEver: number
 ): boolean {
-  if (highestPlantEver >= 24) return false;
+  if (highestPlantEver >= MAX_PLANT_TIER) return false;
   const d = highestPlantEver + 1;
   return slots.some(
     (s, i) =>
@@ -599,7 +600,7 @@ function resolveGoalPlantLevelAgainstForbidden(
 ): number {
   if (chosen > highestPlantEver) return chosen;
   if (!forbidden.has(chosen)) return chosen;
-  const maxDiscovered = Math.min(24, Math.max(1, highestPlantEver));
+  const maxDiscovered = Math.min(MAX_PLANT_TIER, Math.max(1, highestPlantEver));
   const effectiveMin = Math.max(minLevel, seedLevel);
   const seedFloor = Math.max(1, seedLevel);
   const bands = [
@@ -611,7 +612,7 @@ function resolveGoalPlantLevelAgainstForbidden(
   }
   if (
     allowDiscoveryTierFallback &&
-    highestPlantEver < 24 &&
+    highestPlantEver < MAX_PLANT_TIER &&
     !forbidden.has(highestPlantEver + 1)
   ) {
     return highestPlantEver + 1;
@@ -651,7 +652,7 @@ const pickGoalPlantLevel = (
 
   const pickRandomNormalGoal = (): number => {
     const effectiveMin = Math.max(minLevel, seedLevel);
-    const maxForRandom = Math.min(24, highestPlantEver);
+    const maxForRandom = Math.min(MAX_PLANT_TIER, highestPlantEver);
     const forbidden = forbiddenBase();
     const preferred = tiersInRangeAvoidingForbidden(effectiveMin, maxForRandom, forbidden);
     if (preferred.length > 0) {
@@ -667,7 +668,7 @@ const pickGoalPlantLevel = (
       for (let L = effectiveMin; L <= maxForRandom; L++) levels.push(L);
       return levels[Math.floor(Math.random() * levels.length)];
     }
-    return Math.max(seedLevel, Math.min(24, effectiveMin));
+    return Math.max(seedLevel, Math.min(MAX_PLANT_TIER, effectiveMin));
   };
 
   if (hasDiscoveryGoalOnBoard) {
@@ -677,7 +678,7 @@ const pickGoalPlantLevel = (
     lastMergeDiscoveryLevelRef.current = highestPlantEver;
     // Do not refill remaining here — that erases real countdown progress when lastMerge was stale vs hydrate/highest.
   }
-  if (highestPlantEver < 24 && discoveryGoalsRemainingRef.current <= 0) {
+  if (highestPlantEver < MAX_PLANT_TIER && discoveryGoalsRemainingRef.current <= 0) {
     const nextDiscover = highestPlantEver + 1;
     const forbidden = forbiddenDiscovery();
     if (forbidden.has(nextDiscover)) {
@@ -879,7 +880,7 @@ function getActiveOrderMergeResultCap(
   const tiers: number[] = [];
   for (let i = 0; i < goalPlantTypes.length; i++) {
     const pt = goalPlantTypes[i];
-    if (pt < 1 || pt > 24) continue;
+    if (pt < 1 || pt > MAX_PLANT_TIER) continue;
     if (goalSlots[i] !== 'green') continue;
     if ((goalCounts[i] ?? 0) <= 0) continue;
     tiers.push(pt);
@@ -916,7 +917,7 @@ function canAutoMergePlantPair(
   if (!cell?.item || cell.locked || !other?.item || other.locked) return false;
   if (other.item.level !== cell.item.level || other.item.type !== cell.item.type) return false;
   const L = cell.item.level;
-  if (L >= 24) return false;
+  if (L >= MAX_PLANT_TIER) return false;
   if (mergeResultCap != null && L + 1 > mergeResultCap) return false;
   return true;
 }
@@ -1656,19 +1657,19 @@ export default function App() {
     if (autoMergePotCountInitRef.current) {
       autoMergePotCountInitRef.current = false;
       lastGoldenPotCountForAutoMergeRef.current = n;
-      if (n < 24) {
+      if (n < MAX_PLANT_TIER) {
         setAutoMergeMode(false);
         setAutoMergeSetting(false);
       }
       return;
     }
     lastGoldenPotCountForAutoMergeRef.current = n;
-    if (n < 24) {
+    if (n < MAX_PLANT_TIER) {
       setAutoMergeMode(false);
       setAutoMergeSetting(false);
       return;
     }
-    if (prev === 23 && n === 24) {
+    if (prev === MAX_PLANT_TIER - 1 && n === MAX_PLANT_TIER) {
       setAutoMergeMode(true);
       setAutoMergeSetting(true);
     }
@@ -1690,7 +1691,7 @@ export default function App() {
           ordersProgress: 0,
         };
       }
-      if (m.targetLevel === 24 && m.ordersProgress >= seg) {
+      if (m.targetLevel === MAX_PLANT_TIER && m.ordersProgress >= seg) {
         return m;
       }
       return m;
@@ -1713,7 +1714,7 @@ export default function App() {
     if (playerLevel < PLANT_COLLECTION_UI_UNLOCK_LEVEL) return;
     setPlantMastery((m) => {
       if (m.plantMasteryIntroBarComplete) return m;
-      if (m.targetLevel >= 24) return m;
+      if (m.targetLevel >= MAX_PLANT_TIER) return m;
       const pending = m.unlockPending.includes(m.targetLevel)
         ? m.unlockPending
         : [...m.unlockPending, m.targetLevel].sort((a, b) => a - b);
@@ -2100,7 +2101,7 @@ export default function App() {
   const completeMasterySegmentCheat = useCallback(() => {
     const seg = PLANT_MASTERY_ORDERS_PER_SEGMENT;
     setPlantMastery((m) => {
-      if (m.targetLevel === 24 && m.ordersProgress >= seg) return m;
+      if (m.targetLevel === MAX_PLANT_TIER && m.ordersProgress >= seg) return m;
       if (m.plantMasteryIntroBarComplete) {
         return {
           ...m,
@@ -2112,7 +2113,7 @@ export default function App() {
       const pending = m.unlockPending.includes(m.targetLevel)
         ? m.unlockPending
         : [...m.unlockPending, m.targetLevel].sort((a, b) => a - b);
-      if (m.targetLevel < 24) {
+      if (m.targetLevel < MAX_PLANT_TIER) {
         return {
           ...m,
           ordersProgress: 0,
@@ -2123,7 +2124,7 @@ export default function App() {
       return {
         ...m,
         ordersProgress: seg,
-        targetLevel: 24,
+        targetLevel: MAX_PLANT_TIER,
         unlockPending: pending,
       };
     });
@@ -3808,7 +3809,7 @@ export default function App() {
       const types = goalPlantTypesRef.current;
       const hasDiscoveryOnBoard = hasActiveDiscoveryGoalOnBoard(slots, types, loadingIdx, hDisc);
       const dueDiscovery =
-        hDisc < 24 && discoveryGoalsRemainingRef.current <= 0 && !hasDiscoveryOnBoard;
+        hDisc < MAX_PLANT_TIER && discoveryGoalsRemainingRef.current <= 0 && !hasDiscoveryOnBoard;
       const occupiedSiblings = collectOccupiedGoalPlantTiers(slots, types, loadingIdx);
       const occupiedActiveSiblings = collectOccupiedGoalPlantTiersActive(slots, types, loadingIdx);
       const lastCommittedSnapshot = lastSpawnedGoalPlantLevelHUDRef.current;
@@ -4734,7 +4735,7 @@ export default function App() {
           }
         }
         if (luckyProcs) {
-          const bonusLevel = Math.min(24, Math.max(1, seedLevel + 1));
+          const bonusLevel = Math.min(MAX_PLANT_TIER, Math.max(1, seedLevel + 1));
           const t3 = pickNextTarget();
           if (t3 != null) {
             window.setTimeout(() => spawnProjectile(t3, bonusLevel, false, true), staggerMs);
@@ -4959,7 +4960,7 @@ export default function App() {
       grid.forEach((cell, cellIdx) => {
         if (!cell.item) return;
         const level = cell.item.level;
-        const slotIdx = level >= 1 && level <= 24
+        const slotIdx = level >= 1 && level <= MAX_PLANT_TIER
           ? (() => {
               let best = -1;
               let minRemaining = Infinity;
@@ -5155,7 +5156,7 @@ export default function App() {
       if (!cell.item) return;
 
       const level = cell.item.level;
-      const slotIdx = level >= 1 && level <= 24
+      const slotIdx = level >= 1 && level <= MAX_PLANT_TIER
         ? (() => {
             let best = -1;
             let minRemaining = Infinity;
@@ -5319,7 +5320,7 @@ export default function App() {
       const mergeResultLevel = target.item.level + pendingMergeLevelIncreaseRef.current;
       const hasGoalForResult =
         mergeResultLevel >= 1 &&
-        mergeResultLevel <= 24 &&
+        mergeResultLevel <= MAX_PLANT_TIER &&
         goalPlantTypes.some((pt, i) => {
           if (pt !== mergeResultLevel) return false;
           if (goalSlots[i] !== 'green') return false;
@@ -5331,7 +5332,7 @@ export default function App() {
     }
 
     // Deny merges beyond max plant tier (24). Snap dragged plant back and show toast on the static plant.
-    if (willMerge && source.item?.level === 24 && target.item?.level === 24) {
+    if (willMerge && source.item?.level === MAX_PLANT_TIER && target.item?.level === MAX_PLANT_TIER) {
       spawnMaxPlantReachedToast(targetIdx);
       return;
     }
@@ -7155,7 +7156,7 @@ export default function App() {
                         ]);
                       }
                       if (mergeResultLevel != null) {
-                        const slotIdx = mergeResultLevel >= 1 && mergeResultLevel <= 24
+                        const slotIdx = mergeResultLevel >= 1 && mergeResultLevel <= MAX_PLANT_TIER
                           ? (() => {
                               let best = -1;
                               let minRemaining = Infinity;
@@ -8541,7 +8542,7 @@ export default function App() {
               <GoldenPotBonusesPopup
                 isVisible
                 goldenPotCount={plantMastery.unlockedLevels.length}
-                maxGoldenPots={24}
+                maxGoldenPots={MAX_PLANT_TIER}
                 appScale={appScale}
                 revealTierPotCount={goldenPotBonusRevealTier}
                 onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
@@ -8580,7 +8581,7 @@ export default function App() {
                   });
                 }}
                 title="New Discovery"
-                imageSrc={assetPath(`/assets/plants/garden_1/plant_${Math.max(1, Math.min(24, discoveryPopup.level))}.png`)}
+                imageSrc={assetPath(`/assets/plants/garden_1/plant_${Math.max(1, Math.min(MAX_PLANT_TIER, discoveryPopup.level))}.png`)}
                 imageLevel={discoveryPopup.level}
                 subtitle={getPlantData(discoveryPopup.level).name}
                 description={getPlantData(discoveryPopup.level).description}
@@ -9126,7 +9127,7 @@ export default function App() {
                 setPauseMenuOpen(false);
                 setSettingsOpenedFromFtue(false);
               }}
-              showAutoMergeSetting={goldenPotCount >= 24}
+              showAutoMergeSetting={goldenPotCount >= MAX_PLANT_TIER}
               onAutoMergeChange={setAutoMergeSetting}
               showDevToolsButton={!settingsOpenedFromFtue}
               onAnyButtonClick={() => playSfx(SFX_IDS.uiConfirmNormal)}
@@ -9220,10 +9221,10 @@ export default function App() {
                   setLevelUpPopupQueue((q) => [...q, nextLevel]);
                 }
               }}
-              canUnlockPlant={highestPlantEver < 24}
+              canUnlockPlant={highestPlantEver < MAX_PLANT_TIER}
               onUnlockPlantClick={() => {
                 playSfx(SFX_IDS.uiConfirmNormal);
-                if (highestPlantEver >= 24) return;
+                if (highestPlantEver >= MAX_PLANT_TIER) return;
                 const newLevel = highestPlantEver + 1;
                 setHighestPlantEver(newLevel);
                 highestPlantEverRef.current = newLevel;
