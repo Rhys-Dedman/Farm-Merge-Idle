@@ -15,7 +15,7 @@ export const TASKS_FLOATING_BUTTON_UNLOCK_LEVEL = 5;
 export const GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL = 10;
 
 /** Set false to hide the Gardens FB in UI while backend unlock logic remains. */
-export const GARDENS_FLOATING_BUTTON_UI_VISIBLE = false;
+export const GARDENS_FLOATING_BUTTON_UI_VISIBLE = true;
 
 /** On reaching this level, show Starter Pack IAP instead of the level-up popup. */
 export const STARTER_PACK_FORCE_POPUP_LEVEL = 4;

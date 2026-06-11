@@ -3,7 +3,18 @@ import { formatBundleLimitedCountdown } from './limitedOfferCountdown';
 export const DAILY_TASKS_UNLOCKED_KEY = 'daily-tasks-unlocked';
 export const DAILY_TASKS_COUNTDOWN_END_MS_KEY = 'daily-tasks-countdown-end-ms';
 
+/** @deprecated Period is now aligned to local midnight; kept for reference. */
 export const DAILY_TASKS_COUNTDOWN_DURATION_MS = 24 * 60 * 60 * 1000;
+
+/** Next local midnight (00:00) strictly after `fromMs`. */
+export function getNextLocalMidnightMs(fromMs = Date.now()): number {
+  const next = new Date(fromMs);
+  next.setHours(0, 0, 0, 0);
+  if (next.getTime() <= fromMs) {
+    next.setDate(next.getDate() + 1);
+  }
+  return next.getTime();
+}
 
 /** When the daily-tasks popup is open, auto-claim completed tasks this many ms before period end. */
 export const DAILY_TASKS_AUTO_CLAIM_BEFORE_END_MS = 1000;
@@ -29,7 +40,7 @@ export function readDailyTasksUnlocked(): boolean {
 }
 
 export function startDailyTasksCountdown(atTimeMs = Date.now()): number {
-  const endMs = atTimeMs + DAILY_TASKS_COUNTDOWN_DURATION_MS;
+  const endMs = getNextLocalMidnightMs(atTimeMs);
   try {
     localStorage.setItem(DAILY_TASKS_COUNTDOWN_END_MS_KEY, String(endMs));
   } catch {

@@ -46,6 +46,7 @@ import { FakeAdPopup } from './components/FakeAdPopup';
 import { FakeReviewPopup } from './components/FakeReviewPopup';
 import { PauseMenuPopup } from './components/PauseMenuPopup';
 import { SettingsPopup } from './components/SettingsPopup';
+import { GardenPickerPopup } from './components/GardenPickerPopup';
 import { RateUsPopup } from './components/RateUsPopup';
 import { RateUsThankYouPopup } from './components/RateUsThankYouPopup';
 import { DailyTasksPopup } from './components/DailyTasksPopup';
@@ -156,10 +157,13 @@ import {
 } from './utils/gameSave';
 import {
   DEFAULT_GARDEN_ID,
+  GARDEN_IDS,
+  GARDENS_SWITCH_UNLOCK_LEVEL,
   getGardenDisplayLabel,
   getNextGardenId,
   type GardenId,
 } from './constants/gardens';
+import { setDailyTasksActiveGarden } from './utils/dailyTasksGardenScope';
 import { activateGardenInSave, flattenV2ToV1 } from './utils/gardenSave';
 import { createPostFtueCleanSave } from './utils/postFtueCleanSave';
 import {
@@ -1369,6 +1373,8 @@ export default function App() {
   const [devToolsOpen, setDevToolsOpen] = useState(false);
   const [activeGardenId, setActiveGardenId] = useState<GardenId>(DEFAULT_GARDEN_ID);
   const activeGardenIdRef = useRef<GardenId>(DEFAULT_GARDEN_ID);
+  const [garden1PlayerLevel, setGarden1PlayerLevel] = useState(1);
+  const [gardenPickerOpen, setGardenPickerOpen] = useState(false);
   const [fakeNotchPreviewEnabled, setFakeNotchPreviewEnabled] = useState(
     _earlyUserPrefs.fakeNotchPreviewEnabled,
   );
@@ -5841,28 +5847,69 @@ export default function App() {
     if (!v2) return;
     setActiveGardenId(v2.activeGardenId);
     activeGardenIdRef.current = v2.activeGardenId;
+    setDailyTasksActiveGarden(v2.activeGardenId);
+    const g1 = v2.gardens[DEFAULT_GARDEN_ID]?.playerLevel;
+    if (g1 != null) setGarden1PlayerLevel(g1);
   }, []);
 
-  const cycleActiveGarden = useCallback(() => {
-    persistGameSnapshotRef.current();
+  const getSelectableGardenIds = useCallback((): GardenId[] => {
     const v2 = loadGameSaveV2();
-    if (!v2) return;
-    const nextId = getNextGardenId(activeGardenIdRef.current);
-    const nextV2 = activateGardenInSave(v2, nextId);
-    persistGameSaveV2(nextV2);
-    activeGardenIdRef.current = nextId;
-    setActiveGardenId(nextId);
-    const flat = normalizeGameSaveV1({
-      ...flattenV2ToV1(nextV2),
-      savedAt: Date.now(),
-    });
-    hydrateFromSave(flat);
-    setFarmFloatingButtonsVisible(flat.playerLevel >= FLOATING_BUTTONS_UNLOCK_LEVEL);
-    setIsExpanded(false);
-    setActiveScreen('FARM');
-    setOfflineEarningsUi(null);
-    pendingOfflineEarningsRef.current = flat.pendingOfflineEarnings;
-  }, [hydrateFromSave]);
+    const featureUnlocked =
+      v2?.gardensFeatureUnlocked === true ||
+      garden1PlayerLevel >= GARDENS_SWITCH_UNLOCK_LEVEL;
+    const started = new Set(v2?.gardensStarted ?? [DEFAULT_GARDEN_ID]);
+    return GARDEN_IDS.filter(
+      (id) => id === DEFAULT_GARDEN_ID || featureUnlocked || started.has(id),
+    );
+  }, [garden1PlayerLevel]);
+
+  const switchToGarden = useCallback(
+    (targetId: GardenId, options?: { bypassUnlockCheck?: boolean }) => {
+      if (targetId === activeGardenIdRef.current) return;
+      if (!options?.bypassUnlockCheck && targetId !== DEFAULT_GARDEN_ID) {
+        const selectable = getSelectableGardenIds();
+        if (!selectable.includes(targetId)) return;
+      }
+      persistGameSnapshotRef.current();
+      const v2 = loadGameSaveV2();
+      if (!v2) return;
+      const nextV2 = activateGardenInSave(v2, targetId);
+      persistGameSaveV2(nextV2);
+      activeGardenIdRef.current = targetId;
+      setActiveGardenId(targetId);
+      setDailyTasksActiveGarden(targetId);
+      const flat = normalizeGameSaveV1({
+        ...flattenV2ToV1(nextV2),
+        savedAt: Date.now(),
+      });
+      hydrateFromSave(flat);
+      if (targetId === DEFAULT_GARDEN_ID) {
+        setGarden1PlayerLevel(flat.playerLevel);
+      }
+      setFarmFloatingButtonsVisible(flat.playerLevel >= FLOATING_BUTTONS_UNLOCK_LEVEL);
+      setIsExpanded(false);
+      setActiveScreen('FARM');
+      setOfflineEarningsUi(null);
+      pendingOfflineEarningsRef.current = flat.pendingOfflineEarnings;
+      rollDailyTasksPeriodIfExpired();
+      setDailyTaskRows(ensureDailyTasksDay(getDailyTasksCtx()));
+      setDailyTasksCountdownRefreshKey((k) => k + 1);
+    },
+    [getDailyTasksCtx, getSelectableGardenIds, hydrateFromSave],
+  );
+
+  const cycleActiveGarden = useCallback(() => {
+    switchToGarden(getNextGardenId(activeGardenIdRef.current), { bypassUnlockCheck: true });
+  }, [switchToGarden]);
+
+  useEffect(() => {
+    if (activeGardenId === DEFAULT_GARDEN_ID) {
+      setGarden1PlayerLevel(playerLevel);
+    } else {
+      const v2 = loadGameSaveV2();
+      setGarden1PlayerLevel(v2?.gardens[DEFAULT_GARDEN_ID]?.playerLevel ?? 1);
+    }
+  }, [activeGardenId, playerLevel]);
 
   const handleQuickResumeHydrate = useCallback(() => {
     const save = loadGameSave();
@@ -6897,13 +6944,17 @@ export default function App() {
                     {GARDENS_FLOATING_BUTTON_UI_VISIBLE ? (
                       <FloatingButton
                         title="Gardens"
-                        locked={playerLevel < GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL}
+                        locked={garden1PlayerLevel < GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL}
                         unlockLevel={GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL}
                         iconSrc={assetPath(
-                          playerLevel >= GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL
+                          garden1PlayerLevel >= GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL
                             ? '/assets/icons/floating_buttons/icon_fb_gardens.png'
                             : '/assets/icons/floating_buttons/icon_fb_gardens_locked.png',
                         )}
+                        onClick={() => {
+                          playSfx(SFX_IDS.uiConfirmNormal);
+                          setGardenPickerOpen(true);
+                        }}
                       />
                     ) : null}
                   </FloatingButtonStack>
@@ -9040,9 +9091,25 @@ export default function App() {
               appScale={appScale}
             />
 
+            <GardenPickerPopup
+              isVisible={gardenPickerOpen}
+              onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
+              onClose={() => setGardenPickerOpen(false)}
+              activeGardenId={activeGardenId}
+              selectableGardenIds={getSelectableGardenIds()}
+              onSelectGarden={(gardenId) => {
+                playSfx(SFX_IDS.uiConfirmNormal);
+                switchToGarden(gardenId);
+              }}
+              closeOnBackdropClick
+              appScale={appScale}
+            />
+
             <SettingsPopup
               isVisible={pauseMenuOpen}
               onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
+              activeGardenLabel={getGardenDisplayLabel(activeGardenId)}
+              onCycleGardenClick={cycleActiveGarden}
               onRateUs={() => {
                 playSfx(SFX_IDS.uiConfirmNormal);
                 setRateUsPopupOpen(true);
@@ -9162,11 +9229,6 @@ export default function App() {
               onFakeNotchToggle={() => {
                 playSfx(SFX_IDS.uiConfirmNormal);
                 setFakeNotchPreviewEnabled((on) => !on);
-              }}
-              activeGardenLabel={getGardenDisplayLabel(activeGardenId)}
-              onCycleGardenClick={() => {
-                playSfx(SFX_IDS.uiConfirmNormal);
-                cycleActiveGarden();
               }}
               onCompleteTaskClick={() => {
                 playSfx(SFX_IDS.uiConfirmNormal);

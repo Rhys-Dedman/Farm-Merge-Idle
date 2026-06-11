@@ -21,6 +21,9 @@ interface SettingsPopupProps {
   onRateUs?: () => void;
   showAutoMergeSetting?: boolean;
   onAutoMergeChange?: (enabled: boolean) => void;
+  /** Active garden label — tap cycles garden for testing. */
+  activeGardenLabel?: string;
+  onCycleGardenClick?: () => void;
   closeOnBackdropClick?: boolean;
   appScale?: number;
 }
@@ -97,6 +100,8 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
   onRateUs,
   showAutoMergeSetting = false,
   onAutoMergeChange,
+  activeGardenLabel,
+  onCycleGardenClick,
   closeOnBackdropClick = true,
   appScale = 1,
 }) => {
@@ -203,6 +208,21 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
                 <img src={assetPath('/assets/ui/popup_divider.png')} alt="" className="h-auto object-contain" style={{ width: '100%', maxWidth: '220px' }} />
               </div>
               <div className="flex flex-col items-center gap-3 w-full" style={{ maxWidth: '200px' }}>
+                {onCycleGardenClick && activeGardenLabel ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onAnyButtonClick?.();
+                      onCycleGardenClick();
+                    }}
+                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                    style={btnStyle(PALETTES.blue, false)}
+                  >
+                    <span className="font-bold tracking-tight" style={labelStyle(PALETTES.blue)}>
+                      {activeGardenLabel}
+                    </span>
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => {

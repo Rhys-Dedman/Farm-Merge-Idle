@@ -42,7 +42,14 @@ import { getLevelUpTaskSlot } from './playerLevelGoals';
 import { getGoalIconForPlantLevel } from './plantGoalIcons';
 import { getDailyTaskSlotRewardCoins } from './dailyTaskRewards';
 
-export const DAILY_TASKS_DAY_STATE_KEY = 'daily-tasks-day-state-v1';
+import {
+  clearAllDailyTasksDayStorage,
+  DAILY_TASKS_DAY_STATE_LEGACY_KEY,
+  getDailyTasksDayStateStorageKey,
+} from './dailyTasksGardenScope';
+
+/** @deprecated Use per-garden keys via `getDailyTasksDayStateStorageKey`. */
+export const DAILY_TASKS_DAY_STATE_KEY = DAILY_TASKS_DAY_STATE_LEGACY_KEY;
 const SLOT_1_ONLY: ReadonlySet<DailyTaskPoolId> = new Set([
   'seed_rush',
   'fill_garden_seeds',
@@ -389,7 +396,15 @@ export interface DailyTasksDayState {
 
 function readDayState(): DailyTasksDayState | null {
   try {
-    const raw = localStorage.getItem(DAILY_TASKS_DAY_STATE_KEY);
+    const key = getDailyTasksDayStateStorageKey();
+    let raw = localStorage.getItem(key);
+    if (!raw) {
+      raw = localStorage.getItem(DAILY_TASKS_DAY_STATE_LEGACY_KEY);
+      if (raw) {
+        localStorage.setItem(key, raw);
+        localStorage.removeItem(DAILY_TASKS_DAY_STATE_LEGACY_KEY);
+      }
+    }
     if (!raw) return null;
     const data = JSON.parse(raw) as DailyTasksDayState;
     if (data?.v !== 1 || !Array.isArray(data.tasks)) return null;
@@ -406,7 +421,7 @@ function readDayState(): DailyTasksDayState | null {
 
 function writeDayState(state: DailyTasksDayState): void {
   try {
-    localStorage.setItem(DAILY_TASKS_DAY_STATE_KEY, JSON.stringify(state));
+    localStorage.setItem(getDailyTasksDayStateStorageKey(), JSON.stringify(state));
   } catch {
     /* ignore */
   }
@@ -1209,9 +1224,5 @@ export function resetDailyTasksForDev(ctx: DailyTaskRollContext): DailyTaskDefin
 }
 
 export function clearDailyTasksDayStorage(): void {
-  try {
-    localStorage.removeItem(DAILY_TASKS_DAY_STATE_KEY);
-  } catch {
-    /* ignore */
-  }
+  clearAllDailyTasksDayStorage();
 }
