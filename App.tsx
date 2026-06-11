@@ -9096,10 +9096,9 @@ export default function App() {
               onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
               onClose={() => setGardenPickerOpen(false)}
               activeGardenId={activeGardenId}
-              selectableGardenIds={getSelectableGardenIds()}
               onSelectGarden={(gardenId) => {
                 playSfx(SFX_IDS.uiConfirmNormal);
-                switchToGarden(gardenId);
+                switchToGarden(gardenId, { bypassUnlockCheck: true });
               }}
               closeOnBackdropClick
               appScale={appScale}

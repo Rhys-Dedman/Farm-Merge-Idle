@@ -1,64 +1,65 @@
+/**
+ * Select Garden — discovery-style popup for switching active garden.
+ */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { assetPath } from '../utils/assetPath';
 import { GARDEN_IDS, getGardenDisplayLabel, type GardenId } from '../constants/gardens';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
+import { PopupVectorBackground } from './PopupVectorBackground';
 
 interface GardenPickerPopupProps {
   isVisible: boolean;
   onClose: () => void;
   onUserDismiss?: () => void;
   activeGardenId: GardenId;
-  /** Garden ids the player may switch to (always includes garden_1). */
-  selectableGardenIds: GardenId[];
   onSelectGarden: (gardenId: GardenId) => void;
   closeOnBackdropClick?: boolean;
   appScale?: number;
 }
 
 const POPUP_CLOSE_MS = 200;
-const BUTTON_HEIGHT_PX = 36;
+const HEADER_ICON = assetPath('/assets/icons/floating_buttons/icon_fb_gardens.png');
 
-const PALETTES = {
-  green: {
+const GARDEN_BTN = {
+  selected: {
     bg: '#b8d458',
+    pressedBg: '#9fc044',
     border: '#8fb33a',
     text: '#4a6b1e',
-    pressedBg: '#9fc044',
-    textShadow: '0 1px 0 rgba(255,255,255,0.3)',
   },
-  disabled: {
-    bg: '#b7a07a',
-    border: '#8c7554',
-    text: '#5f4b33',
-    pressedBg: '#a58d68',
-    textShadow: '0 1px 0 rgba(255,255,255,0.2)',
+  unselected: {
+    bg: '#89c8e1',
+    pressedBg: '#7ab8d1',
+    border: '#66a4c6',
+    text: '#4580a8',
   },
 } as const;
 
-function btnStyle(
-  p: (typeof PALETTES)['green'],
+function gardenButtonStyle(
+  selected: boolean,
   pressed: boolean,
-  active: boolean,
 ): React.CSSProperties {
+  const p = selected ? GARDEN_BTN.selected : GARDEN_BTN.unselected;
   return {
-    height: `${BUTTON_HEIGHT_PX}px`,
+    width: '360px',
+    height: '80px',
     backgroundColor: pressed ? p.pressedBg : p.bg,
-    border: `3px solid ${active ? '#5a7a28' : p.border}`,
-    borderRadius: '12px',
+    border: `4px solid ${p.border}`,
+    borderRadius: '24px',
     boxShadow: pressed
-      ? 'inset 0 2px 4px rgba(0,0,0,0.15)'
-      : `0 4px 0 ${p.border}, 0 6px 12px rgba(0,0,0,0.15)`,
-    transform: pressed ? 'translateY(2px)' : 'translateY(0)',
-    opacity: active ? 1 : 0.92,
+      ? 'inset 0 4px 8px rgba(0,0,0,0.15)'
+      : `0 8px 0 ${p.border}, 0 12px 24px rgba(0,0,0,0.15)`,
+    transform: pressed ? 'translateY(4px)' : 'translateY(0)',
   };
 }
 
-function labelStyle(p: (typeof PALETTES)['green']): React.CSSProperties {
+function gardenButtonLabelStyle(selected: boolean): React.CSSProperties {
+  const p = selected ? GARDEN_BTN.selected : GARDEN_BTN.unselected;
   return {
     color: p.text,
     fontFamily: 'Inter, sans-serif',
-    textShadow: p.textShadow,
-    fontSize: '0.875rem',
+    textShadow: '0 2px 0 rgba(255,255,255,0.3)',
+    fontSize: '2rem',
   };
 }
 
@@ -67,7 +68,6 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
   onClose,
   onUserDismiss,
   activeGardenId,
-  selectableGardenIds,
   onSelectGarden,
   closeOnBackdropClick = true,
   appScale = 1,
@@ -128,6 +128,7 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
         }}
         onClick={closeOnBackdropClick ? dismissToClose : undefined}
       />
+
       <div
         className="relative flex items-center justify-center"
         style={{ transform: `scale(${appScale})`, transformOrigin: 'center center' }}
@@ -136,85 +137,138 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
           ref={popupCardLayoutRef}
           className="relative flex flex-col items-center"
           style={{
-            width: '260px',
+            width: '320px',
             zIndex: 102,
             ...popupCardSurfaceStyle(
               animState,
               isEntering,
               isLeaving,
-              'pausePopupEnter 250ms ease-out forwards',
-              `pausePopupLeave ${POPUP_CLOSE_MS}ms ease-in forwards`,
+              'gardenPickerEnter 250ms ease-out forwards',
+              `gardenPickerLeave ${POPUP_CLOSE_MS}ms ease-in forwards`,
             ),
           }}
         >
+          <style>{`
+            @keyframes gardenPickerEnter {
+              0% { transform: scale(0.9); opacity: 0; }
+              70% { transform: scale(1.05); opacity: 1; }
+              100% { transform: scale(1); opacity: 1; }
+            }
+            @keyframes gardenPickerLeave {
+              0% { transform: scale(1); opacity: 1; }
+              100% { transform: scale(0.9); opacity: 0; }
+            }
+          `}</style>
+
+          <div
+            className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center"
+            style={{ width: '120px', height: '120px', top: '-20px', zIndex: 104 }}
+          >
+            <img
+              src={assetPath('/assets/ui/popup_header.png')}
+              alt=""
+              className="absolute inset-0 w-full h-full object-contain"
+              style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.25))' }}
+            />
+            <img
+              src={HEADER_ICON}
+              alt=""
+              className="relative object-contain"
+              style={{
+                width: '80px',
+                height: '80px',
+                marginTop: '-4px',
+                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
+              }}
+            />
+          </div>
+
           <div
             style={{
               position: 'relative',
-              width: '260px',
-              borderRadius: '24px',
-              backgroundColor: '#fcf0c6',
-              boxShadow: '0 1px 14px rgba(0,0,0,0.96), inset 0 0 0 1.5px #e9dcaf',
-              border: '2px solid rgba(180, 165, 130, 0.4)',
-              padding: '36px 20px 14px',
+              marginTop: '36px',
+              width: '640px',
+              transform: 'scale(0.5)',
+              transformOrigin: 'top center',
+              marginBottom: '-200px',
             }}
           >
-            <div className="flex flex-col items-center">
-              <h2
-                className="font-black tracking-tight text-center"
-                style={{ color: '#5c4a32', fontFamily: 'Inter, sans-serif', fontSize: '2rem' }}
-              >
-                Gardens
-              </h2>
-              <div className="w-full flex items-center justify-center" style={{ marginTop: '8px', marginBottom: '14px' }}>
-                <img
-                  src={assetPath('/assets/ui/popup_divider.png')}
-                  alt=""
-                  className="h-auto object-contain"
-                  style={{ width: '100%', maxWidth: '220px' }}
-                />
-              </div>
-              <div className="flex flex-col items-center gap-3 w-full" style={{ maxWidth: '200px' }}>
-                {GARDEN_IDS.map((gardenId) => {
-                  const selectable = selectableGardenIds.includes(gardenId);
-                  const isActive = gardenId === activeGardenId;
-                  const palette = selectable ? PALETTES.green : PALETTES.disabled;
-                  return (
-                    <button
-                      key={gardenId}
-                      type="button"
-                      disabled={!selectable}
-                      onMouseDown={() => selectable && setPressedId(gardenId)}
-                      onMouseUp={() => setPressedId(null)}
-                      onMouseLeave={() => setPressedId(null)}
-                      onClick={() => {
-                        if (!selectable) return;
-                        onSelectGarden(gardenId);
-                        dismissToClose();
-                      }}
-                      className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                      style={{
-                        ...btnStyle(palette, pressedId === gardenId, isActive),
-                        cursor: selectable ? 'pointer' : 'not-allowed',
-                        opacity: selectable ? 1 : 0.5,
-                      }}
-                    >
-                      <span className="font-bold tracking-tight" style={labelStyle(palette)}>
-                        {getGardenDisplayLabel(gardenId)}
-                        {isActive ? ' ✓' : ''}
-                      </span>
-                    </button>
-                  );
-                })}
+            <div
+              style={{
+                position: 'relative',
+                filter: 'drop-shadow(0 16px 48px rgba(0,0,0,0.3))',
+                padding: '150px 40px 48px 40px',
+              }}
+            >
+              <PopupVectorBackground />
+              <div className="relative z-[2] flex flex-col items-center w-full">
+                <h2
+                  className="font-normal text-center"
+                  style={{
+                    color: '#c2b280',
+                    fontFamily: 'Inter, sans-serif',
+                    letterSpacing: '-0.02em',
+                    fontSize: '2.25rem',
+                  }}
+                >
+                  Select Garden
+                </h2>
+
+                <div className="w-full flex items-center justify-center" style={{ marginTop: '8px', marginBottom: '20px' }}>
+                  <img
+                    src={assetPath('/assets/ui/popup_divider.png')}
+                    alt=""
+                    className="h-auto object-contain"
+                    style={{ width: '520px' }}
+                  />
+                </div>
+
+                <p
+                  className="font-medium text-center leading-relaxed italic w-full"
+                  style={{
+                    color: '#c2b280',
+                    fontFamily: 'Inter, sans-serif',
+                    paddingLeft: '24px',
+                    paddingRight: '24px',
+                    fontSize: '1.75rem',
+                    marginBottom: '28px',
+                  }}
+                >
+                  You can spend coins to unlock a new garden and discover new plants
+                </p>
+
+                <div className="flex flex-col items-center gap-4 w-full">
+                  {GARDEN_IDS.map((gardenId) => {
+                    const selected = gardenId === activeGardenId;
+                    return (
+                      <button
+                        key={gardenId}
+                        type="button"
+                        onMouseDown={() => setPressedId(gardenId)}
+                        onMouseUp={() => setPressedId(null)}
+                        onMouseLeave={() => setPressedId(null)}
+                        onClick={() => onSelectGarden(gardenId)}
+                        className="relative flex items-center justify-center rounded-xl transition-all"
+                        style={gardenButtonStyle(selected, pressedId === gardenId)}
+                      >
+                        <span className="font-bold tracking-tight" style={gardenButtonLabelStyle(selected)}>
+                          {getGardenDisplayLabel(gardenId)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>
+
           <button
             type="button"
             onClick={dismissToClose}
-            className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
+            className="absolute top-[44px] right-3 w-8 h-8 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
             style={{ backgroundColor: 'transparent', border: 'none', color: '#c2b280', zIndex: 105 }}
           >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <svg width="16" height="16" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               <path d="M2 2L12 12M12 2L2 12" />
             </svg>
           </button>
