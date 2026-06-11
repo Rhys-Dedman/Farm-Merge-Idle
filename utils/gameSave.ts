@@ -24,6 +24,16 @@ import {
   LIMITED_OFFER_INTRO_CYCLE_SEEN_IDS_KEY,
 } from './limitedOfferIntroCycle';
 import { RATE_US_PERMANENTLY_DISMISSED_KEY } from './rateUsDismiss';
+import { DEFAULT_GARDEN_ID } from '../constants/gardens';
+import {
+  flattenV2ToV1,
+  GAME_SAVE_V2_VERSION,
+  mergeV1IntoV2,
+  migrateV1ToV2,
+  parseActiveGardenId,
+  parseGardensStarted,
+  type GameSaveV2,
+} from './gardenSave';
 
 function normalizePlantMasteryUnlockPending(raw: unknown): number[] {
   if (!Array.isArray(raw)) return [];
@@ -189,13 +199,43 @@ export function deriveGoalDiscoveryLightGreenActive(
   });
 }
 
-export function loadGameSave(): GameSaveV1 | null {
+function readGameSaveRaw(): unknown {
   if (typeof localStorage === 'undefined') return null;
   try {
     const raw = localStorage.getItem(GAME_SAVE_STORAGE_KEY);
     if (!raw) return null;
-    const data = JSON.parse(raw) as GameSaveV1;
-    if (data?.v !== GAME_SAVE_VERSION || !Array.isArray(data.grid)) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function coerceGameSaveV2(data: unknown): GameSaveV2 | null {
+  if (!data || typeof data !== 'object') return null;
+  const d = data as GameSaveV2;
+  if (d.v !== GAME_SAVE_V2_VERSION) return null;
+  const gardens = d.gardens && typeof d.gardens === 'object' ? d.gardens : {};
+  if (!gardens[DEFAULT_GARDEN_ID]?.grid) return null;
+  return {
+    ...d,
+    activeGardenId: parseActiveGardenId(d.activeGardenId),
+    gardensStarted: parseGardensStarted(d.gardensStarted),
+    gardens,
+    globals: d.globals ?? ({} as GameSaveV2['globals']),
+  };
+}
+
+function writeGameSaveV2(save: GameSaveV2): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(GAME_SAVE_STORAGE_KEY, JSON.stringify(save));
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+/** Normalize a flat v1-shaped save (active garden + globals merged). */
+export function normalizeGameSaveV1(data: GameSaveV1): GameSaveV1 {
     if (!Array.isArray(data.levelUpPopupQueue)) data.levelUpPopupQueue = [];
     if (typeof data.pendingOfflineEarnings !== 'number' || Number.isNaN(data.pendingOfflineEarnings)) {
       data.pendingOfflineEarnings = 0;
@@ -267,18 +307,59 @@ export function loadGameSave(): GameSaveV1 | null {
       data.goalDiscoveryLightGreenActive = gdl.map((x) => x === true);
     }
     return data;
+}
+
+export function loadGameSaveV2(): GameSaveV2 | null {
+  const raw = readGameSaveRaw();
+  if (!raw || typeof raw !== 'object') return null;
+  const record = raw as { v?: number };
+  if (record.v === GAME_SAVE_V2_VERSION) {
+    const v2 = coerceGameSaveV2(raw);
+    if (!v2) return null;
+    return v2;
+  }
+  if (record.v === GAME_SAVE_VERSION) {
+    const v1 = normalizeGameSaveV1(raw as GameSaveV1);
+    if (!Array.isArray(v1.grid)) return null;
+    const v2 = migrateV1ToV2(v1);
+    writeGameSaveV2(v2);
+    return v2;
+  }
+  return null;
+}
+
+export function loadGameSave(): GameSaveV1 | null {
+  try {
+    const raw = readGameSaveRaw();
+    if (!raw || typeof raw !== 'object') return null;
+    const record = raw as { v?: number };
+
+    if (record.v === GAME_SAVE_V2_VERSION) {
+      const v2 = coerceGameSaveV2(raw);
+      if (!v2) return null;
+      const flat = flattenV2ToV1(v2);
+      return normalizeGameSaveV1(flat);
+    }
+
+    if (record.v === GAME_SAVE_VERSION && Array.isArray((raw as GameSaveV1).grid)) {
+      const v1 = normalizeGameSaveV1(raw as GameSaveV1);
+      writeGameSaveV2(migrateV1ToV2(v1));
+      return v1;
+    }
+
+    return null;
   } catch {
     return null;
   }
 }
 
 export function persistGameSave(save: GameSaveV1): void {
-  if (typeof localStorage === 'undefined') return;
-  try {
-    localStorage.setItem(GAME_SAVE_STORAGE_KEY, JSON.stringify(save));
-  } catch {
-    /* quota / private mode */
-  }
+  const normalized = normalizeGameSaveV1({ ...save, v: GAME_SAVE_VERSION });
+  const existing = loadGameSaveV2();
+  const v2 = existing
+    ? mergeV1IntoV2(existing, normalized)
+    : migrateV1ToV2(normalized);
+  writeGameSaveV2(v2);
 }
 
 export function clearGameSave(): void {
