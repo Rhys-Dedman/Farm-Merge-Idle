@@ -413,7 +413,8 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
           <div
             className="h-full rounded-full"
             style={{
-              width: `${phase === 'ready' ? 100 : displayProgress}%`,
+              // Stay full after loading — `displayProgress` stops at 99; reverting on fadeOut caused a visible shrink on tap.
+              width: `${phase === 'loading' ? displayProgress : 100}%`,
               background: 'linear-gradient(to bottom, #fcea3f, #f7911d)',
               boxShadow: `inset 0 0 0 ${splashUiMetrics.progressBorderPx}px rgba(239, 71, 35, 0.5)`,
               transition: phase === 'ready' ? 'width 200ms ease-out' : 'none',

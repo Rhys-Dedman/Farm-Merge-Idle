@@ -7,6 +7,8 @@ import { UpgradeList, createInitialSeedsState, createInitialHarvestState, create
 import {
   PLANT_COLLECTION_UI_UNLOCK_LEVEL,
   PLANT_COLLECTION_FTUE_INTRO_DISPLAY_PLAYER_LEVEL,
+  FLOATING_BUTTONS_UNLOCK_LEVEL,
+  GARDENS_FLOATING_BUTTON_UI_VISIBLE,
   TASKS_FLOATING_BUTTON_UNLOCK_LEVEL,
   GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL,
   STARTER_PACK_FORCE_POPUP_LEVEL,
@@ -703,6 +705,8 @@ const GARDEN_1_BG = {
 } as const;
 /** Shared scale for bottom / left / right / gradient garden sprites (relative to each other). */
 const GARDEN_SIDE_SPRITE_SCALE = 0.6;
+/** Pin garden backgrounds this many px below the upgrade panel tab underline. */
+const GARDEN_BG_TAB_LINE_OFFSET_PX = 20;
 
 const UPGRADE_PANEL_OPEN_DURATION_MS = 1400;
 const UPGRADE_PANEL_CLOSE_DURATION_MS = 350;
@@ -1380,8 +1384,9 @@ export default function App() {
   const suppressGameSaveRef = useRef(false);
   /** Only allow writing progress to localStorage after FTUE 11 is fully closed. */
   const ftue11PersistenceEnabledRef = useRef(false);
-  /** Farm floating buttons (left + right) — hidden until FTUE 11 “Lets Get Gardening!” */
+  /** Farm floating buttons (left + right) — fade in when level-up popup hits level 2 (after FTUE). */
   const [farmFloatingButtonsVisible, setFarmFloatingButtonsVisible] = useState(false);
+  const [farmFloatingButtonsFadedIn, setFarmFloatingButtonsFadedIn] = useState(false);
   /** After spamming Unlock plant, show discovery only for this level when pause closes */
   const discoveryLevelAfterPauseCloseRef = useRef<number | null>(null);
 
@@ -2732,17 +2737,31 @@ export default function App() {
       return;
     }
     updateFtue10PurchaseButtonRect();
-    const t1 = setTimeout(updateFtue10PurchaseButtonRect, 100);
-    const t2 = setTimeout(updateFtue10PurchaseButtonRect, 250);
-    const t3 = setTimeout(updateFtue10PurchaseButtonRect, 350);
+    // Garden tab slides over 700ms — only trust rects after the transition settles.
+    const t0 = setTimeout(updateFtue10PurchaseButtonRect, 0);
+    const t1 = setTimeout(updateFtue10PurchaseButtonRect, 720);
+    const t2 = setTimeout(updateFtue10PurchaseButtonRect, 860);
+    const t3 = setTimeout(updateFtue10PurchaseButtonRect, 940);
     window.addEventListener('resize', updateFtue10PurchaseButtonRect);
     const raf = requestAnimationFrame(updateFtue10PurchaseButtonRect);
+    let ro: ResizeObserver | null = null;
+    const tObserve = setTimeout(() => {
+      const btn =
+        ftue10PurchaseButtonRef.current ??
+        document.getElementById('ftue10-purchase-harvest_speed');
+      if (!btn) return;
+      ro = new ResizeObserver(updateFtue10PurchaseButtonRect);
+      ro.observe(btn);
+    }, 0);
     return () => {
+      clearTimeout(t0);
       clearTimeout(t1);
       clearTimeout(t2);
       clearTimeout(t3);
+      clearTimeout(tObserve);
       window.removeEventListener('resize', updateFtue10PurchaseButtonRect);
       cancelAnimationFrame(raf);
+      ro?.disconnect();
     };
   }, [ftue10Phase, updateFtue10PurchaseButtonRect]);
 
@@ -2900,6 +2919,22 @@ export default function App() {
       rewards: buildPurchaseSuccessRewards(config),
     });
   }, []);
+
+  useEffect(() => {
+    if (activeFtueStage !== null) return;
+    if (levelUpPopup?.isVisible && levelUpPopup.level >= FLOATING_BUTTONS_UNLOCK_LEVEL) {
+      setFarmFloatingButtonsVisible(true);
+    }
+  }, [activeFtueStage, levelUpPopup]);
+
+  useEffect(() => {
+    if (!farmFloatingButtonsVisible) {
+      setFarmFloatingButtonsFadedIn(false);
+      return;
+    }
+    const id = requestAnimationFrame(() => setFarmFloatingButtonsFadedIn(true));
+    return () => cancelAnimationFrame(id);
+  }, [farmFloatingButtonsVisible]);
 
   const showLevelUpForNextLevel = useCallback((nextLevel: number) => {
     if (nextLevel === STARTER_PACK_FORCE_POPUP_LEVEL) {
@@ -3149,7 +3184,9 @@ export default function App() {
     const colRect = col.getBoundingClientRect();
     if (tabLine) {
       const lineRect = tabLine.getBoundingClientRect();
-      setGardenGrassLiftPx(Math.max(0, (colRect.bottom - lineRect.bottom) / scale));
+      setGardenGrassLiftPx(
+        Math.max(0, (colRect.bottom - lineRect.bottom) / scale - GARDEN_BG_TAB_LINE_OFFSET_PX)
+      );
     }
     if (grid) {
       const gridRect = grid.getBoundingClientRect();
@@ -5773,8 +5810,10 @@ export default function App() {
     }
 
     ftue11PersistenceEnabledRef.current = true;
-    setFarmFloatingButtonsVisible(true);
     const totalOffline = hydrateFromSave(save);
+    if (save.playerLevel >= FLOATING_BUTTONS_UNLOCK_LEVEL) {
+      setFarmFloatingButtonsVisible(true);
+    }
     setIsExpanded(false);
     setActiveScreen('FARM');
     if (totalOffline > 0) {
@@ -5830,8 +5869,10 @@ export default function App() {
         setActiveScreen('FARM');
       } else {
         ftue11PersistenceEnabledRef.current = true;
-        setFarmFloatingButtonsVisible(true);
         const totalOffline = hydrateFromSave(save);
+        if (save.playerLevel >= FLOATING_BUTTONS_UNLOCK_LEVEL) {
+          setFarmFloatingButtonsVisible(true);
+        }
         setIsExpanded(false);
         setActiveScreen('FARM');
         if (totalOffline > 0) {
@@ -6691,9 +6732,13 @@ export default function App() {
                 </div>
               </div>
 
-              {activeScreen === 'FARM' && farmFloatingButtonsVisible ? (
+              {activeScreen === 'FARM' && farmFloatingButtonsVisible && activeFtueStage === null ? (
                 <>
                   <FarmLeftFloatingButtonStack
+                    style={{
+                      opacity: farmFloatingButtonsFadedIn ? 1 : 0,
+                      transition: 'opacity 400ms ease-out',
+                    }}
                     activeBoosts={activeBoosts}
                     starterPackPurchased={starterPackPurchased}
                     starterPackUnlocked={starterPackUnlocked}
@@ -6712,7 +6757,13 @@ export default function App() {
                       setStoreScrollToCoinSectionRequest((n) => n + 1);
                     }}
                   />
-                  <FloatingButtonStack side="right">
+                  <FloatingButtonStack
+                    side="right"
+                    style={{
+                      opacity: farmFloatingButtonsFadedIn ? 1 : 0,
+                      transition: 'opacity 400ms ease-out',
+                    }}
+                  >
                     <div
                       id={TASKS_FTUE_FLOATING_BUTTON_ID}
                       ref={tasksFloatingButtonRef}
@@ -6745,16 +6796,18 @@ export default function App() {
                         }}
                       />
                     </div>
-                    <FloatingButton
-                      title="Gardens"
-                      locked={playerLevel < GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL}
-                      unlockLevel={GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL}
-                      iconSrc={assetPath(
-                        playerLevel >= GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL
-                          ? '/assets/icons/floating_buttons/icon_fb_gardens.png'
-                          : '/assets/icons/floating_buttons/icon_fb_gardens_locked.png',
-                      )}
-                    />
+                    {GARDENS_FLOATING_BUTTON_UI_VISIBLE ? (
+                      <FloatingButton
+                        title="Gardens"
+                        locked={playerLevel < GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL}
+                        unlockLevel={GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL}
+                        iconSrc={assetPath(
+                          playerLevel >= GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL
+                            ? '/assets/icons/floating_buttons/icon_fb_gardens.png'
+                            : '/assets/icons/floating_buttons/icon_fb_gardens_locked.png',
+                        )}
+                      />
+                    ) : null}
                   </FloatingButtonStack>
                 </>
               ) : null}
@@ -8050,7 +8103,6 @@ export default function App() {
                   playSfx(SFX_IDS.uiConfirmNormal);
                   // FTUE 11 is fully closed: from now on we save progress + allow offline earnings.
                   ftue11PersistenceEnabledRef.current = true;
-                  setFarmFloatingButtonsVisible(true);
                   persistGameSnapshotRef.current();
                   setActiveFtueStage(null);
                   setFtue11ThreePlantGoalWindowActive(true);
@@ -9116,6 +9168,7 @@ export default function App() {
                   walletIconRef={walletIconRef}
                   appScale={1}
                   variant="popupReward"
+                  popupVisualScale={appScale}
                   activeCount={activeDiscoveryCoinParticles.length}
                   onImpact={(value) => {
                     setMoney((prev) => prev + value);

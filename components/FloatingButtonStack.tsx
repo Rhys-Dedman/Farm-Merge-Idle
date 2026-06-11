@@ -15,6 +15,7 @@ export interface FloatingButtonStackProps {
   topPx?: number;
   leftPx?: number;
   rightPx?: number;
+  style?: React.CSSProperties;
 }
 
 export const FloatingButtonStack: React.FC<FloatingButtonStackProps> = ({
@@ -24,6 +25,7 @@ export const FloatingButtonStack: React.FC<FloatingButtonStackProps> = ({
   topPx = FLOATING_BUTTON_STACK_TOP_PX,
   leftPx = FLOATING_BUTTON_STACK_LEFT_PX,
   rightPx = FLOATING_BUTTON_STACK_RIGHT_PX,
+  style,
 }) => {
   const horizontalStyle =
     side === 'right'
@@ -33,7 +35,7 @@ export const FloatingButtonStack: React.FC<FloatingButtonStackProps> = ({
   return (
     <div
       className={`pointer-events-none absolute z-[15] ${className}`}
-      style={{ top: topPx, ...horizontalStyle }}
+      style={{ top: topPx, ...horizontalStyle, ...style }}
     >
       <div
         className={`pointer-events-auto flex flex-col ${side === 'right' ? 'items-end' : 'items-start'}`}

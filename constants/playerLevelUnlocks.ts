@@ -5,11 +5,17 @@ export const PLANT_COLLECTION_UI_UNLOCK_LEVEL = 7;
 export const PLANT_COLLECTION_FTUE_INTRO_DISPLAY_PLAYER_LEVEL =
   PLANT_COLLECTION_UI_UNLOCK_LEVEL - 1;
 
+/** Farm floating buttons (left + right stacks) fade in when the level-up popup reaches this level. */
+export const FLOATING_BUTTONS_UNLOCK_LEVEL = 2;
+
 /** Farm floating button: Tasks (no popup yet). */
 export const TASKS_FLOATING_BUTTON_UNLOCK_LEVEL = 5;
 
 /** Farm floating button: Gardens (system TBD). */
 export const GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL = 10;
+
+/** Set false to hide the Gardens FB in UI while backend unlock logic remains. */
+export const GARDENS_FLOATING_BUTTON_UI_VISIBLE = false;
 
 /** On reaching this level, show Starter Pack IAP instead of the level-up popup. */
 export const STARTER_PACK_FORCE_POPUP_LEVEL = 4;

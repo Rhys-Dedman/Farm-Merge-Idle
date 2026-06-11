@@ -18,6 +18,7 @@ export interface FarmLeftFloatingButtonStackProps {
   onStarterPackClick: () => void;
   onNoAdsClick: () => void;
   onCoinBoostClick: () => void;
+  style?: React.CSSProperties;
 }
 
 export const FarmLeftFloatingButtonStack: React.FC<FarmLeftFloatingButtonStackProps> = ({
@@ -28,6 +29,7 @@ export const FarmLeftFloatingButtonStack: React.FC<FarmLeftFloatingButtonStackPr
   onStarterPackClick,
   onNoAdsClick,
   onCoinBoostClick,
+  style,
 }) => {
   const starterPackRemainingMs = useStarterPackCountdown(
     starterPackUnlocked,
@@ -91,5 +93,9 @@ export const FarmLeftFloatingButtonStack: React.FC<FarmLeftFloatingButtonStackPr
 
   if (buttons.length === 0) return null;
 
-  return <FloatingButtonStack side="left">{buttons}</FloatingButtonStack>;
+  return (
+    <FloatingButtonStack side="left" style={style}>
+      {buttons}
+    </FloatingButtonStack>
+  );
 };

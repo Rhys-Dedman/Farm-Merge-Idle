@@ -37,16 +37,9 @@ const DEBUG_FINGER1_BLOCKER_VISIBLE = false;
 const FTUE10_TAB_SEEDS_ID = 'ftue10-tab-seeds';
 const FTUE10_TAB_ORDERS_ID = 'ftue10-tab-orders';
 const FTUE10_TAB_GARDEN_ID = 'ftue10-tab-garden';
-
-/** Finger 3 (purchase) blocker tuning */
-const PURCHASE_HOLE_SHIFT_RIGHT_PX = 40 * FTUE_VISUAL_SCALE;
-const PURCHASE_HOLE_SCALE_Y = 0.51; // slightly less tall vertically (top down, bottom up)
-/** Side blocker tightening for finger 3 (larger = more blocking inward) */
-const PURCHASE_BLOCK_LEFT_EXTRA_PX = 14 * FTUE_VISUAL_SCALE;
-const PURCHASE_BLOCK_RIGHT_EXTRA_PX = 26 * FTUE_VISUAL_SCALE;
-/** Finger 3 (purchase) finger nudge */
-const PURCHASE_FINGER_NUDGE_LEFT_PX = 10 * FTUE_VISUAL_SCALE; // down-left
-const PURCHASE_FINGER_NUDGE_DOWN_PX = 6 * FTUE_VISUAL_SCALE;
+const FTUE10_PURCHASE_BUTTON_ID = 'ftue10-purchase-harvest_speed';
+/** Garden tab content slide duration when panel is expanded (UpgradeList tab-content-container). */
+const GARDEN_TAB_SLIDE_MS = 700;
 /** Garden tab finger: extra nudge left (smaller `left` = further left) */
 const GARDEN_FINGER_NUDGE_LEFT_PX = 18 * FTUE_VISUAL_SCALE;
 
@@ -106,8 +99,18 @@ export const Ftue10Overlay: React.FC<Ftue10OverlayProps> = ({
   const [seedsTabRect, setSeedsTabRect] = useState<Rect | null>(null);
   const [ordersTabRect, setOrdersTabRect] = useState<Rect | null>(null);
   const [gardenTabRect, setGardenTabRect] = useState<Rect | null>(null);
-  const [frozenPurchaseRect, setFrozenPurchaseRect] = useState<Rect | null>(null);
+  const [purchaseButtonRect, setPurchaseButtonRect] = useState<Rect | null>(null);
   const textboxShownRef = useRef(false);
+
+  const measureElementInContainer = useCallback((el: HTMLElement, cr: DOMRect): Rect => {
+    const r = el.getBoundingClientRect();
+    return {
+      left: (r.left - cr.left) / appScale,
+      top: (r.top - cr.top) / appScale,
+      width: r.width / appScale,
+      height: r.height / appScale,
+    };
+  }, [appScale]);
 
   const measure = useCallback(() => {
     const container = document.getElementById('game-container');
@@ -116,19 +119,20 @@ export const Ftue10Overlay: React.FC<Ftue10OverlayProps> = ({
     const s = document.getElementById(FTUE10_TAB_SEEDS_ID);
     const o = document.getElementById(FTUE10_TAB_ORDERS_ID);
     const g = document.getElementById(FTUE10_TAB_GARDEN_ID);
+    const purchase = document.getElementById(FTUE10_PURCHASE_BUTTON_ID);
     if (s) {
-      const r = s.getBoundingClientRect();
-      setSeedsTabRect({ left: (r.left - cr.left) / appScale, top: (r.top - cr.top) / appScale, width: r.width / appScale, height: r.height / appScale });
+      setSeedsTabRect(measureElementInContainer(s, cr));
     } else setSeedsTabRect(null);
     if (o) {
-      const r = o.getBoundingClientRect();
-      setOrdersTabRect({ left: (r.left - cr.left) / appScale, top: (r.top - cr.top) / appScale, width: r.width / appScale, height: r.height / appScale });
+      setOrdersTabRect(measureElementInContainer(o, cr));
     } else setOrdersTabRect(null);
     if (g) {
-      const r = g.getBoundingClientRect();
-      setGardenTabRect({ left: (r.left - cr.left) / appScale, top: (r.top - cr.top) / appScale, width: r.width / appScale, height: r.height / appScale });
+      setGardenTabRect(measureElementInContainer(g, cr));
     } else setGardenTabRect(null);
-  }, [appScale]);
+    if (purchase && phase === 'finger') {
+      setPurchaseButtonRect(measureElementInContainer(purchase, cr));
+    }
+  }, [appScale, measureElementInContainer, phase]);
 
   useEffect(() => {
     setOpacity(0);
@@ -178,26 +182,38 @@ export const Ftue10Overlay: React.FC<Ftue10OverlayProps> = ({
     return () => clearTimeout(t);
   }, [phase]);
 
-  // Finger 3: show only after Seeds tab transition has finished (250ms); freeze rect so no snap
+  // Finger 3: wait for Garden tab slide to finish, then measure purchase button in final position
   useEffect(() => {
     if (phase !== 'finger') {
       setShowFinger3(false);
-      setFrozenPurchaseRect(null);
+      setPurchaseButtonRect(null);
       return;
     }
     setShowFinger3(false);
-    setFrozenPurchaseRect(null);
-    const t = setTimeout(() => setShowFinger3(true), FINGER3_DELAY_MS);
-    return () => clearTimeout(t);
+    setPurchaseButtonRect(null);
+    const tShow = setTimeout(() => setShowFinger3(true), FINGER3_DELAY_MS);
+    return () => clearTimeout(tShow);
   }, [phase]);
 
-  // Freeze purchase button rect when finger 3 first appears so position doesn't jump
   useEffect(() => {
-    if (phase === 'finger' && showFinger3 && purchaseButtonRectProp) {
-      const r = purchaseButtonRectProp;
-      setFrozenPurchaseRect((prev) => prev ?? { left: r.left, top: r.top, width: r.width, height: r.height });
-    }
-  }, [phase, showFinger3, purchaseButtonRectProp]);
+    if (phase !== 'finger') return;
+    measure();
+    const t1 = setTimeout(measure, GARDEN_TAB_SLIDE_MS);
+    const t2 = setTimeout(measure, FINGER3_DELAY_MS);
+    const t3 = setTimeout(measure, FINGER3_DELAY_MS + 80);
+    const resize = () => measure();
+    window.addEventListener('resize', resize);
+    const purchase = document.getElementById(FTUE10_PURCHASE_BUTTON_ID);
+    const ro = purchase ? new ResizeObserver(measure) : null;
+    if (purchase && ro) ro.observe(purchase);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      window.removeEventListener('resize', resize);
+      ro?.disconnect();
+    };
+  }, [phase, measure]);
 
   // Textbox: fade in once when finger 2 appears, stay visible through finger 3, fade only when overlay fades out
   useEffect(() => {
@@ -218,8 +234,8 @@ export const Ftue10Overlay: React.FC<Ftue10OverlayProps> = ({
   const effectiveOpacity = isFadingOut ? fadeOutOpacity : opacity;
 
   const isFingerPhase = phase === 'finger';
-  const purchaseButtonRect = (isFingerPhase && frozenPurchaseRect) ? frozenPurchaseRect : (purchaseButtonRectProp ?? null);
-  const holeRect = phase === 'point_orders' ? seedsTabRect : phase === 'panel_open_orders' ? gardenTabRect : isFingerPhase ? purchaseButtonRect : null;
+  const effectivePurchaseRect = purchaseButtonRect ?? purchaseButtonRectProp ?? null;
+  const holeRect = phase === 'point_orders' ? seedsTabRect : phase === 'panel_open_orders' ? gardenTabRect : isFingerPhase ? effectivePurchaseRect : null;
 
   return (
     <div
@@ -262,25 +278,15 @@ export const Ftue10Overlay: React.FC<Ftue10OverlayProps> = ({
               </div>
             );
           })()
-        ) : isFingerPhase && showFinger3 && purchaseButtonRect ? (
+        ) : isFingerPhase && showFinger3 && effectivePurchaseRect ? (
           (() => {
-            const h = scaleRectFromCenter(
-              expandRect(
-                { ...purchaseButtonRect, left: purchaseButtonRect.left + PURCHASE_HOLE_SHIFT_RIGHT_PX },
-                HOLE_PADDING_PX
-              ),
-              1,
-              PURCHASE_HOLE_SCALE_Y
-            );
-            // Tighten hole from both sides: left blocker moves right, right blocker moves left
-            const rightBlockerStart = Math.max(0, rectRight(h) - (90 + PURCHASE_BLOCK_RIGHT_EXTRA_PX));
-            const leftBlockerWidth = Math.max(0, h.left - Math.max(0, 80 - PURCHASE_BLOCK_LEFT_EXTRA_PX));
+            const h = expandRect(effectivePurchaseRect, HOLE_PADDING_PX);
             const blockStyle = DEBUG_FINGER3_BLOCKER_VISIBLE ? { backgroundColor: FTUE_BLOCKER_TINT as const } : {};
             return (
               <div className="absolute inset-0 pointer-events-none">
                 <div className="absolute left-0 top-0 right-0 pointer-events-auto" style={{ height: h.top, ...blockStyle }} />
-                <div className="absolute left-0 pointer-events-auto" style={{ top: h.top, width: leftBlockerWidth, height: h.height, ...blockStyle }} />
-                <div className="absolute top-0 bottom-0 pointer-events-auto" style={{ left: rightBlockerStart, right: 0, ...blockStyle }} />
+                <div className="absolute left-0 pointer-events-auto" style={{ top: h.top, width: h.left, height: h.height, ...blockStyle }} />
+                <div className="absolute top-0 bottom-0 pointer-events-auto" style={{ left: rectRight(h), right: 0, ...blockStyle }} />
                 <div className="absolute left-0 right-0 bottom-0 pointer-events-auto" style={{ top: rectBottom(h), ...blockStyle }} />
               </div>
             );
@@ -354,12 +360,12 @@ export const Ftue10Overlay: React.FC<Ftue10OverlayProps> = ({
       )}
 
       {/* Finger at purchase button (FTUE 5 style); show only after Seeds tab transition finished */}
-      {isFingerPhase && showFinger3 && purchaseButtonRect && opacity > 0 && !isFadingOut && (
+      {isFingerPhase && showFinger3 && effectivePurchaseRect && opacity > 0 && !isFadingOut && (
         <div
           className="absolute pointer-events-none"
           style={{
-            left: purchaseButtonRect.left + purchaseButtonRect.width / 2 - fingerSize / 2 - 100 * FTUE_VISUAL_SCALE - PURCHASE_FINGER_NUDGE_LEFT_PX,
-            top: purchaseButtonRect.top + purchaseButtonRect.height / 2 - fingerSize / 2 + PURCHASE_FINGER_NUDGE_DOWN_PX,
+            left: effectivePurchaseRect.left + effectivePurchaseRect.width / 2 - fingerSize / 2,
+            top: effectivePurchaseRect.top + effectivePurchaseRect.height / 2 - fingerSize / 2,
             width: fingerSize,
             height: fingerSize,
             transformOrigin: 'center center',
