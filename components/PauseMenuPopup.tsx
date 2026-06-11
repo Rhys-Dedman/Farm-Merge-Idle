@@ -33,6 +33,9 @@ interface PauseMenuPopupProps {
   /** Dev: preview Dynamic Island + top safe-area inset on farm/store/collection. */
   fakeNotchPreviewEnabled?: boolean;
   onFakeNotchToggle?: () => void;
+  /** Active garden label, e.g. Garden 1 — tap cycles garden 1 → 2 → 3 → 1. */
+  activeGardenLabel?: string;
+  onCycleGardenClick?: () => void;
   closeOnBackdropClick?: boolean;
   appScale?: number;
 }
@@ -112,6 +115,8 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   canUnlockPlant = true,
   fakeNotchPreviewEnabled = false,
   onFakeNotchToggle,
+  activeGardenLabel,
+  onCycleGardenClick,
   closeOnBackdropClick = true,
   appScale = 1,
 }) => {
@@ -126,6 +131,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   const [completeTaskPressed, setCompleteTaskPressed] = useState(false);
   const [clearShedPressed, setClearShedPressed] = useState(false);
   const [fakeNotchPressed, setFakeNotchPressed] = useState(false);
+  const [cycleGardenPressed, setCycleGardenPressed] = useState(false);
   const popupCardLayoutRef = useRef<HTMLDivElement>(null);
 
   const beginEnterAfterPreflight = useCallback(() => {
@@ -274,6 +280,21 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
               </p>
 
               <div className="flex flex-col items-center gap-3 w-full" style={{ maxWidth: '200px' }}>
+                {onCycleGardenClick && activeGardenLabel ? (
+                  <button
+                    type="button"
+                    onMouseDown={() => setCycleGardenPressed(true)}
+                    onMouseUp={() => setCycleGardenPressed(false)}
+                    onMouseLeave={() => setCycleGardenPressed(false)}
+                    onClick={() => onCycleGardenClick()}
+                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.green, cycleGardenPressed)}
+                  >
+                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.green)}>
+                      {activeGardenLabel}
+                    </span>
+                  </button>
+                ) : null}
                 {onRewardedAdClick ? (
                   <button
                     type="button"

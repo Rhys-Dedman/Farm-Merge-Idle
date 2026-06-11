@@ -24,7 +24,7 @@ import {
   LIMITED_OFFER_INTRO_CYCLE_SEEN_IDS_KEY,
 } from './limitedOfferIntroCycle';
 import { RATE_US_PERMANENTLY_DISMISSED_KEY } from './rateUsDismiss';
-import { DEFAULT_GARDEN_ID } from '../constants/gardens';
+import { DEFAULT_GARDEN_ID, type GardenId } from '../constants/gardens';
 import {
   flattenV2ToV1,
   GAME_SAVE_V2_VERSION,
@@ -353,12 +353,20 @@ export function loadGameSave(): GameSaveV1 | null {
   }
 }
 
-export function persistGameSave(save: GameSaveV1): void {
+export function persistGameSaveV2(save: GameSaveV2): void {
+  writeGameSaveV2(save);
+}
+
+export function persistGameSave(
+  save: GameSaveV1,
+  options?: { activeGardenId?: GardenId },
+): void {
   const normalized = normalizeGameSaveV1({ ...save, v: GAME_SAVE_VERSION });
   const existing = loadGameSaveV2();
-  const v2 = existing
-    ? mergeV1IntoV2(existing, normalized)
-    : migrateV1ToV2(normalized);
+  let v2 = existing ? mergeV1IntoV2(existing, normalized) : migrateV1ToV2(normalized);
+  if (options?.activeGardenId) {
+    v2.activeGardenId = options.activeGardenId;
+  }
   writeGameSaveV2(v2);
 }
 

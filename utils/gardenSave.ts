@@ -9,7 +9,19 @@ import {
   type GardenId,
   isGardenId,
 } from '../constants/gardens';
-import type { GameSaveV1 } from './gameSave';
+import type { BoardCell } from '../types';
+import {
+  createInitialCropsState,
+  createInitialHarvestState,
+  createInitialSeedsState,
+  getCropYieldPerHarvest,
+} from '../components/UpgradeList';
+import { normalizeBarnShelvesUnlocked } from '../constants/barnShelves';
+import {
+  deriveGoalDiscoveryLightGreenActive,
+  getDiscoveryGoalBuffer,
+  type GameSaveV1,
+} from './gameSave';
 
 export const GAME_SAVE_V2_VERSION = 2 as const;
 
@@ -290,4 +302,98 @@ export function parseGardensStarted(raw: unknown): GardenId[] {
   const started = raw.filter(isGardenId);
   if (!started.includes(DEFAULT_GARDEN_ID)) started.unshift(DEFAULT_GARDEN_ID);
   return [...new Set(started)];
+}
+
+const getHexDistance = (q: number, r: number): number =>
+  (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2;
+
+function generateFreshGardenGrid(): BoardCell[] {
+  const cells: BoardCell[] = [];
+  for (let q = -2; q <= 2; q++) {
+    const r1 = Math.max(-2, -q - 2);
+    const r2 = Math.min(2, -q + 2);
+    for (let r = r1; r <= r2; r++) {
+      const distance = getHexDistance(q, r);
+      cells.push({ q, r, item: null, locked: distance === 2 });
+    }
+  }
+  return cells;
+}
+
+function freshGardenGoalCropRequired(playerLevel: number, cropYieldLevel: number): number {
+  const baseGoal = 3 + Math.floor(cropYieldLevel * 0.5) + Math.floor(playerLevel / 4);
+  return Math.max(3, Math.round(baseGoal * 1.0));
+}
+
+/** Level 1, empty grid, three starter goals — no FTUE (for garden 2/3 first visit). */
+export function createFreshGardenState(): GardenState {
+  const seedsState = createInitialSeedsState();
+  const harvestState = createInitialHarvestState();
+  const cropsState = createInitialCropsState();
+  const playerLevel = 1;
+  const cropYieldLevel = getCropYieldPerHarvest(cropsState);
+  const req = freshGardenGoalCropRequired(playerLevel, cropYieldLevel);
+  const goalSlots: GardenState['goalSlots'] = ['green', 'green', 'green', 'empty', 'empty'];
+  const goalPlantTypes = [1, 2, 3, 0, 0];
+  const highestPlantEver = 1;
+
+  return {
+    pendingOfflineEarnings: 0,
+    money: 0,
+    grid: generateFreshGardenGrid(),
+    seedProgress: 0,
+    harvestProgress: 0,
+    harvestCharges: 3,
+    seedsState,
+    harvestState,
+    cropsState,
+    seedsInStorage: 5,
+    highestPlantEver,
+    playerLevel,
+    playerLevelProgress: 0,
+    plantMasteryGoalsCompleted: 0,
+    plantMasteryOrdersProgress: 0,
+    plantMasteryTargetLevel: 1,
+    plantMasteryUnlockPending: [],
+    plantMasteryUnlockedLevels: [],
+    plantMasteryIntroBarComplete: false,
+    goalSlots,
+    goalPlantTypes,
+    goalLoadingSeconds: 15,
+    goalCounts: [req, req, req, 0, 0],
+    goalAmountsRequired: [req, req, req, 0, 0],
+    goalCompletedValues: [0, 0, 0, 0, 0],
+    goalDisplayOrder: [0, 1, 2],
+    goalDiscoveryLightGreenActive: deriveGoalDiscoveryLightGreenActive(
+      goalSlots,
+      goalPlantTypes,
+      highestPlantEver,
+    ),
+    coinGoalVisible: false,
+    coinGoalValue: 0,
+    coinGoalTimeRemaining: 30,
+    newGoalsSinceDiscovery: 0,
+    discoveryGoalsRemaining: getDiscoveryGoalBuffer(highestPlantEver),
+    lastMergeDiscoveryLevel: 1,
+    lastSpawnedGoalLevels: [2, 3],
+    pendingUnlockUpgradeId: null,
+    levelUpPopupQueue: [],
+    wildGrowthAccumulatorMs: 0,
+    barnShelvesUnlocked: normalizeBarnShelvesUnlocked(),
+  };
+}
+
+/** Persist current garden, activate `targetId`, create fresh state if first visit. */
+export function activateGardenInSave(v2: GameSaveV2, targetId: GardenId): GameSaveV2 {
+  const gardens = { ...v2.gardens };
+  if (!gardens[targetId]) {
+    gardens[targetId] = createFreshGardenState();
+  }
+  const gardensStarted = [...new Set([...v2.gardensStarted, targetId])];
+  return {
+    ...v2,
+    activeGardenId: targetId,
+    gardens,
+    gardensStarted,
+  };
 }

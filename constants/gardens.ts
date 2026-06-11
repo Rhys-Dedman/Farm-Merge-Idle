@@ -11,3 +11,15 @@ export const GARDENS_SWITCH_UNLOCK_LEVEL = 10;
 export function isGardenId(value: unknown): value is GardenId {
   return typeof value === 'string' && (GARDEN_IDS as readonly string[]).includes(value);
 }
+
+export function getNextGardenId(current: GardenId): GardenId {
+  const index = GARDEN_IDS.indexOf(current);
+  if (index < 0) return DEFAULT_GARDEN_ID;
+  return GARDEN_IDS[(index + 1) % GARDEN_IDS.length];
+}
+
+/** Settings / debug label, e.g. `Garden 1`. */
+export function getGardenDisplayLabel(gardenId: GardenId): string {
+  const n = GARDEN_IDS.indexOf(gardenId) + 1;
+  return `Garden ${n > 0 ? n : 1}`;
+}

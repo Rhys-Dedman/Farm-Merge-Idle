@@ -144,13 +144,23 @@ import {
 } from './offers';
 import {
   loadGameSave,
+  loadGameSaveV2,
   persistGameSave,
+  persistGameSaveV2,
+  normalizeGameSaveV1,
   clearGameSave,
   type GameSaveV1,
   GAME_SAVE_VERSION,
   getDiscoveryGoalBuffer,
   deriveGoalDiscoveryLightGreenActive,
 } from './utils/gameSave';
+import {
+  DEFAULT_GARDEN_ID,
+  getGardenDisplayLabel,
+  getNextGardenId,
+  type GardenId,
+} from './constants/gardens';
+import { activateGardenInSave, flattenV2ToV1 } from './utils/gardenSave';
 import { createPostFtueCleanSave } from './utils/postFtueCleanSave';
 import {
   getLimitedOfferAutoPopupPool,
@@ -1357,6 +1367,8 @@ export default function App() {
     coinMultiplier: number;
   } | null>(null);
   const [devToolsOpen, setDevToolsOpen] = useState(false);
+  const [activeGardenId, setActiveGardenId] = useState<GardenId>(DEFAULT_GARDEN_ID);
+  const activeGardenIdRef = useRef<GardenId>(DEFAULT_GARDEN_ID);
   const [fakeNotchPreviewEnabled, setFakeNotchPreviewEnabled] = useState(
     _earlyUserPrefs.fakeNotchPreviewEnabled,
   );
@@ -5824,9 +5836,38 @@ export default function App() {
     return totalOffline;
   }, []);
 
+  const syncActiveGardenFromSave = useCallback(() => {
+    const v2 = loadGameSaveV2();
+    if (!v2) return;
+    setActiveGardenId(v2.activeGardenId);
+    activeGardenIdRef.current = v2.activeGardenId;
+  }, []);
+
+  const cycleActiveGarden = useCallback(() => {
+    persistGameSnapshotRef.current();
+    const v2 = loadGameSaveV2();
+    if (!v2) return;
+    const nextId = getNextGardenId(activeGardenIdRef.current);
+    const nextV2 = activateGardenInSave(v2, nextId);
+    persistGameSaveV2(nextV2);
+    activeGardenIdRef.current = nextId;
+    setActiveGardenId(nextId);
+    const flat = normalizeGameSaveV1({
+      ...flattenV2ToV1(nextV2),
+      savedAt: Date.now(),
+    });
+    hydrateFromSave(flat);
+    setFarmFloatingButtonsVisible(flat.playerLevel >= FLOATING_BUTTONS_UNLOCK_LEVEL);
+    setIsExpanded(false);
+    setActiveScreen('FARM');
+    setOfflineEarningsUi(null);
+    pendingOfflineEarningsRef.current = flat.pendingOfflineEarnings;
+  }, [hydrateFromSave]);
+
   const handleQuickResumeHydrate = useCallback(() => {
     const save = loadGameSave();
     if (!save || save.v !== GAME_SAVE_VERSION) return;
+    syncActiveGardenFromSave();
     pendingQuickLoadFinishRef.current = true;
     const ftue11Completed =
       save.activeFtueStage === null &&
@@ -5869,7 +5910,7 @@ export default function App() {
     } else {
       setOfflineEarningsUi(null);
     }
-  }, [hydrateFromSave]);
+  }, [hydrateFromSave, syncActiveGardenFromSave]);
 
   // Splash complete OR quick resume black fade complete — fade in gameplay
   const handleLoadComplete = useCallback(() => {
@@ -5891,6 +5932,7 @@ export default function App() {
 
     const save = loadGameSave();
     if (save && save.v === GAME_SAVE_VERSION) {
+      syncActiveGardenFromSave();
       const ftue11Completed =
         save.activeFtueStage === null &&
         save.ftueSeedSurplusActivated === true &&
@@ -5950,7 +5992,7 @@ export default function App() {
       }
     };
     requestAnimationFrame(animate);
-  }, [hydrateFromSave]);
+  }, [hydrateFromSave, syncActiveGardenFromSave]);
 
   persistGameSnapshotRef.current = () => {
     if (suppressGameSaveRef.current) return;
@@ -6038,7 +6080,7 @@ export default function App() {
       levelUpPopupQueue,
       wildGrowthAccumulatorMs: wildGrowthAccumMsRef.current,
     };
-    persistGameSave(payload);
+    persistGameSave(payload, { activeGardenId: activeGardenIdRef.current });
   };
 
   const autoCollectOfflineEarningsForUnload = () => {
@@ -9120,6 +9162,11 @@ export default function App() {
               onFakeNotchToggle={() => {
                 playSfx(SFX_IDS.uiConfirmNormal);
                 setFakeNotchPreviewEnabled((on) => !on);
+              }}
+              activeGardenLabel={getGardenDisplayLabel(activeGardenId)}
+              onCycleGardenClick={() => {
+                playSfx(SFX_IDS.uiConfirmNormal);
+                cycleActiveGarden();
               }}
               onCompleteTaskClick={() => {
                 playSfx(SFX_IDS.uiConfirmNormal);
