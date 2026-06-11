@@ -14,6 +14,8 @@ import {
   STARTER_PACK_FORCE_POPUP_LEVEL,
 } from './constants/playerLevelUnlocks';
 import { TASKS_FTUE_FLOATING_BUTTON_ID } from './constants/tasksFtue';
+import { FAKE_SAFE_AREA_TOP_PX } from './constants/debugSafeArea';
+import { FakeNotchOverlay } from './components/FakeNotchOverlay';
 import { Navbar } from './components/Navbar';
 import { StoreScreen } from './components/StoreScreen';
 import { SideAction } from './components/SideAction';
@@ -111,8 +113,7 @@ import { getTickCount60, TARGET_FRAME_MS, scheduleNextFrame } from './utils/raf6
 import { getPerformanceMode } from './utils/performanceMode';
 import { getAutoMergeMode, setAutoMergeMode } from './utils/autoMergeMode';
 import { playMusicLoop, playSfx, setAudioSettings, SFX_IDS, applySavedAudioSettingsEarly } from './utils/sfx';
-
-const _earlyAudio = applySavedAudioSettingsEarly();
+import { loadUserPrefs, persistUserPrefs } from './utils/userPrefs';
 import {
   DOUBLE_COINS_HEADER_ICON,
   DOUBLE_COINS_OFFER_ID,
@@ -195,6 +196,9 @@ import { getPlantData } from './constants/plantData';
 import { getPlantCoinValue } from './utils/plantValue';
 import { getGoalsRequiredForLevel } from './utils/playerLevelGoals';
 import { getGoalIconForPlantLevel } from './utils/plantGoalIcons';
+
+const _earlyUserPrefs = loadUserPrefs();
+const _earlyAudio = applySavedAudioSettingsEarly();
 
 /** Coin per plant level (economy). */
 export function getCoinValueForLevel(level: number): number {
@@ -1353,6 +1357,9 @@ export default function App() {
     coinMultiplier: number;
   } | null>(null);
   const [devToolsOpen, setDevToolsOpen] = useState(false);
+  const [fakeNotchPreviewEnabled, setFakeNotchPreviewEnabled] = useState(
+    _earlyUserPrefs.fakeNotchPreviewEnabled,
+  );
   const [musicEnabled, setMusicEnabled] = useState(_earlyAudio.musicEnabled);
   const [sfxEnabled, setSfxEnabled] = useState(_earlyAudio.sfxEnabled);
   const [settingsOpenedFromFtue, setSettingsOpenedFromFtue] = useState(false);
@@ -1403,7 +1410,12 @@ export default function App() {
   });
   useEffect(() => {
     setAudioSettings({ musicEnabled, sfxEnabled });
+    persistUserPrefs({ musicEnabled, sfxEnabled });
   }, [musicEnabled, sfxEnabled]);
+
+  useEffect(() => {
+    persistUserPrefs({ fakeNotchPreviewEnabled });
+  }, [fakeNotchPreviewEnabled]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -2820,7 +2832,9 @@ export default function App() {
   const [viewportHeight, setViewportHeight] = useState(typeof window !== 'undefined' ? getViewportSize().height : 800);
   const [viewportOffsetTop, setViewportOffsetTop] = useState(typeof window !== 'undefined' ? getViewportSize().offsetTop : 0);
   const viewportWrapperRef = useRef<HTMLDivElement | null>(null);
-  
+  const safeInsetProbeRef = useRef<HTMLDivElement | null>(null);
+  const [safeTopInsetScreen, setSafeTopInsetScreen] = useState(0);
+
   useEffect(() => {
     const update = () => {
       const { width, height, offsetTop } = getViewportSize();
@@ -2843,6 +2857,23 @@ export default function App() {
       }
     };
   }, []);
+
+  // Measure notch / status-bar inset (CSS env + mobile visualViewport offset) in screen px.
+  useLayoutEffect(() => {
+    const measure = () => {
+      const probe = safeInsetProbeRef.current;
+      if (!probe) return;
+      setSafeTopInsetScreen(parseFloat(getComputedStyle(probe).paddingTop) || 0);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    const vv = window.visualViewport;
+    if (vv) vv.addEventListener('resize', measure);
+    return () => {
+      window.removeEventListener('resize', measure);
+      if (vv) vv.removeEventListener('resize', measure);
+    };
+  }, [viewportWidth, viewportHeight, viewportOffsetTop]);
 
   // Upgrade-panel offer expiry uses wall clock (runs while app is closed / unfocused).
   const protectedOfferId = limitedOfferPopup?.isVisible ? (limitedOfferPopup?.offerId ?? null) : null;
@@ -3109,13 +3140,18 @@ export default function App() {
   const baseHeight = 796;
   const mobileBreakpoint = 500;
   const safeTop = viewportWidth < mobileBreakpoint ? viewportOffsetTop : 0;
-  const availableHeight = viewportHeight - safeTop;
+  // Full viewport height — backgrounds bleed under the notch; UI inset is applied inside the canvas.
+  const availableHeight = viewportHeight;
   const scaleX = viewportWidth / baseWidth;
   const scaleY = availableHeight / baseHeight;
   const isWideViewport = scaleX > scaleY;
   const appScale = isWideViewport ? scaleY : scaleX;
   const designWidth = isWideViewport ? viewportWidth / appScale : baseWidth;
   const designHeight = isWideViewport ? baseHeight : availableHeight / appScale;
+  const effectiveSafeTopInsetScreen = fakeNotchPreviewEnabled
+    ? FAKE_SAFE_AREA_TOP_PX
+    : safeTopInsetScreen;
+  const safeTopInsetDesign = effectiveSafeTopInsetScreen / appScale;
   const appScaleRef = useRef(appScale);
   appScaleRef.current = appScale;
   const goalsTrackWidthPx = designWidth - GOALS_AREA_LEFT_MARGIN_PX;
@@ -5596,7 +5632,9 @@ export default function App() {
     }
   };
 
-  const screenTranslateX = `translateX(-${(getScreenIndex() * 100) / 3}%)`;
+  // Pixel snap (not %) — fractional designWidth + translateX(%) leaves ~1px of the barn column visible on farm.
+  const screenCarouselIndex = getScreenIndex();
+  const screenTranslateX = `translateX(-${screenCarouselIndex * designWidth}px)`;
 
   /** Apply saved game + offline sim; returns total offline coin payout pending (not wallet). */
   const hydrateFromSave = useCallback((save: GameSaveV1) => {
@@ -5724,8 +5762,10 @@ export default function App() {
     setFtuePlayerLevelVisible(save.ftuePlayerLevelVisible);
     const now = Date.now();
     setActiveBoosts(normalizeActiveBoostsAfterLoad(save.activeBoosts.filter((b) => b.endTime > now)));
-    setMusicEnabled(save.musicEnabled !== false);
-    setSfxEnabled(save.sfxEnabled !== false);
+    const userPrefs = loadUserPrefs();
+    setMusicEnabled(userPrefs.musicEnabled);
+    setSfxEnabled(userPrefs.sfxEnabled);
+    setFakeNotchPreviewEnabled(userPrefs.fakeNotchPreviewEnabled);
     setPendingUnlockUpgradeId(
       save.pendingUnlockUpgradeId === 'fertile_soil' ? 'wild_growth' : save.pendingUnlockUpgradeId
     );
@@ -6094,12 +6134,18 @@ export default function App() {
           boxSizing: 'border-box',
         }}
       >
+      <FakeNotchOverlay visible={fakeNotchPreviewEnabled && !isLoading} />
+      <div
+        ref={safeInsetProbeRef}
+        aria-hidden
+        className="fixed top-0 left-0 h-0 w-0 pointer-events-none overflow-hidden"
+        style={{ paddingTop: `max(${safeTop}px, env(safe-area-inset-top, 0px))` }}
+      />
       <div
         className="relative flex items-center justify-center overflow-hidden shrink-0 box-border w-full h-full"
         style={{
           width: viewportWidth,
           height: viewportHeight,
-          paddingTop: `max(${safeTop}px, env(safe-area-inset-top, 0px))`,
           paddingBottom: `env(safe-area-inset-bottom, 0px)`,
         }}
       >
@@ -6124,10 +6170,11 @@ export default function App() {
         <div className="flex-grow relative overflow-hidden min-h-0" style={{ zIndex: 10 }}>
           <div 
             className="absolute inset-0 flex transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]"
-            style={{ transform: screenTranslateX, width: '300%' }}
+            style={{ transform: screenTranslateX, width: designWidth * 3 }}
           >
-            <div className="w-1/3 h-full bg-[#5b433c]">
+            <div className="h-full shrink-0 bg-[#5b433c] flex flex-col min-h-0" style={{ width: designWidth }}>
               <StoreScreen
+                safeTopInsetPx={safeTopInsetDesign}
                 money={money}
                 walletFlashActive={walletFlashActive}
                 onAddMoney={(amt) => setMoney(prev => prev + amt)}
@@ -6185,7 +6232,11 @@ export default function App() {
               />
             </div>
 
-            <div ref={farmColumnRef} className="w-1/3 h-full flex flex-col relative overflow-hidden bg-black">
+            <div
+              ref={farmColumnRef}
+              className="h-full shrink-0 flex flex-col relative overflow-hidden bg-black"
+              style={{ width: designWidth }}
+            >
               {/* Grass: bottom at navbar top; height-scaled; lifts with upgrade panel */}
               <div
                 className="absolute inset-0 pointer-events-none overflow-hidden z-[5]"
@@ -6322,8 +6373,13 @@ export default function App() {
                 />
               </div>
 
+              {/* Gameplay UI — inset below notch; backgrounds above stay full-bleed to the physical top */}
+              <div
+                className="relative flex flex-col flex-grow min-h-0 z-10"
+                style={{ paddingTop: safeTopInsetDesign }}
+              >
               {/* Farm header only while Farm is the active column so walletRef targets the visible coin button */}
-              <div className="relative z-50 w-full">
+              <div className="relative z-50 w-full shrink-0">
                 {activeScreen === 'FARM' ? (
                   <PageHeader
                     money={money}
@@ -7288,9 +7344,13 @@ export default function App() {
                   />
                 </div>
               </div>
+              </div>
             </div>
 
-            <div className="w-1/3 h-full flex flex-col relative overflow-hidden">
+            <div
+              className="h-full shrink-0 flex flex-col relative overflow-hidden"
+              style={{ width: designWidth }}
+            >
               {/* 1. Bleed: flat barn color, full column, behind sprite */}
               <div
                 className="absolute inset-0 pointer-events-none z-0"
@@ -7700,7 +7760,10 @@ export default function App() {
 
               {/* Shed header: coin wallet + boosts + settings; no level bar; tighter left inset (Collection only) */}
               {activeScreen === 'BARN' && (
-                <div className="absolute top-0 left-0 right-0 z-50 pointer-events-none">
+                <div
+                  className="absolute left-0 right-0 z-50 pointer-events-none"
+                  style={{ top: safeTopInsetDesign }}
+                >
                   <div className="pointer-events-auto">
                     <PageHeader
                       money={money}
@@ -9052,6 +9115,11 @@ export default function App() {
               onGoldenPotClick={() => {
                 playSfx(SFX_IDS.uiConfirmNormal);
                 completeMasterySegmentCheat();
+              }}
+              fakeNotchPreviewEnabled={fakeNotchPreviewEnabled}
+              onFakeNotchToggle={() => {
+                playSfx(SFX_IDS.uiConfirmNormal);
+                setFakeNotchPreviewEnabled((on) => !on);
               }}
               onCompleteTaskClick={() => {
                 playSfx(SFX_IDS.uiConfirmNormal);

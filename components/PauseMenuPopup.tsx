@@ -30,6 +30,9 @@ interface PauseMenuPopupProps {
   onClearShed?: () => void;
   /** When false, Unlock Plant button is disabled (all plants unlocked) */
   canUnlockPlant?: boolean;
+  /** Dev: preview Dynamic Island + top safe-area inset on farm/store/collection. */
+  fakeNotchPreviewEnabled?: boolean;
+  onFakeNotchToggle?: () => void;
   closeOnBackdropClick?: boolean;
   appScale?: number;
 }
@@ -107,6 +110,8 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   onCompleteTaskClick,
   onClearShed,
   canUnlockPlant = true,
+  fakeNotchPreviewEnabled = false,
+  onFakeNotchToggle,
   closeOnBackdropClick = true,
   appScale = 1,
 }) => {
@@ -120,6 +125,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   const [resetTasksPressed, setResetTasksPressed] = useState(false);
   const [completeTaskPressed, setCompleteTaskPressed] = useState(false);
   const [clearShedPressed, setClearShedPressed] = useState(false);
+  const [fakeNotchPressed, setFakeNotchPressed] = useState(false);
   const popupCardLayoutRef = useRef<HTMLDivElement>(null);
 
   const beginEnterAfterPreflight = useCallback(() => {
@@ -336,6 +342,29 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                   >
                     <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.blue)}>
                       Golden Pot
+                    </span>
+                  </button>
+                ) : null}
+                {onFakeNotchToggle ? (
+                  <button
+                    type="button"
+                    onMouseDown={() => setFakeNotchPressed(true)}
+                    onMouseUp={() => setFakeNotchPressed(false)}
+                    onMouseLeave={() => setFakeNotchPressed(false)}
+                    onClick={() => onFakeNotchToggle()}
+                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                    style={settingsCheatButtonStyle(
+                      fakeNotchPreviewEnabled ? SETTINGS_PALETTES.green : SETTINGS_PALETTES.blue,
+                      fakeNotchPressed,
+                    )}
+                  >
+                    <span
+                      className="font-bold tracking-tight"
+                      style={settingsCheatLabelStyle(
+                        fakeNotchPreviewEnabled ? SETTINGS_PALETTES.green : SETTINGS_PALETTES.blue,
+                      )}
+                    >
+                      Fake notch: {fakeNotchPreviewEnabled ? 'ON' : 'OFF'}
                     </span>
                   </button>
                 ) : null}

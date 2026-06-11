@@ -1,4 +1,5 @@
 import { assetPath } from './assetPath';
+import { loadUserPrefs } from './userPrefs';
 
 export const SFX_IDS = {
   music: 'sfx_music',
@@ -220,15 +221,8 @@ export function playMusicLoop(): void {
  * the splash screen.  Also returns the values so React state can initialise from them.
  */
 export function applySavedAudioSettingsEarly(): { musicEnabled: boolean; sfxEnabled: boolean } {
-  const defaults = { musicEnabled: true, sfxEnabled: true };
-  try {
-    const raw = localStorage.getItem('pocket-garden-save-v1');
-    if (!raw) return defaults;
-    const data = JSON.parse(raw);
-    if (typeof data?.musicEnabled === 'boolean') { musicEnabled = data.musicEnabled; defaults.musicEnabled = data.musicEnabled; }
-    if (typeof data?.sfxEnabled === 'boolean') { sfxEnabled = data.sfxEnabled; defaults.sfxEnabled = data.sfxEnabled; }
-  } catch {
-    /* corrupt or missing save — keep defaults */
-  }
-  return defaults;
+  const prefs = loadUserPrefs();
+  musicEnabled = prefs.musicEnabled;
+  sfxEnabled = prefs.sfxEnabled;
+  return { musicEnabled: prefs.musicEnabled, sfxEnabled: prefs.sfxEnabled };
 }

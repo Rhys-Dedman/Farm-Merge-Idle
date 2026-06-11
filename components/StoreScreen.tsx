@@ -304,6 +304,8 @@ interface StoreScreenProps {
   /** After level-4 unlock popup; enables the 24h countdown in store + farm FB. */
   starterPackUnlocked?: boolean;
   starterPackCountdownRefreshKey?: number;
+  /** Design-space inset below notch; brown chrome bleeds above this, UI starts here. */
+  safeTopInsetPx?: number;
 }
 
 export const StoreScreen: React.FC<StoreScreenProps> = ({
@@ -325,7 +327,10 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
   starterPackPurchased = false,
   starterPackUnlocked = false,
   starterPackCountdownRefreshKey = 0,
+  safeTopInsetPx = 0,
 }) => {
+  const storeTopChromeBleedPx =
+    safeTopInsetPx + STORE_PAGE_HEADER_HEIGHT_PX + STORE_TOP_CHROME_BELOW_HEADER_PX;
   const starterPackRemainingMs = useStarterPackCountdown(
     starterPackUnlocked,
     starterPackCountdownRefreshKey,
@@ -524,16 +529,32 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
 
   return (
     <div className="relative h-full w-full flex flex-col overflow-x-visible">
-      {/* Brown to top of store column, behind PageHeader (same color as band below). */}
+      {/* Brown chrome + stroke: full bleed to physical top (extends under notch). */}
       <div
         aria-hidden
         className="pointer-events-none absolute left-0 right-0 top-0 z-0"
         style={{
-          height: STORE_PAGE_HEADER_HEIGHT_PX,
+          height: storeTopChromeBleedPx,
           backgroundColor: STORE_TOP_CHROME_BROWN,
         }}
-      />
+      >
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            height: 2,
+            bottom: STORE_MASK_LINE_ABOVE_SCROLL_PX,
+            backgroundColor: STORE_MASK_LINE_COLOR,
+          }}
+        />
+      </div>
 
+      {/* Header + store rows: inset below notch; moves with top bar. */}
+      <div
+        className="relative flex flex-col flex-1 min-h-0 z-10"
+        style={{ paddingTop: safeTopInsetPx }}
+      >
       <PageHeader
         money={money}
         walletRef={walletRef}
@@ -551,28 +572,12 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
         onBoostClick={onBoostClick}
       />
 
-      {/* Brown below header (optional height); line lives here when height > 0. */}
       {STORE_TOP_CHROME_BELOW_HEADER_PX > 0 ? (
         <div
           aria-hidden
-          className="relative z-0 w-full shrink-0 pointer-events-none"
-          style={{
-            height: STORE_TOP_CHROME_BELOW_HEADER_PX,
-            backgroundColor: STORE_TOP_CHROME_BROWN,
-          }}
-        >
-          <div
-            style={{
-              position: 'absolute',
-              left: 0,
-              right: 0,
-              height: 2,
-              bottom: STORE_MASK_LINE_ABOVE_SCROLL_PX,
-              backgroundColor: STORE_MASK_LINE_COLOR,
-              zIndex: 2,
-            }}
-          />
-        </div>
+          className="relative shrink-0 pointer-events-none"
+          style={{ height: STORE_TOP_CHROME_BELOW_HEADER_PX }}
+        />
       ) : null}
 
       {/* Store top-ui viewport (sprites + pattern clipped). */}
@@ -603,32 +608,6 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
               transformOrigin: 'top center',
             }}
           />
-
-          {STORE_TOP_CHROME_BELOW_HEADER_PX === 0 && (
-            <div
-              aria-hidden
-              className="pointer-events-none"
-              style={{
-                position: 'absolute',
-                left: 0,
-                right: 0,
-                top: 0,
-                height: STORE_MASK_LINE_ABOVE_SCROLL_PX + 2,
-                zIndex: 2,
-              }}
-            >
-              <div
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  height: 2,
-                  backgroundColor: STORE_MASK_LINE_COLOR,
-                }}
-              />
-            </div>
-          )}
 
           <div
             ref={storeContentRef}
@@ -708,6 +687,7 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
             </div>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

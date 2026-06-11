@@ -15,6 +15,7 @@ import {
   type GameSaveV1,
   getDiscoveryGoalBuffer,
 } from './gameSave';
+import { loadUserPrefs } from './userPrefs';
 
 const getHexDistance = (q: number, r: number): number => (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2;
 
@@ -39,6 +40,7 @@ function postFtueGoalCropRequired(playerLevel: number, cropYieldLevel: number): 
 }
 
 export function createPostFtueCleanSave(): GameSaveV1 {
+  const userPrefs = loadUserPrefs();
   const seedsState = createInitialSeedsState();
   const harvestState = createInitialHarvestState();
   const cropsState = createInitialCropsState();
@@ -119,8 +121,8 @@ export function createPostFtueCleanSave(): GameSaveV1 {
     ftueUpgradePanelVisible: true,
     ftuePlayerLevelVisible: true,
     activeBoosts: [],
-    musicEnabled: true,
-    sfxEnabled: true,
+    musicEnabled: userPrefs.musicEnabled,
+    sfxEnabled: userPrefs.sfxEnabled,
     pendingUnlockUpgradeId: null,
     levelUpPopupQueue: [],
     tasksFtueStarted: false,
