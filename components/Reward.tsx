@@ -10,6 +10,7 @@
  */
 import React from 'react';
 import { assetPath } from '../utils/assetPath';
+import { getGardenCoinIconPath } from '../utils/gardenAssets';
 
 const MIDDLE_ROW_Y_SHIFT = -7;
 
@@ -97,13 +98,14 @@ export interface RewardProps {
 export const Reward: React.FC<RewardProps> = ({
   offerLineText,
   durationText,
-  coinIconPath = '/assets/icons/coins/icon_coin.png',
+  coinIconPath,
   coinIconScale = 1,
   className = '',
   layout = 'storeCard',
 }) => {
   const isInline = layout === 'inline';
   const iconPx = COIN_ROW_ICON_PX * coinIconScale;
+  const resolvedCoinIcon = coinIconPath ? assetPath(coinIconPath) : getGardenCoinIconPath();
   return (
     <div
       className={`reward pointer-events-none select-none ${isInline ? 'relative' : 'absolute inset-0'} ${className}`.trim()}
@@ -136,7 +138,7 @@ export const Reward: React.FC<RewardProps> = ({
         style={{ left: COIN_ICON_LEFT_PX, ...rowItemTransform(COIN_ICON_TOP_ADJ_PX) }}
       >
         <img
-          src={assetPath(coinIconPath)}
+          src={resolvedCoinIcon}
           alt=""
           className="object-contain flex-shrink-0 pointer-events-none"
           style={{ width: iconPx, height: iconPx }}

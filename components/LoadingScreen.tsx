@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { MAX_PLANT_TIER } from '../constants/plants';
 import { assetPath } from '../utils/assetPath';
+import { getGardenPreloadAssetPaths } from '../utils/gardenAssets';
 import { preloadSfxAssets, SFX_PRELOAD_STEP_COUNT, applySavedAudioSettingsEarly } from '../utils/sfx';
 
 applySavedAudioSettingsEarly();
@@ -24,23 +24,17 @@ const SPLASH_PROGRESS_DESIGN_BORDER = 3;
 const SPLASH_PROGRESS_DESIGN_FONT_PX = 14;
 
 const ASSETS_TO_PRELOAD = [
-  // Plants (discovery + grid); plant_0 unused — pot-only when undiscovered
-  ...Array.from({ length: MAX_PLANT_TIER }, (_, i) => `/assets/plants/garden_1/plant_${i + 1}.png`),
-  '/assets/plants/pots/plant_pot.png',
-  // Goal icons (orders/discovery goals – preload all so new goals don’t load images on demand)
-  ...Array.from({ length: MAX_PLANT_TIER }, (_, i) => `/assets/icons/goals/garden_1/icon_goal_${i + 1}.png`),
+  ...getGardenPreloadAssetPaths(),
   // Icons
   '/assets/icons/floating_buttons/icon_tasks.png',
   '/assets/icons/generic_buttons/icon_barn.png',
   '/assets/icons/generic_buttons/icon_farm.png',
   '/assets/icons/generic_buttons/icon_market.png',
-  '/assets/icons/coins/icon_coin.png',
   '/assets/icons/upgrades/icon_harvest.png',
   '/assets/icons/generic_buttons/icon_watchad.png',
   '/assets/icons/generic_buttons/icon_watchad_large.png',
   '/assets/icons/coins/icon_coin_watchad.png',
   '/assets/ui/ui_logo.png',
-  '/assets/ui/ui_level.png',
   '/assets/icons/generic_buttons/icon_lock.png',
   '/assets/icons/upgrades/icon_seedstorm.png',
   '/assets/icons/upgrades/icon_seedproduction.png',
@@ -72,13 +66,6 @@ const ASSETS_TO_PRELOAD = [
   // Backgrounds
   '/assets/collection/background_collection.png',
   '/assets/background/background_loading.png',
-  '/assets/background/garden_1/background_grass.png',
-  '/assets/background/garden_1/background_bottom.png',
-  '/assets/background/garden_1/background_left.png',
-  '/assets/background/garden_1/background_right.png',
-  '/assets/background/garden_1/background_center.png',
-  '/assets/background/garden_1/background_centertop.png',
-  '/assets/background/garden_1/background_gradient.png',
   // Top UI
   '/assets/ui/topui_bg.png',
   '/assets/ui/topui_gradient.png',
@@ -108,7 +95,6 @@ const ASSETS_TO_PRELOAD = [
   '/assets/vfx/particle_leaf_yellow_2.png',
   '/assets/vfx/particle_leaf_blue_1.png',
   '/assets/vfx/particle_leaf_blue_2.png',
-  '/assets/vfx/particle_leaf_background_green.png',
   '/assets/vfx/particle_leaf_background_shadow.png',
   '/assets/vfx/particle_leaf_red_1.png',
   '/assets/vfx/particle_leaf_red_2.png',

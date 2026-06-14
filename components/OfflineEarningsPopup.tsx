@@ -3,6 +3,7 @@
  */
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { getGardenCoinSmallIconPath } from '../utils/gardenAssets';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
 import { PopupVectorBackground } from './PopupVectorBackground';
 import { formatCompactNumber } from '../utils/formatCompactNumber';
@@ -448,7 +449,7 @@ export const OfflineEarningsPopup: React.FC<OfflineEarningsPopupProps> = ({
                   >
                     <img
                       ref={rewardCoinRef}
-                      src={assetPath('/assets/icons/coins/icon_coin_small.png')}
+                      src={getGardenCoinSmallIconPath()}
                       alt=""
                       className="object-contain shrink-0"
                       style={{ width: `${DISCOVERY_COIN_REWARD_ICON_PX}px`, height: `${DISCOVERY_COIN_REWARD_ICON_PX}px` }}

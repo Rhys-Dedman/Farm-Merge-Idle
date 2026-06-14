@@ -4,6 +4,8 @@
  */
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
+import type { GardenId } from '../constants/gardens';
+import { getGardenCoinIconPath } from '../utils/gardenAssets';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
 import { PopupVectorBackground } from './PopupVectorBackground';
 import { PlantWithPot } from './PlantWithPot';
@@ -30,6 +32,7 @@ interface PlantInfoPopupProps {
   onClose: () => void;
   /** Fired on tap when dismissing via X or backdrop (immediate), not when the close animation ends. */
   onUserDismiss?: () => void;
+  gardenId: GardenId;
   plantLevel: number;
   plantName: string;
   plantDescription: string;
@@ -102,6 +105,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
   isVisible,
   onClose,
   onUserDismiss,
+  gardenId,
   plantLevel,
   plantName,
   plantDescription,
@@ -389,7 +393,12 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
               filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
             }}
           >
-            <PlantWithPot level={isUnlocked ? plantLevel : 0} mastered={masteryPotUnlocked} wrapperClassName="h-full w-full" />
+            <PlantWithPot
+              level={isUnlocked ? plantLevel : 0}
+              gardenId={gardenId}
+              mastered={masteryPotUnlocked}
+              wrapperClassName="h-full w-full"
+            />
           </div>
         </div>
 
@@ -510,7 +519,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
                       <>
                         <span>Golden Pot</span>
                         <img
-                          src={assetPath('/assets/icons/coins/icon_coin.png')}
+                          src={getGardenCoinIconPath()}
                           alt=""
                           className="object-contain shrink-0"
                           style={{ width: 40, height: 40 }}

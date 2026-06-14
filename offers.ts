@@ -89,7 +89,8 @@ export const LIMITED_OFFERS: LimitedOfferConfig[] = [
     id: 'special_delivery',
     title: 'Special Delivery',
     description: 'Instantly generate a high level plant',
-    headerIcon: '/assets/plants/garden_1/plant_1.png',
+    /** Overridden at runtime via `getSpecialDeliveryPlantSpritePath` (active garden plant). */
+    headerIcon: '/assets/icons/upgrades/icon_seedproduction.png',
     durationMinutes: null,
     upgradeTab: 'SEEDS',
     trigger: 'anytime',

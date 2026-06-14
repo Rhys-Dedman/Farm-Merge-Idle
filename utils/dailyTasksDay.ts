@@ -1,4 +1,9 @@
 import { assetPath } from './assetPath';
+import {
+  getGardenCoinIconPath,
+  getGardenLevelIconPath,
+  getGoalIconPathForGarden,
+} from './gardenAssets';
 import type { BoardCell } from '../types';
 import type { DailyTaskDefinition, DailyTaskRowState } from '../components/DailyTaskRow';
 import {
@@ -17,10 +22,13 @@ import {
 } from '../constants/dailyTaskCatalog';
 import { getPlantDisplayName } from '../constants/plantData';
 import { MAX_PLANT_TIER } from '../constants/plants';
+import { SHIPPED_GARDEN_IDS, type GardenId } from '../constants/gardens';
 import {
-  readDailyTasksCountdownEndMs,
-  startDailyTasksCountdown,
-} from './dailyTasksCountdown';
+  clearAllDailyTasksDayStorage,
+  DAILY_TASKS_DAY_STATE_LEGACY_KEY,
+  getDailyTasksActiveGarden,
+  getDailyTasksDayStateStorageKey,
+} from './dailyTasksGardenScope';
 import {
   canRollExpandGardenTask,
   canRollPurchaseUpgradeTask,
@@ -37,16 +45,14 @@ import {
   getEligibleGrowPlantsDailyTaskLevels,
 } from './dailyTaskPlantTargets';
 import { canRollGoldenPotDailyTask } from './dailyTaskGoldenPotGate';
+import {
+  readDailyTasksCountdownEndMs,
+  startDailyTasksCountdown,
+} from './dailyTasksCountdown';
 import { getCropYieldPerHarvest } from '../components/UpgradeList';
 import { getLevelUpTaskSlot } from './playerLevelGoals';
 import { getGoalIconForPlantLevel } from './plantGoalIcons';
 import { getDailyTaskSlotRewardCoins } from './dailyTaskRewards';
-
-import {
-  clearAllDailyTasksDayStorage,
-  DAILY_TASKS_DAY_STATE_LEGACY_KEY,
-  getDailyTasksDayStateStorageKey,
-} from './dailyTasksGardenScope';
 
 /** @deprecated Use per-garden keys via `getDailyTasksDayStateStorageKey`. */
 export const DAILY_TASKS_DAY_STATE_KEY = DAILY_TASKS_DAY_STATE_LEGACY_KEY;
@@ -90,6 +96,15 @@ function isPlantTargetTask(templateId: DailyTaskPoolId): boolean {
 }
 
 function getTemplateIcon(templateId: DailyTaskPoolId): string {
+  if (templateId === 'merge_coins' || templateId === 'upgrade_harvest_tab') {
+    return getGardenCoinIconPath();
+  }
+  if (templateId === 'upgrade_crops_tab') {
+    return getGoalIconPathForGarden(14);
+  }
+  if (templateId === 'level_up') {
+    return getGardenLevelIconPath();
+  }
   return TEMPLATE_META[templateId].icon;
 }
 
@@ -145,6 +160,15 @@ function pickWeightedTemplate(pool: DailyTaskPoolId[]): DailyTaskPoolId {
 function getTaskIconForInstance(task: DailyTaskInstanceState): string {
   if (task.targetPlantLevel != null && isPlantTargetTask(task.templateId)) {
     return getGoalIconForPlantLevel(task.targetPlantLevel);
+  }
+  if (task.templateId === 'merge_coins' || task.templateId === 'upgrade_harvest_tab') {
+    return getGardenCoinIconPath();
+  }
+  if (task.templateId === 'upgrade_crops_tab') {
+    return getGoalIconPathForGarden(14);
+  }
+  if (task.templateId === 'level_up') {
+    return getGardenLevelIconPath();
   }
   return TEMPLATE_META[task.templateId].icon;
 }
@@ -223,7 +247,7 @@ const TEMPLATE_META: Record<
   merge_coins: {
     title: 'Merge Coins',
     description: 'Earn {n} coins from merging plants.',
-    icon: assetPath('/assets/icons/coins/icon_coin.png'),
+    icon: assetPath('/assets/icons/coins/icon_coin_garden_1.png'),
   },
   harvest_crops: {
     title: 'Harvest Crops',
@@ -283,7 +307,7 @@ const TEMPLATE_META: Record<
   upgrade_harvest_tab: {
     title: 'Market Upgrade',
     description: 'Buy {n} upgrades in the Market tab.',
-    icon: assetPath('/assets/icons/coins/icon_coin.png'),
+    icon: assetPath('/assets/icons/coins/icon_coin_garden_1.png'),
   },
   upgrade_crops_tab: {
     title: 'Garden Upgrade',
@@ -394,18 +418,9 @@ export interface DailyTasksDayState {
   playtimeMs: number;
 }
 
-function readDayState(): DailyTasksDayState | null {
+function parseDayStateRaw(raw: string | null): DailyTasksDayState | null {
+  if (!raw) return null;
   try {
-    const key = getDailyTasksDayStateStorageKey();
-    let raw = localStorage.getItem(key);
-    if (!raw) {
-      raw = localStorage.getItem(DAILY_TASKS_DAY_STATE_LEGACY_KEY);
-      if (raw) {
-        localStorage.setItem(key, raw);
-        localStorage.removeItem(DAILY_TASKS_DAY_STATE_LEGACY_KEY);
-      }
-    }
-    if (!raw) return null;
     const data = JSON.parse(raw) as DailyTasksDayState;
     if (data?.v !== 1 || !Array.isArray(data.tasks)) return null;
     if (data.lastGrowPlantLevel == null) {
@@ -417,6 +432,44 @@ function readDayState(): DailyTasksDayState | null {
   } catch {
     return null;
   }
+}
+
+function readDayStateForGarden(gardenId: GardenId): DailyTasksDayState | null {
+  try {
+    const key = getDailyTasksDayStateStorageKey(gardenId);
+    let raw = localStorage.getItem(key);
+    if (!raw && gardenId === 'garden_1') {
+      raw = localStorage.getItem(DAILY_TASKS_DAY_STATE_LEGACY_KEY);
+      if (raw) {
+        localStorage.setItem(key, raw);
+        localStorage.removeItem(DAILY_TASKS_DAY_STATE_LEGACY_KEY);
+      }
+    }
+    return parseDayStateRaw(raw);
+  } catch {
+    return null;
+  }
+}
+
+function readDayState(): DailyTasksDayState | null {
+  return readDayStateForGarden(getDailyTasksActiveGarden());
+}
+
+/** Template ids already assigned to other gardens for the same daily period. */
+function getOtherGardensActiveTemplateIds(
+  periodEndMs: number,
+  forGardenId: GardenId = getDailyTasksActiveGarden(),
+): Set<string> {
+  const exclude = new Set<string>();
+  for (const gardenId of SHIPPED_GARDEN_IDS) {
+    if (gardenId === forGardenId) continue;
+    const state = readDayStateForGarden(gardenId);
+    if (!state || state.periodEndMs !== periodEndMs) continue;
+    for (const task of state.tasks) {
+      exclude.add(task.templateId);
+    }
+  }
+  return exclude;
 }
 
 function writeDayState(state: DailyTasksDayState): void {
@@ -439,12 +492,19 @@ function rerollStaleDayState(
   const previousTasks = state.tasks.filter(
     (t): t is DailyTaskInstanceState => t.templateId in TEMPLATE_META,
   );
-  return rollDailyTasksDay(ctx, state.periodEndMs, previousTasks, state.lastGrowPlantLevel);
+  return rollDailyTasksDay(
+    ctx,
+    state.periodEndMs,
+    previousTasks,
+    state.lastGrowPlantLevel,
+    getOtherGardensActiveTemplateIds(state.periodEndMs),
+  );
 }
 
 function getDescriptionValues(
   task: DailyTaskInstanceState,
 ): Record<string, number | string> {
+  const gardenId = getDailyTasksActiveGarden();
   if (task.templateId === 'seed_rush') {
     return { n: SEED_RUSH_TARGET, s: SEED_RUSH_WINDOW_MS / 1000 };
   }
@@ -457,13 +517,13 @@ function getDescriptionValues(
   if (task.templateId === 'create_specific_plant' && task.targetPlantLevel != null) {
     return {
       n: task.target,
-      x: getPlantDisplayName(task.targetPlantLevel),
+      x: getPlantDisplayName(task.targetPlantLevel, gardenId),
     };
   }
   if (task.targetPlantLevel != null && isPlantTargetTask(task.templateId)) {
     return {
       n: task.target,
-      p: getPlantDisplayName(task.targetPlantLevel),
+      p: getPlantDisplayName(task.targetPlantLevel, gardenId),
     };
   }
   return { n: task.target };
@@ -552,12 +612,14 @@ function eligibleForSlot(
   pickedCategories: Set<DailyTaskCatalogCategory>,
   pickedIcons: Set<string>,
   excludeTemplateIds: Set<string>,
+  hardExcludeTemplateIds: Set<string>,
   ctx: DailyTaskRollContext,
   allowExcludedFromPrevious: boolean,
   allowDuplicateCategory: boolean,
   allowDuplicateIcon: boolean,
   lastGrowPlantLevel?: number,
 ): boolean {
+  if (hardExcludeTemplateIds.has(templateId)) return false;
   if (picked.has(templateId)) return false;
   if (!allowDuplicateCategory && pickedCategories.has(getTemplateCategory(templateId))) return false;
   if (
@@ -610,13 +672,14 @@ function pickTemplateForSlot(
   pickedCategories: Set<DailyTaskCatalogCategory>,
   pickedIcons: Set<string>,
   excludeTemplateIds: Set<string>,
+  hardExcludeTemplateIds: Set<string>,
   ctx: DailyTaskRollContext,
   lastGrowPlantLevel?: number,
 ): DailyTaskPoolId {
   const poolIds = rollPoolForContext(ctx, lastGrowPlantLevel);
   const strict = poolIds.filter((id) =>
     eligibleForSlot(
-      id, slot, picked, pickedCategories, pickedIcons, excludeTemplateIds, ctx,
+      id, slot, picked, pickedCategories, pickedIcons, excludeTemplateIds, hardExcludeTemplateIds, ctx,
       false, false, false, lastGrowPlantLevel,
     ),
   );
@@ -625,14 +688,14 @@ function pickTemplateForSlot(
       ? strict
       : poolIds.filter((id) =>
           eligibleForSlot(
-            id, slot, picked, pickedCategories, pickedIcons, excludeTemplateIds, ctx,
+            id, slot, picked, pickedCategories, pickedIcons, excludeTemplateIds, hardExcludeTemplateIds, ctx,
             true, false, false, lastGrowPlantLevel,
           ),
         );
   if (pool.length === 0) {
     const duplicateCategoryAllowed = poolIds.filter((id) =>
       eligibleForSlot(
-        id, slot, picked, pickedCategories, pickedIcons, new Set(), ctx,
+        id, slot, picked, pickedCategories, pickedIcons, new Set(), hardExcludeTemplateIds, ctx,
         true, true, false, lastGrowPlantLevel,
       ),
     );
@@ -641,7 +704,7 @@ function pickTemplateForSlot(
     }
     const duplicateIconAllowed = poolIds.filter((id) =>
       eligibleForSlot(
-        id, slot, picked, new Set(), pickedIcons, new Set(), ctx,
+        id, slot, picked, new Set(), pickedIcons, new Set(), hardExcludeTemplateIds, ctx,
         true, true, false, lastGrowPlantLevel,
       ),
     );
@@ -650,7 +713,7 @@ function pickTemplateForSlot(
     }
     return poolIds.filter(
       (id) => eligibleForSlot(
-        id, slot, picked, new Set(), new Set(), new Set(), ctx,
+        id, slot, picked, new Set(), new Set(), new Set(), hardExcludeTemplateIds, ctx,
         true, true, true, lastGrowPlantLevel,
       ),
     )[0];
@@ -663,6 +726,10 @@ export function rollDailyTasksDay(
   periodEndMs: number,
   previousTasks: DailyTaskInstanceState[] = [],
   lastGrowPlantLevel?: number,
+  hardExcludeTemplateIds: Set<string> = getOtherGardensActiveTemplateIds(
+    periodEndMs,
+    getDailyTasksActiveGarden(),
+  ),
 ): DailyTasksDayState {
   const picked = new Set<string>();
   const pickedCategories = new Set<DailyTaskCatalogCategory>();
@@ -672,7 +739,7 @@ export function rollDailyTasksDay(
 
   for (const slot of [1, 2, 3] as const) {
     const templateId = pickTemplateForSlot(
-      slot, picked, pickedCategories, pickedIcons, exclude, ctx, lastGrowPlantLevel,
+      slot, picked, pickedCategories, pickedIcons, exclude, hardExcludeTemplateIds, ctx, lastGrowPlantLevel,
     );
     const growPlantExclude =
       templateId === 'create_specific_plant' && lastGrowPlantLevel != null
@@ -809,11 +876,23 @@ export function ensureDailyTasksDay(
   let state = readDayState();
 
   if (endMs != null && state != null && state.periodEndMs !== endMs) {
-    state = rollDailyTasksDay(ctx, endMs, state.tasks, state.lastGrowPlantLevel);
+    state = rollDailyTasksDay(
+      ctx,
+      endMs,
+      state.tasks,
+      state.lastGrowPlantLevel,
+      getOtherGardensActiveTemplateIds(endMs),
+    );
     writeDayState(state);
   } else if (state == null) {
     const periodEnd = endMs ?? startDailyTasksCountdown(atTimeMs);
-    state = rollDailyTasksDay(ctx, periodEnd, []);
+    state = rollDailyTasksDay(
+      ctx,
+      periodEnd,
+      [],
+      undefined,
+      getOtherGardensActiveTemplateIds(periodEnd),
+    );
     writeDayState(state);
   } else if (hasRemovedDailyTaskTemplates(state)) {
     state = rerollStaleDayState(state, ctx);
@@ -834,6 +913,7 @@ export function rollDailyTasksNextPeriod(
     periodEnd,
     prev?.tasks ?? [],
     prev?.lastGrowPlantLevel,
+    getOtherGardensActiveTemplateIds(periodEnd),
   );
   writeDayState(state);
   return buildDailyTaskRowsFromState(state, ctx, atTimeMs);

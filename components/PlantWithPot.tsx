@@ -4,6 +4,12 @@
  */
 import React from 'react';
 import { assetPath } from '../utils/assetPath';
+import type { GardenId } from '../constants/gardens';
+import {
+  getGardenPlantSpritePath,
+  getPlantPotGoldPath,
+  getPlantPotNormalPath,
+} from '../utils/gardenAssets';
 
 import { MAX_PLANT_TIER } from '../constants/plants';
 
@@ -11,15 +17,16 @@ import { MAX_PLANT_TIER } from '../constants/plants';
 export const MAX_PLANT_SPRITE_LEVEL = MAX_PLANT_TIER;
 
 export function getPlantSpritePath(level: number): string {
-  const spriteLevel = Math.min(Math.max(1, level), MAX_PLANT_SPRITE_LEVEL);
-  return assetPath(`/assets/plants/garden_1/plant_${spriteLevel}.png`);
+  return getGardenPlantSpritePath(level);
 }
 
-export const PLANT_POT_SRC = assetPath('/assets/plants/pots/plant_pot.png');
-export const PLANT_POT_M1_SRC = assetPath('/assets/plants/pots/plant_pot_m1.png');
+export const PLANT_POT_SRC = getPlantPotNormalPath();
+export const PLANT_POT_M1_SRC = getPlantPotGoldPath();
 
 export interface PlantWithPotProps {
   level: number;
+  /** When set, use this garden's plant sprite instead of the active asset context. */
+  gardenId?: GardenId;
   /** When true, show mastered pot variant for this plant level. */
   mastered?: boolean;
   /** Barn: soft light pulse on pot + plant art when mastery unlock is pending. */
@@ -45,6 +52,7 @@ export interface PlantWithPotProps {
 
 export const PlantWithPot: React.FC<PlantWithPotProps> = ({
   level,
+  gardenId,
   mastered = false,
   masteryAdditiveGlow = false,
   masteryGlowDelaySec = 0,
@@ -70,7 +78,9 @@ export const PlantWithPot: React.FC<PlantWithPotProps> = ({
   // Level 0 uses an empty in-flow div + absolute pot — percentages collapse to 0 unless we fill the parent.
   const rootClass =
     `${className.trim() ? className.trim() : 'h-full w-full'} relative flex items-center justify-center`.trim();
-  const potSrc = mastered ? PLANT_POT_M1_SRC : PLANT_POT_SRC;
+  const potSrc = mastered ? getPlantPotGoldPath() : getPlantPotNormalPath();
+  const plantSpriteSrc =
+    gardenId != null ? getGardenPlantSpritePath(level, gardenId) : getPlantSpritePath(level);
 
   return (
     <div className={rootClass} style={style}>
@@ -99,7 +109,7 @@ export const PlantWithPot: React.FC<PlantWithPotProps> = ({
         {level > 0 ? (
           <>
             <img
-              src={getPlantSpritePath(level)}
+              src={plantSpriteSrc}
               alt={alt}
               draggable={draggable}
               onContextMenu={onContextMenu}
@@ -111,7 +121,7 @@ export const PlantWithPot: React.FC<PlantWithPotProps> = ({
             />
             {masteryAdditiveGlow && (
               <img
-                src={getPlantSpritePath(level)}
+                src={plantSpriteSrc}
                 alt=""
                 aria-hidden
                 draggable={false}

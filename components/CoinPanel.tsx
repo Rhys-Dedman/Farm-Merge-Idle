@@ -3,6 +3,7 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { getGardenCoinIconPath } from '../utils/gardenAssets';
 import { getPerformanceMode } from '../utils/performanceMode';
 
 const REVEAL_MS = 220;
@@ -355,7 +356,7 @@ export const CoinPanel: React.FC<CoinPanelProps> = ({
             }}
           >
             <img
-              src={assetPath('/assets/icons/coins/icon_coin.png')}
+              src={getGardenCoinIconPath()}
               alt=""
               className="shrink-0 object-contain"
               aria-hidden

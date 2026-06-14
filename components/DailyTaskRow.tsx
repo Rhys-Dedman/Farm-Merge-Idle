@@ -4,6 +4,7 @@
  */
 import React, { useRef, useState } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { getGardenCoinSmallIconPath } from '../utils/gardenAssets';
 export type DailyTaskRowState = 'in_progress' | 'complete' | 'claimed';
 
 export interface DailyTaskClaimFx {
@@ -145,7 +146,6 @@ const CLAIM_DISABLED = {
   pressedBg: '#e3c28c',
 } as const;
 
-const ICON_COIN = assetPath('/assets/icons/coins/icon_coin_small.png');
 const ICON_WATCH_AD = assetPath('/assets/icons/generic_buttons/icon_watchad.png');
 const ICON_TICK = assetPath('/assets/ui/icon_tick.png');
 const ICON_TICK_BROWN = assetPath('/assets/ui/icon_tick_brown.png');
@@ -427,7 +427,7 @@ export const DailyTaskRow: React.FC<DailyTaskRowProps> = ({
           }}
         >
           <img
-            src={ICON_COIN}
+            src={getGardenCoinSmallIconPath()}
             alt=""
             className="shrink-0 object-contain"
             style={{ width: REWARD_COIN_ICON_PX, height: REWARD_COIN_ICON_PX }}

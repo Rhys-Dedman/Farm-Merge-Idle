@@ -5,6 +5,7 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { getGardenCoinIconPath } from '../utils/gardenAssets';
 import { getPerformanceMode } from '../utils/performanceMode';
 
 const MOVE_DURATION_MS = 350;
@@ -312,7 +313,7 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
           }}
         >
           <img
-            src={assetPath('/assets/icons/coins/icon_coin.png')}
+            src={getGardenCoinIconPath()}
             alt=""
             className="w-full h-full object-contain"
             aria-hidden

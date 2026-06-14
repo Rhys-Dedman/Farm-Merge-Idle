@@ -3,7 +3,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { assetPath } from '../utils/assetPath';
-import { GARDEN_IDS, getGardenDisplayLabel, type GardenId } from '../constants/gardens';
+import { GARDEN_IDS, getGardenDisplayLabel, SHIPPED_GARDEN_IDS, type GardenId } from '../constants/gardens';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
 import { PopupVectorBackground } from './PopupVectorBackground';
 
@@ -238,7 +238,7 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
                 </p>
 
                 <div className="flex flex-col items-center gap-4 w-full">
-                  {GARDEN_IDS.map((gardenId) => {
+                  {SHIPPED_GARDEN_IDS.map((gardenId) => {
                     const selected = gardenId === activeGardenId;
                     return (
                       <button

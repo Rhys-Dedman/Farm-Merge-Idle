@@ -161,9 +161,20 @@ import {
   GARDEN_IDS,
   GARDENS_SWITCH_UNLOCK_LEVEL,
   getGardenDisplayLabel,
-  getNextGardenId,
+  SHIPPED_GARDEN_IDS,
   type GardenId,
 } from './constants/gardens';
+import {
+  getGardenBackgroundPaths,
+  getGardenAmbientLeafSpritePath,
+  getGardenCoinIconPath,
+  getGardenPlantSpritePath,
+  getGardenLevelIconPath,
+  getNextShippedGardenId,
+  getSpecialDeliveryPlantLevel,
+  getSpecialDeliveryPlantSpritePath,
+  setActiveGardenAssetContext,
+} from './utils/gardenAssets';
 import { setDailyTasksActiveGarden } from './utils/dailyTasksGardenScope';
 import { activateGardenInSave, flattenV2ToV1 } from './utils/gardenSave';
 import { createPostFtueCleanSave } from './utils/postFtueCleanSave';
@@ -367,10 +378,13 @@ function buildLimitedOfferPopupState(
   const offer = getOfferById(resolvedOfferId);
   if (!offer) return null;
   const specialDeliveryLevel =
-    offer.id === 'special_delivery' && overrides?.highestPlantEver != null
-      ? Math.max(1, Math.min(MAX_PLANT_TIER, overrides.highestPlantEver - 1))
+    offer.id === 'special_delivery'
+      ? getSpecialDeliveryPlantLevel(overrides?.highestPlantEver)
       : null;
-  const imageSrc = assetPath(offer.headerIcon);
+  const imageSrc =
+    specialDeliveryLevel != null
+      ? getSpecialDeliveryPlantSpritePath(overrides?.highestPlantEver)
+      : assetPath(offer.headerIcon);
   const isCoinMult = isCoinMultiplierBoostId(resolvedOfferId);
   return {
     isVisible: true,
@@ -714,19 +728,12 @@ const easeOutClose = (t: number) => 1 - Math.pow(1 - t, 3);
 const UPGRADE_PANEL_COLLAPSED_HEIGHT_PX = 50;
 const UPGRADE_PANEL_EXPANDED_HEIGHT_PX = 279;
 
-const GARDEN_1_BG = {
-  grass: '/assets/background/garden_1/background_grass.png',
-  bottom: '/assets/background/garden_1/background_bottom.png',
-  left: '/assets/background/garden_1/background_left.png',
-  right: '/assets/background/garden_1/background_right.png',
-  center: '/assets/background/garden_1/background_center.png',
-  centerTop: '/assets/background/garden_1/background_centertop.png',
-  gradient: '/assets/background/garden_1/background_gradient.png',
-} as const;
 /** Shared scale for bottom / left / right / gradient garden sprites (relative to each other). */
 const GARDEN_SIDE_SPRITE_SCALE = 0.6;
 /** Pin garden backgrounds this many px below the upgrade panel tab underline. */
 const GARDEN_BG_TAB_LINE_OFFSET_PX = 20;
+/** Nudge collection column right to clear subpixel seam bleed on garden (design px). */
+const BARN_CAROUSEL_SEAM_OFFSET_PX = 1;
 
 const UPGRADE_PANEL_OPEN_DURATION_MS = 1400;
 const UPGRADE_PANEL_CLOSE_DURATION_MS = 350;
@@ -772,9 +779,13 @@ const POPUP_ASSETS_TO_PRELOAD = [
   assetPath('/assets/ui/popup_divider.png'),
   assetPath('/assets/vfx/particle_leaf_green_1.png'),
   assetPath('/assets/vfx/particle_leaf_green_2.png'),
-  assetPath('/assets/plants/pots/plant_pot.png'),
-  assetPath('/assets/plants/pots/plant_pot_m1.png'),
-  ...([1, 2, 3, 4, 5].map((n) => assetPath(`/assets/icons/goals/garden_1/icon_goal_${n}.png`))),
+  assetPath('/assets/plants/pots/pot_normal.png'),
+  assetPath('/assets/plants/pots/pot_gold.png'),
+  ...SHIPPED_GARDEN_IDS.flatMap((gardenId) =>
+    [1, 2, 3, 4, 5].map((n) =>
+      assetPath(`/assets/icons/goals/${gardenId}/icon_goal_${n}.png`),
+    ),
+  ),
 ];
 
 POPUP_ASSETS_TO_PRELOAD.forEach((src) => {
@@ -1428,6 +1439,11 @@ export default function App() {
     rateUs: false,
     dailyTasks: false,
   });
+  useEffect(() => {
+    setActiveGardenAssetContext(activeGardenId);
+    activeGardenIdRef.current = activeGardenId;
+  }, [activeGardenId]);
+
   useEffect(() => {
     setAudioSettings({ musicEnabled, sfxEnabled });
     persistUserPrefs({ musicEnabled, sfxEnabled });
@@ -5656,9 +5672,9 @@ export default function App() {
     }
   };
 
-  // Pixel snap (not %) — fractional designWidth + translateX(%) leaves ~1px of the barn column visible on farm.
   const screenCarouselIndex = getScreenIndex();
   const screenTranslateX = `translateX(-${screenCarouselIndex * designWidth}px)`;
+  const gardenBg = getGardenBackgroundPaths(activeGardenId);
 
   /** Apply saved game + offline sim; returns total offline coin payout pending (not wallet). */
   const hydrateFromSave = useCallback((save: GameSaveV1) => {
@@ -5853,6 +5869,7 @@ export default function App() {
     if (!v2) return;
     setActiveGardenId(v2.activeGardenId);
     activeGardenIdRef.current = v2.activeGardenId;
+    setActiveGardenAssetContext(v2.activeGardenId);
     setDailyTasksActiveGarden(v2.activeGardenId);
     const g1 = v2.gardens[DEFAULT_GARDEN_ID]?.playerLevel;
     if (g1 != null) setGarden1PlayerLevel(g1);
@@ -5864,7 +5881,7 @@ export default function App() {
       v2?.gardensFeatureUnlocked === true ||
       garden1PlayerLevel >= GARDENS_SWITCH_UNLOCK_LEVEL;
     const started = new Set(v2?.gardensStarted ?? [DEFAULT_GARDEN_ID]);
-    return GARDEN_IDS.filter(
+    return SHIPPED_GARDEN_IDS.filter(
       (id) => id === DEFAULT_GARDEN_ID || featureUnlocked || started.has(id),
     );
   }, [garden1PlayerLevel]);
@@ -5883,6 +5900,7 @@ export default function App() {
       persistGameSaveV2(nextV2);
       activeGardenIdRef.current = targetId;
       setActiveGardenId(targetId);
+      setActiveGardenAssetContext(targetId);
       setDailyTasksActiveGarden(targetId);
       const flat = normalizeGameSaveV1({
         ...flattenV2ToV1(nextV2),
@@ -5907,7 +5925,7 @@ export default function App() {
   );
 
   const cycleActiveGarden = useCallback(() => {
-    switchToGarden(getNextGardenId(activeGardenIdRef.current), { bypassUnlockCheck: true });
+    switchToGarden(getNextShippedGardenId(activeGardenIdRef.current), { bypassUnlockCheck: true });
   }, [switchToGarden]);
 
   useEffect(() => {
@@ -6347,7 +6365,7 @@ export default function App() {
                 <div
                   className="absolute inset-0 bg-no-repeat"
                   style={{
-                    backgroundImage: `url(${assetPath(GARDEN_1_BG.grass)})`,
+                    backgroundImage: `url(${assetPath(gardenBg.grass)})`,
                     backgroundSize: 'auto 100%',
                     backgroundPosition: 'bottom center',
                   }}
@@ -6356,7 +6374,7 @@ export default function App() {
 
               {/* Center: pinned to hex grid; above grass, below bottom/left/right/gradient */}
               <img
-                src={assetPath(GARDEN_1_BG.center)}
+                src={assetPath(gardenBg.center)}
                 alt=""
                 className="absolute pointer-events-none z-[5] max-w-none"
                 draggable={false}
@@ -6372,7 +6390,7 @@ export default function App() {
 
               {/* Bottom accent: bottom-center pinned; above center, below left/right */}
               <img
-                src={assetPath(GARDEN_1_BG.bottom)}
+                src={assetPath(gardenBg.bottom)}
                 alt=""
                 className="absolute bottom-0 left-1/2 pointer-events-none z-[6] max-w-none"
                 draggable={false}
@@ -6387,7 +6405,7 @@ export default function App() {
 
               {/* Side sprites: bottom corners; above bottom, below gradient */}
               <img
-                src={assetPath(GARDEN_1_BG.left)}
+                src={assetPath(gardenBg.left)}
                 alt=""
                 className="absolute bottom-0 left-0 pointer-events-none z-[7] max-w-none"
                 draggable={false}
@@ -6400,7 +6418,7 @@ export default function App() {
                 aria-hidden
               />
               <img
-                src={assetPath(GARDEN_1_BG.right)}
+                src={assetPath(gardenBg.right)}
                 alt=""
                 className="absolute bottom-0 right-0 pointer-events-none z-[7] max-w-none"
                 draggable={false}
@@ -6415,7 +6433,7 @@ export default function App() {
 
               {/* Center top: same hex anchor as center; above bottom/left/right, below gradient */}
               <img
-                src={assetPath(GARDEN_1_BG.centerTop)}
+                src={assetPath(gardenBg.centerTop)}
                 alt=""
                 className="absolute pointer-events-none z-[7] max-w-none"
                 draggable={false}
@@ -6436,7 +6454,7 @@ export default function App() {
                 aria-hidden
               >
                 <img
-                  src={assetPath(GARDEN_1_BG.gradient)}
+                  src={assetPath(gardenBg.gradient)}
                   alt=""
                   className="block w-full max-w-none"
                   draggable={false}
@@ -6793,7 +6811,7 @@ export default function App() {
                           )}
                           {showCompletedContent && (
                             <>
-                              <img ref={goalIconRefs[slotIdx]} src={assetPath('/assets/icons/coins/icon_coin.png')} alt="" className={`absolute left-1/2 object-contain pointer-events-none ${isBouncing ? 'goal-icon-bounce' : ''}`} style={{ zIndex: 6, bottom: '71%', width: 40, height: 40, transform: 'translate(-50%, -2px)' }} />
+                              <img ref={goalIconRefs[slotIdx]} src={getGardenCoinIconPath()} alt="" className={`absolute left-1/2 object-contain pointer-events-none ${isBouncing ? 'goal-icon-bounce' : ''}`} style={{ zIndex: 6, bottom: '71%', width: 40, height: 40, transform: 'translate(-50%, -2px)' }} />
                               <span className="absolute left-1/2 font-bold pointer-events-none" style={{ zIndex: 6, bottom: '62%', color: '#c99959', fontSize: '15px', transform: 'translate(-50%, -1px)' }}>{formatCompactNumber(applyDoubleCoinsVisualAmount((goalCompletedValues[slotIdx] ?? 0) * (activeBoosts.some(b => b.offerId === 'happiest_customers') ? 2 : 1), activeBoosts))}</span>
                             </>
                           )}
@@ -7024,7 +7042,7 @@ export default function App() {
                     )}
 <SideAction
                         label="Plant"
-                        icon={assetPath(`/assets/plants/garden_1/plant_${seedLevel}.png`)}
+                        icon={getGardenPlantSpritePath(seedLevel)}
                         iconNode={<PlantWithPot level={seedLevel} mastered={plantMastery.unlockedLevels.includes(seedLevel)} wrapperClassName="h-full w-full" />}
                         iconScale={1.35}
                         iconOffsetY={-1}
@@ -7270,7 +7288,7 @@ export default function App() {
               />
               <AmbientFallingLeaves
                 enabled={!isLoading && activeScreen === 'FARM'}
-                spriteUrl={assetPath('/assets/vfx/particle_leaf_background_green.png')}
+                spriteUrl={getGardenAmbientLeafSpritePath()}
                 zIndex={55}
                 spawnIntervalMs={5000}
               />
@@ -7454,7 +7472,10 @@ export default function App() {
 
             <div
               className="h-full shrink-0 flex flex-col relative overflow-hidden"
-              style={{ width: designWidth }}
+              style={{
+                width: designWidth,
+                transform: `translateX(${BARN_CAROUSEL_SEAM_OFFSET_PX}px)`,
+              }}
             >
               {/* 1. Bleed: flat barn color, full column, behind sprite */}
               <div
@@ -7590,7 +7611,7 @@ export default function App() {
                                 style={{ marginLeft: 7, marginRight: -9, transform: 'translate(1px, -1px)' }}
                               >
                                 <img
-                                  src={assetPath('/assets/ui/ui_level.png')}
+                                  src={getGardenLevelIconPath()}
                                   alt=""
                                   className="w-10 h-10 object-contain"
                                   draggable={false}
@@ -8562,6 +8583,7 @@ export default function App() {
             {discoveryPopup && (
               <DiscoveryPopup
                 isVisible={discoveryPopup.isVisible}
+                gardenId={activeGardenId}
                 onUserDismiss={() => {
                   if (suppressDiscoveryDeclineSfxRef.current) {
                     suppressDiscoveryDeclineSfxRef.current = false;
@@ -8581,10 +8603,10 @@ export default function App() {
                   });
                 }}
                 title="New Discovery"
-                imageSrc={assetPath(`/assets/plants/garden_1/plant_${Math.max(1, Math.min(MAX_PLANT_TIER, discoveryPopup.level))}.png`)}
+                imageSrc={getGardenPlantSpritePath(discoveryPopup.level, activeGardenId)}
                 imageLevel={discoveryPopup.level}
-                subtitle={getPlantData(discoveryPopup.level).name}
-                description={getPlantData(discoveryPopup.level).description}
+                subtitle={getPlantData(discoveryPopup.level, activeGardenId).name}
+                description={getPlantData(discoveryPopup.level, activeGardenId).description}
                 buttonText={discoveryPopup.level === 2 ? 'Excellent!' : 'Add to Collection'}
                 rewardAmount={applyDoubleCoinsVisualAmount(
                   getCoinValueForLevel(discoveryPopup.level) * PLANT_DISCOVERY_COIN_MULTIPLIER,
@@ -8785,6 +8807,7 @@ export default function App() {
             {plantInfoPopup && (
               <PlantInfoPopup
                 isVisible={plantInfoPopup.isVisible}
+                gardenId={activeGardenId}
                 onUserDismiss={() => {
                   if (suppressPlantInfoDeclineSfxRef.current) {
                     suppressPlantInfoDeclineSfxRef.current = false;
@@ -8800,8 +8823,8 @@ export default function App() {
                   setPlantInfoPopup(null);
                 }}
                 plantLevel={plantInfoPopup.level}
-                plantName={getPlantData(plantInfoPopup.level).name}
-                plantDescription={getPlantData(plantInfoPopup.level).description}
+                plantName={getPlantData(plantInfoPopup.level, activeGardenId).name}
+                plantDescription={getPlantData(plantInfoPopup.level, activeGardenId).description}
                 isUnlocked={plantInfoPopup.level <= highestPlantEver}
                 masteryPotUnlocked={plantMastery.unlockedLevels.includes(plantInfoPopup.level)}
                 appScale={appScale}

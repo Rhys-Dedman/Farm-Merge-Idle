@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { TabType } from '../types';
 import { assetPath } from '../utils/assetPath';
 import { iconAssetPath } from '../utils/iconAssetPath';
+import { getGardenCoinSmallIconPath, getGardenLevelIconPath, getSpecialDeliveryPlantLevel } from '../utils/gardenAssets';
 import { getRewardedOfferTimeRemainingSec } from '../utils/rewardedOfferPanel';
 import { playSfx, SFX_IDS } from '../utils/sfx';
 import { getPlantCoinValue } from '../utils/plantValue';
@@ -456,14 +457,13 @@ export const getLevelUnlockInfo = (level: number): LevelUnlockInfo => {
   return {
     title: `Level ${level}`,
     description: "You've reached a new level!",
-    icon: assetPath('/assets/ui/ui_level.png'),
+    icon: getGardenLevelIconPath(),
     upgradeId: undefined,
     tab: undefined,
   };
 };
 
 const ICON_LOCK = assetPath('/assets/icons/generic_buttons/icon_lock.png');
-const ICON_COIN_SMALL = assetPath('/assets/icons/coins/icon_coin_small.png');
 
 /** Crops tab list order (must match CROPS_UNLOCK_LEVELS + level-up rows for that tab). */
 const CROPS_UPGRADES: UpgradeDef[] = [
@@ -1066,8 +1066,8 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
             {offer.id === 'special_delivery' ? (
               <div className="relative" style={{ width: 30, height: 34, marginTop: 2 }}>
                 <PlantWithPot
-                  level={Math.max(1, Math.min(MAX_PLANT_TIER, highestPlantEver - 1))}
-                  mastered={masteredPlantLevels.includes(Math.max(1, Math.min(MAX_PLANT_TIER, highestPlantEver - 1)))}
+                  level={getSpecialDeliveryPlantLevel(highestPlantEver)}
+                  mastered={masteredPlantLevels.includes(getSpecialDeliveryPlantLevel(highestPlantEver))}
                   wrapperClassName="h-full w-full"
                 />
               </div>
@@ -1338,7 +1338,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
                     ) : (
                       <span className="flex items-center gap-[1px] -translate-x-1 relative shrink-0">
                         <img
-                          src={ICON_COIN_SMALL}
+                          src={getGardenCoinSmallIconPath()}
                           alt=""
                           className="shrink-0 object-contain"
                           style={{ width: 16, height: 16, minWidth: 16, maxWidth: 16, minHeight: 16, maxHeight: 16, display: 'block', position: 'relative', zIndex: 1, flexShrink: 0 }}

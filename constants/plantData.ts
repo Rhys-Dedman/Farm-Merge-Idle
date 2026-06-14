@@ -1,5 +1,10 @@
-/** Plant display names and descriptions (discovery popups, daily tasks, etc.). */
-export const PLANT_DATA: Record<number, { name: string; description: string }> = {
+import { DEFAULT_GARDEN_ID, GARDEN_IDS, type GardenId } from './gardens';
+import { getActiveGardenAssetContext } from '../utils/gardenAssets';
+
+export type PlantInfo = { name: string; description: string };
+
+/** Garden 1 plant names and descriptions (discovery popups, daily tasks, barn info, etc.). */
+const PLANT_DATA_GARDEN_1: Record<number, PlantInfo> = {
   1: { name: 'Tiny Sprout', description: 'A tiny green shoot just starting out, doing its best to look important.' },
   2: { name: 'Young Sapling', description: 'A small tree in the making that already seems quite proud of itself.' },
   3: { name: 'Wild Fern', description: 'A cheerful tangle of leaves growing in whatever direction feels right today.' },
@@ -22,13 +27,41 @@ export const PLANT_DATA: Record<number, { name: string; description: string }> =
   20: { name: 'Sour Lemon', description: 'Bright and beautiful on the outside with a surprisingly bitter attitude.' },
 };
 
-export function getPlantData(level: number): { name: string; description: string } {
-  return PLANT_DATA[level] ?? {
+function duplicatePlantData(source: Record<number, PlantInfo>): Record<number, PlantInfo> {
+  return { ...source };
+}
+
+/** Per-garden plant copy — duplicated from garden 1 for now; each garden can diverge later. */
+export const GARDEN_PLANT_DATA: Record<GardenId, Record<number, PlantInfo>> = {
+  garden_1: PLANT_DATA_GARDEN_1,
+  garden_2: duplicatePlantData(PLANT_DATA_GARDEN_1),
+  garden_3: duplicatePlantData(PLANT_DATA_GARDEN_1),
+};
+
+/** @deprecated Use `GARDEN_PLANT_DATA` or `getPlantData(level, gardenId)`. */
+export const PLANT_DATA = GARDEN_PLANT_DATA[DEFAULT_GARDEN_ID];
+
+function resolveGardenPlantData(gardenId: GardenId): Record<number, PlantInfo> {
+  return GARDEN_PLANT_DATA[gardenId] ?? GARDEN_PLANT_DATA[DEFAULT_GARDEN_ID];
+}
+
+export function getPlantData(
+  level: number,
+  gardenId: GardenId = getActiveGardenAssetContext(),
+): PlantInfo {
+  const data = resolveGardenPlantData(gardenId);
+  return data[level] ?? {
     name: `Plant Lv.${level}`,
     description: 'A mysterious new plant species.',
   };
 }
 
-export function getPlantDisplayName(level: number): string {
-  return getPlantData(level).name;
+export function getPlantDisplayName(
+  level: number,
+  gardenId: GardenId = getActiveGardenAssetContext(),
+): string {
+  return getPlantData(level, gardenId).name;
 }
+
+/** All garden ids that have plant copy tables (for tooling / future editors). */
+export const GARDEN_PLANT_DATA_IDS: readonly GardenId[] = GARDEN_IDS;

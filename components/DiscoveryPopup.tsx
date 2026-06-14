@@ -5,6 +5,8 @@
  */
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
+import type { GardenId } from '../constants/gardens';
+import { getGardenCoinSmallIconPath } from '../utils/gardenAssets';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
 import { PopupVectorBackground } from './PopupVectorBackground';
 import { formatCompactNumber } from '../utils/formatCompactNumber';
@@ -42,6 +44,7 @@ interface DiscoveryPopupProps {
   onClose: () => void;
   /** Fired on tap when dismissing via X or backdrop (immediate), not when the close animation ends. */
   onUserDismiss?: () => void;
+  gardenId: GardenId;
   title: string;
   imageSrc: string;
   subtitle: string;
@@ -160,6 +163,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
   isVisible,
   onClose,
   onUserDismiss,
+  gardenId,
   title,
   imageSrc,
   subtitle,
@@ -482,6 +486,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
             >
               <PlantWithPot
                 level={Math.max(1, Math.min(MAX_PLANT_TIER, imageLevel))}
+                gardenId={gardenId}
                 wrapperClassName="h-full w-full"
               />
             </div>
@@ -598,7 +603,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
             >
               <img
                 ref={rewardCoinRef}
-                src={assetPath('/assets/icons/coins/icon_coin_small.png')}
+                src={getGardenCoinSmallIconPath()}
                 alt=""
                 className="object-contain shrink-0"
                 style={{ width: `${DISCOVERY_COIN_REWARD_ICON_PX}px`, height: `${DISCOVERY_COIN_REWARD_ICON_PX}px` }}
