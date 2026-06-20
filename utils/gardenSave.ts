@@ -5,6 +5,7 @@ import type { ActiveBoostData } from '../components/ActiveBoostIndicator';
 import type { GardenState } from '../types/gardenState';
 import {
   DEFAULT_GARDEN_ID,
+  GARDEN_IDS,
   GARDENS_SWITCH_UNLOCK_LEVEL,
   type GardenId,
   isGardenId,
@@ -15,7 +16,12 @@ import {
   createInitialHarvestState,
   createInitialSeedsState,
   getCropYieldPerHarvest,
+  getSeedStorageMax,
 } from '../components/UpgradeList';
+import {
+  getGlobalGoldenPotCount,
+  getHarvestChargesMax,
+} from '../constants/goldenPotBonuses';
 import { normalizeBarnShelvesUnlocked } from '../constants/barnShelves';
 import {
   deriveGoalDiscoveryLightGreenActive,
@@ -120,6 +126,13 @@ export function extractGardenStateFromV1(save: GameSaveV1): GardenState {
     levelUpPopupQueue: [...save.levelUpPopupQueue],
     wildGrowthAccumulatorMs: save.wildGrowthAccumulatorMs,
     barnShelvesUnlocked: [...save.barnShelvesUnlocked],
+    dailyAllowanceClaimedDayKey: save.dailyAllowanceClaimedDayKey,
+    storeFreeOfferSlots: save.storeFreeOfferSlots
+      ? ([...save.storeFreeOfferSlots] as [string, string])
+      : undefined,
+    storeSlotCooldownEnds: save.storeSlotCooldownEnds
+      ? ([...save.storeSlotCooldownEnds] as [number, number])
+      : undefined,
   };
 }
 
@@ -204,6 +217,13 @@ export function flattenV2ToV1(v2: GameSaveV2): GameSaveV1 {
     rewardedOffers: g.rewardedOffers,
     barnNotification: g.barnNotification,
     barnShelvesUnlocked: [...garden.barnShelvesUnlocked],
+    dailyAllowanceClaimedDayKey: garden.dailyAllowanceClaimedDayKey,
+    storeFreeOfferSlots: garden.storeFreeOfferSlots
+      ? ([...garden.storeFreeOfferSlots] as [string, string])
+      : undefined,
+    storeSlotCooldownEnds: garden.storeSlotCooldownEnds
+      ? ([...garden.storeSlotCooldownEnds] as [number, number])
+      : undefined,
     goalSlots: [...garden.goalSlots],
     goalPlantTypes: [...garden.goalPlantTypes],
     goalLoadingSeconds: garden.goalLoadingSeconds,
@@ -326,7 +346,7 @@ function freshGardenGoalCropRequired(playerLevel: number, cropYieldLevel: number
 }
 
 /** Level 1, empty grid, three starter goals — no FTUE (for garden 2/3 first visit). */
-export function createFreshGardenState(): GardenState {
+export function createFreshGardenState(globalGoldenPotCount = 0): GardenState {
   const seedsState = createInitialSeedsState();
   const harvestState = createInitialHarvestState();
   const cropsState = createInitialCropsState();
@@ -336,6 +356,8 @@ export function createFreshGardenState(): GardenState {
   const goalSlots: GardenState['goalSlots'] = ['green', 'green', 'green', 'empty', 'empty'];
   const goalPlantTypes = [1, 2, 3, 0, 0];
   const highestPlantEver = 1;
+  const seedStorageMax = getSeedStorageMax(seedsState, globalGoldenPotCount);
+  const harvestChargesMax = getHarvestChargesMax(globalGoldenPotCount);
 
   return {
     pendingOfflineEarnings: 0,
@@ -343,11 +365,11 @@ export function createFreshGardenState(): GardenState {
     grid: generateFreshGardenGrid(),
     seedProgress: 0,
     harvestProgress: 0,
-    harvestCharges: 3,
+    harvestCharges: harvestChargesMax,
     seedsState,
     harvestState,
     cropsState,
-    seedsInStorage: 5,
+    seedsInStorage: seedStorageMax,
     highestPlantEver,
     playerLevel,
     playerLevelProgress: 0,
@@ -383,11 +405,31 @@ export function createFreshGardenState(): GardenState {
   };
 }
 
+/** Clears daily allowance claim day key on every garden (global bonus resets all gardens). */
+export function clearDailyAllowanceClaimedForAllGardens(v2: GameSaveV2): GameSaveV2 {
+  const gardens = { ...v2.gardens };
+  let changed = false;
+  for (const id of GARDEN_IDS) {
+    const garden = gardens[id];
+    if (!garden?.dailyAllowanceClaimedDayKey) continue;
+    gardens[id] = { ...garden, dailyAllowanceClaimedDayKey: undefined };
+    changed = true;
+  }
+  if (!changed) return v2;
+  return { ...v2, gardens, savedAt: Date.now() };
+}
+
 /** Persist current garden, activate `targetId`, create fresh state if first visit. */
 export function activateGardenInSave(v2: GameSaveV2, targetId: GardenId): GameSaveV2 {
   const gardens = { ...v2.gardens };
   if (!gardens[targetId]) {
-    gardens[targetId] = createFreshGardenState();
+    const activeId = v2.activeGardenId;
+    const globalGoldenPotCount = getGlobalGoldenPotCount(
+      v2.gardens[activeId]?.plantMasteryUnlockedLevels ?? [],
+      v2.gardens,
+      activeId,
+    );
+    gardens[targetId] = createFreshGardenState(globalGoldenPotCount);
   }
   const gardensStarted = [...new Set([...v2.gardensStarted, targetId])];
   return {

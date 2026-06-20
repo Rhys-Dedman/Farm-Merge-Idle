@@ -260,6 +260,9 @@ export function isStorePremiumOnlyOfferId(id: string): boolean {
   return STORE_PREMIUM_ONLY_OFFER_IDS.has(id);
 }
 
+/** Store slot-0 daily allowance (not in duration pool; shown when bonus unlocked + unclaimed today). */
+export const STORE_DAILY_ALLOWANCE_OFFER_ID = 'daily_allowance' as const;
+
 /** Store free-offer pool: only rewarded ads with a timed boost (durationSeconds or durationMinutes). */
 export const STORE_DURATION_FREE_OFFER_IDS = [
   'rapid_seeds',
@@ -287,6 +290,16 @@ export function pickInitialStoreFreeOfferSlots(): [string, string] {
   const a = pickStoreDurationOfferId(new Set());
   const b = pickStoreDurationOfferId(new Set([a]));
   return [a, b];
+}
+
+/** Drop expired cooldown timestamps when hydrating per-garden store slot state. */
+export function normalizeStoreSlotCooldownEnds(
+  ends?: [number, number],
+  atTimeMs = Date.now(),
+): [number, number] {
+  const a = ends?.[0] ?? 0;
+  const b = ends?.[1] ?? 0;
+  return [a > atTimeMs ? a : 0, b > atTimeMs ? b : 0];
 }
 
 /** Header icon size (px) on store free (medium) cards. */

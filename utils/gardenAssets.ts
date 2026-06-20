@@ -131,6 +131,31 @@ export function getPlantPotGoldPath(): string {
   return assetPath(PLANT_POT_GOLD_PATH);
 }
 
+export function getGoldenPotWalletIconPath(): string {
+  return assetPath('/assets/icons/collection/icon_goldenpot.png');
+}
+
+/** Collection milestone reward icon — `icon_collection_<slug>.png`. */
+export function getCollectionBonusIconPath(iconSlug: string): string {
+  return assetPath(`/assets/icons/collection/icon_collection_${iconSlug}.png`);
+}
+
+/** Preload paths for collection bonus milestone icons. */
+export function getCollectionBonusIconPreloadPaths(): string[] {
+  return [
+    'MoreCustomers',
+    'DailyAllowance',
+    'FruitGarden',
+    'DailyRewards',
+    'SeedStorage',
+    'OfflineBoost',
+    'HarvestStorage',
+    'ExtraTasks',
+    'SeedSpeed',
+    'HarvestSpeed',
+  ].map((slug) => `/assets/icons/collection/icon_collection_${slug}.png`);
+}
+
 export function getNextShippedGardenId(current: GardenId): GardenId {
   const shipped = SHIPPED_GARDEN_IDS.filter(isGardenId);
   const index = shipped.indexOf(current);

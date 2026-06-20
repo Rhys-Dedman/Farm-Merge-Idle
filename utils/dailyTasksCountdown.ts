@@ -72,6 +72,24 @@ export function formatDailyTasksCountdown(remainingMs: number): string {
   return formatBundleLimitedCountdown(remainingMs);
 }
 
+/** Local calendar day key (`YYYY-MM-DD`) — same midnight boundary as daily tasks. */
+export function getLocalDayKey(atTimeMs = Date.now()): string {
+  const d = new Date(atTimeMs);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** True when the player already claimed daily allowance for `claimedDayKey` today (local time). */
+export function isDailyAllowanceClaimedForDay(
+  claimedDayKey: string | undefined,
+  atTimeMs = Date.now(),
+): boolean {
+  if (!claimedDayKey) return false;
+  return claimedDayKey === getLocalDayKey(atTimeMs);
+}
+
 /** When the 24h window ends: start the next period (caller rolls new tasks). */
 export function rollDailyTasksPeriodIfExpired(atTimeMs = Date.now()): boolean {
   if (!readDailyTasksUnlocked()) return false;

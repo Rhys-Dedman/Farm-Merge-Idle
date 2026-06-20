@@ -8,6 +8,19 @@ import { assetPath } from '../utils/assetPath';
 
 const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_green_1.png'), assetPath('/assets/vfx/particle_leaf_green_2.png')];
 const LEAF_SPRITES_GOLD = [assetPath('/assets/vfx/particle_leaf_yellow_1.png'), assetPath('/assets/vfx/particle_leaf_yellow_2.png')];
+
+function preloadLeafBurstSprites(urls: readonly string[]): void {
+  for (const src of urls) {
+    const img = new Image();
+    img.src = src;
+    if (typeof img.decode === 'function') {
+      void img.decode().catch(() => {});
+    }
+  }
+}
+
+preloadLeafBurstSprites(LEAF_SPRITES);
+preloadLeafBurstSprites(LEAF_SPRITES_GOLD);
 const CELL_SCALE = 1.2;
 const HEX_RADIUS_PX = 0.6 * PLANT_CONTAINER_WIDTH * CELL_SCALE;
 const MAX_RADIUS_HEX = 1;
@@ -97,7 +110,9 @@ export const LeafBurst: React.FC<LeafBurstProps> = ({
   onCompleteRef.current = onComplete;
 
   useEffect(() => {
-    const start = startTime;
+    // Anchor to mount time — parent setState batching (e.g. first store allowance claim) can
+    // delay mount by 50–100ms+; using the prop startTime makes the burst look late or frozen.
+    const start = Date.now();
     const totalDurationMs = Math.max(...leaves.map((l) => l.lifetimeMs)) + 80;
     leaves.forEach((l, i) => {
       const p = posRef.current[i];
@@ -183,7 +198,7 @@ export const LeafBurst: React.FC<LeafBurstProps> = ({
 
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [startTime, leaves]);
+  }, [leaves, useCircle]);
 
   return (
     <div

@@ -29,7 +29,7 @@ import {
 } from './dailyTasksDay';
 
 export type { DailyTaskRollContext, GardenPlotStats } from './dailyTasksDay';
-export { getDailyTaskSlotRewardCoins } from './dailyTaskRewards';
+export { getDailyTaskSlotRewardCoins, getDailyTaskRewardCoins } from './dailyTaskRewards';
 export {
   ensureDailyTasksDay,
   getDailyTaskRollContext,

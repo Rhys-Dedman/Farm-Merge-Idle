@@ -4,8 +4,7 @@ import { MAX_PLANT_TIER } from './plants';
 export const PLANT_MASTERY_ORDERS_PER_SEGMENT = 50;
 
 /**
- * Max stored `ordersProgress` while filling a segment (before rollover on the next goal).
- * Until `plantMasteryIntroBarComplete`, bar shows 15/15 (fake intro level); after intro, normal level goals.
+ * Legacy save cap for `ordersProgress` (no longer drives collection UI).
  */
 export function getMaxStoredOrdersProgressForTarget(
   targetLevel: number,
@@ -46,4 +45,34 @@ const PLANT_MASTERY_UNLOCK_COSTS: Readonly<Record<number, number>> = {
 export function getPlantMasteryUnlockCost(level: number): number {
   const safeLevel = Math.max(1, Math.min(MAX_PLANT_TIER, Math.floor(level)));
   return PLANT_MASTERY_UNLOCK_COSTS[safeLevel] ?? 0;
+}
+
+/** Discovered plant tiers that do not yet have a golden pot. */
+export function getGoldenPotUpgradeableLevels(
+  highestPlantEver: number,
+  unlockedLevels: readonly number[],
+): number[] {
+  const unlocked = new Set(unlockedLevels);
+  const levels: number[] = [];
+  const max = Math.max(0, Math.floor(highestPlantEver));
+  for (let level = 1; level <= max; level++) {
+    if (!unlocked.has(level)) levels.push(level);
+  }
+  return levels;
+}
+
+export function countGoldenPotUpgradeablePlants(
+  highestPlantEver: number,
+  unlockedLevels: readonly number[],
+): number {
+  return getGoldenPotUpgradeableLevels(highestPlantEver, unlockedLevels).length;
+}
+
+export function canPurchaseGoldenPotForLevel(
+  level: number,
+  highestPlantEver: number,
+  unlockedLevels: readonly number[],
+): boolean {
+  const safeLevel = Math.max(1, Math.min(MAX_PLANT_TIER, Math.floor(level)));
+  return safeLevel <= highestPlantEver && !unlockedLevels.includes(safeLevel);
 }

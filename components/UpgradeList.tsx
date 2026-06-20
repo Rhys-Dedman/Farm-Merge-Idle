@@ -16,7 +16,11 @@ import {
   isWildGrowthMaxLevel,
 } from '../utils/wildGrowth';
 import { PlantWithPot } from './PlantWithPot';
-import { hasGoldenPotHarvest150, hasGoldenPotProduction150 } from '../constants/goldenPotBonuses';
+import {
+  getHarvestSpeedDisplayPercent,
+  getSeedProductionDisplayPercent,
+  getGoldenPotSeedStorageMaxBonus,
+} from '../constants/goldenPotBonuses';
 import { MAX_PLANT_TIER } from '../constants/plants';
 
 export interface UpgradeState {
@@ -69,13 +73,14 @@ export const isDoubleSeedsMaxed = (seedsState: SeedsState): boolean => {
   return level >= 10;
 };
 
-/** Storage Capacity: base 5 + level, max 15 (levels 0–10). */
+/** Storage Capacity: base 5 + level, max 15 (levels 0–10); +1 with Seed Storage golden pot bonus. */
 export const SEED_STORAGE_BASE = 5;
 export const SEED_STORAGE_MAX_CAP = 15;
 
-export const getSeedStorageMax = (seedsState: SeedsState): number => {
+export const getSeedStorageMax = (seedsState: SeedsState, globalGoldenPotCount = 0): number => {
   const level = seedsState?.seed_storage?.level ?? 0;
-  return Math.min(SEED_STORAGE_MAX_CAP, SEED_STORAGE_BASE + level);
+  const bonus = getGoldenPotSeedStorageMaxBonus(globalGoldenPotCount);
+  return Math.min(SEED_STORAGE_MAX_CAP + bonus, SEED_STORAGE_BASE + level + bonus);
 };
 
 export const isSeedStorageMaxed = (seedsState: SeedsState): boolean => {
@@ -418,9 +423,9 @@ export const getLevelUnlockInfo = (level: number): LevelUnlockInfo => {
       upgradeId: '',
       tab: 'CROPS',
       name: 'Plant Collection',
-      description: 'Collect and upgrade your plants for bonuses.',
+      description: 'Upgrade your plants with a Golden Pot. Collect Golden Pots to unlock bonuses.',
       icon: 'icon_plantmastery.png',
-      popupDescription: 'Collect and upgrade your plants for bonuses.',
+      popupDescription: 'Upgrade your plants with a Golden Pot. Collect Golden Pots to unlock bonuses.',
       plantCollectionHeader: true,
       navigateToBarnOnUnlock: true,
       buttonText: 'View Collection',
@@ -1185,11 +1190,11 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
         
         // Check if this upgrade is maxed
         const isMaxed = 
-          (upgrade.id === 'seed_production' && (state.level >= 9 || hasGoldenPotProduction150(goldenPotCount))) ||
+          (upgrade.id === 'seed_production' && state.level >= 9) ||
           (upgrade.id === 'seed_surplus' && isSurplusRechargesMaxed(seedsState as SeedsState)) ||
           (upgrade.id === 'seed_storage' && isSeedStorageMaxed(stateMap as SeedsState)) ||
           (upgrade.id === 'double_seeds' && isDoubleSeedsMaxed(stateMap as SeedsState)) ||
-          (upgrade.id === 'harvest_speed' && (state.level >= 9 || hasGoldenPotHarvest150(goldenPotCount))) ||
+          (upgrade.id === 'harvest_speed' && state.level >= 9) ||
           (upgrade.id === 'bonus_seeds' && isBonusSeedMaxed(stateMap as SeedsState)) ||
           (upgrade.id === 'plot_expansion' && isPlotExpansionMaxed(lockedCellCount)) ||
           (upgrade.id === 'wild_growth' && isWildGrowthMaxLevel(state.level)) ||
@@ -1223,8 +1228,12 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
         const cropsValue = category === 'CROPS' ? getCropsUpgradeValue(upgrade.id, state.level) : null;
         const harvestValue = category === 'HARVEST' ? getHarvestUpgradeValue(upgrade.id, state.level) : null;
         let displayValue = seedsValue ?? cropsValue ?? harvestValue;
-        if (upgrade.id === 'seed_production' && hasGoldenPotProduction150(goldenPotCount)) displayValue = '150%';
-        if (upgrade.id === 'harvest_speed' && hasGoldenPotHarvest150(goldenPotCount)) displayValue = '150%';
+        if (upgrade.id === 'seed_production') {
+          displayValue = `${getSeedProductionDisplayPercent(state.level, goldenPotCount)}%`;
+        }
+        if (upgrade.id === 'harvest_speed') {
+          displayValue = `${getHarvestSpeedDisplayPercent(state.level, goldenPotCount)}%`;
+        }
         
         const UNLOCK_FLASH_BLUE = '#89c8e1';
         return (

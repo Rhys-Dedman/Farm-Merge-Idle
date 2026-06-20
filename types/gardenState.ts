@@ -45,4 +45,10 @@ export interface GardenState {
   levelUpPopupQueue: number[];
   wildGrowthAccumulatorMs?: number;
   barnShelvesUnlocked: boolean[];
+  /** Local day key (`YYYY-MM-DD`) when daily allowance was last claimed in this garden. */
+  dailyAllowanceClaimedDayKey?: string;
+  /** Per-garden store free-offer ids (slot 0 may show allowance before these apply). */
+  storeFreeOfferSlots?: [string, string];
+  /** Per-garden store slot cooldown end timestamps (ms). */
+  storeSlotCooldownEnds?: [number, number];
 }

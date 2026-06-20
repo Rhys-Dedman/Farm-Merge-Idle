@@ -2,10 +2,10 @@
  * Top bar (coin wallet, level, active boosts, settings).
  * Reference UI: size/position locked — see docs/UI-REFERENCE-TOP-BAR.md.
  */
-import React, { useEffect, useRef, useState, type MutableRefObject } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from 'react';
 import { MAX_PLANT_TIER } from '../constants/plants';
 import { assetPath } from '../utils/assetPath';
-import { getGardenCoinIconPath, getGardenLevelIconPath } from '../utils/gardenAssets';
+import { getGardenCoinIconPath, getGardenLevelIconPath, getGoldenPotWalletIconPath } from '../utils/gardenAssets';
 import { getTickCount60 } from '../utils/raf60';
 import { getPerformanceMode } from '../utils/performanceMode';
 
@@ -23,10 +23,18 @@ export const MAX_VISIBLE_BOOST_SLOTS = 5;
 const PLAYER_LEVEL_SLOT_WIDTH_PX = 155;
 /** Coin wallet button width. */
 const WALLET_WIDTH_PX = 85;
+/** Golden pot wallet (right dock) — auto width; reserve ≈ max label after scale(0.88). */
+const GOLDEN_POT_WALLET_RESERVE_PX = 78;
+const GOLDEN_POT_WALLET_GAP_PX = 10;
+const GOLDEN_POT_WALLET_ICON_PX = 36;
+/** Match coin cluster scale in `headerLeftWrapperRef`. */
+const GOLDEN_POT_WALLET_SCALE = 0.88;
 /** Gap between wallet, level, and boost strip inside the scaled cluster (`gap: 18`). */
 const HEADER_CLUSTER_GAP_PX = 18;
 /** Boost strip pulls left 10px under the level bar (`marginLeft: -10`). */
 const BOOST_STRIP_MARGIN_LEFT_PX = -10;
+/** Store: gap between centered title right edge and first boost icon. */
+const AFTER_CENTER_TITLE_BOOST_PAD_PX = 10;
 /** Reserve space at the right of the bar for FPS + settings (absolute dock); tuned so gear never clips. */
 const RIGHT_DOCK_RESERVE_PX_WITH_FPS = 84;
 const RIGHT_DOCK_RESERVE_PX_NO_FPS = 44;
@@ -34,6 +42,9 @@ const RIGHT_DOCK_RESERVE_PX_NO_FPS = 44;
 const SETTINGS_GEAR_PX = 22;
 const DOCK_GAP_PX = 8;
 const FPS_RIGHT_OFFSET_PX = 12 + SETTINGS_GEAR_PX + DOCK_GAP_PX; // 42
+/** Settings dock inset from the right edge (`right-3` = 12px per UI reference). */
+const SETTINGS_DOCK_RIGHT_PX = 12;
+const SETTINGS_DOCK_RIGHT_WITH_GOLDEN_POT_PX = 4;
 
 interface PageHeaderProps {
   /** Coin balance; null/undefined coerced to 0 for display (bad saves / edge cases). */
@@ -43,6 +54,15 @@ interface PageHeaderProps {
   walletFlashActive?: boolean;
   /** When this increments, triggers coin bounce animation */
   walletBurstCount?: number;
+  /** Golden pots owned / total collection plants; when set with refs, shows a right-docked wallet left of settings. */
+  goldenPotWallet?: {
+    count: number;
+    totalCount: number;
+    walletRef: React.RefObject<HTMLButtonElement | null>;
+    walletIconRef: React.RefObject<HTMLElement | null>;
+    flashActive?: boolean;
+    burstCount?: number;
+  };
   onWalletClick?: () => void;
   /** If set, shows plant wallet instead of coin wallet */
   plantWallet?: {
@@ -98,6 +118,11 @@ interface PageHeaderProps {
   /** Add this to boost area marginLeft (e.g. 20 on Store to push boosts right) */
   boostAreaMarginLeftOffset?: number;
   /**
+   * Store only: place boosts just right of `centerTitle` (measured each layout).
+   * Farm/gameplay keep the default strip after the level bar.
+   */
+  boostAreaLayout?: 'default' | 'afterCenterTitle';
+  /**
    * Dev / testing: poll this ref and show "Last: Plant N" left of the FPS readout.
    * Flex-end keeps FPS anchored when the label is visible.
    */
@@ -121,6 +146,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   walletIconRef, 
   walletFlashActive = false,
   walletBurstCount = 0,
+  goldenPotWallet,
   onWalletClick,
   plantWallet,
   onGiftClick,
@@ -146,16 +172,21 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   onBoostClick,
   headerLeftWrapperRef,
   boostAreaMarginLeftOffset = 0,
+  boostAreaLayout = 'default',
   debugLastSpawnedGoalLevelRef = null,
   debugDiscoveryGoalsUntilRef = null,
 }) => {
   const isInteractive = !!walletRef;
   const boostRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const centerTitleRef = useRef<HTMLDivElement>(null);
+  const [afterCenterTitleBoostLeftPx, setAfterCenterTitleBoostLeftPx] = useState<number | null>(null);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const fpsButtonRef = useRef<HTMLButtonElement>(null);
   const prevBurstRef = useRef(walletBurstCount);
+  const prevGoldenPotBurstRef = useRef(goldenPotWallet?.burstCount ?? 0);
   const prevFlashRef = useRef(playerLevelFlashTrigger);
   const [bounceKey, setBounceKey] = useState(0);
+  const [goldenPotBounceKey, setGoldenPotBounceKey] = useState(0);
   const [progressBarFlash, setProgressBarFlash] = useState(false);
   const [fps, setFps] = useState(0);
   const [debugLastGoalLevel, setDebugLastGoalLevel] = useState(0);
@@ -226,6 +257,14 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
     }
     prevBurstRef.current = walletBurstCount;
   }, [walletBurstCount]);
+
+  useEffect(() => {
+    const burst = goldenPotWallet?.burstCount ?? 0;
+    if (burst > prevGoldenPotBurstRef.current) {
+      setGoldenPotBounceKey((k) => k + 1);
+    }
+    prevGoldenPotBurstRef.current = burst;
+  }, [goldenPotWallet?.burstCount]);
   useEffect(() => {
     if (playerLevelFlashTrigger > prevFlashRef.current) {
       setProgressBarFlash(true);
@@ -257,6 +296,68 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
 
   // Left/right cap width when scaled to fit height 44px (184 * 44/180 ≈ 45px)
   const capWidthPx = Math.round((LEFT_CAP_PX * 44) / SPRITE_H);
+  /** Golden pot right dock is collection-only; farm/store keep the locked fec7f0a dock layout. */
+  const showGoldenPotWallet = goldenPotWallet != null;
+  const goldenPotWalletReservePx = showGoldenPotWallet
+    ? Math.round(GOLDEN_POT_WALLET_RESERVE_PX * GOLDEN_POT_WALLET_SCALE) + GOLDEN_POT_WALLET_GAP_PX
+    : 0;
+  const baseRightDockReservePx = hideFpsReader
+    ? RIGHT_DOCK_RESERVE_PX_NO_FPS
+    : RIGHT_DOCK_RESERVE_PX_WITH_FPS;
+  const rightDockReservePx = baseRightDockReservePx + goldenPotWalletReservePx;
+  const fpsRightOffsetPx = FPS_RIGHT_OFFSET_PX + goldenPotWalletReservePx;
+  const settingsDockRightPx = showGoldenPotWallet
+    ? SETTINGS_DOCK_RIGHT_WITH_GOLDEN_POT_PX
+    : SETTINGS_DOCK_RIGHT_PX;
+  /** Farm/store boost strip (after level bar or store spacer). Collection omits level and has no boosts. */
+  const showBoostStrip = !omitPlayerLevelBlock || displayBoostCount > 0;
+  const useAfterCenterTitleBoosts = boostAreaLayout === 'afterCenterTitle' && !!centerTitle;
+
+  const measureAfterCenterTitleBoostLeft = useCallback(() => {
+    const titleEl = centerTitleRef.current;
+    const wrapperEl = headerLeftWrapperRef?.current;
+    if (!titleEl || !wrapperEl) return;
+    const titleRect = titleEl.getBoundingClientRect();
+    const wrapperRect = wrapperEl.getBoundingClientRect();
+    const scale = wrapperEl.offsetWidth > 0 ? wrapperRect.width / wrapperEl.offsetWidth : 1;
+    setAfterCenterTitleBoostLeftPx(
+      (titleRect.right + AFTER_CENTER_TITLE_BOOST_PAD_PX - wrapperRect.left) / scale,
+    );
+  }, [headerLeftWrapperRef]);
+
+  useLayoutEffect(() => {
+    if (!useAfterCenterTitleBoosts) {
+      setAfterCenterTitleBoostLeftPx(null);
+      return;
+    }
+    measureAfterCenterTitleBoostLeft();
+    window.addEventListener('resize', measureAfterCenterTitleBoostLeft);
+    const ro = new ResizeObserver(measureAfterCenterTitleBoostLeft);
+    if (centerTitleRef.current) ro.observe(centerTitleRef.current);
+    if (headerLeftWrapperRef?.current) ro.observe(headerLeftWrapperRef.current);
+    return () => {
+      window.removeEventListener('resize', measureAfterCenterTitleBoostLeft);
+      ro.disconnect();
+    };
+  }, [
+    useAfterCenterTitleBoosts,
+    centerTitle,
+    measureAfterCenterTitleBoostLeft,
+    displayBoostCount,
+    headerLeftWrapperRef,
+  ]);
+
+  const boostStripWidthPx =
+    displayBoostCount > 0
+      ? displayBoostCount * ACTIVE_BOOST_INDICATOR_SIZE_PX + (displayBoostCount - 1) * BOOST_GAP_PX
+      : activeBoostMinWidthPx ?? ACTIVE_BOOST_INDICATOR_SIZE_PX;
+
+  /** Store: same flex row / vertical alignment as farm; only marginLeft pushes past the title. */
+  const boostStripMarginLeftPx = useAfterCenterTitleBoosts
+    ? afterCenterTitleBoostLeftPx != null
+      ? Math.max(0, afterCenterTitleBoostLeftPx - WALLET_WIDTH_PX - HEADER_CLUSTER_GAP_PX)
+      : 0
+    : BOOST_STRIP_MARGIN_LEFT_PX + boostAreaMarginLeftOffset;
 
   return (
     <header
@@ -309,12 +410,13 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
           className={`relative z-10 flex w-full min-w-0 min-h-[44px] items-center py-2 ${headerRowPadLeftPx === undefined ? 'pl-3 pr-3' : 'pr-3'}`}
           style={{
             /* Reserve space for absolute FPS + settings dock — do not shrink the cluster with max-width/clip (that hid boosts 3–5 and clipped the coin icon). */
-            paddingRight: hideFpsReader ? RIGHT_DOCK_RESERVE_PX_NO_FPS : RIGHT_DOCK_RESERVE_PX_WITH_FPS,
+            paddingRight: rightDockReservePx,
             ...(headerRowPadLeftPx !== undefined ? { paddingLeft: headerRowPadLeftPx } : {}),
           }}
         >
           {centerTitle && (
             <div
+              ref={centerTitleRef}
               aria-hidden
               className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
               style={{
@@ -381,8 +483,9 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                 {formatMoney(money)}
               </span>
             </button>
-            {/* Store: invisible spacer same width as level bar so boost strip matches Farm X position. Farm: real level (opacity 0 during FTUE but still reserves width). */}
+            {/* Store (afterCenterTitle): no spacer — boosts sit right of the title. Farm: level bar or FTUE spacer. */}
             {!omitPlayerLevelBlock &&
+              !useAfterCenterTitleBoosts &&
               (collapsePlayerLevel && hidePlayerLevel ? (
                 <div
                   aria-hidden
@@ -462,18 +565,17 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                 </div>
               ))}
             {/* Active boosts: wallet/level sit outside this box so coin -ml-3 is never clipped; up to 5 icons (6+ use hidden timers). */}
+            {showBoostStrip && (
             <div
               ref={activeBoostAreaRef}
               className="relative flex flex-shrink-0 items-center overflow-visible boost-slide-container"
               style={{
-                marginLeft: -10 + boostAreaMarginLeftOffset,
+                marginLeft: boostStripMarginLeftPx,
                 height: 22,
                 minHeight: 22,
-                width:
-                  displayBoostCount > 0
-                    ? displayBoostCount * ACTIVE_BOOST_INDICATOR_SIZE_PX + (displayBoostCount - 1) * BOOST_GAP_PX
-                    : activeBoostMinWidthPx ?? ACTIVE_BOOST_INDICATOR_SIZE_PX,
-                ...(activeBoostMinWidthPx != null && displayBoostCount === 0 && { minWidth: activeBoostMinWidthPx }),
+                width: boostStripWidthPx,
+                ...(activeBoostMinWidthPx != null &&
+                  displayBoostCount === 0 && { minWidth: activeBoostMinWidthPx }),
               }}
             >
               {visibleBoostSlice.map((boost, index) => (
@@ -503,6 +605,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                 </div>
               ))}
             </div>
+            )}
           </>
         ) : plantWallet ? (
           <div className="relative flex items-center gap-1 bg-black/50 backdrop-blur-md pl-1 pr-2 py-1 rounded-full border-0 shadow-2xl overflow-hidden -ml-4">
@@ -554,7 +657,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
       {(!hideFpsReader || debugLastSpawnedGoalLevelRef || debugDiscoveryGoalsUntilRef) && (
         <div
           className="pointer-events-none absolute top-1/2 z-20 flex -translate-y-1/2 flex-row items-center justify-end gap-1.5"
-          style={{ right: FPS_RIGHT_OFFSET_PX }}
+          style={{ right: fpsRightOffsetPx }}
         >
           {debugDiscoveryGoalsUntilRef && (
             <span
@@ -595,7 +698,68 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
           )}
         </div>
       )}
-      <div className="absolute right-3 top-1/2 z-40 flex -translate-y-1/2 items-center">
+      <div
+        className={`absolute top-1/2 z-40 flex -translate-y-1/2 items-center${showGoldenPotWallet ? '' : ' right-3'}`}
+        style={
+          showGoldenPotWallet
+            ? { right: settingsDockRightPx, gap: GOLDEN_POT_WALLET_GAP_PX }
+            : undefined
+        }
+      >
+        {showGoldenPotWallet && (
+          <button
+            ref={goldenPotWallet.walletRef}
+            type="button"
+            className="relative inline-flex items-center justify-center rounded-full border outline-none shadow-2xl overflow-visible flex-shrink-0"
+            style={{
+              height: 22,
+              minWidth: 78,
+              marginLeft: 6,
+              backgroundColor: '#775041',
+              borderWidth: 1,
+              borderColor: '#e9dcaf',
+              transform: `scale(${GOLDEN_POT_WALLET_SCALE})`,
+              transformOrigin: 'right center',
+            }}
+            aria-label={`${goldenPotWallet.count} of ${goldenPotWallet.totalCount} golden pots`}
+          >
+            <div
+              className="absolute inset-0 rounded-full pointer-events-none transition-opacity duration-75 ease-out"
+              style={{
+                background: '#d2af7b',
+                opacity: goldenPotWallet.flashActive ? 1 : 0,
+              }}
+              aria-hidden
+            />
+            <span
+              ref={goldenPotWallet.walletIconRef}
+              className="absolute left-0 top-1/2 flex items-center justify-center leading-none -ml-3 pointer-events-none"
+              style={{ transform: 'translateY(calc(-50% + 1px))' }}
+              aria-hidden
+            >
+              <img
+                key={goldenPotBounceKey}
+                src={getGoldenPotWalletIconPath()}
+                alt=""
+                className={`object-contain object-left outline-none border-0 ${goldenPotBounceKey > 0 ? 'coin-bounce' : ''}`}
+                style={{
+                  width: GOLDEN_POT_WALLET_ICON_PX,
+                  height: GOLDEN_POT_WALLET_ICON_PX,
+                  outline: 'none',
+                  border: 'none',
+                }}
+                draggable={false}
+              />
+            </span>
+            <span
+              key={goldenPotBounceKey}
+              className={`relative font-black text-xs tracking-tight text-[#fcf0c7] whitespace-nowrap pl-[22px] pr-2 py-1 ${goldenPotBounceKey > 0 ? 'coin-text-bounce' : ''}`}
+              style={{ transformOrigin: 'center center' }}
+            >
+              {goldenPotWallet.count}/{goldenPotWallet.totalCount}
+            </span>
+          </button>
+        )}
         <button
           id="settings-gear-button"
           ref={settingsButtonRef}

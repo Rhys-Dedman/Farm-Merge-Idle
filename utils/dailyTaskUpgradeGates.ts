@@ -10,7 +10,6 @@ import {
   isPlotExpansionMaxed,
   isSurplusRechargesMaxed,
 } from '../components/UpgradeList';
-import { hasGoldenPotHarvest150, hasGoldenPotProduction150 } from '../constants/goldenPotBonuses';
 import { WILD_GROWTH_UNLOCK_PLAYER_LEVEL } from '../constants/playerLevelUnlocks';
 import { isWildGrowthMaxLevel, WILD_GROWTH_MAX_LEVEL } from './wildGrowth';
 
@@ -100,7 +99,7 @@ export function isUpgradeMaxedForDailyTasks(upgradeId: string, ctx: UpgradeGateC
   const level = getUpgradeLevel(upgradeId, ctx);
   switch (upgradeId) {
     case 'seed_production':
-      return level >= 9 || hasGoldenPotProduction150(ctx.goldenPotCount);
+      return level >= 9;
     case 'seed_surplus':
       return isSurplusRechargesMaxed(ctx.seedsState);
     case 'double_seeds':
@@ -108,7 +107,7 @@ export function isUpgradeMaxedForDailyTasks(upgradeId: string, ctx: UpgradeGateC
     case 'bonus_seeds':
       return isBonusSeedMaxed(ctx.seedsState);
     case 'harvest_speed':
-      return level >= 9 || hasGoldenPotHarvest150(ctx.goldenPotCount);
+      return level >= 9;
     case 'plot_expansion':
       return isPlotExpansionMaxed(ctx.lockedCellCount);
     case 'wild_growth':

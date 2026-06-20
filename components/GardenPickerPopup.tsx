@@ -3,7 +3,8 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { assetPath } from '../utils/assetPath';
-import { GARDEN_IDS, getGardenDisplayLabel, SHIPPED_GARDEN_IDS, type GardenId } from '../constants/gardens';
+import { getGardenDisplayLabel, SHIPPED_GARDEN_IDS, type GardenId } from '../constants/gardens';
+import { getGoldenPotCountRequiredForGarden } from '../constants/goldenPotBonuses';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
 import { PopupVectorBackground } from './PopupVectorBackground';
 
@@ -13,12 +14,16 @@ interface GardenPickerPopupProps {
   onUserDismiss?: () => void;
   activeGardenId: GardenId;
   onSelectGarden: (gardenId: GardenId) => void;
+  /** Gardens the player can switch to (garden 2 requires Fruit Garden golden pot bonus). */
+  selectableGardenIds: GardenId[];
   closeOnBackdropClick?: boolean;
   appScale?: number;
 }
 
 const POPUP_CLOSE_MS = 200;
 const HEADER_ICON = assetPath('/assets/icons/floating_buttons/icon_fb_gardens.png');
+const GOLDEN_POT_ICON = assetPath('/assets/icons/collection/icon_goldenpot.png');
+const GOLDEN_POT_REQUIREMENT_COLOR = '#915c22';
 
 const GARDEN_BTN = {
   selected: {
@@ -33,28 +38,38 @@ const GARDEN_BTN = {
     border: '#66a4c6',
     text: '#4580a8',
   },
+  locked: {
+    bg: '#d4c4a0',
+    pressedBg: '#d4c4a0',
+    border: '#b8a880',
+    text: '#8a7355',
+  },
 } as const;
 
 function gardenButtonStyle(
   selected: boolean,
+  locked: boolean,
   pressed: boolean,
 ): React.CSSProperties {
-  const p = selected ? GARDEN_BTN.selected : GARDEN_BTN.unselected;
+  const p = locked ? GARDEN_BTN.locked : selected ? GARDEN_BTN.selected : GARDEN_BTN.unselected;
   return {
     width: '360px',
     height: '80px',
-    backgroundColor: pressed ? p.pressedBg : p.bg,
+    backgroundColor: pressed && !locked ? p.pressedBg : p.bg,
     border: `4px solid ${p.border}`,
     borderRadius: '24px',
-    boxShadow: pressed
-      ? 'inset 0 4px 8px rgba(0,0,0,0.15)'
-      : `0 8px 0 ${p.border}, 0 12px 24px rgba(0,0,0,0.15)`,
-    transform: pressed ? 'translateY(4px)' : 'translateY(0)',
+    boxShadow:
+      locked || pressed
+        ? 'inset 0 4px 8px rgba(0,0,0,0.12)'
+        : `0 8px 0 ${p.border}, 0 12px 24px rgba(0,0,0,0.15)`,
+    transform: pressed && !locked ? 'translateY(4px)' : 'translateY(0)',
+    cursor: locked ? 'default' : 'pointer',
+    opacity: locked ? 0.92 : 1,
   };
 }
 
-function gardenButtonLabelStyle(selected: boolean): React.CSSProperties {
-  const p = selected ? GARDEN_BTN.selected : GARDEN_BTN.unselected;
+function gardenButtonLabelStyle(selected: boolean, locked: boolean): React.CSSProperties {
+  const p = locked ? GARDEN_BTN.locked : selected ? GARDEN_BTN.selected : GARDEN_BTN.unselected;
   return {
     color: p.text,
     fontFamily: 'Inter, sans-serif',
@@ -69,6 +84,7 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
   onUserDismiss,
   activeGardenId,
   onSelectGarden,
+  selectableGardenIds,
   closeOnBackdropClick = true,
   appScale = 1,
 }) => {
@@ -240,20 +256,59 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
                 <div className="flex flex-col items-center gap-4 w-full">
                   {SHIPPED_GARDEN_IDS.map((gardenId) => {
                     const selected = gardenId === activeGardenId;
+                    const isSelectable = selectableGardenIds.includes(gardenId);
+                    const goldenPotRequired = getGoldenPotCountRequiredForGarden(gardenId);
+                    const locked = !isSelectable && goldenPotRequired != null;
                     return (
                       <button
                         key={gardenId}
                         type="button"
-                        onMouseDown={() => setPressedId(gardenId)}
+                        aria-disabled={locked || undefined}
+                        aria-label={
+                          locked && goldenPotRequired != null
+                            ? `${getGardenDisplayLabel(gardenId)}, unlock at ${goldenPotRequired} golden pots`
+                            : getGardenDisplayLabel(gardenId)
+                        }
+                        onMouseDown={() => {
+                          if (!locked) setPressedId(gardenId);
+                        }}
                         onMouseUp={() => setPressedId(null)}
                         onMouseLeave={() => setPressedId(null)}
-                        onClick={() => onSelectGarden(gardenId)}
+                        onClick={() => {
+                          if (locked) return;
+                          onSelectGarden(gardenId);
+                        }}
                         className="relative flex items-center justify-center rounded-xl transition-all"
-                        style={gardenButtonStyle(selected, pressedId === gardenId)}
+                        style={gardenButtonStyle(selected, locked, pressedId === gardenId)}
                       >
-                        <span className="font-bold tracking-tight" style={gardenButtonLabelStyle(selected)}>
+                        <span className="font-bold tracking-tight" style={gardenButtonLabelStyle(selected, locked)}>
                           {getGardenDisplayLabel(gardenId)}
                         </span>
+                        {locked && goldenPotRequired != null && (
+                          <div
+                            className="absolute flex items-center justify-center gap-2"
+                            style={{ right: '20px', top: '50%', transform: 'translateY(-50%)' }}
+                            aria-hidden
+                          >
+                            <img
+                              src={GOLDEN_POT_ICON}
+                              alt=""
+                              className="object-contain shrink-0"
+                              style={{ width: '36px', height: '36px' }}
+                            />
+                            <span
+                              className="font-bold tabular-nums leading-none"
+                              style={{
+                                color: GOLDEN_POT_REQUIREMENT_COLOR,
+                                fontFamily: 'Inter, sans-serif',
+                                fontSize: '1.75rem',
+                                letterSpacing: '-0.04em',
+                              }}
+                            >
+                              {goldenPotRequired}
+                            </span>
+                          </div>
+                        )}
                       </button>
                     );
                   })}

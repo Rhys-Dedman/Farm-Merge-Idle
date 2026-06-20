@@ -181,6 +181,12 @@ export interface GameSaveV1 {
   wildGrowthAccumulatorMs?: number;
   /** Shed shelves unlocked (6); missing on old saves → treated as all true in loader. */
   barnShelvesUnlocked: boolean[];
+  /** Local day key when daily store allowance was claimed in this garden. */
+  dailyAllowanceClaimedDayKey?: string;
+  /** Per-garden store free-offer ids (slot 0 may show allowance before these apply). */
+  storeFreeOfferSlots?: [string, string];
+  /** Per-garden store slot cooldown end timestamps (ms). */
+  storeSlotCooldownEnds?: [number, number];
 }
 
 /** Best-effort when `goalDiscoveryLightGreenActive` missing (undiscovered tier === highest + 1 only). */

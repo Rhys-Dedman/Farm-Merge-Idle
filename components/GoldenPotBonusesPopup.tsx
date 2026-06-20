@@ -12,6 +12,13 @@ import {
   REWARD_PILL_STROKE_COLOR,
   REWARD_PILL_STROKE_WIDTH_PX,
 } from './Reward';
+import {
+  GOLDEN_POT_BONUS_TIER_THRESHOLDS,
+  GOLDEN_POT_BONUS_TIERS,
+  getGoldenPotBonusIconSlugForPotCount,
+} from '../constants/goldenPotBonuses';
+import { getCollectionBonusIconPath } from '../utils/gardenAssets';
+import { COLLECTION_PLANT_COUNT } from '../constants/barnShelves';
 
 const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_green_1.png'), assetPath('/assets/vfx/particle_leaf_green_2.png')];
 
@@ -136,6 +143,8 @@ function createBonusRowPillLeaves(idBase: number): RowBurstLeaf[] {
 
 const POPUP_WIDTH = 260;
 const POPUP_HEIGHT = 320;
+/** Flex center follows collapsed 0.5× layout height; nudge up so the card reads visually centered. */
+const GOLDEN_POT_BONUSES_POPUP_CENTER_NUDGE_Y_PX = -96;
 
 function createPopupLeaves(): LeafParticle[] {
   return Array.from({ length: POPUP_LEAF_COUNT }, (_, i) => {
@@ -182,25 +191,52 @@ function createPopupLeaves(): LeafParticle[] {
 
 const SUBTITLE_COLOR = '#5c4a32';
 
-/** Left column tier number (scaled inner coords). */
-const BONUS_TIER_NUMBER_REM = 1.25;
+/** Tier pot count on locked rows (scaled inner coords). */
+const BONUS_TIER_NUMBER_REM = 1.4;
+const BONUS_TIER_NUMBER_COLOR = '#915c22';
+const BONUS_TIER_NUMBER_LETTER_SPACING_EM = -0.08;
+const BONUS_ROW_REWARD_ICON_PX = 56;
+const BONUS_ROW_REWARD_ICON_LEFT = 'calc(3% + 9px)';
+const BONUS_ROW_DESC_BOX_WIDTH_PX = 318;
+const BONUS_ROW_DESC_BOX_OFFSET_Y_PX = 4;
+const BONUS_ROW_DESC_TITLE_HEIGHT_PX = 45;
+const BONUS_ROW_DESC_SUBTITLE_HEIGHT_PX = 25;
+const BONUS_ROW_DESC_TITLE_FONT_REM = 2.1;
+const BONUS_ROW_DESC_SUBTITLE_FONT_REM = 1.55;
+const BONUS_ENABLED_TITLE_COLOR = '#62863b';
+const BONUS_ENABLED_SUBTITLE_COLOR = '#9eb643';
+const BONUS_LOCKED_TITLE_COLOR = '#765041';
+const BONUS_LOCKED_SUBTITLE_COLOR = '#c6b280';
 
-import { MAX_PLANT_TIER } from '../constants/plants';
+const GOLD_POT_BONUS_TIERS_DISPLAY = GOLDEN_POT_BONUS_TIERS.map((tier, i) => ({
+  ...tier,
+  displayKey: `golden-pot-bonus-row-${i}`,
+}));
 
-/** Display order: 4 golden pots at top → max tier at bottom (matches `constants/goldenPotBonuses` thresholds). */
-const GOLD_POT_BONUS_TIERS: readonly { potCount: number; description: string }[] = [
-  { potCount: 4, description: '4th Order Slot' },
-  { potCount: 8, description: '2x Offline Earnings' },
-  { potCount: 12, description: '2x Merge Coins' },
-  { potCount: 16, description: '150% Production' },
-  { potCount: 18, description: '150% Harvest' },
-  { potCount: MAX_PLANT_TIER, description: 'Auto Merge' },
-];
+function getCompletedGoldenPotBonusCount(goldenPotCount: number): number {
+  return GOLDEN_POT_BONUS_TIER_THRESHOLDS.filter((threshold) => goldenPotCount >= threshold).length;
+}
 
-const BONUS_DISABLED_NUMBER_COLOR = '#dcc999';
-const BONUS_DISABLED_DESC_COLOR = '#c7b381';
-const BONUS_ENABLED_NUMBER_COLOR = '#9fb744';
-const BONUS_ENABLED_DESC_COLOR = '#62873b';
+/** Bonus row sprite is 606×86; full row width in prescale coords (panel frame can be wider). */
+const BONUS_ROW_DISPLAY_WIDTH_PX = 520;
+const BONUS_LIST_PANEL_PAD_X_PX = 10;
+const BONUS_LIST_PANEL_PAD_Y_PX = 10;
+const BONUS_LIST_PANEL_WIDTH_PX = BONUS_ROW_DISPLAY_WIDTH_PX + BONUS_LIST_PANEL_PAD_X_PX * 2;
+const BONUS_ROW_IMAGE_ASPECT = 86 / 606;
+const BONUS_ROW_HEIGHT_PX = Math.round(BONUS_ROW_DISPLAY_WIDTH_PX * BONUS_ROW_IMAGE_ASPECT);
+const BONUS_ROW_GAP_PX = 10;
+const BONUS_ROWS_VISIBLE = 4.5;
+const BONUS_LIST_SCROLL_ROWS_HEIGHT_PX = Math.round(
+  BONUS_ROWS_VISIBLE * BONUS_ROW_HEIGHT_PX + (Math.ceil(BONUS_ROWS_VISIBLE) - 1) * BONUS_ROW_GAP_PX
+);
+/** Viewport height: 4.5 rows plus inset gaps inside the clip (padding lives on the scroller). */
+const BONUS_LIST_SCROLL_VIEWPORT_HEIGHT_PX =
+  BONUS_LIST_SCROLL_ROWS_HEIGHT_PX + BONUS_LIST_PANEL_PAD_Y_PX * 2;
+/** Scroll panel — cream fill with matching outline. */
+const BONUS_LIST_PANEL_FILL = '#f4e6b9';
+const BONUS_LIST_PANEL_STROKE = '#e9dcaf';
+const BONUS_LIST_PANEL_STROKE_PX = 3;
+const BONUS_LIST_PANEL_RADIUS_PX = 36;
 
 const BONUS_ROW_REVEAL_DELAY_MS = 250;
 
@@ -209,7 +245,7 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
   onClose,
   onUserDismiss,
   goldenPotCount,
-  maxGoldenPots = MAX_PLANT_TIER,
+  maxGoldenPots = COLLECTION_PLANT_COUNT,
   appScale = 1,
   revealTierPotCount = null,
 }) => {
@@ -230,6 +266,7 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
   const popupCardLayoutRef = useRef<HTMLDivElement>(null);
 
   const clampedCount = Math.max(0, Math.min(maxGoldenPots, goldenPotCount));
+  const completedBonusCount = getCompletedGoldenPotBonusCount(clampedCount);
   const countLabel = `${clampedCount}/${maxGoldenPots}`;
 
   useEffect(() => {
@@ -395,7 +432,7 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
       <div
         className="relative flex items-center justify-center"
         style={{
-          transform: `translateY(-32px) scale(${appScale})`,
+          transform: `translateY(${GOLDEN_POT_BONUSES_POPUP_CENTER_NUDGE_Y_PX}px) scale(${appScale})`,
           transformOrigin: 'center center',
         }}
       >
@@ -486,6 +523,15 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
                 transform: translate(-50%, -50%) translate(var(--dx, 0px), var(--dy, 0px))
                   rotate(calc(var(--leaf-rot, 0deg) + 100deg)) scale(0.48);
               }
+            }
+            .golden-pot-bonus-list-scroll {
+              -webkit-overflow-scrolling: touch;
+              overscroll-behavior: contain;
+              scrollbar-width: none;
+              -ms-overflow-style: none;
+            }
+            .golden-pot-bonus-list-scroll::-webkit-scrollbar {
+              display: none;
             }
           `}</style>
 
@@ -605,33 +651,53 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
                 </div>
 
                 <div
-                  className="flex w-full flex-col"
-                  style={{ marginTop: '28px', maxWidth: '520px', gap: '10px' }}
+                  style={{
+                    marginTop: '28px',
+                    width: `${BONUS_LIST_PANEL_WIDTH_PX}px`,
+                    paddingLeft: `${BONUS_LIST_PANEL_PAD_X_PX}px`,
+                    paddingRight: `${BONUS_LIST_PANEL_PAD_X_PX}px`,
+                    boxSizing: 'border-box',
+                    backgroundColor: BONUS_LIST_PANEL_FILL,
+                    borderRadius: `${BONUS_LIST_PANEL_RADIUS_PX}px`,
+                    boxShadow: `0 0 0 ${BONUS_LIST_PANEL_STROKE_PX}px ${BONUS_LIST_PANEL_STROKE}`,
+                    overflow: 'hidden',
+                  }}
+                  aria-label="Golden pot bonuses"
                 >
-                  {GOLD_POT_BONUS_TIERS.map((tier) => {
-                    const unlockedByCount = clampedCount >= tier.potCount;
+                  <div
+                    className="golden-pot-bonus-list-scroll flex flex-col overflow-y-auto overflow-x-hidden"
+                    style={{
+                      width: `${BONUS_ROW_DISPLAY_WIDTH_PX}px`,
+                      maxHeight: `${BONUS_LIST_SCROLL_VIEWPORT_HEIGHT_PX}px`,
+                      paddingTop: `${BONUS_LIST_PANEL_PAD_Y_PX}px`,
+                      paddingBottom: `${BONUS_LIST_PANEL_PAD_Y_PX}px`,
+                      boxSizing: 'border-box',
+                      gap: `${BONUS_ROW_GAP_PX}px`,
+                    }}
+                  >
+                  {GOLD_POT_BONUS_TIERS_DISPLAY.map((tier, tierIndex) => {
+                    const rowIsCompleted = tierIndex < completedBonusCount;
                     const isStagedRevealRow =
                       revealTierPotCount != null &&
                       revealTierPotCount === tier.potCount &&
-                      unlockedByCount;
-                    const showAsUnlocked = unlockedByCount && (!isStagedRevealRow || tierRevealArmed);
+                      tierIndex === completedBonusCount - 1;
+                    const showAsUnlocked = rowIsCompleted && (!isStagedRevealRow || tierRevealArmed);
+                    const rewardIconSrc = getCollectionBonusIconPath(
+                      getGoldenPotBonusIconSlugForPotCount(tier.potCount)
+                    );
                     const bonusSprite = showAsUnlocked
                       ? assetPath('/assets/ui/popup_bonuses_enabled.png')
                       : assetPath('/assets/ui/popup_bonuses_disabled.png');
-                    const numberColor = showAsUnlocked ? BONUS_ENABLED_NUMBER_COLOR : BONUS_DISABLED_NUMBER_COLOR;
-                    const descColor = showAsUnlocked ? BONUS_ENABLED_DESC_COLOR : BONUS_DISABLED_DESC_COLOR;
+                    const titleColor = showAsUnlocked ? BONUS_ENABLED_TITLE_COLOR : BONUS_LOCKED_TITLE_COLOR;
+                    const subtitleColor = showAsUnlocked ? BONUS_ENABLED_SUBTITLE_COLOR : BONUS_LOCKED_SUBTITLE_COLOR;
                     const playRowPop = isStagedRevealRow && tierRevealArmed;
                     return (
                       <div
-                        key={tier.potCount}
+                        key={tier.displayKey}
                         className="relative w-full shrink-0 overflow-visible"
-                        style={
-                          playRowPop
-                            ? { animation: 'bonusTierRevealPop 420ms ease-out' }
-                            : undefined
-                        }
+                        style={playRowPop ? { animation: 'bonusTierRevealPop 420ms ease-out' } : undefined}
                       >
-                        {tier.potCount === revealTierPotCount && rowBurstLeaves.length > 0 && (
+                        {isStagedRevealRow && rowBurstLeaves.length > 0 && (
                           <div
                             className="pointer-events-none absolute inset-0 z-10 overflow-visible"
                             aria-hidden
@@ -664,47 +730,89 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
                           className="block h-auto w-full object-contain pointer-events-none"
                           draggable={false}
                         />
-                        {/* Same %-of-sprite positioning as the original single bonus row */}
                         <div
-                          className="pointer-events-none absolute flex items-center justify-center rounded-lg font-black box-border text-center"
+                          className="pointer-events-none absolute flex items-center justify-center"
                           style={{
-                            left: 'calc(2% + 10px)',
-                            top: 'calc(22% + 9px)',
-                            padding: '10px 13px',
-                            width: '3.45rem',
-                            maxWidth: '3.45rem',
-                            backgroundColor: 'transparent',
-                            color: numberColor,
-                            fontFamily: 'Inter, sans-serif',
-                            fontSize: `${BONUS_TIER_NUMBER_REM}rem`,
-                            lineHeight: 1,
+                            left: BONUS_ROW_REWARD_ICON_LEFT,
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            width: `${BONUS_ROW_REWARD_ICON_PX}px`,
+                            height: `${BONUS_ROW_REWARD_ICON_PX}px`,
                           }}
                         >
-                          {tier.potCount}
+                          <img
+                            src={rewardIconSrc}
+                            alt=""
+                            className="h-full w-full object-contain"
+                            draggable={false}
+                          />
                         </div>
+                        {!showAsUnlocked && (
+                          <div
+                            className="pointer-events-none absolute flex items-center justify-center rounded-lg font-bold box-border text-center"
+                            style={{
+                              right: 'calc(4% + 4px)',
+                              top: 'calc(22% + 12px)',
+                              padding: '10px 13px',
+                              width: '3.45rem',
+                              maxWidth: '3.45rem',
+                              backgroundColor: 'transparent',
+                              color: BONUS_TIER_NUMBER_COLOR,
+                              fontFamily: 'Inter, sans-serif',
+                              fontSize: `${BONUS_TIER_NUMBER_REM}rem`,
+                              letterSpacing: `${BONUS_TIER_NUMBER_LETTER_SPACING_EM}em`,
+                              lineHeight: 1,
+                            }}
+                          >
+                            {tier.potCount}
+                          </div>
+                        )}
                         <div
-                          className="pointer-events-none absolute flex items-center justify-center rounded-lg font-bold text-center box-border overflow-hidden"
+                          className="pointer-events-none absolute flex flex-col box-border overflow-hidden"
                           style={{
-                            top: 'calc(26% - 8px)',
-                            right: 'calc(22% - 45px)',
-                            maxWidth: '68.64%',
-                            width: '68.64%',
-                            padding: '10px 16px',
-                            backgroundColor: 'transparent',
-                            fontFamily: 'Inter, sans-serif',
-                            lineHeight: 1.15,
+                            left: '50%',
+                            top: '50%',
+                            transform: `translate(-50%, calc(-50% - ${BONUS_ROW_DESC_BOX_OFFSET_Y_PX}px))`,
+                            width: `${BONUS_ROW_DESC_BOX_WIDTH_PX}px`,
                           }}
                         >
-                          <span
-                            className="block w-full min-w-0 whitespace-nowrap text-center"
-                            style={{ fontSize: '1.75rem', color: descColor }}
+                          <div
+                            className="flex w-full items-center justify-start overflow-hidden"
+                            style={{
+                              height: `${BONUS_ROW_DESC_TITLE_HEIGHT_PX}px`,
+                              paddingTop: '1px',
+                              fontFamily: 'Inter, sans-serif',
+                              lineHeight: 1,
+                            }}
                           >
-                            {tier.description}
-                          </span>
+                            <span
+                              className="block w-full min-w-0 whitespace-nowrap text-left font-bold"
+                              style={{ fontSize: `${BONUS_ROW_DESC_TITLE_FONT_REM}rem`, color: titleColor }}
+                            >
+                              {tier.title}
+                            </span>
+                          </div>
+                          <div
+                            className="flex w-full items-center justify-start overflow-hidden"
+                            style={{
+                              height: `${BONUS_ROW_DESC_SUBTITLE_HEIGHT_PX}px`,
+                              marginTop: '-1px',
+                              fontFamily: 'Inter, sans-serif',
+                              lineHeight: 1,
+                            }}
+                          >
+                            <span
+                              className="block w-full min-w-0 whitespace-nowrap text-left font-medium"
+                              style={{ fontSize: `${BONUS_ROW_DESC_SUBTITLE_FONT_REM}rem`, color: subtitleColor }}
+                            >
+                              {tier.subtitle}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     );
                   })}
+                  </div>
                 </div>
               </div>
             </div>

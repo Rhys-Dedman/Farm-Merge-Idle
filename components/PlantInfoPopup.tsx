@@ -44,8 +44,10 @@ interface PlantInfoPopupProps {
     coinCost: number;
     canAfford: boolean;
     isUnlocked?: boolean;
-    onPurchase: () => void;
+    onPurchase: (startPoint: { x: number; y: number }) => void;
   };
+  /** Per-garden coin balance shown top-left (does not affect main header wallet). */
+  coinWalletMoney?: number;
   /** Collection FTUE: no X, backdrop does not dismiss — player must use Golden Pot button. */
   restrictClose?: boolean;
 }
@@ -57,6 +59,13 @@ const POPUP_WIDTH = 280;
 const POPUP_HEIGHT = 260;
 const POPUP_LEAF_Y_OFFSET = -15;
 const POPUP_CLOSE_MS = 200;
+
+const formatWalletMoney = (amount: number | null | undefined): string => {
+  const n = amount != null && typeof amount === 'number' && Number.isFinite(amount) ? amount : 0;
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+  return String(n);
+};
 
 function createPopupLeaves(): LeafParticle[] {
   return Array.from({ length: POPUP_LEAF_COUNT }, (_, i) => {
@@ -114,6 +123,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
   appScale = 1,
   masteryUnlock,
   restrictClose = false,
+  coinWalletMoney,
 }) => {
   const [animState, setAnimState] = useState<PopupAnimWithPreflight>('hidden');
   const [assetsReady, setAssetsReady] = useState(false);
@@ -125,6 +135,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
   const leafStartTimeRef = useRef<number>(0);
   const leafPosRef = useRef<{ x: number; y: number; vx: number; vy: number; opacity: number; rotation: number; scale: number; started: boolean }[]>([]);
   const popupCardLayoutRef = useRef<HTMLDivElement>(null);
+  const masteryButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!isVisible) {
@@ -477,7 +488,9 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
                     const buttonTextColor = isMasteryUnlocked ? '#a68e64' : (canAfford ? '#587e26' : '#a68e64');
                     return (
                   <button
+                    ref={masteryButtonRef}
                     type="button"
+                    disabled={isMasteryUnlocked}
                     onMouseDown={() => canAfford && !isMasteryUnlocked && setMasteryButtonPressed(true)}
                     onMouseUp={() => setMasteryButtonPressed(false)}
                     onMouseLeave={() => setMasteryButtonPressed(false)}
@@ -485,7 +498,11 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
                       e.stopPropagation();
                       setMasteryButtonPressed(false);
                       if (!canAfford || isMasteryUnlocked) return;
-                      masteryUnlock.onPurchase();
+                      const rect = masteryButtonRef.current?.getBoundingClientRect();
+                      const startPoint = rect
+                        ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+                        : { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+                      masteryUnlock.onPurchase(startPoint);
                     }}
                     className="relative flex select-none items-center justify-center gap-3 rounded-xl font-bold tracking-tight transition-all"
                     style={{
@@ -508,21 +525,21 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
                       fontSize: '2rem',
                       lineHeight: 1.1,
                       textShadow: '0 2px 0 rgba(255,255,255,0.3)',
-                      cursor: canAfford && !isMasteryUnlocked ? 'pointer' : 'default',
-                      opacity: 1,
+                      cursor: isMasteryUnlocked ? 'default' : canAfford ? 'pointer' : 'default',
+                      opacity: isMasteryUnlocked ? 0.85 : 1,
                       WebkitTapHighlightColor: 'transparent',
                     }}
                   >
                     {isMasteryUnlocked ? (
-                      <span>Golden Pot Aquired</span>
+                      <span>Golden Pot Acquired</span>
                     ) : (
                       <>
-                        <span>Golden Pot</span>
+                        <span>Upgrade</span>
                         <img
-                          src={getGardenCoinIconPath()}
+                          src={getGardenCoinIconPath(gardenId)}
                           alt=""
                           className="object-contain shrink-0"
-                          style={{ width: 40, height: 40 }}
+                          style={{ width: 40, height: 40, transform: 'scale(1.2)' }}
                           draggable={false}
                         />
                         <span>{masteryUnlock.coinCost === 0 ? 'FREE' : formatCompactNumber(masteryUnlock.coinCost)}</span>
@@ -536,6 +553,41 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Coin wallet — top-left, mirrors close X on top-right */}
+        {coinWalletMoney != null && (
+          <div
+            className="absolute top-[56px] left-8 pointer-events-none"
+            style={{ zIndex: 105 }}
+          >
+            <div
+              className="relative inline-flex items-center h-[22px] rounded-full border shadow-2xl overflow-visible w-fit min-w-0"
+              style={{
+                backgroundColor: '#775041',
+                borderWidth: 1,
+                borderColor: '#e9dcaf',
+              }}
+            >
+              <span
+                className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center justify-center leading-none -ml-3 pointer-events-none"
+                aria-hidden
+              >
+                <img
+                  src={getGardenCoinIconPath(gardenId)}
+                  alt=""
+                  className="w-[30px] h-[30px] object-contain object-left outline-none border-0"
+                  style={{ outline: 'none', border: 'none' }}
+                />
+              </span>
+              <span
+                className="relative font-black text-xs tracking-tight text-[#fcf0c7] whitespace-nowrap pl-[20px] pr-3 py-1"
+                style={{ transformOrigin: 'center center' }}
+              >
+                {formatWalletMoney(coinWalletMoney)}
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Close Button - X */}
         {!restrictClose && (

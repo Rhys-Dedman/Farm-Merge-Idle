@@ -52,7 +52,32 @@ import {
 import { getCropYieldPerHarvest } from '../components/UpgradeList';
 import { getLevelUpTaskSlot } from './playerLevelGoals';
 import { getGoalIconForPlantLevel } from './plantGoalIcons';
-import { getDailyTaskSlotRewardCoins } from './dailyTaskRewards';
+import { getDailyTaskRewardCoins } from './dailyTaskRewards';
+import { hasGoldenPotExtraTasks } from '../constants/goldenPotBonuses';
+
+export type DailyTaskSlot = 1 | 2 | 3 | 4;
+
+/** Reward + roll rules tier (extra slot 4 mirrors slot 2). */
+export function getDailyTaskSlotTier(slot: DailyTaskSlot): 1 | 2 | 3 {
+  return slot === 4 ? 2 : slot;
+}
+
+const DAILY_TASK_DISPLAY_ORDER: Record<DailyTaskSlot, number> = {
+  1: 0,
+  2: 1,
+  4: 2,
+  3: 3,
+};
+
+function sortTasksForDisplay(tasks: DailyTaskInstanceState[]): DailyTaskInstanceState[] {
+  return [...tasks].sort(
+    (a, b) => DAILY_TASK_DISPLAY_ORDER[a.slot] - DAILY_TASK_DISPLAY_ORDER[b.slot],
+  );
+}
+
+function hasExtraDailyTaskSlot(ctx: DailyTaskRollContext): boolean {
+  return hasGoldenPotExtraTasks(ctx.globalGoldenPotCount ?? 0);
+}
 
 /** @deprecated Use per-garden keys via `getDailyTasksDayStateStorageKey`. */
 export const DAILY_TASKS_DAY_STATE_KEY = DAILY_TASKS_DAY_STATE_LEGACY_KEY;
@@ -352,6 +377,8 @@ export interface DailyTaskRollContext extends UpgradeGateContext {
   maxPlantTier: number;
   playerLevelProgress: number;
   plantMasteryUnlockPendingCount: number;
+  /** Account-wide golden pot count (max across gardens); drives Daily Rewards 2×. */
+  globalGoldenPotCount?: number;
 }
 
 export function getGardenPlotStats(grid: BoardCell[]): GardenPlotStats {
@@ -394,7 +421,7 @@ export function playerHasUndiscoveredPlants(
 export interface DailyTaskInstanceState {
   instanceId: string;
   templateId: DailyTaskPoolId;
-  slot: 1 | 2 | 3;
+  slot: DailyTaskSlot;
   progress: number;
   target: number;
   claimed: boolean;
@@ -537,23 +564,24 @@ function rowState(task: DailyTaskInstanceState): DailyTaskRowState {
 
 function resolveTarget(
   templateId: DailyTaskPoolId,
-  slot: 1 | 2 | 3,
+  slot: DailyTaskSlot,
   ctx: DailyTaskRollContext,
 ): number {
+  const slotTier = getDailyTaskSlotTier(slot);
   if (SINGLE_COUNT_TASKS.has(templateId)) return 1;
   if (templateId === 'seed_rush') return SEED_RUSH_TARGET;
   if (templateId === 'order_rush') return ORDER_RUSH_TARGET;
-  if (templateId === 'merge_only_order') return slot;
+  if (templateId === 'merge_only_order') return slotTier;
   if (templateId === 'fill_garden_seeds') return Math.max(1, ctx.stats.unlockedPlotCount);
   if (templateId === 'harvest_crops') {
     const cropYield = getCropYieldPerHarvest(ctx.cropsState);
-    return HARVEST_CROPS_BASE_BY_SLOT[slot - 1] * cropYield;
+    return HARVEST_CROPS_BASE_BY_SLOT[slotTier - 1] * cropYield;
   }
   if (templateId === 'create_specific_plant') {
-    return GROW_PLANTS_TARGETS_BY_SLOT[slot - 1];
+    return GROW_PLANTS_TARGETS_BY_SLOT[slotTier - 1];
   }
   const qty = QUANTITY_BY_SLOT[templateId as keyof typeof QUANTITY_BY_SLOT];
-  return qty[slot - 1];
+  return qty[slotTier - 1];
 }
 
 function isGardenFull(stats: GardenPlotStats): boolean {
@@ -586,20 +614,21 @@ function rollPoolForContext(
 
 function canRollUpgradeTemplate(
   templateId: DailyTaskPoolId,
-  slot: 1 | 2 | 3,
+  slot: DailyTaskSlot,
   ctx: DailyTaskRollContext,
 ): boolean {
+  const slotTier = getDailyTaskSlotTier(slot);
   switch (templateId) {
     case 'purchase_upgrade':
-      return canRollPurchaseUpgradeTask(slot, ctx);
+      return canRollPurchaseUpgradeTask(slotTier, ctx);
     case 'expand_garden_slot':
-      return slot === 2 && canRollExpandGardenTask(ctx);
+      return slotTier === 2 && canRollExpandGardenTask(ctx);
     case 'upgrade_harvest_tab':
-      return canRollTabUpgradeTask('HARVEST', slot, ctx);
+      return canRollTabUpgradeTask('HARVEST', slotTier, ctx);
     case 'upgrade_crops_tab':
-      return canRollTabUpgradeTask('CROPS', slot, ctx);
+      return canRollTabUpgradeTask('CROPS', slotTier, ctx);
     case 'upgrade_seeds_tab':
-      return canRollTabUpgradeTask('SEEDS', slot, ctx);
+      return canRollTabUpgradeTask('SEEDS', slotTier, ctx);
     default:
       return true;
   }
@@ -607,7 +636,7 @@ function canRollUpgradeTemplate(
 
 function eligibleForSlot(
   templateId: DailyTaskPoolId,
-  slot: 1 | 2 | 3,
+  slot: DailyTaskSlot,
   picked: Set<string>,
   pickedCategories: Set<DailyTaskCatalogCategory>,
   pickedIcons: Set<string>,
@@ -619,6 +648,7 @@ function eligibleForSlot(
   allowDuplicateIcon: boolean,
   lastGrowPlantLevel?: number,
 ): boolean {
+  const slotTier = getDailyTaskSlotTier(slot);
   if (hardExcludeTemplateIds.has(templateId)) return false;
   if (picked.has(templateId)) return false;
   if (!allowDuplicateCategory && pickedCategories.has(getTemplateCategory(templateId))) return false;
@@ -629,9 +659,9 @@ function eligibleForSlot(
   ) {
     return false;
   }
-  if (slot > 1 && SLOT_1_ONLY.has(templateId)) return false;
-  if (slot !== 2 && SLOT_2_ONLY.has(templateId)) return false;
-  if (slot !== 3 && SLOT_3_ONLY.has(templateId)) return false;
+  if (slotTier > 1 && SLOT_1_ONLY.has(templateId)) return false;
+  if (slotTier !== 2 && SLOT_2_ONLY.has(templateId)) return false;
+  if (slotTier !== 3 && SLOT_3_ONLY.has(templateId)) return false;
   if (templateId === 'fill_garden_seeds' && isGardenFull(ctx.stats)) return false;
   if (
     templateId === 'discover_plant' &&
@@ -643,7 +673,7 @@ function eligibleForSlot(
     if (!canRollUpgradeTemplate(templateId, slot, ctx)) return false;
   }
   if (templateId === 'level_up') {
-    if (slot !== getLevelUpTaskSlot(ctx.playerLevel, ctx.playerLevelProgress)) return false;
+    if (slotTier !== getLevelUpTaskSlot(ctx.playerLevel, ctx.playerLevelProgress)) return false;
   }
   if (templateId === 'merge_specific_plant' && !canRollPlantTargetDailyTask(ctx.highestPlantEver)) {
     return false;
@@ -667,7 +697,7 @@ function eligibleForSlot(
 }
 
 function pickTemplateForSlot(
-  slot: 1 | 2 | 3,
+  slot: DailyTaskSlot,
   picked: Set<string>,
   pickedCategories: Set<DailyTaskCatalogCategory>,
   pickedIcons: Set<string>,
@@ -721,6 +751,72 @@ function pickTemplateForSlot(
   return pickWeightedTemplate(pool);
 }
 
+function buildRollSlots(ctx: DailyTaskRollContext): DailyTaskSlot[] {
+  return hasExtraDailyTaskSlot(ctx) ? [1, 2, 4, 3] : [1, 2, 3];
+}
+
+function rollTaskForSlot(
+  slot: DailyTaskSlot,
+  picked: Set<string>,
+  pickedCategories: Set<DailyTaskCatalogCategory>,
+  pickedIcons: Set<string>,
+  exclude: Set<string>,
+  hardExcludeTemplateIds: Set<string>,
+  ctx: DailyTaskRollContext,
+  lastGrowPlantLevel?: number,
+): DailyTaskInstanceState {
+  const templateId = pickTemplateForSlot(
+    slot, picked, pickedCategories, pickedIcons, exclude, hardExcludeTemplateIds, ctx, lastGrowPlantLevel,
+  );
+  const growPlantExclude =
+    templateId === 'create_specific_plant' && lastGrowPlantLevel != null
+      ? new Set([lastGrowPlantLevel])
+      : new Set<number>();
+  const targetPlantLevel = isPlantTargetTask(templateId)
+    ? pickPlantLevelForTask(templateId, ctx.highestPlantEver, pickedIcons, growPlantExclude)
+    : undefined;
+  return {
+    instanceId: `daily-slot-${slot}`,
+    templateId,
+    slot,
+    progress: 0,
+    target: resolveTarget(templateId, slot, ctx),
+    claimed: false,
+    fillGardenLocked: false,
+    seedRushWindowStartMs: null,
+    seedRushWindowCount: 0,
+    orderRushWindowStartMs: null,
+    orderRushWindowCount: 0,
+    ...(targetPlantLevel != null ? { targetPlantLevel } : {}),
+  };
+}
+
+/** Add slot-4 task mid-period when Extra Tasks bonus unlocks. */
+function syncExtraDailyTaskSlot(state: DailyTasksDayState, ctx: DailyTaskRollContext): boolean {
+  if (!hasExtraDailyTaskSlot(ctx)) return false;
+  if (state.tasks.some((t) => t.slot === 4)) return false;
+
+  const picked = new Set(state.tasks.map((t) => t.templateId));
+  const pickedCategories = new Set(state.tasks.map((t) => getTemplateCategory(t.templateId)));
+  const pickedIcons = new Set(state.tasks.map((t) => getTaskIconForInstance(t)));
+  const exclude = buildRollExclusionsFromPreviousTasks([]);
+  const hardExclude = getOtherGardensActiveTemplateIds(state.periodEndMs);
+
+  const task = rollTaskForSlot(
+    4,
+    picked,
+    pickedCategories,
+    pickedIcons,
+    exclude,
+    hardExclude,
+    ctx,
+    state.lastGrowPlantLevel,
+  );
+  picked.add(task.templateId);
+  state.tasks.push(task);
+  return true;
+}
+
 export function rollDailyTasksDay(
   ctx: DailyTaskRollContext,
   periodEndMs: number,
@@ -737,33 +833,19 @@ export function rollDailyTasksDay(
   const exclude = buildRollExclusionsFromPreviousTasks(previousTasks);
   const tasks: DailyTaskInstanceState[] = [];
 
-  for (const slot of [1, 2, 3] as const) {
-    const templateId = pickTemplateForSlot(
-      slot, picked, pickedCategories, pickedIcons, exclude, hardExcludeTemplateIds, ctx, lastGrowPlantLevel,
-    );
-    const growPlantExclude =
-      templateId === 'create_specific_plant' && lastGrowPlantLevel != null
-        ? new Set([lastGrowPlantLevel])
-        : new Set<number>();
-    const targetPlantLevel = isPlantTargetTask(templateId)
-      ? pickPlantLevelForTask(templateId, ctx.highestPlantEver, pickedIcons, growPlantExclude)
-      : undefined;
-    const task: DailyTaskInstanceState = {
-      instanceId: `daily-slot-${slot}`,
-      templateId,
+  for (const slot of buildRollSlots(ctx)) {
+    const task = rollTaskForSlot(
       slot,
-      progress: 0,
-      target: resolveTarget(templateId, slot, ctx),
-      claimed: false,
-      fillGardenLocked: false,
-      seedRushWindowStartMs: null,
-      seedRushWindowCount: 0,
-      orderRushWindowStartMs: null,
-      orderRushWindowCount: 0,
-      ...(targetPlantLevel != null ? { targetPlantLevel } : {}),
-    };
-    picked.add(templateId);
-    pickedCategories.add(getTemplateCategory(templateId));
+      picked,
+      pickedCategories,
+      pickedIcons,
+      exclude,
+      hardExcludeTemplateIds,
+      ctx,
+      lastGrowPlantLevel,
+    );
+    picked.add(task.templateId);
+    pickedCategories.add(getTemplateCategory(task.templateId));
     pickedIcons.add(getTaskIconForInstance(task));
     tasks.push(task);
   }
@@ -838,6 +920,7 @@ function instanceToRow(
   }
   progressCurrent = Math.min(progressCurrent, task.target);
   const state = rowState({ ...task, progress: Math.max(task.progress, progressCurrent) });
+  const globalGoldenPotCount = ctx.globalGoldenPotCount ?? ctx.goldenPotCount;
   return {
     id: task.instanceId,
     state,
@@ -846,7 +929,11 @@ function instanceToRow(
     descriptionValues: getDescriptionValues(task),
     progressCurrent,
     progressTotal: task.target,
-    rewardCoins: getDailyTaskSlotRewardCoins(task.slot, ctx.playerLevel),
+    rewardCoins: getDailyTaskRewardCoins(
+      getDailyTaskSlotTier(task.slot),
+      ctx.playerLevel,
+      globalGoldenPotCount,
+    ),
     iconSrc: getTaskIconForInstance(task),
   };
 }
@@ -865,7 +952,7 @@ export function buildDailyTaskRowsFromState(
     }
   }
   writeDayState(state);
-  return state.tasks.map((t) => instanceToRow(t, ctx, now));
+  return sortTasksForDisplay(state.tasks).map((t) => instanceToRow(t, ctx, now));
 }
 
 export function ensureDailyTasksDay(
@@ -896,6 +983,10 @@ export function ensureDailyTasksDay(
     writeDayState(state);
   } else if (hasRemovedDailyTaskTemplates(state)) {
     state = rerollStaleDayState(state, ctx);
+    writeDayState(state);
+  }
+
+  if (syncExtraDailyTaskSlot(state, ctx)) {
     writeDayState(state);
   }
 
@@ -1282,13 +1373,13 @@ export function markDailyTasksClaimed(
   }, ctx);
 }
 
-/** Dev: complete the next incomplete task top-to-bottom (slot 1 → 2 → 3). Does not claim. */
+/** Dev: complete the next incomplete task top-to-bottom (slot 1 → 2 → 4 → 3). Does not claim. */
 export function completeNextDailyTaskForDev(
   ctx: DailyTaskRollContext,
   atTimeMs = Date.now(),
 ): DailyTaskDefinition[] {
   return mutateDayState((state) => {
-    const sorted = [...state.tasks].sort((a, b) => a.slot - b.slot);
+    const sorted = sortTasksForDisplay(state.tasks);
     for (const task of sorted) {
       if (task.claimed) continue;
       const row = instanceToRow({ ...task }, ctx, atTimeMs);

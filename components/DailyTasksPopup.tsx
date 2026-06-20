@@ -17,10 +17,10 @@ const POPUP_HEIGHT = 360;
 
 /** Outer shell width (standard popups use 320px). */
 const DAILY_TASKS_SHELL_WIDTH_PX = 400;
-const DAILY_TASKS_SHELL_MIN_HEIGHT_PX = 440;
+const DAILY_TASKS_SHELL_MIN_HEIGHT_PX = 520;
 /** Prescale panel width (standard discovery uses 640px). */
 const DAILY_TASKS_PRESCALE_WIDTH_PX = 720;
-const DAILY_TASKS_PRESCALE_MARGIN_BOTTOM_PX = -326;
+const DAILY_TASKS_PRESCALE_MARGIN_BOTTOM_PX = -386;
 
 /** Visible card width after 0.5× prescale (used to align close X with card corner). */
 const DAILY_TASKS_VISUAL_CARD_WIDTH_PX = DAILY_TASKS_PRESCALE_WIDTH_PX * 0.5;
@@ -271,7 +271,7 @@ export const DailyTasksPopup: React.FC<DailyTasksPopupProps> = ({
                 <div
                   className="w-full flex flex-col"
                   style={{
-                    minHeight: '240px',
+                    minHeight: '320px',
                     paddingLeft: '8px',
                     paddingRight: '8px',
                     gap: '26px',

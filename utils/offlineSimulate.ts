@@ -21,9 +21,8 @@ import {
 import {
   getHarvestRechargePerMinute,
   getSeedRechargePerMinute,
+  getHarvestChargesMax,
 } from '../constants/goldenPotBonuses';
-
-const HARVEST_CHARGES_MAX = 3;
 
 /**
  * Offline surplus coins are disabled until FTUE 11 (recharge intro) is dismissed.
@@ -115,11 +114,12 @@ export function simulateOfflineSeedHarvest(input: OfflineSimInput): OfflineSimRe
       } as SeedsState)
     : input.seedsState;
   const surplusValue = getSeedSurplusValue(surplusSeedsState, Math.max(1, input.highestPlantEver));
-  const maxCap = getSeedStorageMax(input.seedsState);
+  const goldPots = Math.max(0, input.goldenPotCount ?? 0);
+  const maxCap = getSeedStorageMax(input.seedsState, goldPots);
+  const harvestChargesMax = getHarvestChargesMax(goldPots);
 
   const seedProdLevel = input.seedsState?.seed_production?.level ?? 0;
   const harvestSpeedLevel = getHarvestSpeedLevel(input.cropsState);
-  const goldPots = input.goldenPotCount ?? 0;
 
   const getSeedRatePerMs = (wallTime: number) => {
     if (seedFrozen) return 0;
@@ -155,7 +155,7 @@ export function simulateOfflineSeedHarvest(input: OfflineSimInput): OfflineSimRe
   const processHarvestComplete = () => {
     const wallTime = input.savedAt + elapsed;
     const doubleCoinsMult = hasActiveDoubleCoinsBoostAt(input.activeBoosts, wallTime) ? 2 : 1;
-    if (harvestCharges < HARVEST_CHARGES_MAX) {
+    if (harvestCharges < harvestChargesMax) {
       harvestCharges++;
     } else if (earnCoins && surplusValue > 0 && input.ftueHarvestSurplusActivated) {
       offlineSurplusCoins += doubleCoinsMult === 2 ? Math.round(surplusValue * 2) : surplusValue;

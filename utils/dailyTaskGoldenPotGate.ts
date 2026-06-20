@@ -2,10 +2,10 @@ import { PLANT_COLLECTION_UI_UNLOCK_LEVEL } from '../constants/playerLevelUnlock
 
 export function canRollGoldenPotDailyTask(
   playerLevel: number,
-  plantMasteryUnlockPendingCount: number,
+  goldenPotUpgradeableCount: number,
 ): boolean {
   return (
     playerLevel >= PLANT_COLLECTION_UI_UNLOCK_LEVEL &&
-    plantMasteryUnlockPendingCount > 0
+    goldenPotUpgradeableCount > 0
   );
 }

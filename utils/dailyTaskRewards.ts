@@ -1,4 +1,5 @@
 import { TASKS_FLOATING_BUTTON_UNLOCK_LEVEL } from '../constants/playerLevelUnlocks';
+import { GOLDEN_POT_BONUS_DAILY_TASKS_2X_AT } from '../constants/goldenPotBonuses';
 
 /** Base coin rewards per slot at tasks unlock level. */
 const DAILY_TASK_SLOT_REWARD_BASE: readonly [number, number, number] = [250, 500, 1000];
@@ -16,4 +17,14 @@ export function getDailyTaskSlotRewardCoins(slot: 1 | 2 | 3, playerLevel: number
     DAILY_TASK_SLOT_REWARD_BASE[idx] +
     levelsAboveUnlock * DAILY_TASK_SLOT_REWARD_PER_LEVEL[idx]
   );
+}
+
+/** Slot + level base reward, with Daily Rewards golden pot bonus (2×) applied when unlocked. */
+export function getDailyTaskRewardCoins(
+  slot: 1 | 2 | 3,
+  playerLevel: number,
+  globalGoldenPotCount: number,
+): number {
+  const base = getDailyTaskSlotRewardCoins(slot, playerLevel);
+  return globalGoldenPotCount >= GOLDEN_POT_BONUS_DAILY_TASKS_2X_AT ? base * 2 : base;
 }
