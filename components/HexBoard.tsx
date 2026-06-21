@@ -1,8 +1,9 @@
-import React, { useRef, useEffect, useCallback, useState, forwardRef, useImperativeHandle } from 'react';
+import React, { useRef, useEffect, useCallback, useState, forwardRef, useImperativeHandle, useMemo } from 'react';
 import { flushSync } from 'react-dom';
 import { BoardCell, Item, DragState } from '../types';
 import { PLANT_CONTAINER_WIDTH, PLANT_CONTAINER_HEIGHT } from '../constants/boardLayout';
-import { assetPath } from '../utils/assetPath';
+import { type GardenId } from '../constants/gardens';
+import { getHexCellAssetPath, type HexCellSpriteName } from '../utils/gardenAssets';
 import { PlantWithPot } from './PlantWithPot';
 import { MAX_PLANT_TIER } from '../constants/plants';
 
@@ -63,6 +64,8 @@ interface HexBoardProps {
   onMaxTierMergeAttempt?: (staticCellIdx: number) => void;
   /** After auto-merge impact bounce finishes (same timing as drag merge clearing). */
   onProgrammaticMergeSettled?: (sourceIdx: number, targetIdx: number) => void;
+  /** Active garden — hex cell sprites swap per garden folder. */
+  gardenId?: GardenId;
 }
 
 export type HexBoardHandle = {
@@ -70,12 +73,18 @@ export type HexBoardHandle = {
   beginProgrammaticMerge: (sourceIdx: number, targetIdx: number, gridSnapshot?: BoardCell[]) => boolean;
 };
 
-const HEX_SPRITE_EXT = '.png';
-const HEXCELL_GREEN = assetPath(`/assets/hex/hexcell_green${HEX_SPRITE_EXT}`);
-const HEXCELL_SHADOW = assetPath(`/assets/hex/hexcell_shadow${HEX_SPRITE_EXT}`);
-const HEXCELL_WHITE = assetPath(`/assets/hex/hexcell_white${HEX_SPRITE_EXT}`);
-const HEXCELL_LOCKED = assetPath(`/assets/hex/hexcell_locked${HEX_SPRITE_EXT}`);
-const HEXCELL_FERTILE = assetPath(`/assets/hex/hexcell_fertile${HEX_SPRITE_EXT}`);
+function useHexCellSprites(gardenId?: GardenId) {
+  return useMemo(() => {
+    const path = (name: HexCellSpriteName) => getHexCellAssetPath(name, gardenId);
+    return {
+      normal: path('hexcell_normal'),
+      shadow: path('hexcell_shadow'),
+      white: path('hexcell_white'),
+      locked: path('hexcell_locked'),
+      fertile: path('hexcell_fertile'),
+    };
+  }, [gardenId]);
+}
 
 export const HexBoard = forwardRef<HexBoardHandle, HexBoardProps>(function HexBoard({
   isActive,
@@ -104,7 +113,9 @@ export const HexBoard = forwardRef<HexBoardHandle, HexBoardProps>(function HexBo
   masteredPlantLevels = [],
   onMaxTierMergeAttempt,
   onProgrammaticMergeSettled,
+  gardenId,
 }, ref) {
+  const hexSprites = useHexCellSprites(gardenId);
   const liftStartRef = useRef<number>(0);
   const flyStartRef = useRef<number>(0);
   const rafRef = useRef<number>(0);
@@ -765,7 +776,7 @@ export const HexBoard = forwardRef<HexBoardHandle, HexBoardProps>(function HexBo
                 height: `${hexDisplayH}px`,
                 transform: `translate(calc(-50% + ${x}px), calc(-50% + ${y + shadowOffsetY}px))`,
                 zIndex: 0,
-                backgroundImage: `url(${HEXCELL_SHADOW})`,
+                backgroundImage: `url(${hexSprites.shadow})`,
                 backgroundSize: 'contain',
                 backgroundPosition: 'center',
                 backgroundRepeat: 'no-repeat',
@@ -774,7 +785,7 @@ export const HexBoard = forwardRef<HexBoardHandle, HexBoardProps>(function HexBo
           );
         })}
 
-        {/* PASS 2: hexcell_green, hexcell_fertile, or hexcell_locked — one sprite per cell (idle) */}
+        {/* PASS 2: hexcell_normal, hexcell_fertile, or hexcell_locked — one sprite per cell (idle) */}
         {grid.map((cell, i) => {
           const x = hexSize * (3 / 2) * cell.q * horizontalSpacing * gridSpacing;
           const y = hexSize * Math.sqrt(3) * (cell.r + cell.q / 2) * verticalSpacing * gridSpacing;
@@ -810,7 +821,7 @@ export const HexBoard = forwardRef<HexBoardHandle, HexBoardProps>(function HexBo
             >
               {/* Locked cell sprite */}
               <img
-                src={HEXCELL_LOCKED}
+                src={hexSprites.locked}
                 alt=""
                 className={`hex-cell-img w-full h-full object-contain absolute inset-0 transition-opacity duration-200 ${isUnlocking ? 'opacity-0' : ''}`}
                 style={{ opacity: isLocked && !isUnlocking ? 1 : 0 }}
@@ -818,7 +829,7 @@ export const HexBoard = forwardRef<HexBoardHandle, HexBoardProps>(function HexBo
               />
               {/* Green cell sprite (shown when not locked/fertile, or fading in during unlock, or fading out during fertilize) */}
               <img
-                src={HEXCELL_GREEN}
+                src={hexSprites.normal}
                 alt=""
                 className={`hex-cell-img w-full h-full object-contain absolute inset-0 transition-all duration-200 ${isUnlocking ? 'hexcell-unlock-bounce' : ''}`}
                 style={{ opacity: isLocked && !isUnlocking ? 0 : isFertile && !isFertilizing ? 0 : 1 }}
@@ -826,7 +837,7 @@ export const HexBoard = forwardRef<HexBoardHandle, HexBoardProps>(function HexBo
               />
               {/* Fertile cell sprite (shown when fertile, or fading in during fertilize) */}
               <img
-                src={HEXCELL_FERTILE}
+                src={hexSprites.fertile}
                 alt=""
                 className={`hex-cell-img w-full h-full object-contain absolute inset-0 transition-all duration-200 ${isFertilizing ? 'hexcell-unlock-bounce' : ''}`}
                 style={{ opacity: isFertile || isFertilizing ? 1 : 0 }}
@@ -873,7 +884,7 @@ export const HexBoard = forwardRef<HexBoardHandle, HexBoardProps>(function HexBo
               }}
             >
               <img
-                src={HEXCELL_WHITE}
+                src={hexSprites.white}
                 alt=""
                 className={`hex-cell-img w-full h-full object-contain ${animClass}`}
                 style={staticOpacity != null ? { opacity: staticOpacity } : !animClass ? { opacity: 0 } : undefined}

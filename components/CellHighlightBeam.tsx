@@ -8,7 +8,8 @@
  * - Sparkles rise in a spiral pattern with eased velocity (fast then slow)
  */
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { assetPath } from '../utils/assetPath';
+import { type GardenId } from '../constants/gardens';
+import { getHexCellAssetPath } from '../utils/gardenAssets';
 
 interface CellHighlightBeamProps {
   x: number;
@@ -25,6 +26,8 @@ interface CellHighlightBeamProps {
   sparkleSizeScale?: number;
   /** Multiplier for upward spiral travel height (default 1). */
   sparkleHeightScale?: number;
+  /** Active garden — hex highlight sprite swaps per garden folder. */
+  gardenId?: GardenId;
 }
 
 const VFX_DURATION_MS = 1200;
@@ -36,7 +39,7 @@ const SPARKLE_HEIGHT_MULTIPLIER = 1.2;
 const SPARKLE_COLOR = '#fff0b3';
 const SPARKLE_SHADOW = 'rgba(255, 240, 179, 0.5)';
 
-const HEXCELL_HIGHLIGHT = assetPath('/assets/hex/hexcell_highlight.png');
+const HEXCELL_HIGHLIGHT = (gardenId?: GardenId) => getHexCellAssetPath('hexcell_highlight', gardenId);
 
 interface Sparkle {
   id: number;
@@ -69,7 +72,9 @@ export const CellHighlightBeam: React.FC<CellHighlightBeamProps> = ({
   sparkleCount = DEFAULT_SPARKLE_COUNT,
   sparkleSizeScale = 1,
   sparkleHeightScale = 1,
+  gardenId,
 }) => {
+  const hexHighlightSrc = useMemo(() => HEXCELL_HIGHLIGHT(gardenId), [gardenId]);
   const [progress, setProgress] = useState(0);
   const [spriteOpacity, setSpriteOpacity] = useState(0);
 
@@ -145,7 +150,7 @@ export const CellHighlightBeam: React.FC<CellHighlightBeamProps> = ({
     >
       {showHexSprite ? (
         <img
-          src={HEXCELL_HIGHLIGHT}
+          src={hexHighlightSrc}
           alt=""
           className="w-full h-full object-contain"
           style={{

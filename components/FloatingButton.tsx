@@ -1,14 +1,19 @@
 import React from 'react';
+import { type GardenId } from '../constants/gardens';
+import {
+  GARDEN_1_ACTION_BUTTON_CHROME,
+  getGardenActionButtonChrome,
+} from '../constants/gardenActionButtonTheme';
 import { assetPath } from '../utils/assetPath';
 
-const FLOATING_BUTTON_LOCK_ICON = assetPath('/assets/icons/generic_buttons/icon_lock.png');
+const G1 = GARDEN_1_ACTION_BUTTON_CHROME;
 
-export const FLOATING_BUTTON_PILL_GRADIENT_TOP = '#efe5ba';
-export const FLOATING_BUTTON_PILL_GRADIENT_BOTTOM = '#c1cd67';
-export const FLOATING_BUTTON_PILL_LOCKED_GRADIENT_TOP = '#d9e6c0';
-export const FLOATING_BUTTON_PILL_LOCKED_GRADIENT_BOTTOM = '#94bf79';
-export const FLOATING_BUTTON_PILL_OUTLINE_COLOR = '#56764d';
-export const FLOATING_BUTTON_PILL_TEXT_COLOR = '#526e43';
+export const FLOATING_BUTTON_PILL_GRADIENT_TOP = G1.pillGradientTop;
+export const FLOATING_BUTTON_PILL_GRADIENT_BOTTOM = G1.pillGradientBottom;
+export const FLOATING_BUTTON_PILL_LOCKED_GRADIENT_TOP = G1.pillLockedGradientTop;
+export const FLOATING_BUTTON_PILL_LOCKED_GRADIENT_BOTTOM = G1.pillLockedGradientBottom;
+export const FLOATING_BUTTON_PILL_OUTLINE_COLOR = G1.pillOutlineColor;
+export const FLOATING_BUTTON_PILL_TEXT_COLOR = G1.pillTextColor;
 export const FLOATING_BUTTON_PILL_OUTLINE_WIDTH_PX = 2;
 export const FLOATING_BUTTON_PILL_FONT_SIZE_PX = 8;
 export const FLOATING_BUTTON_PILL_HEIGHT_PX = 22;
@@ -17,6 +22,8 @@ export const FLOATING_BUTTON_PILL_HORIZONTAL_PADDING_PX = 8;
 export const FLOATING_BUTTON_PILL_WIDTH_PX = 60;
 export const FLOATING_BUTTON_ICON_SIZE_PX = 65;
 export const FLOATING_BUTTON_ICON_OFFSET_Y_PX = 8;
+
+const FLOATING_BUTTON_LOCK_ICON = assetPath('/assets/icons/generic_buttons/icon_lock.png');
 
 export interface FloatingButtonProps {
   title: string;
@@ -30,6 +37,8 @@ export interface FloatingButtonProps {
   onClick?: () => void;
   /** 200ms 1→1.1→1 bounce on the button (e.g. tasks ready to claim). */
   readyBounceActive?: boolean;
+  /** Active garden — pill gradient/outline swap per garden palette. */
+  gardenId?: GardenId;
   className?: string;
   style?: React.CSSProperties;
   'aria-label'?: string;
@@ -44,17 +53,15 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
   unlockLevel,
   onClick,
   readyBounceActive = false,
+  gardenId,
   className = '',
   style,
   'aria-label': ariaLabel,
 }) => {
+  const chrome = getGardenActionButtonChrome(gardenId);
   const pillLabelText = pillLabel ?? title;
-  const pillGradientTop = locked
-    ? FLOATING_BUTTON_PILL_LOCKED_GRADIENT_TOP
-    : FLOATING_BUTTON_PILL_GRADIENT_TOP;
-  const pillGradientBottom = locked
-    ? FLOATING_BUTTON_PILL_LOCKED_GRADIENT_BOTTOM
-    : FLOATING_BUTTON_PILL_GRADIENT_BOTTOM;
+  const pillGradientTop = locked ? chrome.pillLockedGradientTop : chrome.pillGradientTop;
+  const pillGradientBottom = locked ? chrome.pillLockedGradientBottom : chrome.pillGradientBottom;
   const resolvedAriaLabel =
     ariaLabel ??
     (locked && unlockLevel != null
@@ -95,9 +102,9 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
           paddingRight: FLOATING_BUTTON_PILL_HORIZONTAL_PADDING_PX,
           borderWidth: FLOATING_BUTTON_PILL_OUTLINE_WIDTH_PX,
           borderStyle: 'solid',
-          borderColor: FLOATING_BUTTON_PILL_OUTLINE_COLOR,
+          borderColor: chrome.pillOutlineColor,
           backgroundImage: `linear-gradient(to bottom, ${pillGradientTop}, ${pillGradientBottom})`,
-          color: FLOATING_BUTTON_PILL_TEXT_COLOR,
+          color: chrome.pillTextColor,
           fontSize: FLOATING_BUTTON_PILL_FONT_SIZE_PX,
         }}
       >
@@ -109,7 +116,7 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
               style={{
                 width: 10,
                 height: 10,
-                backgroundColor: FLOATING_BUTTON_PILL_TEXT_COLOR,
+                backgroundColor: chrome.pillTextColor,
                 maskImage: `url(${FLOATING_BUTTON_LOCK_ICON})`,
                 maskSize: 'contain',
                 maskRepeat: 'no-repeat',

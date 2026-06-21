@@ -6,6 +6,7 @@ import { UpgradeTabs } from './components/UpgradeTabs';
 import { UpgradeList, createInitialSeedsState, createInitialHarvestState, createInitialCropsState, getSeedLevelFromHighestPlant, getBonusSeedChance, getSeedSurplusValue, getSeedStorageMax, getCropYieldPerHarvest, getHarvestSpeedLevel, getMergeHarvestChance, getGoalLoadingSeconds, getMarketValueMultiplier, getPremiumOrdersMinLevel, getSurplusSalesMultiplier, isSurplusSalesUnlocked, getHappyCustomerChance, HarvestState, UpgradeState, RewardedOffer, getLevelUnlockInfo, MAX_LEVEL_WITH_CUSTOM_UNLOCK_POPUP, isCustomerSpeedMaxed } from './components/UpgradeList';
 import {
   PLANT_COLLECTION_UI_UNLOCK_LEVEL,
+  isPlantCollectionUiUnlockedGlobally,
   FLOATING_BUTTONS_UNLOCK_LEVEL,
   shouldShowFarmFloatingButtons,
   GARDENS_FLOATING_BUTTON_UI_VISIBLE,
@@ -177,7 +178,10 @@ import {
   getSpecialDeliveryPlantLevel,
   getSpecialDeliveryPlantSpritePath,
   setActiveGardenAssetContext,
+  getGoalSlotUiPath,
+  getTopUiAssetPath,
 } from './utils/gardenAssets';
+import { getGardenGoalTextColors } from './constants/gardenGoalTheme';
 import { setDailyTasksActiveGarden } from './utils/dailyTasksGardenScope';
 import {
   activateGardenInSave,
@@ -1832,6 +1836,7 @@ export default function App() {
       dailyTaskUpgradeCtxRef.current,
     ),
     globalGoldenPotCount: globalGoldenPotCountRef.current,
+    garden1PlayerLevel,
   });
   /** Defer starting loading in plant goal slot 3 until player returns to FARM (see fourth-slot unlock flow). */
   const pendingFourthPlantGoalSlotRef = useRef(false);
@@ -3237,6 +3242,17 @@ export default function App() {
       setIapOfferUi({ offerId: STORE_IAP_OFFER_STARTER_PACK_ID });
       return;
     }
+    if (
+      nextLevel === PLANT_COLLECTION_UI_UNLOCK_LEVEL &&
+      isPlantCollectionUiUnlockedGlobally(garden1PlayerLevel)
+    ) {
+      setPlayerLevel((l) => l + 1);
+      recordDailyTaskPlayerLeveledUp();
+      setTimeout(() => {
+        levelUpGuardRef.current = false;
+      }, 0);
+      return;
+    }
     if (nextLevel <= MAX_LEVEL_WITH_CUSTOM_UNLOCK_POPUP) {
       setLevelUpPopup({ isVisible: true, level: nextLevel });
     } else {
@@ -3246,7 +3262,7 @@ export default function App() {
         levelUpGuardRef.current = false;
       }, 0);
     }
-  }, [recordDailyTaskPlayerLeveledUp]);
+  }, [garden1PlayerLevel, recordDailyTaskPlayerLeveledUp]);
 
   const canOpenLimitedOfferRewardPopup = useCallback(() => {
     if (offlineEarningsUi?.open) return false;
@@ -3457,7 +3473,7 @@ export default function App() {
   const collectionBarDenominator = collectionRewardBar.denominator;
   const collectionBarFillPct = collectionFillBar.fillPct;
   const collectionRewardIconSrc = getCollectionBonusIconPath(collectionRewardBar.rewardIconSlug);
-  const isPlantCollectionUiUnlocked = playerLevel >= PLANT_COLLECTION_UI_UNLOCK_LEVEL;
+  const isPlantCollectionUiUnlocked = isPlantCollectionUiUnlockedGlobally(garden1PlayerLevel);
   const goldenPotWalletHeaderProps =
     activeScreen === 'BARN' && isPlantCollectionUiUnlocked
     ? {
@@ -3662,9 +3678,9 @@ export default function App() {
       return;
     }
     setBarnNotification(
-      playerLevel >= PLANT_COLLECTION_UI_UNLOCK_LEVEL && unreadMasteryUnlockLevels.length > 0
+      isPlantCollectionUiUnlockedGlobally(garden1PlayerLevel) && unreadMasteryUnlockLevels.length > 0
     );
-  }, [activeScreen, unreadMasteryUnlockLevels.length, playerLevel]);
+  }, [activeScreen, unreadMasteryUnlockLevels.length, garden1PlayerLevel]);
 
   useEffect(() => {
     if (activeScreen !== 'BARN') return;
@@ -3685,14 +3701,15 @@ export default function App() {
     }, 150);
   }, [activeScreen, barnScale, goldenPotUpgradeableLevels, isPlantCollectionUiUnlocked, collectionFtuePhase]);
 
-  /** Resume collection FTUE when re-entering barn (e.g. after save load). */
+  /** Resume collection FTUE when re-entering barn on garden 1 (e.g. after save load). */
   useEffect(() => {
     if (activeScreen !== 'BARN') return;
+    if (activeGardenId !== DEFAULT_GARDEN_ID) return;
     if (collectionFtueCompleted) return;
-    if (playerLevel < PLANT_COLLECTION_UI_UNLOCK_LEVEL) return;
+    if (!isPlantCollectionUiUnlockedGlobally(garden1PlayerLevel)) return;
     if (plantMastery.unlockedLevels.includes(1)) return;
     setCollectionFtuePhase((p) => (p == null ? 'intro_cta' : p));
-  }, [activeScreen, collectionFtueCompleted, playerLevel, plantMastery.unlockedLevels]);
+  }, [activeScreen, activeGardenId, collectionFtueCompleted, garden1PlayerLevel, plantMastery.unlockedLevels]);
 
   useEffect(() => {
     if (goldenPotBonusesWasOpenRef.current && !goldenPotBonusesPopupOpen && collectionFtuePhase === 'point_bonuses') {
@@ -5895,6 +5912,25 @@ export default function App() {
   const screenCarouselIndex = getScreenIndex();
   const screenTranslateX = `translateX(-${screenCarouselIndex * designWidth}px)`;
   const gardenBg = getGardenBackgroundPaths(activeGardenId);
+  const goalSlotUi = useMemo(
+    () => ({
+      shadow: getGoalSlotUiPath('goal_shadow.png', activeGardenId),
+      loading: getGoalSlotUiPath('goal_loading.png', activeGardenId),
+      normal: getGoalSlotUiPath('goal_normal.png', activeGardenId),
+      yellow: getGoalSlotUiPath('goal_yellow.png', activeGardenId),
+      undiscovered: getGoalSlotUiPath('goal_undiscovered.png', activeGardenId),
+      cream: getGoalSlotUiPath('goal_cream.png', activeGardenId),
+    }),
+    [activeGardenId],
+  );
+  const goalTextColors = useMemo(
+    () => getGardenGoalTextColors(activeGardenId),
+    [activeGardenId],
+  );
+  const topUiGradientSrc = useMemo(
+    () => getTopUiAssetPath('topui_gradient.png', activeGardenId),
+    [activeGardenId],
+  );
 
   /** Apply saved game + offline sim; returns total offline coin payout pending (not wallet). */
   const hydrateFromSave = useCallback((save: GameSaveV1) => {
@@ -6750,7 +6786,7 @@ export default function App() {
                 style={{ height: '280px' }}
               >
                 <img
-                  src={assetPath('/assets/ui/topui_gradient.png')}
+                  src={topUiGradientSrc}
                   alt=""
                   className="block w-full h-full"
                   style={{
@@ -6839,6 +6875,7 @@ export default function App() {
                       const state = buildLimitedOfferPopupState(boost.offerId, { activeBoostEndTime: boost.endTime, highestPlantEver });
                       if (state) setLimitedOfferPopup(state);
                     }}
+                    gardenId={activeGardenId}
                   />
                 ) : (
                   <div className="min-h-[44px] shrink-0" aria-hidden />
@@ -7029,10 +7066,10 @@ export default function App() {
                     >
                       {showSlot && (
                         <>
-                          <img src={assetPath('/assets/ui/goal_shadow.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top transition-opacity duration-100" style={{ zIndex: 1, opacity: greenOpacity }} />
-                          <img src={assetPath('/assets/ui/goal_loading.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top transition-opacity duration-100" style={{ zIndex: 2, opacity: loadingOpacity }} />
+                          <img src={goalSlotUi.shadow} alt="" className="absolute inset-0 w-full h-full object-contain object-top transition-opacity duration-100" style={{ zIndex: 1, opacity: greenOpacity }} />
+                          <img src={goalSlotUi.loading} alt="" className="absolute inset-0 w-full h-full object-contain object-top transition-opacity duration-100" style={{ zIndex: 2, opacity: loadingOpacity }} />
                           <img
-                            src={assetPath('/assets/ui/goal_green.png')}
+                            src={goalSlotUi.normal}
                             alt=""
                             className="absolute inset-0 w-full h-full object-contain object-top transition-opacity duration-100"
                             style={{
@@ -7040,9 +7077,9 @@ export default function App() {
                               opacity: greenOpacity * (showLightGreenDiscoveryFrame ? 0 : 1),
                             }}
                           />
-                          <img src={assetPath('/assets/ui/goal_yellow.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top" style={{ zIndex: 4, opacity: 0 }} />
+                          <img src={goalSlotUi.yellow} alt="" className="absolute inset-0 w-full h-full object-contain object-top" style={{ zIndex: 4, opacity: 0 }} />
                           <img
-                            src={assetPath('/assets/ui/goal_lightgreen.png')}
+                            src={goalSlotUi.undiscovered}
                             alt=""
                             className={`absolute inset-0 w-full h-full object-contain object-top ${goalImpactActive ? 'goal-impact-lightgreen' : ''}`}
                             style={{
@@ -7050,7 +7087,7 @@ export default function App() {
                               opacity: goalImpactActive ? undefined : showLightGreenDiscoveryFrame ? greenOpacity : 0,
                             }}
                           />
-                          <img src={assetPath('/assets/ui/goal_cream.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top" style={{ zIndex: 5, opacity: isCompletedState ? 1 : 0 }} />
+                          <img src={goalSlotUi.cream} alt="" className="absolute inset-0 w-full h-full object-contain object-top" style={{ zIndex: 5, opacity: isCompletedState ? 1 : 0 }} />
                           {showGreenContent && !showCompletedContent && (
                             <>
                               <img
@@ -7066,10 +7103,10 @@ export default function App() {
                                   zIndex: 6,
                                   bottom: '62%',
                                   color: goalImpactSlots.includes(slotIdx)
-                                    ? '#537b38'
+                                    ? goalTextColors.impact
                                     : showLightGreenDiscoveryFrame
-                                      ? '#3d5628'
-                                      : '#a1b54e',
+                                      ? goalTextColors.undiscovered
+                                      : goalTextColors.normal,
                                   fontSize: '15px',
                                   opacity: greenOpacity,
                                   transform: 'translate(-50%, -1px)',
@@ -7152,8 +7189,8 @@ export default function App() {
                       });
                     }}
                   >
-                    <img src={assetPath('/assets/ui/goal_shadow.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top" style={{ zIndex: 1, opacity: 0.4 }} />
-                    <img src={assetPath('/assets/ui/goal_yellow.png')} alt="" className="absolute inset-0 w-full h-full object-contain object-top" style={{ zIndex: 2 }} />
+                    <img src={goalSlotUi.shadow} alt="" className="absolute inset-0 w-full h-full object-contain object-top" style={{ zIndex: 1, opacity: 0.4 }} />
+                    <img src={goalSlotUi.yellow} alt="" className="absolute inset-0 w-full h-full object-contain object-top" style={{ zIndex: 2 }} />
                     <div className="absolute left-1/2 pointer-events-none" style={{ zIndex: 6, bottom: '70%', width: 42, height: 42, transform: 'translate(-50%, -1px)' }}>
                       <svg width="42" height="42" viewBox="0 0 42 42" className="absolute left-0 top-0 block" style={{ transform: 'rotate(-90deg)' }}>
                         <circle cx="21" cy="21" r="20" fill="transparent" stroke="#ea9940" strokeWidth="2.5" />
@@ -7180,6 +7217,7 @@ export default function App() {
               {activeScreen === 'FARM' && farmFloatingButtonsVisible && activeFtueStage === null ? (
                 <>
                   <FarmLeftFloatingButtonStack
+                    gardenId={activeGardenId}
                     style={{
                       opacity: farmFloatingButtonsFadedIn ? 1 : 0,
                       transition: 'opacity 400ms ease-out',
@@ -7215,6 +7253,7 @@ export default function App() {
                       className="inline-block"
                     >
                       <FloatingButtonTasks
+                        gardenId={activeGardenId}
                         tasksUnlocked={dailyTasksUnlocked}
                         unlockLevel={TASKS_FLOATING_BUTTON_UNLOCK_LEVEL}
                         tasks={dailyTaskRows}
@@ -7243,6 +7282,7 @@ export default function App() {
                     </div>
                     {GARDENS_FLOATING_BUTTON_UI_VISIBLE ? (
                       <FloatingButton
+                        gardenId={activeGardenId}
                         title="Gardens"
                         locked={garden1PlayerLevel < GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL}
                         unlockLevel={GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL}
@@ -7311,6 +7351,7 @@ export default function App() {
                       </div>
                     )}
 <SideAction
+                        gardenId={activeGardenId}
                         label="Plant"
                         icon={getGardenPlantSpritePath(seedLevel)}
                         iconNode={<PlantWithPot level={seedLevel} mastered={plantMastery.unlockedLevels.includes(seedLevel)} wrapperClassName="h-full w-full" />}
@@ -7361,6 +7402,7 @@ export default function App() {
                       </div>
                     )}
                      <SideAction 
+                        gardenId={activeGardenId}
                         label="Harvest" 
                         icon={assetPath('/assets/icons/upgrades/icon_harvest.png')} 
                         progress={harvestFreeMode ? 0 : harvestProgress / 100}
@@ -7427,6 +7469,7 @@ export default function App() {
                       spawnMaxPlantReachedToast(staticCellIdx);
                     }}
                     onProgrammaticMergeSettled={onProgrammaticMergeSettled}
+                    gardenId={activeGardenId}
                     onMergeImpactStart={(cellIdx, px, py, mergeResultLevel) => {
                       const container = containerRef.current;
                       if (!container) return;
@@ -8207,6 +8250,7 @@ export default function App() {
                       }}
                       hideTopBarBg
                       hideFps
+                      gardenId={activeGardenId}
                     />
                   </div>
                 </div>
@@ -8371,6 +8415,7 @@ export default function App() {
                 sparkleCount={b.sparkleCount}
                 sparkleSizeScale={b.sparkleSizeScale}
                 sparkleHeightScale={b.sparkleHeightScale}
+                gardenId={activeGardenId}
                 onComplete={() => setCellHighlightBeams((prev) => prev.filter((x) => x.id !== b.id))}
               />
             ))}

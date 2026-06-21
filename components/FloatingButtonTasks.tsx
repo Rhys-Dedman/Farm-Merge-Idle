@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { type GardenId } from '../constants/gardens';
 import { FloatingButton } from './FloatingButton';
 import {
   getTasksFloatingButtonIconSrc,
@@ -16,6 +17,7 @@ export interface FloatingButtonTasksProps {
   readyBounceNonce?: number;
   /** FTUE: keep locked chrome until unlock bounce reveals the normal icon. */
   forceLockedVisual?: boolean;
+  gardenId?: GardenId;
   onClick?: () => void;
   className?: string;
   style?: React.CSSProperties;
@@ -27,6 +29,7 @@ export const FloatingButtonTasks: React.FC<FloatingButtonTasksProps> = ({
   tasks,
   readyBounceNonce = 0,
   forceLockedVisual = false,
+  gardenId,
   onClick,
   className,
   style,
@@ -51,6 +54,7 @@ export const FloatingButtonTasks: React.FC<FloatingButtonTasksProps> = ({
       unlockLevel={unlockLevel}
       iconSrc={getTasksFloatingButtonIconSrc(visual)}
       readyBounceActive={readyBounceActive}
+      gardenId={gardenId}
       onClick={onClick}
       className={className}
       style={style}

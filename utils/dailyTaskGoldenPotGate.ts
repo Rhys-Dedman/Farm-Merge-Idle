@@ -1,11 +1,14 @@
-import { PLANT_COLLECTION_UI_UNLOCK_LEVEL } from '../constants/playerLevelUnlocks';
+import {
+  isPlantCollectionUiUnlockedGlobally,
+  PLANT_COLLECTION_UI_UNLOCK_LEVEL,
+} from '../constants/playerLevelUnlocks';
 
 export function canRollGoldenPotDailyTask(
-  playerLevel: number,
+  garden1PlayerLevel: number,
   goldenPotUpgradeableCount: number,
 ): boolean {
   return (
-    playerLevel >= PLANT_COLLECTION_UI_UNLOCK_LEVEL &&
+    isPlantCollectionUiUnlockedGlobally(garden1PlayerLevel) &&
     goldenPotUpgradeableCount > 0
   );
 }

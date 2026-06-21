@@ -59,29 +59,13 @@ const ASSETS_TO_PRELOAD = [
   '/assets/icons/upgrades/icon_surplussales.png',
   '/assets/icons/upgrades/icon_happycustomer.png',
   '/assets/icons/upgrades/icon_premiumorders.png',
-  // Hex cells
-  '/assets/hex/hexcell_green.png',
-  '/assets/hex/hexcell_locked.png',
-  '/assets/hex/hexcell_fertile.png',
-  '/assets/hex/hexcell_highlight.png',
   // Backgrounds
   '/assets/collection/background_collection.png',
   '/assets/background/background_loading.png',
-  // Top UI
-  '/assets/ui/topui_bg.png',
-  '/assets/ui/topui_gradient.png',
   // Barn
   '/assets/collection/collection_shelf.png',
   '/assets/collection/collection_roof.png',
   '/assets/collection/collection_tools.png',
-  // Goal slot sprites
-  '/assets/ui/goal_shadow.png',
-  '/assets/ui/goal_loading.png',
-  '/assets/ui/goal_green.png',
-  '/assets/ui/goal_yellow.png',
-  '/assets/ui/goal_lightgreen.png',
-  '/assets/ui/goal_cream.png',
-  '/assets/ui/goal_white.png',
   // Popups
   '/assets/ui/popup_header.png',
   '/assets/ui/popup_header_yellow.png',

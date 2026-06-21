@@ -5,7 +5,8 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from 'react';
 import { MAX_PLANT_TIER } from '../constants/plants';
 import { assetPath } from '../utils/assetPath';
-import { getGardenCoinIconPath, getGardenLevelIconPath, getGoldenPotWalletIconPath } from '../utils/gardenAssets';
+import { type GardenId } from '../constants/gardens';
+import { getGardenCoinIconPath, getGardenLevelIconPath, getGoldenPotWalletIconPath, getTopUiAssetPath } from '../utils/gardenAssets';
 import { getTickCount60 } from '../utils/raf60';
 import { getPerformanceMode } from '../utils/performanceMode';
 
@@ -131,6 +132,8 @@ interface PageHeaderProps {
    * Dev / testing: poll this ref — remaining normal goal spawns until a discovery order (left of Last).
    */
   debugDiscoveryGoalsUntilRef?: MutableRefObject<number> | null;
+  /** Active garden — top bar background swaps per garden folder. */
+  gardenId?: GardenId;
 }
 
 const formatMoney = (amount: number | null | undefined): string => {
@@ -175,6 +178,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   boostAreaLayout = 'default',
   debugLastSpawnedGoalLevelRef = null,
   debugDiscoveryGoalsUntilRef = null,
+  gardenId,
 }) => {
   const isInteractive = !!walletRef;
   const boostRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -282,7 +286,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   const visibleBoostSlice = activeBoosts.slice(0, displayBoostCount);
   const hiddenBoostSlice = activeBoosts.slice(displayBoostCount);
 
-  const bgUrl = assetPath('/assets/ui/topui_bg.png');
+  const bgUrl = getTopUiAssetPath('topui_bg.png', gardenId);
 
   // Sprite: 600×180
   // Left cap: 0–184px (184px wide)

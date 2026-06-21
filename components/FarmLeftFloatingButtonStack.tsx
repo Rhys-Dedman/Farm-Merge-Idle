@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { type GardenId } from '../constants/gardens';
 import { FloatingButton } from './FloatingButton';
 import { FloatingButtonStack } from './FloatingButtonStack';
 import { FloatingButtonStarterPack } from './FloatingButtonStarterPack';
@@ -18,6 +19,7 @@ export interface FarmLeftFloatingButtonStackProps {
   onStarterPackClick: () => void;
   onNoAdsClick: () => void;
   onCoinBoostClick: () => void;
+  gardenId?: GardenId;
   style?: React.CSSProperties;
 }
 
@@ -29,6 +31,7 @@ export const FarmLeftFloatingButtonStack: React.FC<FarmLeftFloatingButtonStackPr
   onStarterPackClick,
   onNoAdsClick,
   onCoinBoostClick,
+  gardenId,
   style,
 }) => {
   const starterPackRemainingMs = useStarterPackCountdown(
@@ -51,6 +54,7 @@ export const FarmLeftFloatingButtonStack: React.FC<FarmLeftFloatingButtonStackPr
         iconSrc={assetPath('/assets/icons/coins/icon_coin_boost.png')}
         aria-label="Coin Boost"
         onClick={onCoinBoostClick}
+        gardenId={gardenId}
       />
     );
     // Slot 1: Starter Pack, or Coin Boost when that slot has no primary offer.
@@ -61,6 +65,7 @@ export const FarmLeftFloatingButtonStack: React.FC<FarmLeftFloatingButtonStackPr
           starterPackUnlocked={starterPackUnlocked}
           starterPackCountdownRefreshKey={starterPackCountdownRefreshKey}
           onClick={onStarterPackClick}
+          gardenId={gardenId}
         />,
       );
     } else if (coinBoostFillerEligible) {
@@ -74,6 +79,7 @@ export const FarmLeftFloatingButtonStack: React.FC<FarmLeftFloatingButtonStackPr
           title="NO ADS"
           iconSrc={assetPath('/assets/icons/floating_buttons/icon_fb_noads.png')}
           onClick={onNoAdsClick}
+          gardenId={gardenId}
         />,
       );
     } else if (showStarterPackFb && coinBoostFillerEligible) {
@@ -89,6 +95,7 @@ export const FarmLeftFloatingButtonStack: React.FC<FarmLeftFloatingButtonStackPr
     onStarterPackClick,
     onNoAdsClick,
     onCoinBoostClick,
+    gardenId,
   ]);
 
   if (buttons.length === 0) return null;

@@ -29,6 +29,65 @@ export function resolveFarmArtGardenId(gardenId: GardenId): GardenId {
   return GARDENS_WITH_FARM_ART.includes(gardenId) ? gardenId : DEFAULT_GARDEN_ID;
 }
 
+const GENERIC_UI_BASE = '/assets/ui/generic';
+
+/** Shared UI chrome (popups, store, FTUE finger, etc.) — not garden-themed. */
+export function getGenericUiAssetPath(filename: string): string {
+  return assetPath(`${GENERIC_UI_BASE}/${filename}`);
+}
+
+/** Per-garden UI sprites (goal slots, etc.) — swaps with active garden. */
+export function getGardenUiAssetPath(
+  filename: string,
+  gardenId: GardenId = activeGardenId,
+): string {
+  const folder = resolveFarmArtGardenId(gardenId);
+  return assetPath(`/assets/ui/${folder}/${filename}`);
+}
+
+/** Hex cell sprites — per-garden folder (`/assets/hex/garden_N/`). */
+export function resolveHexArtGardenId(gardenId: GardenId = activeGardenId): GardenId {
+  return resolveFarmArtGardenId(gardenId);
+}
+
+/** Top bar sprites — shared in `generic/` until per-garden topui art ships. */
+export function getTopUiAssetPath(
+  filename: 'topui_bg.png' | 'topui_gradient.png',
+  _gardenId?: GardenId,
+): string {
+  return getGenericUiAssetPath(filename);
+}
+
+export type HexCellSpriteName =
+  | 'hexcell_normal'
+  | 'hexcell_shadow'
+  | 'hexcell_white'
+  | 'hexcell_locked'
+  | 'hexcell_fertile'
+  | 'hexcell_highlight';
+
+export function getHexCellAssetPath(
+  name: HexCellSpriteName,
+  gardenId: GardenId = activeGardenId,
+): string {
+  const folder = resolveHexArtGardenId(gardenId);
+  return assetPath(`/assets/hex/${folder}/${name}.png`);
+}
+
+export function getGoalSlotUiPath(
+  filename:
+    | 'goal_shadow.png'
+    | 'goal_loading.png'
+    | 'goal_normal.png'
+    | 'goal_yellow.png'
+    | 'goal_undiscovered.png'
+    | 'goal_cream.png'
+    | 'goal_white.png',
+  gardenId: GardenId = activeGardenId,
+): string {
+  return getGardenUiAssetPath(filename, gardenId);
+}
+
 function resolveCoinGardenId(gardenId: GardenId): GardenId {
   return GARDENS_WITH_COIN_ICONS.includes(gardenId) ? gardenId : DEFAULT_GARDEN_ID;
 }
@@ -99,7 +158,7 @@ export function getGardenCoinSmallIconPath(gardenId: GardenId = activeGardenId):
 /** Player level pill icon — `ui_level_garden_N.png`. */
 export function getGardenLevelIconPath(gardenId: GardenId = activeGardenId): string {
   const id = resolveLevelGardenId(gardenId);
-  return assetPath(`/assets/ui/ui_level_${id}.png`);
+  return getGenericUiAssetPath(`ui_level_${id}.png`);
 }
 
 /** Farm ambient falling leaves — `particle_leaf_garden_N.png`. */
@@ -185,13 +244,36 @@ export function getGardenPreloadAssetPaths(): string[] {
     paths.push(
       `/assets/icons/coins/icon_coin_${gardenId}.png`,
       `/assets/icons/coins/icon_coin_small_${gardenId}.png`,
-      `/assets/ui/ui_level_${gardenId}.png`,
+      `${GENERIC_UI_BASE}/ui_level_${gardenId}.png`,
     );
     const artFolder = resolveFarmArtGardenId(gardenId);
     for (let i = 1; i <= MAX_PLANT_TIER; i++) {
       paths.push(`/assets/plants/${artFolder}/plant_${i}.png`);
       paths.push(`/assets/icons/goals/${artFolder}/icon_goal_${i}.png`);
     }
+    const hexFolder = resolveHexArtGardenId(gardenId);
+    for (const hex of [
+      'hexcell_normal',
+      'hexcell_shadow',
+      'hexcell_white',
+      'hexcell_locked',
+      'hexcell_fertile',
+      'hexcell_highlight',
+    ] as const) {
+      paths.push(`/assets/hex/${hexFolder}/${hex}.png`);
+    }
+    for (const goal of [
+      'goal_shadow.png',
+      'goal_loading.png',
+      'goal_normal.png',
+      'goal_yellow.png',
+      'goal_undiscovered.png',
+      'goal_cream.png',
+      'goal_white.png',
+    ] as const) {
+      paths.push(`/assets/ui/${artFolder}/${goal}`);
+    }
+    paths.push(`${GENERIC_UI_BASE}/topui_bg.png`, `${GENERIC_UI_BASE}/topui_gradient.png`);
   }
   return paths;
 }

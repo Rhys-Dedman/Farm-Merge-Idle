@@ -379,6 +379,8 @@ export interface DailyTaskRollContext extends UpgradeGateContext {
   plantMasteryUnlockPendingCount: number;
   /** Account-wide golden pot count (max across gardens); drives Daily Rewards 2×. */
   globalGoldenPotCount?: number;
+  /** Garden 1 player level — collection unlock is global once this reaches unlock level. */
+  garden1PlayerLevel?: number;
 }
 
 export function getGardenPlotStats(grid: BoardCell[]): GardenPlotStats {
@@ -688,7 +690,10 @@ function eligibleForSlot(
   }
   if (
     templateId === 'collection_upgrade' &&
-    !canRollGoldenPotDailyTask(ctx.playerLevel, ctx.plantMasteryUnlockPendingCount)
+    !canRollGoldenPotDailyTask(
+      ctx.garden1PlayerLevel ?? ctx.playerLevel,
+      ctx.plantMasteryUnlockPendingCount,
+    )
   ) {
     return false;
   }

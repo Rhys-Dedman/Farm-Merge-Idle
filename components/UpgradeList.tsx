@@ -1345,12 +1345,12 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
                         MAX
                       </span>
                     ) : (
-                      <span className="flex items-center gap-[1px] -translate-x-1 relative shrink-0">
+                      <span className="flex items-center gap-1.5 -translate-x-1 relative shrink-0">
                         <img
                           src={getGardenCoinSmallIconPath()}
                           alt=""
                           className="shrink-0 object-contain"
-                          style={{ width: 16, height: 16, minWidth: 16, maxWidth: 16, minHeight: 16, maxHeight: 16, display: 'block', position: 'relative', zIndex: 1, flexShrink: 0 }}
+                          style={{ width: 16, height: 16, minWidth: 16, maxWidth: 16, minHeight: 16, maxHeight: 16, display: 'block', position: 'relative', zIndex: 1, flexShrink: 0, transform: 'translateY(-1px)' }}
                         />
                         <span
                           className="text-[13px] font-black tracking-tighter"

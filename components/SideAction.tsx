@@ -1,4 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
+import { type GardenId } from '../constants/gardens';
+import { getGardenActionButtonChrome } from '../constants/gardenActionButtonTheme';
 import { shouldTick30 } from '../utils/raf60';
 
 interface TapRipple {
@@ -31,6 +33,8 @@ interface SideActionProps {
   bounceTrigger?: number;
   /** If true, disable the rotate animation when flashing (default: false) */
   noRotateOnFlash?: boolean;
+  /** Active garden — circle gradient + pill chrome swap per garden palette. */
+  gardenId?: GardenId;
   onClick?: (e: React.MouseEvent) => void;
 }
 
@@ -52,8 +56,10 @@ export const SideAction: React.FC<SideActionProps> = ({
   freeMode = false,
   bounceTrigger = 0,
   noRotateOnFlash = false,
+  gardenId,
   onClick 
 }) => {
+  const chrome = getGardenActionButtonChrome(gardenId);
   // Base Radius and Expanded Radius (only for body/decoration when flashing)
   const baseRadius = 38;
   const expandedRadius = baseRadius * 1.1; // 10% increase = 41.8
@@ -154,11 +160,11 @@ export const SideAction: React.FC<SideActionProps> = ({
     ? 'none'
     : 'stroke-dashoffset 0.08s cubic-bezier(0.25, 0.1, 0.25, 1)';
 
-  const progressBgColor = isFlashing ? '#475c3b' : '#394a28';
-  const completedProgressColor = isFlashing ? '#87a62f' : '#7a9f20';
-  // White version progress bar colors: upgrade button green for completed, storage text dark green for incomplete
-  const whiteProgressCompletedColor = '#9db546'; // light green for completed progress
-  const whiteProgressIncompleteColor = '#475c3b'; // storage text dark green
+  const progressTrackColor = chrome.pillOutlineColor;
+  const progressBgColor = progressTrackColor;
+  const completedProgressColor = isFlashing ? chrome.progressRingFlashColor : chrome.progressRingColor;
+  const whiteProgressCompletedColor = chrome.progressRingLightColor;
+  const whiteProgressIncompleteColor = progressTrackColor;
   const useRefDrive = progressRef != null && !freeMode;
   // Green bar: hides progress when flashing
   const greenPct = useRefDrive ? Math.max(0, Math.min(1, (progressRef?.current ?? 0) / 100)) : 0;
@@ -172,6 +178,15 @@ export const SideAction: React.FC<SideActionProps> = ({
   const whiteRefDriveOffset = useRefDrive
     ? whiteCircumference - (greenPct * whiteCircumference)
     : (freeMode ? whiteCircumference : undefined);
+
+  const rechargePillStyle: React.CSSProperties = {
+    backgroundImage: `linear-gradient(to bottom, ${chrome.pillGradientTop}, ${chrome.pillGradientBottom})`,
+    borderColor: chrome.pillOutlineColor,
+    borderRadius: '999px',
+  };
+  const rechargePillTextStyle: React.CSSProperties = {
+    color: chrome.pillTextColor,
+  };
 
   return (
     <div className="relative overflow-visible">
@@ -211,7 +226,7 @@ export const SideAction: React.FC<SideActionProps> = ({
               cy="50"
               r="50"
               fill="none"
-              stroke="#588c30"
+              stroke={chrome.pillOutlineColor}
               strokeWidth="5"
               className="tap-ripple-ring"
               style={{ transformOrigin: '50% 50%' }}
@@ -229,39 +244,32 @@ export const SideAction: React.FC<SideActionProps> = ({
         {/* SVG Circular Progress & Decoration */}
         <svg className="absolute inset-0 w-full h-full drop-shadow-[0_1px_6px_rgba(0,0,0,0.8)]" viewBox="0 0 100 100">
           <defs>
-            {/* Standard Green Gradient for the button body */}
-            <linearGradient id={`btn-grad-${label}`} x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#577741" />
-              <stop offset="100%" stopColor="#39502e" />
-            </linearGradient>
-
-            {/* Light Rim/Flash Gradient (Top #fcf0c6, Bottom #cad870) */}
-            <linearGradient id={`light-grad-${label}`} x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#fcf0c6" />
-              <stop offset="100%" stopColor="#cad870" />
+            {/* Same vertical gradient as floating-button / recharge pill */}
+            <linearGradient id={`pill-grad-${label}`} x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor={chrome.pillGradientTop} />
+              <stop offset="100%" stopColor={chrome.pillGradientBottom} />
             </linearGradient>
           </defs>
 
-          {/* Light Outer Border Ring - Now uses the vertical gradient */}
+          {/* Outer border ring */}
           {/* Green version: r=48, White version: r=46 */}
           <circle
             cx="50"
             cy="50"
             r={isFlashing ? 44 : 48}
-            fill={`url(#light-grad-${label})`}
+            fill={`url(#pill-grad-${label})`}
             className="transition-all duration-300"
             style={{
               filter: 'none'
             }}
           />
           
-          {/* Inner Gradient Body - Radius 43 */}
-          {/* Uses light-grad when flashing, else standard green grad */}
+          {/* Inner body */}
           <circle
             cx="50"
             cy="50"
             r="43"
-            fill={isFlashing ? `url(#light-grad-${label})` : `url(#btn-grad-${label})`}
+            fill={`url(#pill-grad-${label})`}
             stroke="rgba(255,255,255,0.15)"
             strokeWidth="1.5"
             className="transition-colors duration-300"
@@ -396,9 +404,7 @@ export const SideAction: React.FC<SideActionProps> = ({
           <div 
             className="absolute bottom-[-6px] py-[3px] shadow-md border-2 z-20 flex items-center justify-center transition-all duration-200"
             style={{ 
-              backgroundImage: 'linear-gradient(to bottom, #fcf0c6, #d0df6f)',
-              borderColor: '#7c8741',
-              borderRadius: '999px',
+              ...rechargePillStyle,
               paddingLeft: '8px',
               paddingRight: '8px',
               minWidth: '2ch'
@@ -406,7 +412,7 @@ export const SideAction: React.FC<SideActionProps> = ({
           >
             <span 
               className="text-[11.25px] font-black uppercase tracking-widest leading-none whitespace-nowrap"
-              style={{ color: '#475c3b' }}
+              style={rechargePillTextStyle}
             >
               FREE
             </span>
@@ -415,9 +421,7 @@ export const SideAction: React.FC<SideActionProps> = ({
           <div 
             className="absolute bottom-[-6px] py-[3px] shadow-md border-2 z-20 flex items-center justify-center transition-all duration-200"
             style={{ 
-              backgroundImage: 'linear-gradient(to bottom, #fcf0c6, #d0df6f)',
-              borderColor: '#7c8741',
-              borderRadius: '999px',
+              ...rechargePillStyle,
               paddingLeft: '8px',
               paddingRight: '8px',
               minWidth: '2ch'
@@ -425,7 +429,7 @@ export const SideAction: React.FC<SideActionProps> = ({
           >
             <span 
               className="text-[11.25px] font-black tabular-nums leading-none whitespace-nowrap"
-              style={{ color: '#475c3b' }}
+              style={rechargePillTextStyle}
             >
               {storageCount}/{storageMax}
             </span>
@@ -433,15 +437,11 @@ export const SideAction: React.FC<SideActionProps> = ({
         ) : isFlashing && isBoardFull ? (
           <div 
             className="absolute bottom-[-6px] px-[12px] py-[3px] shadow-md border-2 z-20 flex items-center justify-center animate-in fade-in slide-in-from-bottom-2 duration-300"
-            style={{ 
-              backgroundImage: 'linear-gradient(to bottom, #fcf0c6, #d0df6f)',
-              borderColor: '#7c8741',
-              borderRadius: '999px'
-            }}
+            style={rechargePillStyle}
           >
             <span 
               className="text-[11.25px] font-black uppercase tracking-widest leading-none"
-              style={{ color: '#475c3b' }}
+              style={rechargePillTextStyle}
             >
               FULL
             </span>
