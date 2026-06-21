@@ -197,7 +197,7 @@ import {
   hasAnyDevUnlockPlantRemaining,
   type GardenCollectionSnapshot,
 } from './utils/collectionGardenState';
-import { createPostFtueCleanSave } from './utils/postFtueCleanSave';
+import { createPostFtueCleanSaveV2 } from './utils/postFtueCleanSave';
 import {
   getLimitedOfferAutoPopupPool,
   getNextLimitedOfferIntroPopup,
@@ -261,7 +261,14 @@ export function getCoinValueForLevel(level: number): number {
   return getPlantCoinValue(level);
 }
 
-/** Max plant goal slots: 3 until 4 golden pots; 4 after Golden Pot bonus. Index 4 (5th slot) is coin goal only. */
+/** Dev cheat: coins added per "+1Mil Coins" tap / Shift+M. */
+const DEV_CHEAT_ADD_MONEY_AMOUNT = 1_000_000;
+
+type DevCheatOptions = {
+  /** When true (default), discovery / level-up popups wait until settings closes. */
+  deferPopups?: boolean;
+};
+
 const GOALS_AREA_LEFT_MARGIN_PX = 20;
 const GOALS_AREA_RIGHT_MARGIN_PX = 40;
 const GOALS_SLOT_STEP_PX = 75;
@@ -2331,6 +2338,121 @@ export default function App() {
     persistGameSaveV2(nextV2);
     setCollectionSaveRevision((r) => r + 1);
   }, [plantMastery.unlockedLevels]);
+
+  const handleDevLevelUpClick = useCallback((options?: DevCheatOptions) => {
+    const deferPopups = options?.deferPopups !== false;
+    playSfx(SFX_IDS.uiConfirmNormal);
+    const nextLevel = playerLevel + 1;
+    if (nextLevel === STARTER_PACK_FORCE_POPUP_LEVEL) {
+      markStarterPackUnlocked();
+      setStarterPackUnlocked(true);
+      pendingLevelUpAfterStarterPackRef.current = nextLevel;
+      setIapOfferUi({ offerId: STORE_IAP_OFFER_STARTER_PACK_ID });
+      return;
+    }
+    setPlayerLevel(nextLevel);
+    recordDailyTaskPlayerLeveledUp();
+    setPlayerLevelProgress(0);
+    setPlayerLevelFlashTrigger((t) => t + 1);
+    if (nextLevel <= MAX_LEVEL_WITH_CUSTOM_UNLOCK_POPUP) {
+      if (deferPopups) {
+        setLevelUpPopupQueue((q) => [...q, nextLevel]);
+      } else {
+        setLevelUpPopup({ isVisible: true, level: nextLevel });
+      }
+    }
+  }, [playerLevel, recordDailyTaskPlayerLeveledUp]);
+
+  const handleDevUnlockPlantClick = useCallback((options?: DevCheatOptions) => {
+    const deferPopups = options?.deferPopups !== false;
+    playSfx(SFX_IDS.uiConfirmNormal);
+    const activeSnap: GardenCollectionSnapshot = {
+      highestPlantEver: highestPlantEverRef.current,
+      unlockedLevels: plantMastery.unlockedLevels,
+      money: moneyRef.current,
+    };
+    const v2Gardens = loadGameSaveV2()?.gardens;
+    if (!hasAnyDevUnlockPlantRemaining(activeGardenIdRef.current, activeSnap, v2Gardens)) return;
+    const target = findNextDevUnlockPlantTarget(
+      activeGardenIdRef.current,
+      activeSnap,
+      v2Gardens,
+    );
+    if (!target) return;
+    const { gardenId: targetGardenId, newLevel } = target;
+
+    if (targetGardenId === activeGardenIdRef.current) {
+      setHighestPlantEver(newLevel);
+      highestPlantEverRef.current = newLevel;
+      discoveryGoalsRemainingRef.current = getDiscoveryGoalBuffer(newLevel);
+      lastMergeDiscoveryLevelRef.current = newLevel;
+      if (deferPopups) {
+        discoveryLevelAfterPauseCloseRef.current = newLevel;
+      } else {
+        setDiscoveryPopup({ isVisible: true, level: newLevel });
+      }
+      return;
+    }
+
+    let v2 = loadGameSaveV2();
+    if (!v2) return;
+    v2 = ensureGardenStartedInSave(v2, targetGardenId);
+    const g = v2.gardens[targetGardenId];
+    if (!g) return;
+    v2 = {
+      ...v2,
+      gardens: {
+        ...v2.gardens,
+        [targetGardenId]: {
+          ...g,
+          highestPlantEver: newLevel,
+          discoveryGoalsRemaining: getDiscoveryGoalBuffer(newLevel),
+          lastMergeDiscoveryLevel: newLevel,
+        },
+      },
+      savedAt: Date.now(),
+    };
+    persistGameSaveV2(v2);
+    setCollectionSaveRevision((r) => r + 1);
+  }, [plantMastery.unlockedLevels]);
+
+  const handleDevGoldenPotClick = useCallback(() => {
+    playSfx(SFX_IDS.uiConfirmNormal);
+    completeMasterySegmentCheat();
+  }, [completeMasterySegmentCheat]);
+
+  const handleDevAddMoneyClick = useCallback(() => {
+    playSfx(SFX_IDS.uiConfirmNormal);
+    setMoney((prev) => prev + DEV_CHEAT_ADD_MONEY_AMOUNT);
+  }, []);
+
+  const flushDeferredCheatPopups = useCallback(() => {
+    const plantLevelToDiscover = discoveryLevelAfterPauseCloseRef.current;
+    discoveryLevelAfterPauseCloseRef.current = null;
+    if (plantLevelToDiscover != null) {
+      setDiscoveryPopup({ isVisible: true, level: plantLevelToDiscover });
+    }
+    setLevelUpPopupQueue((q) => {
+      if (q.length > 0) {
+        setLevelUpPopup({ isVisible: true, level: q[0] });
+        return q.slice(1);
+      }
+      return q;
+    });
+  }, []);
+
+  const devCheatHandlersRef = useRef({
+    unlockPlant: handleDevUnlockPlantClick,
+    levelUp: handleDevLevelUpClick,
+    goldenPot: handleDevGoldenPotClick,
+    addMoney: handleDevAddMoneyClick,
+  });
+  devCheatHandlersRef.current = {
+    unlockPlant: handleDevUnlockPlantClick,
+    levelUp: handleDevLevelUpClick,
+    goldenPot: handleDevGoldenPotClick,
+    addMoney: handleDevAddMoneyClick,
+  };
 
   const purchasePlantMasteryForLevel = useCallback(
     (level: number, gardenId: GardenId) => {
@@ -6519,6 +6641,40 @@ export default function App() {
     };
   }, [isLoading]);
 
+  /** Dev keyboard shortcuts — work whenever the game tab is focused (not only when Dev Tools is open). */
+  useEffect(() => {
+    const isTypingTarget = (target: EventTarget | null): boolean => {
+      if (!(target instanceof HTMLElement)) return false;
+      const tag = target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+      return target.isContentEditable;
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (isTypingTarget(e.target)) return;
+
+      const key = e.key.toLowerCase();
+      const cheats = devCheatHandlersRef.current;
+      if (key === 'p') {
+        e.preventDefault();
+        cheats.unlockPlant({ deferPopups: false });
+      } else if (key === 'l') {
+        e.preventDefault();
+        cheats.levelUp({ deferPopups: false });
+      } else if (key === 'g') {
+        e.preventDefault();
+        cheats.goldenPot();
+      } else if (key === 'm') {
+        e.preventDefault();
+        cheats.addMoney();
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+  }, []);
+
   return (
     <ErrorBoundary>
       <>
@@ -9466,18 +9622,7 @@ export default function App() {
                 setPauseMenuOpen(false);
                 setSettingsOpenedFromFtue(false);
                 setDevToolsOpen(false);
-                const plantLevelToDiscover = discoveryLevelAfterPauseCloseRef.current;
-                discoveryLevelAfterPauseCloseRef.current = null;
-                if (plantLevelToDiscover != null) {
-                  setDiscoveryPopup({ isVisible: true, level: plantLevelToDiscover });
-                }
-                setLevelUpPopupQueue((q) => {
-                  if (q.length > 0) {
-                    setLevelUpPopup({ isVisible: true, level: q[0] });
-                    return q.slice(1);
-                  }
-                  return q;
-                });
+                flushDeferredCheatPopups();
               }}
               onOpenDevTools={() => setDevToolsOpen(true)}
               onClearBoosts={() => {
@@ -9542,73 +9687,14 @@ export default function App() {
                 const state = buildLimitedOfferPopupState(offer.id, { highestPlantEver });
                 if (state) setLimitedOfferPopup(state);
               }}
-              onLevelUpClick={() => {
-                playSfx(SFX_IDS.uiConfirmNormal);
-                const nextLevel = playerLevel + 1;
-                if (nextLevel === STARTER_PACK_FORCE_POPUP_LEVEL) {
-                  markStarterPackUnlocked();
-                  setStarterPackUnlocked(true);
-                  pendingLevelUpAfterStarterPackRef.current = nextLevel;
-                  setIapOfferUi({ offerId: STORE_IAP_OFFER_STARTER_PACK_ID });
-                  return;
-                }
-                setPlayerLevel(nextLevel);
-                recordDailyTaskPlayerLeveledUp();
-                setPlayerLevelProgress(0);
-                setPlayerLevelFlashTrigger((t) => t + 1);
-                if (nextLevel <= MAX_LEVEL_WITH_CUSTOM_UNLOCK_POPUP) {
-                  setLevelUpPopupQueue((q) => [...q, nextLevel]);
-                }
-              }}
+              onLevelUpClick={handleDevLevelUpClick}
               canUnlockPlant={hasAnyDevUnlockPlantRemaining(
                 activeGardenId,
                 activeCollectionSnapshot,
                 collectionV2Gardens,
               )}
-              onUnlockPlantClick={() => {
-                playSfx(SFX_IDS.uiConfirmNormal);
-                const target = findNextDevUnlockPlantTarget(
-                  activeGardenId,
-                  activeCollectionSnapshot,
-                  collectionV2Gardens,
-                );
-                if (!target) return;
-                const { gardenId: targetGardenId, newLevel } = target;
-
-                if (targetGardenId === activeGardenIdRef.current) {
-                  setHighestPlantEver(newLevel);
-                  highestPlantEverRef.current = newLevel;
-                  discoveryGoalsRemainingRef.current = getDiscoveryGoalBuffer(newLevel);
-                  lastMergeDiscoveryLevelRef.current = newLevel;
-                  discoveryLevelAfterPauseCloseRef.current = newLevel;
-                  return;
-                }
-
-                let v2 = loadGameSaveV2();
-                if (!v2) return;
-                v2 = ensureGardenStartedInSave(v2, targetGardenId);
-                const g = v2.gardens[targetGardenId];
-                if (!g) return;
-                v2 = {
-                  ...v2,
-                  gardens: {
-                    ...v2.gardens,
-                    [targetGardenId]: {
-                      ...g,
-                      highestPlantEver: newLevel,
-                      discoveryGoalsRemaining: getDiscoveryGoalBuffer(newLevel),
-                      lastMergeDiscoveryLevel: newLevel,
-                    },
-                  },
-                  savedAt: Date.now(),
-                };
-                persistGameSaveV2(v2);
-                setCollectionSaveRevision((r) => r + 1);
-              }}
-              onGoldenPotClick={() => {
-                playSfx(SFX_IDS.uiConfirmNormal);
-                completeMasterySegmentCheat();
-              }}
+              onUnlockPlantClick={handleDevUnlockPlantClick}
+              onGoldenPotClick={handleDevGoldenPotClick}
               fakeNotchPreviewEnabled={fakeNotchPreviewEnabled}
               onFakeNotchToggle={() => {
                 playSfx(SFX_IDS.uiConfirmNormal);
@@ -9629,10 +9715,7 @@ export default function App() {
                 applyDailyTaskRowsUpdate(resetDailyTasksForDev(getDailyTasksCtx()));
                 setDailyTaskClaimBounceIds([]);
               }}
-              onAddMoney={(amount) => {
-                playSfx(SFX_IDS.uiConfirmNormal);
-                setMoney((prev) => prev + amount);
-              }}
+              onAddMoney={() => handleDevAddMoneyClick()}
               onClearProgress={() => {
                 playSfx(SFX_IDS.uiConfirmNormal);
                 if (
@@ -9657,7 +9740,7 @@ export default function App() {
                 setStarterPackPurchased(false);
                 setStarterPackCountdownRefreshKey((k) => k + 1);
                 setDailyTasksCountdownRefreshKey((k) => k + 1);
-                persistGameSave(createPostFtueCleanSave());
+                persistGameSaveV2(createPostFtueCleanSaveV2());
                 window.location.reload();
               }}
               closeOnBackdropClick

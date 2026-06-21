@@ -24,6 +24,11 @@ import {
   LIMITED_OFFER_INTRO_CYCLE_SEEN_IDS_KEY,
 } from './limitedOfferIntroCycle';
 import { RATE_US_PERMANENTLY_DISMISSED_KEY } from './rateUsDismiss';
+import {
+  DAILY_TASKS_COUNTDOWN_END_MS_KEY,
+  DAILY_TASKS_UNLOCKED_KEY,
+} from './dailyTasksCountdown';
+import { clearAllDailyTasksDayStorage } from './dailyTasksGardenScope';
 import { DEFAULT_GARDEN_ID, type GardenId } from '../constants/gardens';
 import { MAX_PLANT_TIER } from '../constants/plants';
 import {
@@ -415,6 +420,17 @@ export function clearGameSave(): void {
   try {
     localStorage.removeItem(LIMITED_OFFER_INTRO_CYCLE_COMPLETE_KEY);
     localStorage.removeItem(RATE_US_PERMANENTLY_DISMISSED_KEY);
+  } catch {
+    /* ignore */
+  }
+  clearAllDailyTasksDayStorage();
+  try {
+    localStorage.removeItem(DAILY_TASKS_COUNTDOWN_END_MS_KEY);
+  } catch {
+    /* ignore */
+  }
+  try {
+    localStorage.removeItem(DAILY_TASKS_UNLOCKED_KEY);
   } catch {
     /* ignore */
   }

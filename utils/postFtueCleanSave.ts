@@ -15,6 +15,13 @@ import {
   type GameSaveV1,
   getDiscoveryGoalBuffer,
 } from './gameSave';
+import { DEFAULT_GARDEN_ID } from '../constants/gardens';
+import {
+  extractGardenStateFromV1,
+  extractGlobalsFromV1,
+  GAME_SAVE_V2_VERSION,
+  type GameSaveV2,
+} from './gardenSave';
 import { loadUserPrefs } from './userPrefs';
 
 const getHexDistance = (q: number, r: number): number => (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2;
@@ -130,5 +137,19 @@ export function createPostFtueCleanSave(): GameSaveV1 {
     tasksFtueCompleted: false,
     wildGrowthAccumulatorMs: 0,
     barnShelvesUnlocked: normalizeBarnShelvesUnlocked(),
+  };
+}
+
+/** Post-FTUE clean account save — garden 1 only; other gardens are fully wiped. */
+export function createPostFtueCleanSaveV2(): GameSaveV2 {
+  const v1 = createPostFtueCleanSave();
+  return {
+    v: GAME_SAVE_V2_VERSION,
+    savedAt: v1.savedAt,
+    activeGardenId: DEFAULT_GARDEN_ID,
+    gardensFeatureUnlocked: false,
+    gardensStarted: [DEFAULT_GARDEN_ID],
+    gardens: { [DEFAULT_GARDEN_ID]: extractGardenStateFromV1(v1) },
+    globals: extractGlobalsFromV1(v1),
   };
 }

@@ -6,7 +6,7 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
 import type { GardenId } from '../constants/gardens';
-import { getGardenCoinSmallIconPath } from '../utils/gardenAssets';
+import { getGardenCoinIconPath } from '../utils/gardenAssets';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
 import { PopupVectorBackground } from './PopupVectorBackground';
 import { formatCompactNumber } from '../utils/formatCompactNumber';
@@ -603,7 +603,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
             >
               <img
                 ref={rewardCoinRef}
-                src={getGardenCoinSmallIconPath()}
+                src={getGardenCoinIconPath(gardenId)}
                 alt=""
                 className="object-contain shrink-0"
                 style={{ width: `${DISCOVERY_COIN_REWARD_ICON_PX}px`, height: `${DISCOVERY_COIN_REWARD_ICON_PX}px` }}
