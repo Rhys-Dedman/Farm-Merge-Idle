@@ -34,6 +34,7 @@ export function getGardenDisplayLabel(gardenId: GardenId): string {
 const COLLECTION_GARDEN_DISPLAY_NAMES: Partial<Record<GardenId, string>> = {
   garden_1: 'Flower Garden',
   garden_2: 'Fruit Garden',
+  garden_3: 'Vegetable Garden',
 };
 
 /** Collection screen section title for each garden (e.g. Flower Garden, Fruit Garden). */

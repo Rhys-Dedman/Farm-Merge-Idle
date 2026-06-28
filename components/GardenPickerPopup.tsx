@@ -1,12 +1,32 @@
 /**
  * Select Garden — discovery-style popup for switching active garden.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { assetPath } from '../utils/assetPath';
-import { getGardenDisplayLabel, SHIPPED_GARDEN_IDS, type GardenId } from '../constants/gardens';
-import { getGoldenPotCountRequiredForGarden } from '../constants/goldenPotBonuses';
+import {
+  DEFAULT_GARDEN_ID,
+  GARDEN_IDS,
+  getCollectionGardenDisplayName,
+  isShippedGardenId,
+  type GardenId,
+} from '../constants/gardens';
+import { getGoldenPotCountRequiredForGarden, hasGoldenPotNewGardenUnlocked } from '../constants/goldenPotBonuses';
+import {
+  GARDEN_PICKER_CARD_HORIZONTAL_PAD_PX,
+  GARDEN_PICKER_GOLDEN_POT_UNLOCK_REQUIRED,
+  GARDEN_PICKER_LIST_GAP_PX,
+  GARDEN_PICKER_LIST_HORIZONTAL_PAD_PX,
+  GARDEN_PICKER_PRESCALE_WIDTH_PX,
+  GARDEN_PICKER_PURCHASE_COIN_PRICE,
+} from '../constants/gardenPicker';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
 import { PopupVectorBackground } from './PopupVectorBackground';
+import { PopupRectLeafBurst } from './PopupRectLeafBurst';
+import {
+  GardenPickerRow,
+  type GardenPickerPanelState,
+  type GardenPickerPurchaseFx,
+} from './GardenPickerRow';
 
 interface GardenPickerPopupProps {
   isVisible: boolean;
@@ -14,68 +34,93 @@ interface GardenPickerPopupProps {
   onUserDismiss?: () => void;
   activeGardenId: GardenId;
   onSelectGarden: (gardenId: GardenId) => void;
-  /** Gardens the player can switch to (garden 2 requires Fruit Garden golden pot bonus). */
-  selectableGardenIds: GardenId[];
+  onPurchaseGarden?: (gardenId: GardenId) => void;
+  onPurchaseSound?: () => void;
+  /** Gardens the player has started / owns. */
+  gardensStarted?: GardenId[];
+  globalGoldenPotCount?: number;
+  /** Active garden coin balance (garden 1 coins pay for garden 2, etc.). */
+  playerMoney?: number;
   closeOnBackdropClick?: boolean;
   appScale?: number;
 }
 
 const POPUP_CLOSE_MS = 200;
 const HEADER_ICON = assetPath('/assets/icons/floating_buttons/icon_fb_gardens.png');
-const GOLDEN_POT_ICON = assetPath('/assets/icons/collection/icon_goldenpot.png');
-const GOLDEN_POT_REQUIREMENT_COLOR = '#915c22';
+/** Ring art is fixed; scale icon only so it is not capped by the inner aperture. */
+const HEADER_RING_PX = 120;
+const HEADER_RING_TOP_PX = -20;
+const HEADER_ICON_BASE_PX = 80;
+const HEADER_ICON_SCALE = 1.15;
+const HEADER_ICON_PX = Math.round(HEADER_ICON_BASE_PX * HEADER_ICON_SCALE);
 
-const GARDEN_BTN = {
-  selected: {
-    bg: '#b8d458',
-    pressedBg: '#9fc044',
-    border: '#8fb33a',
-    text: '#4a6b1e',
-  },
-  unselected: {
-    bg: '#89c8e1',
-    pressedBg: '#7ab8d1',
-    border: '#66a4c6',
-    text: '#4580a8',
-  },
-  locked: {
-    bg: '#d4c4a0',
-    pressedBg: '#d4c4a0',
-    border: '#b8a880',
-    text: '#8a7355',
-  },
-} as const;
+/** Match Daily Tasks popup shell / prescale layout. */
+const GARDEN_PICKER_SHELL_WIDTH_PX = 400;
+const GARDEN_PICKER_SHELL_MIN_HEIGHT_PX = 520;
+const GARDEN_PICKER_PRESCALE_MARGIN_BOTTOM_PX = -300;
+const GARDEN_PICKER_VISUAL_CARD_WIDTH_PX = GARDEN_PICKER_PRESCALE_WIDTH_PX * 0.5;
+const GARDEN_PICKER_CLOSE_TOP_PX = 56;
+const GARDEN_PICKER_CLOSE_RIGHT_PX =
+  (GARDEN_PICKER_SHELL_WIDTH_PX - GARDEN_PICKER_VISUAL_CARD_WIDTH_PX) / 2 + 24;
+const GARDEN_PICKER_POPUP_OFFSET_Y = 'clamp(48px, 7vh, 80px)';
 
-function gardenButtonStyle(
-  selected: boolean,
-  locked: boolean,
-  pressed: boolean,
-): React.CSSProperties {
-  const p = locked ? GARDEN_BTN.locked : selected ? GARDEN_BTN.selected : GARDEN_BTN.unselected;
-  return {
-    width: '360px',
-    height: '80px',
-    backgroundColor: pressed && !locked ? p.pressedBg : p.bg,
-    border: `4px solid ${p.border}`,
-    borderRadius: '24px',
-    boxShadow:
-      locked || pressed
-        ? 'inset 0 4px 8px rgba(0,0,0,0.12)'
-        : `0 8px 0 ${p.border}, 0 12px 24px rgba(0,0,0,0.15)`,
-    transform: pressed && !locked ? 'translateY(4px)' : 'translateY(0)',
-    cursor: locked ? 'default' : 'pointer',
-    opacity: locked ? 0.92 : 1,
-  };
+const SETTINGS_TITLE_COLOR = '#5c4a32';
+const DIVIDER_ROW_MIN_HEIGHT_PX = 40;
+const POPUP_TITLE_TEXT = 'Your Gardens';
+const POPUP_DESCRIPTION_TEXT = 'Unlock new gardens and discover new plants!';
+/** Prescale rem — reads as 2rem on screen after 0.5× (matches Discovery / Golden Pot popups). */
+const POPUP_DESCRIPTION_FONT_SIZE_REM = '2rem';
+
+interface GardenPickerLeafBurst {
+  id: string;
+  x: number;
+  y: number;
+  rectWidth: number;
+  rectHeight: number;
 }
 
-function gardenButtonLabelStyle(selected: boolean, locked: boolean): React.CSSProperties {
-  const p = locked ? GARDEN_BTN.locked : selected ? GARDEN_BTN.selected : GARDEN_BTN.unselected;
-  return {
-    color: p.text,
-    fontFamily: 'Inter, sans-serif',
-    textShadow: '0 2px 0 rgba(255,255,255,0.3)',
-    fontSize: '2rem',
-  };
+function gardenIndex(gardenId: GardenId): number {
+  return GARDEN_IDS.indexOf(gardenId);
+}
+
+function isPreviousGardenOwned(gardenId: GardenId, gardensStarted: Set<GardenId>): boolean {
+  const index = gardenIndex(gardenId);
+  if (index <= 0) return true;
+  return gardensStarted.has(GARDEN_IDS[index - 1]!);
+}
+
+export function resolveGardenPickerPanelState(
+  gardenId: GardenId,
+  activeGardenId: GardenId,
+  options: {
+    gardensStarted: Set<GardenId>;
+    globalGoldenPotCount: number;
+    playerMoney: number;
+  },
+): GardenPickerPanelState {
+  if (!isPreviousGardenOwned(gardenId, options.gardensStarted)) {
+    return 'locked';
+  }
+
+  if (!isShippedGardenId(gardenId)) {
+    return 'coming_soon';
+  }
+
+  const started = options.gardensStarted.has(gardenId);
+  const goldenPotRequired = getGoldenPotCountRequiredForGarden(gardenId);
+
+  if (started) {
+    return gardenId === activeGardenId ? 'selected' : 'owned';
+  }
+
+  if (goldenPotRequired != null) {
+    if (!hasGoldenPotNewGardenUnlocked(options.globalGoldenPotCount)) {
+      return 'pots';
+    }
+    return 'purchase';
+  }
+
+  return gardenId === activeGardenId ? 'selected' : 'owned';
 }
 
 export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
@@ -84,13 +129,20 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
   onUserDismiss,
   activeGardenId,
   onSelectGarden,
-  selectableGardenIds,
+  onPurchaseGarden,
+  onPurchaseSound,
+  gardensStarted = [DEFAULT_GARDEN_ID],
+  globalGoldenPotCount = 0,
+  playerMoney = 0,
   closeOnBackdropClick = true,
   appScale = 1,
 }) => {
   const [animState, setAnimState] = useState<PopupAnimWithPreflight>('hidden');
-  const [pressedId, setPressedId] = useState<GardenId | null>(null);
+  const [bounceRowKeys, setBounceRowKeys] = useState<string[]>([]);
+  const [leafBursts, setLeafBursts] = useState<GardenPickerLeafBurst[]>([]);
   const popupCardLayoutRef = useRef<HTMLDivElement>(null);
+
+  const gardensStartedSet = useMemo(() => new Set(gardensStarted), [gardensStarted]);
 
   const beginEnterAfterPreflight = useCallback(() => {
     setAnimState('entering');
@@ -111,6 +163,13 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
     }
   }, [isVisible, animState, onClose]);
 
+  useEffect(() => {
+    if (!isVisible) {
+      setBounceRowKeys([]);
+      setLeafBursts([]);
+    }
+  }, [isVisible]);
+
   const dismissToClose = () => {
     if (animState === 'leaving' || animState === 'hidden' || animState === 'preflight') return;
     onUserDismiss?.();
@@ -120,6 +179,35 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
       onClose();
     }, POPUP_CLOSE_MS);
   };
+
+  const triggerPurchasePresentation = useCallback((rowKey: string, fx: GardenPickerPurchaseFx) => {
+    setBounceRowKeys((prev) => (prev.includes(rowKey) ? prev : [...prev, rowKey]));
+    setLeafBursts((prev) => [
+      ...prev,
+      {
+        id: `garden-purchase-${rowKey}-${Date.now()}`,
+        x: fx.rowCenter.x,
+        y: fx.rowCenter.y,
+        rectWidth: fx.rowWidth,
+        rectHeight: fx.rowHeight,
+      },
+    ]);
+    window.setTimeout(() => {
+      setBounceRowKeys((prev) => prev.filter((k) => k !== rowKey));
+    }, 220);
+  }, []);
+
+  const handlePurchase = useCallback(
+    (rowKey: string, gardenId: GardenId, fx: GardenPickerPurchaseFx) => {
+      if (playerMoney < GARDEN_PICKER_PURCHASE_COIN_PRICE) return;
+      onPurchaseSound?.();
+      triggerPurchasePresentation(rowKey, fx);
+      window.setTimeout(() => {
+        onPurchaseGarden?.(gardenId);
+      }, 200);
+    },
+    [onPurchaseGarden, onPurchaseSound, playerMoney, triggerPurchasePresentation],
+  );
 
   if (animState === 'hidden') return null;
 
@@ -132,6 +220,18 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
       className="fixed inset-0 flex items-center justify-center"
       style={{ zIndex: 100, overflow: 'hidden', pointerEvents: isPreflight ? 'none' : 'auto' }}
     >
+      {leafBursts.map((burst) => (
+        <PopupRectLeafBurst
+          key={burst.id}
+          centerX={burst.x}
+          centerY={burst.y}
+          rectWidth={burst.rectWidth}
+          rectHeight={burst.rectHeight}
+          zIndex={110}
+          onComplete={() => setLeafBursts((prev) => prev.filter((b) => b.id !== burst.id))}
+        />
+      ))}
+
       <div
         className="absolute transition-opacity duration-200"
         style={{
@@ -147,14 +247,19 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
 
       <div
         className="relative flex items-center justify-center"
-        style={{ transform: `scale(${appScale})`, transformOrigin: 'center center' }}
+        style={{
+          transform: `scale(${appScale}) translateY(${GARDEN_PICKER_POPUP_OFFSET_Y})`,
+          transformOrigin: 'center center',
+        }}
       >
         <div
           ref={popupCardLayoutRef}
-          className="relative flex flex-col items-center"
+          className="relative flex flex-col items-center overflow-visible"
           style={{
-            width: '320px',
+            width: `${GARDEN_PICKER_SHELL_WIDTH_PX}px`,
+            minHeight: GARDEN_PICKER_SHELL_MIN_HEIGHT_PX,
             zIndex: 102,
+            overflow: 'visible',
             ...popupCardSurfaceStyle(
               animState,
               isEntering,
@@ -177,65 +282,87 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
           `}</style>
 
           <div
-            className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center"
-            style={{ width: '120px', height: '120px', top: '-20px', zIndex: 104 }}
+            className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center overflow-visible"
+            style={{
+              width: `${HEADER_RING_PX}px`,
+              height: `${HEADER_RING_PX}px`,
+              top: `${HEADER_RING_TOP_PX}px`,
+              zIndex: 104,
+            }}
           >
             <img
               src={assetPath('/assets/ui/popup_header.png')}
               alt=""
-              className="absolute inset-0 w-full h-full object-contain"
-              style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.25))' }}
-            />
-            <img
-              src={HEADER_ICON}
-              alt=""
-              className="relative object-contain"
+              className="absolute inset-0 h-full w-full object-contain"
               style={{
-                width: '80px',
-                height: '80px',
+                maxWidth: 'none',
+                maxHeight: 'none',
+                filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.25))',
+              }}
+            />
+            <div
+              className="relative flex shrink-0 items-center justify-center overflow-visible"
+              style={{
+                width: `${HEADER_ICON_PX}px`,
+                height: `${HEADER_ICON_PX}px`,
                 marginTop: '-4px',
                 filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
               }}
-            />
+            >
+              <img
+                src={HEADER_ICON}
+                alt=""
+                className="h-full w-full object-contain"
+                style={{ maxWidth: 'none', maxHeight: 'none' }}
+                draggable={false}
+              />
+            </div>
           </div>
 
           <div
             style={{
               position: 'relative',
               marginTop: '36px',
-              width: '640px',
+              width: `${GARDEN_PICKER_PRESCALE_WIDTH_PX}px`,
               transform: 'scale(0.5)',
               transformOrigin: 'top center',
-              marginBottom: '-200px',
+              marginBottom: `${GARDEN_PICKER_PRESCALE_MARGIN_BOTTOM_PX}px`,
             }}
           >
             <div
               style={{
                 position: 'relative',
                 filter: 'drop-shadow(0 16px 48px rgba(0,0,0,0.3))',
-                padding: '150px 40px 48px 40px',
+                padding: `150px ${GARDEN_PICKER_CARD_HORIZONTAL_PAD_PX}px 60px ${GARDEN_PICKER_CARD_HORIZONTAL_PAD_PX}px`,
               }}
             >
               <PopupVectorBackground />
               <div className="relative z-[2] flex flex-col items-center w-full">
                 <h2
-                  className="font-normal text-center"
+                  className="font-black tracking-tight text-center"
                   style={{
-                    color: '#c2b280',
+                    color: SETTINGS_TITLE_COLOR,
                     fontFamily: 'Inter, sans-serif',
-                    letterSpacing: '-0.02em',
-                    fontSize: '2.25rem',
+                    fontSize: '4.5rem',
+                    lineHeight: 1.1,
                   }}
                 >
-                  Select Garden
+                  {POPUP_TITLE_TEXT}
                 </h2>
 
-                <div className="w-full flex items-center justify-center" style={{ marginTop: '8px', marginBottom: '20px' }}>
+                <div
+                  className="w-full flex items-center justify-center"
+                  style={{
+                    marginTop: '8px',
+                    marginBottom: '20px',
+                    minHeight: DIVIDER_ROW_MIN_HEIGHT_PX,
+                  }}
+                >
                   <img
                     src={assetPath('/assets/ui/popup_divider.png')}
                     alt=""
                     className="h-auto object-contain"
-                    style={{ width: '520px' }}
+                    style={{ width: '580px', maxHeight: DIVIDER_ROW_MIN_HEIGHT_PX }}
                   />
                 </div>
 
@@ -246,70 +373,42 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
                     fontFamily: 'Inter, sans-serif',
                     paddingLeft: '24px',
                     paddingRight: '24px',
-                    fontSize: '1.75rem',
+                    fontSize: POPUP_DESCRIPTION_FONT_SIZE_REM,
                     marginBottom: '28px',
                   }}
                 >
-                  You can spend coins to unlock a new garden and discover new plants
+                  {POPUP_DESCRIPTION_TEXT}
                 </p>
 
-                <div className="flex flex-col items-center gap-4 w-full">
-                  {SHIPPED_GARDEN_IDS.map((gardenId) => {
-                    const selected = gardenId === activeGardenId;
-                    const isSelectable = selectableGardenIds.includes(gardenId);
-                    const goldenPotRequired = getGoldenPotCountRequiredForGarden(gardenId);
-                    const locked = !isSelectable && goldenPotRequired != null;
+                <div
+                  className="w-full flex flex-col items-stretch"
+                  style={{
+                    paddingLeft: GARDEN_PICKER_LIST_HORIZONTAL_PAD_PX,
+                    paddingRight: GARDEN_PICKER_LIST_HORIZONTAL_PAD_PX,
+                    gap: GARDEN_PICKER_LIST_GAP_PX,
+                  }}
+                  aria-label="Garden list"
+                >
+                  {GARDEN_IDS.map((gardenId) => {
+                    const state = resolveGardenPickerPanelState(gardenId, activeGardenId, {
+                      gardensStarted: gardensStartedSet,
+                      globalGoldenPotCount,
+                      playerMoney,
+                    });
                     return (
-                      <button
+                      <GardenPickerRow
                         key={gardenId}
-                        type="button"
-                        aria-disabled={locked || undefined}
-                        aria-label={
-                          locked && goldenPotRequired != null
-                            ? `${getGardenDisplayLabel(gardenId)}, unlock at ${goldenPotRequired} golden pots`
-                            : getGardenDisplayLabel(gardenId)
-                        }
-                        onMouseDown={() => {
-                          if (!locked) setPressedId(gardenId);
-                        }}
-                        onMouseUp={() => setPressedId(null)}
-                        onMouseLeave={() => setPressedId(null)}
-                        onClick={() => {
-                          if (locked) return;
-                          onSelectGarden(gardenId);
-                        }}
-                        className="relative flex items-center justify-center rounded-xl transition-all"
-                        style={gardenButtonStyle(selected, locked, pressedId === gardenId)}
-                      >
-                        <span className="font-bold tracking-tight" style={gardenButtonLabelStyle(selected, locked)}>
-                          {getGardenDisplayLabel(gardenId)}
-                        </span>
-                        {locked && goldenPotRequired != null && (
-                          <div
-                            className="absolute flex items-center justify-center gap-2"
-                            style={{ right: '20px', top: '50%', transform: 'translateY(-50%)' }}
-                            aria-hidden
-                          >
-                            <img
-                              src={GOLDEN_POT_ICON}
-                              alt=""
-                              className="object-contain shrink-0"
-                              style={{ width: '36px', height: '36px' }}
-                            />
-                            <span
-                              className="font-bold tabular-nums leading-none"
-                              style={{
-                                color: GOLDEN_POT_REQUIREMENT_COLOR,
-                                fontFamily: 'Inter, sans-serif',
-                                fontSize: '1.75rem',
-                                letterSpacing: '-0.04em',
-                              }}
-                            >
-                              {goldenPotRequired}
-                            </span>
-                          </div>
-                        )}
-                      </button>
+                        gardenId={gardenId}
+                        state={state}
+                        gardenDisplayName={getCollectionGardenDisplayName(gardenId)}
+                        globalGoldenPotCount={globalGoldenPotCount}
+                        goldenPotRequired={GARDEN_PICKER_GOLDEN_POT_UNLOCK_REQUIRED}
+                        purchaseCoinPrice={GARDEN_PICKER_PURCHASE_COIN_PRICE}
+                        playerMoney={playerMoney}
+                        claimBounceActive={bounceRowKeys.includes(gardenId)}
+                        onView={() => onSelectGarden(gardenId)}
+                        onPurchase={(fx) => handlePurchase(gardenId, gardenId, fx)}
+                      />
                     );
                   })}
                 </div>
@@ -320,8 +419,16 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
           <button
             type="button"
             onClick={dismissToClose}
-            className="absolute top-[44px] right-3 w-8 h-8 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
-            style={{ backgroundColor: 'transparent', border: 'none', color: '#c2b280', zIndex: 105 }}
+            className="absolute w-8 h-8 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
+            style={{
+              top: GARDEN_PICKER_CLOSE_TOP_PX,
+              right: GARDEN_PICKER_CLOSE_RIGHT_PX,
+              backgroundColor: 'transparent',
+              border: 'none',
+              color: '#c2b280',
+              zIndex: 105,
+            }}
+            aria-label="Close"
           >
             <svg width="16" height="16" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               <path d="M2 2L12 12M12 2L2 12" />

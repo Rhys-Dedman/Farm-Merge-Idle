@@ -24,8 +24,8 @@ export function shouldShowFarmFloatingButtons(gardenId: GardenId, playerLevel: n
 /** Farm floating button: Tasks (no popup yet). */
 export const TASKS_FLOATING_BUTTON_UNLOCK_LEVEL = 5;
 
-/** Farm floating button: Gardens (0 = unlocked for testing; restore to 10 for release). */
-export const GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL = 0;
+/** Farm floating button: Gardens (garden 1 player level). */
+export const GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL = 10;
 
 /** Set false to hide the Gardens FB in UI while backend unlock logic remains. */
 export const GARDENS_FLOATING_BUTTON_UI_VISIBLE = true;

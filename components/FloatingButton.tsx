@@ -70,7 +70,7 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
   return (
     <button
       type="button"
-      onClick={locked ? undefined : onClick}
+      onClick={onClick}
       aria-label={resolvedAriaLabel}
       aria-disabled={locked || undefined}
       className={`relative inline-block overflow-visible border-0 bg-transparent p-0 outline-none select-none transition-transform duration-150 ${locked ? 'cursor-default' : 'active:scale-95'} ${readyBounceActive ? 'floating-button-ready-bounce' : ''} ${className}`}

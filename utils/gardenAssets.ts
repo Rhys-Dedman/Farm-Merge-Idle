@@ -213,6 +213,40 @@ export function getCollectionGardenSectionIconPreloadPaths(): string[] {
   });
 }
 
+const GARDEN_PICKER_ICON_BASE = '/assets/icons/collection';
+
+function gardenPickerIconNumber(gardenId: GardenId): number {
+  const n = GARDEN_IDS.indexOf(gardenId) + 1;
+  return n > 0 ? n : 1;
+}
+
+/** Garden picker brown-square icon — `icon_gardens_N.png`. */
+export function getGardenPickerGardenIconPath(gardenId: GardenId): string {
+  const n = gardenPickerIconNumber(gardenId);
+  return assetPath(`${GARDEN_PICKER_ICON_BASE}/icon_gardens_${n}.png`);
+}
+
+/** Pots state — per-garden locked variant `icon_gardens_N_locked.png`. */
+export function getGardenPickerGardenPotsIconPath(gardenId: GardenId): string {
+  const n = gardenPickerIconNumber(gardenId);
+  return assetPath(`${GARDEN_PICKER_ICON_BASE}/icon_gardens_${n}_locked.png`);
+}
+
+/** Locked state (prior garden not owned) — `icon_gardens_locked.png`. */
+export function getGardenPickerFullyLockedIconPath(): string {
+  return assetPath(`${GARDEN_PICKER_ICON_BASE}/icon_gardens_locked.png`);
+}
+
+export function getGardenPickerIconPreloadPaths(): string[] {
+  const paths = new Set<string>([`${GARDEN_PICKER_ICON_BASE}/icon_gardens_locked.png`]);
+  for (const gardenId of GARDEN_IDS) {
+    const n = gardenPickerIconNumber(gardenId);
+    paths.add(`${GARDEN_PICKER_ICON_BASE}/icon_gardens_${n}.png`);
+    paths.add(`${GARDEN_PICKER_ICON_BASE}/icon_gardens_${n}_locked.png`);
+  }
+  return [...paths];
+}
+
 /** Collection milestone reward icon — `icon_collection_<slug>.png`. */
 export function getCollectionBonusIconPath(iconSlug: string): string {
   return assetPath(`/assets/icons/collection/icon_collection_${iconSlug}.png`);

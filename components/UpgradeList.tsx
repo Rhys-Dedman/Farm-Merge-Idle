@@ -389,6 +389,8 @@ export type LevelUnlockInfo = {
   navigateToBarnOnUnlock?: boolean;
   /** Primary button label (default Unlock Now! in LevelUpPopup) */
   levelUpButtonText?: string;
+  /** Level-up header icon scale (default 1). */
+  headerIconScale?: number;
 };
 
 /** Get level unlock info for level-up popup. Returns title, description, icon, and optionally upgradeId/tab for Unlock Now behavior. */
@@ -404,6 +406,7 @@ export const getLevelUnlockInfo = (level: number): LevelUnlockInfo => {
     plantCollectionHeader?: boolean;
     navigateToBarnOnUnlock?: boolean;
     buttonText?: string;
+    headerIconScale?: number;
   };
   const allUnlocks: Row[] = [
     { level: 2, upgradeId: 'plot_expansion', tab: 'CROPS', name: 'Garden Expansion', description: 'Unlock additional plots in the garden', icon: 'icon_plotexpansion.png', popupDescription: 'You can now unlock additional plots in the garden' },
@@ -436,10 +439,11 @@ export const getLevelUnlockInfo = (level: number): LevelUnlockInfo => {
       level: 10,
       upgradeId: '',
       tab: 'CROPS',
-      name: 'Gardens',
+      name: 'New Garden',
       description: 'New garden areas to explore.',
       icon: 'icon_fb_gardens.png',
       popupDescription: 'New Gardens are now available.',
+      headerIconScale: 1.2,
     },
     { level: 11, upgradeId: 'crop_value', tab: 'CROPS', name: 'Crop Yield', description: 'Increase how many crops your plants produce when harvesting', icon: 'icon_cropvalue.png', popupDescription: 'You can now increase how many crops your plants produce when harvesting' },
     { level: 12, upgradeId: 'happy_customer', tab: 'HARVEST', name: 'Happy Customers', description: 'Increase chance that customers pay double for orders', icon: 'icon_happycustomer.png', popupDescription: 'You can now increase the chance for customers to pay double coins for orders' },
@@ -457,6 +461,7 @@ export const getLevelUnlockInfo = (level: number): LevelUnlockInfo => {
       plantCollectionHeader: match.plantCollectionHeader,
       navigateToBarnOnUnlock: match.navigateToBarnOnUnlock,
       levelUpButtonText: match.buttonText,
+      headerIconScale: match.headerIconScale,
     };
   }
   return {

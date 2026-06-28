@@ -53,6 +53,11 @@ import { GardenPickerPopup } from './components/GardenPickerPopup';
 import { RateUsPopup } from './components/RateUsPopup';
 import { RateUsThankYouPopup } from './components/RateUsThankYouPopup';
 import { DailyTasksPopup } from './components/DailyTasksPopup';
+import {
+  LockedFloatingFeaturePopup,
+  LOCKED_DAILY_TASKS_POPUP_DESCRIPTION,
+  LOCKED_GARDENS_POPUP_DESCRIPTION,
+} from './components/LockedFloatingFeaturePopup';
 import { type DailyTaskClaimFx, type DailyTaskDefinition } from './components/DailyTaskRow';
 import {
   clearDailyTasksProgressStorage,
@@ -226,6 +231,7 @@ import {
 } from './utils/wildGrowth';
 import { OfflineEarningsPopup } from './components/OfflineEarningsPopup';
 import { BARN_SHELVES_PER_GARDEN, COLLECTION_COMING_SOON_LABEL, COLLECTION_GARDEN_LABEL_AFTER_SHELVES_MARGIN_TOP_PX, COLLECTION_GARDEN_LABEL_MARGIN_BOTTOM_PX, COLLECTION_PLANT_COUNT, COLLECTION_SCROLL_BOTTOM_PAD_PX, COLLECTION_SHELVES_MARGIN_TOP_PX, COLLECTION_UNDISCOVERED_GARDEN_LABEL, getCollectionShelfMeta, normalizeBarnShelvesUnlocked } from './constants/barnShelves';
+import { GARDEN_PICKER_PURCHASE_COIN_PRICE } from './constants/gardenPicker';
 import { MAX_PLANT_TIER } from './constants/plants';
 import {
   PLANT_MASTERY_GLOW_MS,
@@ -1447,6 +1453,7 @@ export default function App() {
   const [showFakeReview, setShowFakeReview] = useState(false);
   const [rateUsThankYouOpen, setRateUsThankYouOpen] = useState(false);
   const [dailyTasksPopupOpen, setDailyTasksPopupOpen] = useState(false);
+  const [lockedDailyTasksPopupOpen, setLockedDailyTasksPopupOpen] = useState(false);
   const dailyTasksPopupOpenRef = useRef(dailyTasksPopupOpen);
   dailyTasksPopupOpenRef.current = dailyTasksPopupOpen;
   const [dailyTaskRows, setDailyTaskRows] = useState<DailyTaskDefinition[]>([]);
@@ -1475,6 +1482,7 @@ export default function App() {
   const activeGardenIdRef = useRef<GardenId>(DEFAULT_GARDEN_ID);
   const [garden1PlayerLevel, setGarden1PlayerLevel] = useState(1);
   const [gardenPickerOpen, setGardenPickerOpen] = useState(false);
+  const [lockedGardenPickerPopupOpen, setLockedGardenPickerPopupOpen] = useState(false);
   const [gardenSwitchOverlayActive, setGardenSwitchOverlayActive] = useState(false);
   const [gardenSwitchOverlayOpacity, setGardenSwitchOverlayOpacity] = useState(0);
   const gardenSwitchTransitionRef = useRef(false);
@@ -3935,12 +3943,8 @@ export default function App() {
   useEffect(() => {
     if (activeScreen === 'BARN') {
       setBarnNotification(false);
-      return;
     }
-    setBarnNotification(
-      isPlantCollectionUiUnlockedGlobally(garden1PlayerLevel) && unreadMasteryUnlockLevels.length > 0
-    );
-  }, [activeScreen, unreadMasteryUnlockLevels.length, garden1PlayerLevel]);
+  }, [activeScreen]);
 
   useEffect(() => {
     if (activeScreen !== 'BARN') return;
@@ -6446,6 +6450,48 @@ export default function App() {
     );
   }, [plantMastery.unlockedLevels, activeGardenId, collectionSaveRevision]);
 
+  const gardensStartedList = useMemo((): GardenId[] => {
+    return loadGameSaveV2()?.gardensStarted ?? [DEFAULT_GARDEN_ID];
+  }, [collectionSaveRevision, gardenPickerOpen, activeGardenId]);
+
+  const purchaseGardenFromPicker = useCallback(
+    (gardenId: GardenId) => {
+      if (gardenId === DEFAULT_GARDEN_ID) return;
+      if (!hasGoldenPotNewGardenUnlocked(globalGoldenPotCount)) return;
+
+      const v2 = loadGameSaveV2();
+      if (!v2) return;
+      if ((v2.gardensStarted ?? []).includes(gardenId)) return;
+
+      const price = GARDEN_PICKER_PURCHASE_COIN_PRICE;
+      if (moneyRef.current < price) return;
+
+      setMoney((m) => m - price);
+
+      let nextV2 = ensureGardenStartedInSave(v2!, gardenId);
+      const payerGardenId = activeGardenIdRef.current;
+      const payerGarden = nextV2.gardens[payerGardenId];
+      if (payerGarden) {
+        nextV2 = {
+          ...nextV2,
+          gardens: {
+            ...nextV2.gardens,
+            [payerGardenId]: {
+              ...payerGarden,
+              money: payerGarden.money - price,
+            },
+          },
+          savedAt: Date.now(),
+        };
+      } else {
+        nextV2 = { ...nextV2, savedAt: Date.now() };
+      }
+      persistGameSaveV2(nextV2);
+      setCollectionSaveRevision((r) => r + 1);
+    },
+    [globalGoldenPotCount],
+  );
+
   const applyGardenSwitchState = useCallback(
     (targetId: GardenId) => {
       persistGameSnapshotRef.current();
@@ -7629,6 +7675,11 @@ export default function App() {
                         readyBounceNonce={tasksFbReadyBounceNonce}
                         forceLockedVisual={tasksFtueHoldLockedVisual}
                         onClick={() => {
+                          if (!dailyTasksUnlocked || tasksFtueHoldLockedVisual) {
+                            playSfx(SFX_IDS.uiConfirmNormal);
+                            setLockedDailyTasksPopupOpen(true);
+                            return;
+                          }
                           playSfx(SFX_IDS.uiConfirmNormal);
                           if (!tasksFtueCompleted) {
                             setTasksFtueCompleted(true);
@@ -7662,6 +7713,10 @@ export default function App() {
                         )}
                         onClick={() => {
                           playSfx(SFX_IDS.uiConfirmNormal);
+                          if (garden1PlayerLevel < GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL) {
+                            setLockedGardenPickerPopupOpen(true);
+                            return;
+                          }
                           setGardenPickerOpen(true);
                         }}
                       />
@@ -9146,22 +9201,8 @@ export default function App() {
                     ) : undefined
                   }
                   buttonText={unlockInfo.levelUpButtonText}
+                  iconScale={unlockInfo.headerIconScale ?? 1}
                   showGoldenPotAvailableRow={levelUpPopup.level === PLANT_COLLECTION_UI_UNLOCK_LEVEL}
-                  onUnlockNowImmediate={({ startPoint }) => {
-                    playSfx(SFX_IDS.uiConfirmReward);
-                    if (levelUpPopup.level < PLANT_COLLECTION_UI_UNLOCK_LEVEL || !containerRef.current) return;
-                    const cr = containerRef.current.getBoundingClientRect();
-                    const scale = appScaleRef.current || 1;
-                    setActiveBarnParticles((prev) => [
-                      ...prev,
-                      {
-                        id: `levelup-golden-pot-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-                        startX: (startPoint.x - cr.left) / scale,
-                        startY: (startPoint.y - cr.top) / scale,
-                        variant: 'golden',
-                      },
-                    ]);
-                  }}
                   onUnlockNow={() => {
                     suppressLevelUpDeclineSfxRef.current = true;
                     if (
@@ -9280,8 +9321,7 @@ export default function App() {
                       value: rewardValue,
                     }]);
                   }
-                  // From plant 3 onward, also shoot a green particle to Collection and set nav notification.
-                  if (discoveryPopup.level >= 3 && containerRef.current) {
+                  if (containerRef.current) {
                     const cr = containerRef.current.getBoundingClientRect();
                     const scale = appScaleRef.current;
                     setActiveBarnParticles((prev) => [
@@ -9737,6 +9777,32 @@ export default function App() {
               countdownRefreshKey={dailyTasksCountdownRefreshKey}
             />
 
+            <LockedFloatingFeaturePopup
+              isVisible={lockedDailyTasksPopupOpen}
+              onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
+              onClose={() => setLockedDailyTasksPopupOpen(false)}
+              closeOnBackdropClick
+              appScale={appScale}
+              title="Daily Tasks"
+              headerIconSrc={assetPath('/assets/icons/floating_buttons/icon_tasks.png')}
+              headerIconPx={Math.round(70 * 1.15)}
+              description={LOCKED_DAILY_TASKS_POPUP_DESCRIPTION}
+              unlockLevel={TASKS_FLOATING_BUTTON_UNLOCK_LEVEL}
+            />
+
+            <LockedFloatingFeaturePopup
+              isVisible={lockedGardenPickerPopupOpen}
+              onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
+              onClose={() => setLockedGardenPickerPopupOpen(false)}
+              closeOnBackdropClick
+              appScale={appScale}
+              title="Your Gardens"
+              headerIconSrc={assetPath('/assets/icons/floating_buttons/icon_fb_gardens.png')}
+              headerIconPx={Math.round(80 * 1.15)}
+              description={LOCKED_GARDENS_POPUP_DESCRIPTION}
+              unlockLevel={GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL}
+            />
+
             <RateUsThankYouPopup
               isVisible={rateUsThankYouOpen}
               onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
@@ -9778,11 +9844,15 @@ export default function App() {
               onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
               onClose={() => setGardenPickerOpen(false)}
               activeGardenId={activeGardenId}
-              selectableGardenIds={getSelectableGardenIds()}
+              gardensStarted={gardensStartedList}
+              globalGoldenPotCount={globalGoldenPotCount}
+              playerMoney={money}
               onSelectGarden={(gardenId) => {
                 playSfx(SFX_IDS.uiConfirmNormal);
                 switchToGarden(gardenId);
               }}
+              onPurchaseGarden={purchaseGardenFromPicker}
+              onPurchaseSound={() => playSfx(SFX_IDS.uiConfirmReward)}
               closeOnBackdropClick
               appScale={appScale}
             />

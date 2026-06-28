@@ -46,8 +46,6 @@ interface LevelUpPopupProps {
   /** When set, shown inside the blue header circle instead of `icon` (e.g. PlantWithPot). */
   headerIcon?: React.ReactNode;
   onUnlockNow?: () => void;
-  /** Fires immediately on Unlock Now (before close animation); use for VFX e.g. particle to Collection. */
-  onUnlockNowImmediate?: (ctx: { startPoint: { x: number; y: number } }) => void;
   appScale?: number;
   /** When provided, show smaller text above title (e.g. "New Feature") */
   subtitle?: string;
@@ -120,7 +118,6 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
   icon,
   headerIcon,
   onUnlockNow,
-  onUnlockNowImmediate,
   appScale = 1,
   subtitle,
   buttonText = 'Unlock Now!',
@@ -243,15 +240,6 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
 
   const handleButtonClick = () => {
     if (animState === 'preflight') return;
-    let ctx: { startPoint: { x: number; y: number } } | undefined;
-    if (showGoldenPotAvailableRow && goldenPotRewardIconRef.current) {
-      const r = goldenPotRewardIconRef.current.getBoundingClientRect();
-      ctx = { startPoint: { x: r.left + r.width / 2, y: r.top + r.height / 2 } };
-    } else if (buttonRef.current) {
-      const r = buttonRef.current.getBoundingClientRect();
-      ctx = { startPoint: { x: r.left + r.width / 2, y: r.top + r.height / 2 } };
-    }
-    if (ctx) onUnlockNowImmediate?.(ctx);
     setAnimState('leaving');
     setTimeout(() => {
       setAnimState('hidden');

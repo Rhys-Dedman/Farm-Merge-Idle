@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
-import { getGardenPreloadAssetPaths, getCollectionBonusIconPreloadPaths, getCollectionGardenSectionIconPreloadPaths } from '../utils/gardenAssets';
+import { getGardenPreloadAssetPaths, getCollectionBonusIconPreloadPaths, getCollectionGardenSectionIconPreloadPaths, getGardenPickerIconPreloadPaths } from '../utils/gardenAssets';
 import { preloadSfxAssets, SFX_PRELOAD_STEP_COUNT, applySavedAudioSettingsEarly } from '../utils/sfx';
 
 applySavedAudioSettingsEarly();
@@ -27,6 +27,7 @@ const ASSETS_TO_PRELOAD = [
   ...getGardenPreloadAssetPaths(),
   ...getCollectionBonusIconPreloadPaths(),
   ...getCollectionGardenSectionIconPreloadPaths(),
+  ...getGardenPickerIconPreloadPaths(),
   // Icons
   '/assets/icons/floating_buttons/icon_tasks.png',
   '/assets/icons/generic_buttons/icon_barn.png',
@@ -69,6 +70,11 @@ const ASSETS_TO_PRELOAD = [
   '/assets/collection/collection_tools.png',
   '/assets/ui/generic/ui_collection_garden.png',
   '/assets/ui/generic/ui_collection_icon_locked.png',
+  '/assets/ui/generic/ui_gardens_unlocked.png',
+  '/assets/ui/generic/ui_gardens_selected.png',
+  '/assets/ui/generic/ui_gardens_owned.png',
+  '/assets/ui/generic/ui_gardens_pots.png',
+  '/assets/ui/generic/ui_gardens_locked.png',
   // Popups
   '/assets/ui/popup_header.png',
   '/assets/ui/popup_header_yellow.png',
