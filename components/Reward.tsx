@@ -11,6 +11,7 @@
 import React from 'react';
 import { assetPath } from '../utils/assetPath';
 import { getGardenCoinIconPath } from '../utils/gardenAssets';
+import { DOUBLE_COINS_REWARD_ICON, isDoubleCoinsRewardLine } from '../offers';
 
 const MIDDLE_ROW_Y_SHIFT = -7;
 
@@ -108,7 +109,11 @@ export const Reward: React.FC<RewardProps> = ({
 }) => {
   const isInline = layout === 'inline';
   const iconPx = COIN_ROW_ICON_PX * coinIconScale;
-  const resolvedCoinIcon = coinIconPath ? assetPath(coinIconPath) : getGardenCoinIconPath();
+  const resolvedCoinIcon = coinIconPath
+    ? assetPath(coinIconPath)
+    : isDoubleCoinsRewardLine(offerLineText)
+      ? assetPath(DOUBLE_COINS_REWARD_ICON)
+      : getGardenCoinIconPath();
   return (
     <div
       className={`reward pointer-events-none select-none ${isInline ? 'relative' : 'absolute inset-0'} ${className}`.trim()}

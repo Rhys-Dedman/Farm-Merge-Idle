@@ -13,6 +13,27 @@ export const BARN_SHELF_COUNT = BARN_SHELVES_PER_GARDEN * COLLECTION_GARDEN_IDS.
 /** Total plant slots on the collection screen. */
 export const COLLECTION_PLANT_COUNT = MAX_PLANT_TIER * COLLECTION_GARDEN_IDS.length;
 
+/** Offset for shelves block (space above Flower Garden label). Screen-only. */
+export const COLLECTION_SHELVES_MARGIN_TOP_PX = 228;
+
+/**
+ * Space above labels that follow shelves (Fruit Garden, Coming Soon).
+ * Shared so both move together when tuned.
+ */
+export const COLLECTION_GARDEN_LABEL_AFTER_SHELVES_MARGIN_TOP_PX = -58;
+
+/** Gap under a garden label before its shelves. Screen-only. */
+export const COLLECTION_GARDEN_LABEL_MARGIN_BOTTOM_PX = 10;
+
+/** Teaser label when the next garden is not yet unlocked (no shelves). */
+export const COLLECTION_UNDISCOVERED_GARDEN_LABEL = 'Undiscovered';
+
+/** Teaser label below the last shipped garden shelves (no shelves yet). */
+export const COLLECTION_COMING_SOON_LABEL = 'Coming Soon';
+
+/** Scroll past the last label so it clears the viewport, with room below. */
+export const COLLECTION_SCROLL_BOTTOM_PAD_PX = 110;
+
 export function getCollectionShelfMeta(shelfIndex: number): {
   gardenId: (typeof COLLECTION_GARDEN_IDS)[number];
   shelfInGarden: number;

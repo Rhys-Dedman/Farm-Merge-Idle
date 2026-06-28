@@ -1,6 +1,7 @@
 import { assetPath } from './assetPath';
 import {
   DEFAULT_GARDEN_ID,
+  GARDEN_IDS,
   type GardenId,
   isGardenId,
   SHIPPED_GARDEN_IDS,
@@ -194,6 +195,24 @@ export function getGoldenPotWalletIconPath(): string {
   return assetPath('/assets/icons/collection/icon_goldenpot.png');
 }
 
+export function getCollectionGardenLockedIconPath(): string {
+  return getGenericUiAssetPath('ui_collection_icon_locked.png');
+}
+
+/** Collection garden section header icon — `ui_collection_icon_garden_N.png`. */
+export function getCollectionGardenSectionIconPath(gardenId: GardenId): string {
+  const n = GARDEN_IDS.indexOf(gardenId) + 1;
+  return getGenericUiAssetPath(`ui_collection_icon_garden_${n > 0 ? n : 1}.png`);
+}
+
+/** Preload collection section icons for shipped gardens. */
+export function getCollectionGardenSectionIconPreloadPaths(): string[] {
+  return SHIPPED_GARDEN_IDS.map((gardenId) => {
+    const n = GARDEN_IDS.indexOf(gardenId) + 1;
+    return `${GENERIC_UI_BASE}/ui_collection_icon_garden_${n > 0 ? n : 1}.png`;
+  });
+}
+
 /** Collection milestone reward icon — `icon_collection_<slug>.png`. */
 export function getCollectionBonusIconPath(iconSlug: string): string {
   return assetPath(`/assets/icons/collection/icon_collection_${iconSlug}.png`);
@@ -222,6 +241,82 @@ export function getNextShippedGardenId(current: GardenId): GardenId {
   return shipped[(index + 1) % shipped.length];
 }
 
+/** Image paths to preload when switching to a garden (background, plants, hex, goals, coins). */
+export function getSingleGardenPreloadAssetPaths(gardenId: GardenId): string[] {
+  const paths: string[] = [];
+  const bg = getGardenBackgroundPaths(gardenId);
+  paths.push(
+    bg.grass,
+    bg.bottom,
+    bg.left,
+    bg.right,
+    bg.center,
+    bg.centerTop,
+    bg.gradient,
+  );
+  paths.push(getGardenAmbientLeafSpritePath(gardenId));
+  paths.push(
+    `/assets/icons/coins/icon_coin_${gardenId}.png`,
+    `/assets/icons/coins/icon_coin_small_${gardenId}.png`,
+    `${GENERIC_UI_BASE}/ui_level_${gardenId}.png`,
+  );
+  const artFolder = resolveFarmArtGardenId(gardenId);
+  for (let i = 1; i <= MAX_PLANT_TIER; i++) {
+    paths.push(`/assets/plants/${artFolder}/plant_${i}.png`);
+    paths.push(`/assets/icons/goals/${artFolder}/icon_goal_${i}.png`);
+  }
+  const hexFolder = resolveHexArtGardenId(gardenId);
+  for (const hex of [
+    'hexcell_normal',
+    'hexcell_shadow',
+    'hexcell_white',
+    'hexcell_locked',
+    'hexcell_fertile',
+    'hexcell_highlight',
+  ] as const) {
+    paths.push(`/assets/hex/${hexFolder}/${hex}.png`);
+  }
+  for (const goal of [
+    'goal_shadow.png',
+    'goal_loading.png',
+    'goal_normal.png',
+    'goal_yellow.png',
+    'goal_undiscovered.png',
+    'goal_cream.png',
+    'goal_white.png',
+  ] as const) {
+    paths.push(`/assets/ui/${artFolder}/${goal}`);
+  }
+  paths.push(`${GENERIC_UI_BASE}/topui_bg.png`, `${GENERIC_UI_BASE}/topui_gradient.png`);
+  paths.push(PLANT_POT_NORMAL_PATH, PLANT_POT_GOLD_PATH);
+  return paths;
+}
+
+export function preloadAssetPaths(paths: string[]): Promise<void> {
+  return Promise.all(
+    paths.map(
+      (src) =>
+        new Promise<void>((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            if (typeof img.decode === 'function') {
+              img.decode().then(() => resolve()).catch(() => resolve());
+            } else {
+              resolve();
+            }
+          };
+          img.onerror = () => resolve();
+          img.src = assetPath(src);
+        }),
+    ),
+  ).then(() => undefined);
+}
+
+/** Warm browser cache for a garden before revealing it after a switch transition. */
+export function preloadGardenSwitchAssets(gardenId: GardenId): Promise<void> {
+  return preloadAssetPaths(getSingleGardenPreloadAssetPaths(gardenId));
+}
+
 /** Preload paths for splash (both shipped gardens + shared pots). */
 export function getGardenPreloadAssetPaths(): string[] {
   const paths: string[] = [
@@ -230,50 +325,7 @@ export function getGardenPreloadAssetPaths(): string[] {
     '/assets/vfx/particle_leaf_background_shadow.png',
   ];
   for (const gardenId of SHIPPED_GARDEN_IDS) {
-    const bg = getGardenBackgroundPaths(gardenId);
-    paths.push(
-      bg.grass,
-      bg.bottom,
-      bg.left,
-      bg.right,
-      bg.center,
-      bg.centerTop,
-      bg.gradient,
-    );
-    paths.push(getGardenAmbientLeafSpritePath(gardenId));
-    paths.push(
-      `/assets/icons/coins/icon_coin_${gardenId}.png`,
-      `/assets/icons/coins/icon_coin_small_${gardenId}.png`,
-      `${GENERIC_UI_BASE}/ui_level_${gardenId}.png`,
-    );
-    const artFolder = resolveFarmArtGardenId(gardenId);
-    for (let i = 1; i <= MAX_PLANT_TIER; i++) {
-      paths.push(`/assets/plants/${artFolder}/plant_${i}.png`);
-      paths.push(`/assets/icons/goals/${artFolder}/icon_goal_${i}.png`);
-    }
-    const hexFolder = resolveHexArtGardenId(gardenId);
-    for (const hex of [
-      'hexcell_normal',
-      'hexcell_shadow',
-      'hexcell_white',
-      'hexcell_locked',
-      'hexcell_fertile',
-      'hexcell_highlight',
-    ] as const) {
-      paths.push(`/assets/hex/${hexFolder}/${hex}.png`);
-    }
-    for (const goal of [
-      'goal_shadow.png',
-      'goal_loading.png',
-      'goal_normal.png',
-      'goal_yellow.png',
-      'goal_undiscovered.png',
-      'goal_cream.png',
-      'goal_white.png',
-    ] as const) {
-      paths.push(`/assets/ui/${artFolder}/${goal}`);
-    }
-    paths.push(`${GENERIC_UI_BASE}/topui_bg.png`, `${GENERIC_UI_BASE}/topui_gradient.png`);
+    paths.push(...getSingleGardenPreloadAssetPaths(gardenId));
   }
   return paths;
 }

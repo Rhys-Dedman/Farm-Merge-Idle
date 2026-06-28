@@ -201,10 +201,10 @@ const BONUS_ROW_DESC_BOX_WIDTH_PX = 318;
 const BONUS_ROW_DESC_BOX_OFFSET_Y_PX = 4;
 const BONUS_ROW_DESC_TITLE_HEIGHT_PX = 45;
 const BONUS_ROW_DESC_SUBTITLE_HEIGHT_PX = 25;
-const BONUS_ROW_DESC_TITLE_FONT_REM = 2.1;
-const BONUS_ROW_DESC_SUBTITLE_FONT_REM = 1.55;
+const BONUS_ROW_DESC_TITLE_FONT_REM = 2.0;
+const BONUS_ROW_DESC_SUBTITLE_FONT_REM = 1.45;
 const BONUS_ENABLED_TITLE_COLOR = '#62863b';
-const BONUS_ENABLED_SUBTITLE_COLOR = '#9eb643';
+const BONUS_ENABLED_SUBTITLE_COLOR = '#8aa038';
 const BONUS_LOCKED_TITLE_COLOR = '#765041';
 const BONUS_LOCKED_SUBTITLE_COLOR = '#c6b280';
 
@@ -559,7 +559,7 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
                 filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
               }}
             >
-              <PlantWithPot level={1} mastered wrapperClassName="h-full w-full" />
+              <PlantWithPot level={0} mastered wrapperClassName="h-full w-full" />
             </div>
           </div>
 

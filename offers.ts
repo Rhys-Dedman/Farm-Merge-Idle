@@ -31,6 +31,17 @@ export interface LimitedOfferConfig {
 /** Single IAP / boost-bar entry for all coin multiplier packs (time stacks). */
 export const DOUBLE_COINS_OFFER_ID = 'double_coins';
 export const DOUBLE_COINS_HEADER_ICON = '/assets/icons/store/icon_coinmultiplier_1.png';
+/** Reward-strip coin for account-wide Double Coins (not garden-specific). */
+export const DOUBLE_COINS_REWARD_ICON = '/assets/icons/coins/icon_coin_double.png';
+
+/** Top boost-bar + saved boost entry icon for Double Coins (account-wide). */
+export function getDoubleCoinsActiveBoostIcon(): string {
+  return DOUBLE_COINS_REWARD_ICON;
+}
+
+export function isDoubleCoinsRewardLine(offerLineText: string): boolean {
+  return offerLineText.trim().toLowerCase() === 'double coins';
+}
 
 /** Store IAP no-ads row — stacks on boost bar (timer only; ad removal is game feature TBD). */
 export const REMOVE_ADS_OFFER_ID = 'remove_ads';
@@ -161,6 +172,7 @@ export function hasActiveDoubleCoinsBoostAt(
   atTimeMs: number
 ): boolean {
   const headerNorm = DOUBLE_COINS_HEADER_ICON.replace(/\\/g, '/').toLowerCase();
+  const rewardNorm = DOUBLE_COINS_REWARD_ICON.replace(/\\/g, '/').toLowerCase();
   return activeBoosts.some((b) => {
     const endMs = typeof b.endTime === 'number' && Number.isFinite(b.endTime) ? b.endTime : Number(b.endTime);
     if (!Number.isFinite(endMs) || endMs <= atTimeMs) return false;
@@ -179,6 +191,8 @@ export function hasActiveDoubleCoinsBoostAt(
       icon.includes('coinmultiplier') ||
       icon.includes('coin_multiplier') ||
       icon === headerNorm ||
+      icon === rewardNorm ||
+      icon.endsWith('icon_coin_double.png') ||
       icon.endsWith('icon_coinmultiplier_1.png') ||
       icon.endsWith('icon_coinmultiplier_2.png') ||
       icon.endsWith('icon_coinmultiplier_3.png')
@@ -342,6 +356,7 @@ export const STORE_COIN_OFFERS: StoreCoinOfferConfig[] = [
     priceLabel: '$5.99',
     boostOfferId: DOUBLE_COINS_OFFER_ID,
     durationMs: 30 * 60 * 1000,
+    rewardStripIconPath: DOUBLE_COINS_REWARD_ICON,
   },
   {
     id: 'store_coin_mega_boost',
@@ -352,6 +367,7 @@ export const STORE_COIN_OFFERS: StoreCoinOfferConfig[] = [
     priceLabel: '$9.99',
     boostOfferId: DOUBLE_COINS_OFFER_ID,
     durationMs: 2 * 60 * 60 * 1000,
+    rewardStripIconPath: DOUBLE_COINS_REWARD_ICON,
   },
   {
     id: 'store_coin_ultra_boost',
@@ -362,6 +378,7 @@ export const STORE_COIN_OFFERS: StoreCoinOfferConfig[] = [
     priceLabel: '$79.99',
     boostOfferId: DOUBLE_COINS_OFFER_ID,
     durationMs: 24 * 60 * 60 * 1000,
+    rewardStripIconPath: DOUBLE_COINS_REWARD_ICON,
   },
   {
     id: STORE_IAP_OFFER_REMOVE_ADS_ID,
@@ -447,7 +464,7 @@ export const STORE_BUNDLE_OFFERS: StoreBundleOfferConfig[] = [
     durationText: '24hr',
     rewardStripIconPath: REMOVE_ADS_HEADER_ICON,
     extraRewardRows: [
-      { offerLineText: 'Double Coins', durationText: '2hr' },
+      { offerLineText: 'Double Coins', durationText: '2hr', coinIconPath: DOUBLE_COINS_REWARD_ICON },
       {
         offerLineText: 'Rapid Harvest',
         durationText: '30m',
@@ -457,7 +474,7 @@ export const STORE_BUNDLE_OFFERS: StoreBundleOfferConfig[] = [
     ],
     iapBoostGrants: [
       { offerId: REMOVE_ADS_OFFER_ID, durationMs: 24 * 60 * 60 * 1000, icon: REMOVE_ADS_HEADER_ICON },
-      { offerId: DOUBLE_COINS_OFFER_ID, durationMs: 2 * 60 * 60 * 1000, icon: DOUBLE_COINS_HEADER_ICON },
+      { offerId: DOUBLE_COINS_OFFER_ID, durationMs: 2 * 60 * 60 * 1000, icon: DOUBLE_COINS_REWARD_ICON },
       {
         offerId: 'rapid_harvest',
         durationMs: 30 * 60 * 1000,
@@ -480,7 +497,7 @@ export const STORE_BUNDLE_OFFERS: StoreBundleOfferConfig[] = [
     durationText: '7d',
     rewardStripIconPath: REMOVE_ADS_HEADER_ICON,
     extraRewardRows: [
-      { offerLineText: 'Double Coins', durationText: '24hr' },
+      { offerLineText: 'Double Coins', durationText: '24hr', coinIconPath: DOUBLE_COINS_REWARD_ICON },
       {
         offerLineText: 'Rapid Seeds',
         durationText: '2hr',
@@ -490,7 +507,7 @@ export const STORE_BUNDLE_OFFERS: StoreBundleOfferConfig[] = [
     ],
     iapBoostGrants: [
       { offerId: REMOVE_ADS_OFFER_ID, durationMs: 7 * 24 * 60 * 60 * 1000, icon: REMOVE_ADS_HEADER_ICON },
-      { offerId: DOUBLE_COINS_OFFER_ID, durationMs: 24 * 60 * 60 * 1000, icon: DOUBLE_COINS_HEADER_ICON },
+      { offerId: DOUBLE_COINS_OFFER_ID, durationMs: 24 * 60 * 60 * 1000, icon: DOUBLE_COINS_REWARD_ICON },
       {
         offerId: 'rapid_seeds',
         durationMs: 2 * 60 * 60 * 1000,

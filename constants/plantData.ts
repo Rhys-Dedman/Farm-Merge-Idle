@@ -20,22 +20,36 @@ const PLANT_DATA_GARDEN_1: Record<number, PlantInfo> = {
   13: { name: 'Sacred Lotus', description: 'Perfect layered petals resting peacefully as if the rest of the garden can sort itself out.' },
   14: { name: 'Radiant Sunflower', description: 'A shining bloom that never seems to get tired of being in the spotlight.' },
   15: { name: 'Velvet Geranium', description: 'Clusters of colourful blooms that always seem eager to make an impression.' },
-  16: { name: 'Snowy Gardenia', description: 'An elegant flower that always seems dressed for a formal occasion.' },
+  16: { name: 'Snowy Gardenia', description: 'With a fragrance this strong, it never needs to introduce itself' },
   17: { name: 'Golden Marigold', description: 'A golden flower that never seems to run short on enthusiasm.' },
   18: { name: 'Blue Bellflower', description: 'Soft blue blossoms that dance whenever the wind remembers them.' },
   19: { name: 'Crimson Poppy', description: 'A vibrant flower that believes blending in is a waste of good petals.' },
   20: { name: 'Tree Star', description: 'A rare leafy treat that has remained popular since the age of dinosaurs.' },
 };
 
-/** Garden 2 (Fruit Garden) — same early tiers as garden 1; top tiers are fruits and vegetables. */
+/** Garden 2 (Fruit Garden) — fruit-themed names and descriptions. */
 const PLANT_DATA_GARDEN_2: Record<number, PlantInfo> = {
   ...PLANT_DATA_GARDEN_1,
-  15: { name: 'Corn Cobb', description: 'Kernels lined up in perfect rows like they practiced beforehand.' },
-  16: { name: 'Sweet Strawberry', description: 'Bright little berries that rarely survive long enough to be shared.' },
-  17: { name: 'Crunchy Carrot', description: 'Bright orange and pointy, making it a popular choice with snowmen.' },
-  18: { name: 'Glossy Eggplant', description: 'A polished fruit that looks like it expects compliments.' },
-  19: { name: 'Juicy Tomato', description: 'Round fruits gathering together like they have important things to discuss.' },
-  20: { name: 'Sour Lemon', description: 'Bright and beautiful on the outside with a surprisingly bitter attitude.' },
+  1: { name: 'Berry Bush', description: 'A tidy mound of greenery that\'s beginning to discover its colourful side.' },
+  2: { name: 'Twin Cherry', description: 'Two cheerful cherries that rarely wander far from one another' },
+  3: { name: 'Blueberry', description: 'Tiny blue berries gathered together because adventures are always better in groups.' },
+  4: { name: 'Fresh Kiwi', description: 'One of the few fruits that proves appearances can be wonderfully misleading.' },
+  5: { name: 'Ruby Apple', description: 'Perfectly content hanging around until gravity offers a gentle suggestion' },
+  6: { name: 'Juicy Cantaloupe', description: 'A hefty fruit that believes growing larger is always the correct decision' },
+  7: { name: 'Ripe Passionfruit', description: 'A tropical fruit with far more personality than its size would suggest' },
+  8: { name: 'Sweet Strawberry', description: 'Always seems to arrive just in time for picnics and sunny afternoons' },
+  9: { name: 'Creamy Avocado', description: 'Spends months ripening, then expects everyone to make a decision immediately.' },
+  10: { name: 'Royal Fig', description: 'Carries itself with the calm confidence of something that\'s seen countless seasons' },
+  11: { name: 'Summer Peach', description: 'Always looks as though it\'s been lightly painted by the afternoon sun' },
+  12: { name: 'Tropical Banana', description: 'A familiar favourite that\'s been brightening lunchboxes for generations' },
+  13: { name: 'Spiky Rambutan', description: 'Looks like it lost an argument with a hairbrush, but tastes delightful' },
+  14: { name: 'Zesty Lemon', description: 'Always seems just a little sour about something' },
+  15: { name: 'Island Coconut', description: 'Keeps a tough shell around a surprisingly gentle heart.' },
+  16: { name: 'Citrus Orange', description: 'Arrives in tidy little segments that always seem happy to share' },
+  17: { name: 'Purple Grapes', description: 'A close-knit family of fruit that rarely leaves anyone behind.' },
+  18: { name: 'Giant Watermelon', description: 'Patiently grows larger every day with absolutely no intention of stopping' },
+  19: { name: 'Sunny Pineapple', description: 'A fruit that clearly understands the value of a memorable hairstyle' },
+  20: { name: 'Dragon Fruit', description: 'Has all the flair of a mythical beast with none of the fire-breathing' },
 };
 
 function duplicatePlantData(source: Record<number, PlantInfo>): Record<number, PlantInfo> {

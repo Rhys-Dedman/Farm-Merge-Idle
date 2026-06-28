@@ -30,3 +30,13 @@ export function getGardenDisplayLabel(gardenId: GardenId): string {
   const n = GARDEN_IDS.indexOf(gardenId) + 1;
   return `Garden ${n > 0 ? n : 1}`;
 }
+
+const COLLECTION_GARDEN_DISPLAY_NAMES: Partial<Record<GardenId, string>> = {
+  garden_1: 'Flower Garden',
+  garden_2: 'Fruit Garden',
+};
+
+/** Collection screen section title for each garden (e.g. Flower Garden, Fruit Garden). */
+export function getCollectionGardenDisplayName(gardenId: GardenId): string {
+  return COLLECTION_GARDEN_DISPLAY_NAMES[gardenId] ?? getGardenDisplayLabel(gardenId);
+}

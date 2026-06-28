@@ -51,7 +51,7 @@ export const FarmLeftFloatingButtonStack: React.FC<FarmLeftFloatingButtonStackPr
       <FloatingButton
         key="coin-boost"
         title="BOOST"
-        iconSrc={assetPath('/assets/icons/coins/icon_coin_boost.png')}
+        iconSrc={assetPath('/assets/icons/floating_buttons/icon_fb_coin_boost.png')}
         aria-label="Coin Boost"
         onClick={onCoinBoostClick}
         gardenId={gardenId}

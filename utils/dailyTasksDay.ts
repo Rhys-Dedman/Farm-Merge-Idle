@@ -1,7 +1,6 @@
 import { assetPath } from './assetPath';
 import {
   getGardenCoinIconPath,
-  getGardenLevelIconPath,
   getGoalIconPathForGarden,
 } from './gardenAssets';
 import type { BoardCell } from '../types';
@@ -127,9 +126,6 @@ function getTemplateIcon(templateId: DailyTaskPoolId): string {
   if (templateId === 'upgrade_crops_tab') {
     return getGoalIconPathForGarden(14);
   }
-  if (templateId === 'level_up') {
-    return getGardenLevelIconPath();
-  }
   return TEMPLATE_META[templateId].icon;
 }
 
@@ -191,9 +187,6 @@ function getTaskIconForInstance(task: DailyTaskInstanceState): string {
   }
   if (task.templateId === 'upgrade_crops_tab') {
     return getGoalIconPathForGarden(14);
-  }
-  if (task.templateId === 'level_up') {
-    return getGardenLevelIconPath();
   }
   return TEMPLATE_META[task.templateId].icon;
 }

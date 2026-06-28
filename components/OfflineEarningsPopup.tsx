@@ -396,7 +396,7 @@ export const OfflineEarningsPopup: React.FC<OfflineEarningsPopupProps> = ({
                   className="font-normal text-center"
                   style={{ color: '#c2b280', fontFamily: 'Inter, sans-serif', letterSpacing: '-0.02em', fontSize: '2.25rem' }}
                 >
-                  Offline Earnings
+                  Idle Earnings
                 </h2>
                 <h3
                   className="font-black tracking-tight text-center"
