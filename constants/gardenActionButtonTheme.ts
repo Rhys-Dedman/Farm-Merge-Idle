@@ -13,6 +13,9 @@ export type GardenActionButtonChromeTheme = {
   progressRingFlashColor: string;
   /** Alternate progress ring (white flash variant). */
   progressRingLightColor: string;
+  /** Inner circle when recharging (out of charges). Omit to use pill gradient on inner body. */
+  bodyGradientTop?: string;
+  bodyGradientBottom?: string;
 };
 
 /** Garden 1 — locked reference palette for floating buttons + seed/harvest chrome. */
@@ -21,11 +24,13 @@ export const GARDEN_1_ACTION_BUTTON_CHROME: GardenActionButtonChromeTheme = {
   pillGradientBottom: '#c1cd67',
   pillLockedGradientTop: '#d9e6c0',
   pillLockedGradientBottom: '#94bf79',
-  pillOutlineColor: '#56764d',
-  pillTextColor: '#526e43',
+  pillOutlineColor: '#38482f',
+  pillTextColor: '#38482f',
   progressRingColor: '#7a9f20',
   progressRingFlashColor: '#87a62f',
   progressRingLightColor: '#9db546',
+  bodyGradientTop: '#577641',
+  bodyGradientBottom: '#39502e',
 };
 
 /** Garden 2 — warm cream/gold gradient with brown outline + label text. */
@@ -34,11 +39,13 @@ export const GARDEN_2_ACTION_BUTTON_CHROME: GardenActionButtonChromeTheme = {
   pillGradientBottom: '#e0c282',
   pillLockedGradientTop: '#f9e8b9',
   pillLockedGradientBottom: '#e0c282',
-  pillOutlineColor: '#745133',
-  pillTextColor: '#745133',
+  pillOutlineColor: '#714f32',
+  pillTextColor: '#714f32',
   progressRingColor: '#eaa927',
   progressRingFlashColor: '#eaa927',
   progressRingLightColor: '#eaa927',
+  bodyGradientTop: '#aa834b',
+  bodyGradientBottom: '#7f5b40',
 };
 
 export function getGardenActionButtonChrome(

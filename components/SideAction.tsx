@@ -194,6 +194,12 @@ export const SideAction: React.FC<SideActionProps> = ({
     color: chrome.pillTextColor,
   };
 
+  const hasBodyGradient = chrome.bodyGradientTop != null && chrome.bodyGradientBottom != null;
+  const innerBodyFill =
+    isFlashing || !hasBodyGradient
+      ? `url(#pill-grad-${label})`
+      : `url(#body-grad-${label})`;
+
   return (
     <div className="relative overflow-visible">
       <style>{`
@@ -255,6 +261,12 @@ export const SideAction: React.FC<SideActionProps> = ({
               <stop offset="0%" stopColor={chrome.pillGradientTop} />
               <stop offset="100%" stopColor={chrome.pillGradientBottom} />
             </linearGradient>
+            {hasBodyGradient ? (
+              <linearGradient id={`body-grad-${label}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor={chrome.bodyGradientTop} />
+                <stop offset="100%" stopColor={chrome.bodyGradientBottom} />
+              </linearGradient>
+            ) : null}
           </defs>
 
           {/* Outer border ring */}
@@ -270,12 +282,12 @@ export const SideAction: React.FC<SideActionProps> = ({
             }}
           />
           
-          {/* Inner body */}
+          {/* Inner body — light when ready, dark when recharging (Garden 1). */}
           <circle
             cx="50"
             cy="50"
             r="43"
-            fill={`url(#pill-grad-${label})`}
+            fill={innerBodyFill}
             stroke="rgba(255,255,255,0.15)"
             strokeWidth="1.5"
             className="transition-colors duration-300"
