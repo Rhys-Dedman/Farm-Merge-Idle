@@ -20,6 +20,8 @@ interface PauseMenuPopupProps {
   onGoldenPotClick?: () => void;
   /** Dev/cheat: add coins (e.g. +100k). Does not close pause menu. */
   onAddMoney?: (amount: number) => void;
+  /** Dev/cheat: set wallet to 0 on every garden. */
+  onClearCoins?: () => void;
   /** Reset economy + progression to post–FTUE 11, level 1 (no tutorial replay). */
   onClearProgress?: () => void;
   /** Reset daily task seed progress and claims for the current day. */
@@ -105,6 +107,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   onUnlockPlantClick,
   onGoldenPotClick,
   onAddMoney,
+  onClearCoins,
   onClearProgress,
   onResetTasksClick,
   onCompleteTaskClick,
@@ -121,6 +124,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   const [unlockPlantPressed, setUnlockPlantPressed] = useState(false);
   const [goldenPotPressed, setGoldenPotPressed] = useState(false);
   const [addCoinsPressed, setAddCoinsPressed] = useState(false);
+  const [clearCoinsPressed, setClearCoinsPressed] = useState(false);
   const [clearProgressPressed, setClearProgressPressed] = useState(false);
   const [resetTasksPressed, setResetTasksPressed] = useState(false);
   const [completeTaskPressed, setCompleteTaskPressed] = useState(false);
@@ -302,6 +306,21 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                   >
                     <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.blue)}>
                       +1Mil Coins
+                    </span>
+                  </button>
+                ) : null}
+                {onClearCoins ? (
+                  <button
+                    type="button"
+                    onMouseDown={() => setClearCoinsPressed(true)}
+                    onMouseUp={() => setClearCoinsPressed(false)}
+                    onMouseLeave={() => setClearCoinsPressed(false)}
+                    onClick={() => onClearCoins()}
+                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.red, clearCoinsPressed)}
+                  >
+                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.red)}>
+                      Clear Coins
                     </span>
                   </button>
                 ) : null}

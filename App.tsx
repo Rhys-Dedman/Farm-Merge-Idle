@@ -197,6 +197,7 @@ import {
   activateGardenInSave,
   clearDailyAllowanceClaimedForAllGardens,
   flattenV2ToV1,
+  mergeV1IntoV2,
 } from './utils/gardenSave';
 import {
   ensureGardenStartedInSave,
@@ -224,7 +225,7 @@ import {
 } from './utils/rewardedOfferPanel';
 import { markRateUsPermanentlyDismissed } from './utils/rateUsDismiss';
 import { isOfflineCoinEarningsBlockedByFtue, simulateOfflineSeedHarvest, simulateWildGrowthOffline } from './utils/offlineSimulate';
-import { loadGameSaveWithIdleAbsenceApplied } from './utils/gardenIdleEarnings';
+import { applyIdleEarningsToInactiveGardens, loadGameSaveWithIdleAbsenceApplied, markGardenBecameInactive } from './utils/gardenIdleEarnings';
 import { clampOfflineEarningsBank } from './utils/offlineEarningsCap';
 import {
   getWildGrowthIntervalMsForLevel,
@@ -2480,6 +2481,21 @@ export default function App() {
   const handleDevAddMoneyClick = useCallback(() => {
     playSfx(SFX_IDS.uiConfirmNormal);
     setMoney((prev) => prev + DEV_CHEAT_ADD_MONEY_AMOUNT);
+  }, []);
+
+  const handleDevClearCoinsClick = useCallback(() => {
+    playSfx(SFX_IDS.uiConfirmNormal);
+    setMoney(0);
+    const v2 = loadGameSaveV2();
+    if (!v2) return;
+    const gardens = { ...v2.gardens };
+    for (const id of Object.keys(gardens) as GardenId[]) {
+      const garden = gardens[id];
+      if (!garden) continue;
+      gardens[id] = { ...garden, money: 0 };
+    }
+    persistGameSaveV2({ ...v2, gardens, savedAt: Date.now() });
+    setCollectionSaveRevision((r) => r + 1);
   }, []);
 
   const handlePostFtueCleanRestart = useCallback((confirmMessage: string) => {
@@ -6565,10 +6581,16 @@ export default function App() {
   const applyGardenSwitchState = useCallback(
     (targetId: GardenId) => {
       persistGameSnapshotRef.current();
-      const v2 = loadGameSaveV2();
+      let v2 = loadGameSaveV2();
       if (!v2) return 0;
+      const leavingId = v2.activeGardenId;
+      const now = Date.now();
+      if (leavingId !== targetId) {
+        v2 = markGardenBecameInactive(v2, leavingId, now);
+        persistGameSaveV2(v2);
+      }
       const nextV2 = activateGardenInSave(v2, targetId);
-      persistGameSaveV2({ ...nextV2, savedAt: Date.now() });
+      persistGameSaveV2({ ...nextV2, savedAt: now });
       activeGardenIdRef.current = targetId;
       setActiveGardenId(targetId);
       setActiveGardenAssetContext(targetId);
@@ -6870,7 +6892,16 @@ export default function App() {
       storeFreeOfferSlots,
       storeSlotCooldownEnds,
     };
-    persistGameSave(payload, { activeGardenId: activeGardenIdRef.current });
+    const normalized = normalizeGameSaveV1({ ...payload, v: GAME_SAVE_VERSION });
+    const existing = loadGameSaveV2();
+    if (!existing) {
+      persistGameSave(payload, { activeGardenId: activeGardenIdRef.current });
+      return;
+    }
+    let v2 = mergeV1IntoV2(existing, normalized);
+    v2.activeGardenId = activeGardenIdRef.current;
+    v2 = applyIdleEarningsToInactiveGardens(v2, payload.savedAt);
+    persistGameSaveV2(v2);
   };
 
   const autoCollectOfflineEarningsForUnload = () => {
@@ -10079,6 +10110,7 @@ export default function App() {
                 setDailyTaskClaimBounceIds([]);
               }}
               onAddMoney={() => handleDevAddMoneyClick()}
+              onClearCoins={() => handleDevClearCoinsClick()}
               onClearProgress={() =>
                 handlePostFtueCleanRestart(
                   'You will lose your progress and start from level 1 without the FTUE'

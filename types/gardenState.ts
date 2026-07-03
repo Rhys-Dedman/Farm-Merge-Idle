@@ -51,4 +51,6 @@ export interface GardenState {
   storeFreeOfferSlots?: [string, string];
   /** Per-garden store slot cooldown end timestamps (ms). */
   storeSlotCooldownEnds?: [number, number];
+  /** Epoch ms when this garden last ran in-session idle sim (while another garden was active). */
+  lastInactiveSimAt?: number;
 }
