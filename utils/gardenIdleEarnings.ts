@@ -22,6 +22,11 @@ import {
   simulateOfflineSeedHarvest,
   simulateWildGrowthOffline,
 } from './offlineSimulate';
+import {
+  capOfflineSimSurplusCoins,
+  clampOfflineEarningsBank,
+  type OfflineEarningsCapContext,
+} from './offlineEarningsCap';
 
 /** Ignore sub-second gaps so quick refresh / garden switch does not re-sim. */
 const MIN_IDLE_ABSENCE_MS = 1000;
@@ -91,6 +96,19 @@ export function simulateGardenIdleAbsence(
 
   const pendingBank = ftueBlocksOffline ? 0 : (garden.pendingOfflineEarnings ?? 0);
 
+  const capCtx: OfflineEarningsCapContext = {
+    highestPlantEver: garden.highestPlantEver,
+    seedsState: garden.seedsState,
+    ftueSeedSurplusActivated: globals.ftueSeedSurplusActivated,
+    ftueHarvestSurplusActivated: globals.ftueHarvestSurplusActivated,
+  };
+  const simCoins = ftueBlocksOffline
+    ? 0
+    : capOfflineSimSurplusCoins(sim.offlineSurplusCoins, capCtx, deltaMs);
+  const pendingOfflineEarnings = ftueBlocksOffline
+    ? 0
+    : clampOfflineEarningsBank(pendingBank + simCoins, capCtx, `garden:${gardenId}`);
+
   return {
     ...garden,
     seedProgress: sim.seedProgress,
@@ -100,7 +118,7 @@ export function simulateGardenIdleAbsence(
     cropsState: cropsNorm,
     grid: wildOut.grid,
     wildGrowthAccumulatorMs: wildOut.wildGrowthAccumMs,
-    pendingOfflineEarnings: pendingBank + sim.offlineSurplusCoins,
+    pendingOfflineEarnings,
   };
 }
 

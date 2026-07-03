@@ -18,3 +18,8 @@ export const FLOATING_BUTTON_STACK_TOP_PX =
   FLOATING_BUTTON_GOALS_HEIGHT_PX +
   FLOATING_BUTTON_STACK_GAP_BELOW_GOALS_PX +
   FLOATING_BUTTON_STACK_TOP_NUDGE_PX;
+
+/** Match PageHeader + goals stack; add design-space safe-top inset (notch / status bar). */
+export function getFloatingButtonStackTopPx(safeTopInsetDesignPx = 0): number {
+  return FLOATING_BUTTON_STACK_TOP_PX + safeTopInsetDesignPx;
+}

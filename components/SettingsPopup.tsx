@@ -18,6 +18,8 @@ interface SettingsPopupProps {
   onSfxEnabledChange: (enabled: boolean) => void;
   onClearBoosts?: () => void;
   onResetProgress?: () => void;
+  /** Shown during FTUE settings — same end state as dev Clear Progress. */
+  onSkipTutorial?: () => void;
   onRateUs?: () => void;
   showAutoMergeSetting?: boolean;
   onAutoMergeChange?: (enabled: boolean) => void;
@@ -97,6 +99,7 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
   onSfxEnabledChange,
   onClearBoosts,
   onResetProgress,
+  onSkipTutorial,
   onRateUs,
   showAutoMergeSetting = false,
   onAutoMergeChange,
@@ -111,6 +114,7 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
   const [devToolsPressed, setDevToolsPressed] = useState(false);
   const [clearBoostsPressed, setClearBoostsPressed] = useState(false);
   const [resetPressed, setResetPressed] = useState(false);
+  const [skipTutorialPressed, setSkipTutorialPressed] = useState(false);
   const [rateUsPressed, setRateUsPressed] = useState(false);
   const popupCardLayoutRef = useRef<HTMLDivElement>(null);
 
@@ -208,6 +212,24 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
                 <img src={assetPath('/assets/ui/popup_divider.png')} alt="" className="h-auto object-contain" style={{ width: '100%', maxWidth: '220px' }} />
               </div>
               <div className="flex flex-col items-center gap-3 w-full" style={{ maxWidth: '200px' }}>
+                {onSkipTutorial ? (
+                  <button
+                    type="button"
+                    onMouseDown={() => setSkipTutorialPressed(true)}
+                    onMouseUp={() => setSkipTutorialPressed(false)}
+                    onMouseLeave={() => setSkipTutorialPressed(false)}
+                    onClick={() => {
+                      onAnyButtonClick?.();
+                      onSkipTutorial();
+                    }}
+                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                    style={btnStyle(PALETTES.red, skipTutorialPressed)}
+                  >
+                    <span className="font-bold tracking-tight" style={labelStyle(PALETTES.red)}>
+                      Skip Tutorial
+                    </span>
+                  </button>
+                ) : null}
                 {onCycleGardenClick && activeGardenLabel ? (
                   <button
                     type="button"

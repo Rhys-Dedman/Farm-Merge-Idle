@@ -15,6 +15,7 @@ import {
   STARTER_PACK_FORCE_POPUP_LEVEL,
 } from './constants/playerLevelUnlocks';
 import { TASKS_FTUE_FLOATING_BUTTON_ID } from './constants/tasksFtue';
+import { getFloatingButtonStackTopPx } from './constants/floatingButtonLayout';
 import { FAKE_SAFE_AREA_TOP_PX } from './constants/debugSafeArea';
 import { FakeNotchOverlay } from './components/FakeNotchOverlay';
 import { Navbar } from './components/Navbar';
@@ -224,13 +225,14 @@ import {
 import { markRateUsPermanentlyDismissed } from './utils/rateUsDismiss';
 import { isOfflineCoinEarningsBlockedByFtue, simulateOfflineSeedHarvest, simulateWildGrowthOffline } from './utils/offlineSimulate';
 import { loadGameSaveWithIdleAbsenceApplied } from './utils/gardenIdleEarnings';
+import { clampOfflineEarningsBank } from './utils/offlineEarningsCap';
 import {
   getWildGrowthIntervalMsForLevel,
   pickWildGrowthSpawn,
   WILD_GROWTH_UNLOCK_PLAYER_LEVEL,
 } from './utils/wildGrowth';
 import { OfflineEarningsPopup } from './components/OfflineEarningsPopup';
-import { BARN_SHELVES_PER_GARDEN, COLLECTION_COMING_SOON_LABEL, COLLECTION_GARDEN_LABEL_AFTER_SHELVES_MARGIN_TOP_PX, COLLECTION_GARDEN_LABEL_MARGIN_BOTTOM_PX, COLLECTION_PLANT_COUNT, COLLECTION_SCROLL_BOTTOM_PAD_PX, COLLECTION_SHELVES_MARGIN_TOP_PX, COLLECTION_UNDISCOVERED_GARDEN_LABEL, getCollectionShelfMeta, normalizeBarnShelvesUnlocked } from './constants/barnShelves';
+import { BARN_SHELVES_PER_GARDEN, COLLECTION_COMING_SOON_LABEL, COLLECTION_GARDEN_LABEL_AFTER_SHELVES_MARGIN_TOP_PX, COLLECTION_GARDEN_LABEL_MARGIN_BOTTOM_PX, COLLECTION_PHONE_GARDEN_LABEL_AFTER_SHELVES_MARGIN_TOP_PX, COLLECTION_PHONE_GARDEN_LABEL_SCALE, COLLECTION_PHONE_PLANT_PANEL_SCALE, COLLECTION_PHONE_PLANT_PANEL_TOP_PX, COLLECTION_PHONE_ROOF_LAYOUT_SCALE, COLLECTION_PHONE_ROOF_SCALE, COLLECTION_PHONE_SHELF_WIDTH_SCALE, COLLECTION_PHONE_SHELVES_MARGIN_TOP_PX, COLLECTION_PLANT_COUNT, COLLECTION_PLANT_PANEL_TOP_PX, COLLECTION_SCROLL_BOTTOM_PAD_PX, COLLECTION_SHELVES_MARGIN_TOP_PX, COLLECTION_UNDISCOVERED_GARDEN_LABEL, getCollectionShelfMeta, normalizeBarnShelvesUnlocked } from './constants/barnShelves';
 import { GARDEN_PICKER_PURCHASE_COIN_PRICE } from './constants/gardenPicker';
 import { MAX_PLANT_TIER } from './constants/plants';
 import {
@@ -786,6 +788,11 @@ const BARN_CAROUSEL_SEAM_OFFSET_PX = 1;
 const COLLECTION_BACKGROUND_WIDTH_PX = 2000;
 const COLLECTION_BACKGROUND_IMAGE = assetPath('/assets/collection/background_collection.png');
 const COLLECTION_CONTENT_BOTTOM_PAD_PX = 140;
+/** Widest collection art (shelf); barn scale targets filling the design column on phones. */
+const COLLECTION_BARN_LAYOUT_WIDTH_PX = 490;
+const COLLECTION_ROOF_WIDTH_PX = 800;
+/** Native `collection_roof.png` height ÷ width (2048×512). */
+const COLLECTION_ROOF_ASPECT_HEIGHT = 512 / 2048;
 
 const UPGRADE_PANEL_OPEN_DURATION_MS = 1400;
 const UPGRADE_PANEL_CLOSE_DURATION_MS = 350;
@@ -2475,6 +2482,32 @@ export default function App() {
     setMoney((prev) => prev + DEV_CHEAT_ADD_MONEY_AMOUNT);
   }, []);
 
+  const handlePostFtueCleanRestart = useCallback((confirmMessage: string) => {
+    playSfx(SFX_IDS.uiConfirmNormal);
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+    suppressGameSaveRef.current = true;
+    setAutoMergeMode(false);
+    try { localStorage.removeItem(STORE_STARTER_PACK_COUNTDOWN_END_MS_KEY); } catch { /* ignore */ }
+    try { localStorage.removeItem(STORE_STARTER_PACK_UNLOCKED_KEY); } catch { /* ignore */ }
+    try { localStorage.removeItem(STORE_STARTER_PACK_PURCHASED_KEY); } catch { /* ignore */ }
+    try { localStorage.removeItem(DAILY_TASKS_COUNTDOWN_END_MS_KEY); } catch { /* ignore */ }
+    try { localStorage.removeItem(DAILY_TASKS_UNLOCKED_KEY); } catch { /* ignore */ }
+    clearDailyTasksProgressStorage();
+    setTasksFtueStarted(false);
+    setTasksFtueUnlockRevealed(false);
+    setTasksFtueCompleted(false);
+    tasksFtueRevealPlayedRef.current = false;
+    pendingTasksFtueRevealRef.current = false;
+    setStarterPackUnlocked(false);
+    setStarterPackPurchased(false);
+    setStarterPackCountdownRefreshKey((k) => k + 1);
+    setDailyTasksCountdownRefreshKey((k) => k + 1);
+    persistGameSaveV2(createPostFtueCleanSaveV2());
+    window.location.reload();
+  }, []);
+
   const flushDeferredCheatPopups = useCallback(() => {
     const plantLevelToDiscover = discoveryLevelAfterPauseCloseRef.current;
     discoveryLevelAfterPauseCloseRef.current = null;
@@ -3601,17 +3634,38 @@ export default function App() {
     ? FAKE_SAFE_AREA_TOP_PX
     : safeTopInsetScreen;
   const safeTopInsetDesign = effectiveSafeTopInsetScreen / appScale;
+  const farmFloatingButtonStackTopPx = getFloatingButtonStackTopPx(safeTopInsetDesign);
   const appScaleRef = useRef(appScale);
   appScaleRef.current = appScale;
   const goalsTrackWidthPx = designWidth - GOALS_AREA_LEFT_MARGIN_PX;
   const coinGoalPinnedRight = goalsTrackWidthPx >= COIN_GOAL_PIN_RIGHT_MIN_TRACK_PX;
-  // Calculate barn scale: only apply on narrow mobile screens (below 500px)
-  // On wider screens, use scale 1 (no scaling)
-  const barnDesignWidth = 470;
-  const barnPadding = 20;
-  const barnScale = viewportWidth >= mobileBreakpoint 
-    ? 1 
-    : Math.min(1, (viewportWidth - barnPadding) / barnDesignWidth);
+  const isCollectionPhoneLayout = viewportWidth < mobileBreakpoint;
+  const collectionPlantPanelTopPx = isCollectionPhoneLayout
+    ? COLLECTION_PHONE_PLANT_PANEL_TOP_PX
+    : COLLECTION_PLANT_PANEL_TOP_PX;
+  const collectionShelvesMarginTopPx = isCollectionPhoneLayout
+    ? COLLECTION_PHONE_SHELVES_MARGIN_TOP_PX
+    : COLLECTION_SHELVES_MARGIN_TOP_PX;
+  const collectionGardenLabelAfterShelvesMarginTopPx = isCollectionPhoneLayout
+    ? COLLECTION_PHONE_GARDEN_LABEL_AFTER_SHELVES_MARGIN_TOP_PX
+    : COLLECTION_GARDEN_LABEL_AFTER_SHELVES_MARGIN_TOP_PX;
+  const collectionGardenLabelScale = isCollectionPhoneLayout ? COLLECTION_PHONE_GARDEN_LABEL_SCALE : 1;
+  const collectionRoofVisualWidthPx =
+    COLLECTION_ROOF_WIDTH_PX * (isCollectionPhoneLayout ? COLLECTION_PHONE_ROOF_SCALE : 1);
+  const collectionRoofLayoutWidthPx = isCollectionPhoneLayout
+    ? COLLECTION_ROOF_WIDTH_PX * COLLECTION_PHONE_ROOF_LAYOUT_SCALE
+    : collectionRoofVisualWidthPx;
+  const collectionRoofLayoutHeightPx =
+    collectionRoofLayoutWidthPx * COLLECTION_ROOF_ASPECT_HEIGHT;
+  // Collection is inside the design column (448px on phones), which appScale already fits to the device.
+  // On narrow viewports, scale barn content to fill that column — not viewportWidth (that double-shrinks).
+  const barnScale =
+    viewportWidth >= mobileBreakpoint
+      ? 1
+      : Math.min(
+          1,
+          (designWidth / COLLECTION_BARN_LAYOUT_WIDTH_PX) * COLLECTION_PHONE_SHELF_WIDTH_SCALE,
+        );
 
   const collectionV2Gardens = useMemo(
     () => loadGameSaveV2()?.gardens,
@@ -6374,11 +6428,24 @@ export default function App() {
 
     const ftueBlocksOffline = isOfflineCoinEarningsBlockedByFtue(save);
     const goldPotsForOffline = goldenPotN;
+    const clampOfflineBank = (amount: number, label: string) =>
+      ftueBlocksOffline
+        ? 0
+        : clampOfflineEarningsBank(
+            amount,
+            {
+              highestPlantEver: save.highestPlantEver,
+              seedsState: save.seedsState,
+              ftueSeedSurplusActivated: save.ftueSeedSurplusActivated,
+              ftueHarvestSurplusActivated: save.ftueHarvestSurplusActivated,
+            },
+            label,
+          );
 
     if (options?.skipOfflineSim) {
       wildGrowthAccumMsRef.current = save.wildGrowthAccumulatorMs ?? 0;
       setGrid(save.grid);
-      const pendingBank = ftueBlocksOffline ? 0 : (save.pendingOfflineEarnings ?? 0);
+      const pendingBank = clampOfflineBank(save.pendingOfflineEarnings ?? 0, 'hydrate:load');
       pendingOfflineEarningsRef.current = pendingBank;
       return applyGoldenPotOfflineEarningsBonus(pendingBank, goldPotsForOffline);
     }
@@ -6420,8 +6487,11 @@ export default function App() {
     wildGrowthAccumMsRef.current = wildOut.wildGrowthAccumMs;
     setGrid(wildOut.grid);
 
-    const pendingBank = ftueBlocksOffline ? 0 : (save.pendingOfflineEarnings ?? 0);
-    const rawOfflineTotal = pendingBank + sim.offlineSurplusCoins;
+    const pendingBank = clampOfflineBank(save.pendingOfflineEarnings ?? 0, 'hydrate:sim-bank');
+    const rawOfflineTotal = clampOfflineBank(
+      pendingBank + sim.offlineSurplusCoins,
+      'hydrate:sim-total',
+    );
     pendingOfflineEarningsRef.current = rawOfflineTotal;
     return applyGoldenPotOfflineEarningsBonus(rawOfflineTotal, goldPotsForOffline);
   }, []);
@@ -7633,6 +7703,7 @@ export default function App() {
                 <>
                   <FarmLeftFloatingButtonStack
                     gardenId={activeGardenId}
+                    topPx={farmFloatingButtonStackTopPx}
                     style={{
                       opacity: farmFloatingButtonsFadedIn ? 1 : 0,
                       transition: 'opacity 400ms ease-out',
@@ -7657,6 +7728,7 @@ export default function App() {
                   />
                   <FloatingButtonStack
                     side="right"
+                    topPx={farmFloatingButtonStackTopPx}
                     style={{
                       opacity: farmFloatingButtonsFadedIn ? 1 : 0,
                       transition: 'opacity 400ms ease-out',
@@ -8259,15 +8331,23 @@ export default function App() {
                   />
 
                   {/* Barn roof at the top - fixed pixel size, centered */}
-                  <div className="relative pointer-events-none" style={{ zIndex: 1, overflow: 'visible' }}>
+                  <div
+                    className="relative pointer-events-none"
+                    style={{
+                      zIndex: 1,
+                      overflow: 'visible',
+                      height: isCollectionPhoneLayout ? collectionRoofLayoutHeightPx : undefined,
+                    }}
+                  >
                     <img
                       src={assetPath('/assets/collection/collection_roof.png')}
                       alt="Barn Roof"
                       style={{
-                        width: '800px',
+                        width: `${collectionRoofVisualWidthPx}px`,
                         height: 'auto',
                         maxWidth: 'none',
-                        position: 'relative',
+                        position: isCollectionPhoneLayout ? 'absolute' : 'relative',
+                        top: isCollectionPhoneLayout ? 0 : undefined,
                         left: '50%',
                         transform: 'translateX(-50%)',
                       }}
@@ -8277,9 +8357,23 @@ export default function App() {
                   {/* Plant mastery panel in the added shelf gap (absolute so it doesn't shift layout). */}
                   <div
                     className="absolute pointer-events-auto"
-                    style={{ zIndex: 2, left: '50%', top: 170, transform: 'translateX(-50%)' }}
+                    style={{
+                      zIndex: 2,
+                      left: '50%',
+                      top: collectionPlantPanelTopPx,
+                      transform: 'translateX(-50%)',
+                    }}
                   >
-                    <div className="relative" style={{ width: '320px' }}>
+                    <div
+                      className="relative"
+                      style={{
+                        width: '320px',
+                        transform: isCollectionPhoneLayout
+                          ? `scale(${COLLECTION_PHONE_PLANT_PANEL_SCALE})`
+                          : undefined,
+                        transformOrigin: 'top center',
+                      }}
+                    >
                       <img
                         src={
                           isPlantCollectionUiUnlocked
@@ -8564,7 +8658,7 @@ export default function App() {
                   {/* Shelves: garden labels + unlock pill + glow when mastery is pending */}
                   <div
                     className="relative flex flex-col items-center"
-                    style={{ marginTop: COLLECTION_SHELVES_MARGIN_TOP_PX }}
+                    style={{ marginTop: collectionShelvesMarginTopPx }}
                     data-barn-shelves
                   >
                     <GardenLabel
@@ -8572,6 +8666,7 @@ export default function App() {
                       label={getCollectionGardenDisplayName(DEFAULT_GARDEN_ID)}
                       marginTop={0}
                       marginBottom={COLLECTION_GARDEN_LABEL_MARGIN_BOTTOM_PX}
+                      scale={collectionGardenLabelScale}
                     />
                     {Array.from({ length: BARN_SHELVES_PER_GARDEN }, (_, shelfInGarden) =>
                       renderCollectionShelf(shelfInGarden),
@@ -8588,12 +8683,13 @@ export default function App() {
                           ? undefined
                           : getCollectionGardenLockedIconPath()
                       }
-                      marginTop={COLLECTION_GARDEN_LABEL_AFTER_SHELVES_MARGIN_TOP_PX}
+                      marginTop={collectionGardenLabelAfterShelvesMarginTopPx}
                       marginBottom={
                         isFruitGardenCollectionUnlocked
                           ? COLLECTION_GARDEN_LABEL_MARGIN_BOTTOM_PX
                           : 0
                       }
+                      scale={collectionGardenLabelScale}
                     />
                     {isFruitGardenCollectionUnlocked && (
                       <>
@@ -8603,8 +8699,9 @@ export default function App() {
                         <GardenLabel
                           label={COLLECTION_COMING_SOON_LABEL}
                           iconSrc={getCollectionGardenLockedIconPath()}
-                          marginTop={COLLECTION_GARDEN_LABEL_AFTER_SHELVES_MARGIN_TOP_PX}
+                          marginTop={collectionGardenLabelAfterShelvesMarginTopPx}
                           marginBottom={0}
+                          scale={collectionGardenLabelScale}
                         />
                       </>
                     )}
@@ -9871,6 +9968,14 @@ export default function App() {
               showAutoMergeSetting={goldenPotCount >= MAX_PLANT_TIER}
               onAutoMergeChange={setAutoMergeSetting}
               showDevToolsButton={!settingsOpenedFromFtue}
+              onSkipTutorial={
+                settingsOpenedFromFtue
+                  ? () =>
+                      handlePostFtueCleanRestart(
+                        'Skip the tutorial and start from level 1 with a fresh farm?'
+                      )
+                  : undefined
+              }
               onAnyButtonClick={() => playSfx(SFX_IDS.uiConfirmNormal)}
               musicEnabled={musicEnabled}
               sfxEnabled={sfxEnabled}
@@ -9974,33 +10079,11 @@ export default function App() {
                 setDailyTaskClaimBounceIds([]);
               }}
               onAddMoney={() => handleDevAddMoneyClick()}
-              onClearProgress={() => {
-                playSfx(SFX_IDS.uiConfirmNormal);
-                if (
-                  !window.confirm('You will lose your progress and start from level 1 without the FTUE')
-                ) {
-                  return;
-                }
-                suppressGameSaveRef.current = true;
-                setAutoMergeMode(false);
-                try { localStorage.removeItem(STORE_STARTER_PACK_COUNTDOWN_END_MS_KEY); } catch { /* ignore */ }
-                try { localStorage.removeItem(STORE_STARTER_PACK_UNLOCKED_KEY); } catch { /* ignore */ }
-                try { localStorage.removeItem(STORE_STARTER_PACK_PURCHASED_KEY); } catch { /* ignore */ }
-                try { localStorage.removeItem(DAILY_TASKS_COUNTDOWN_END_MS_KEY); } catch { /* ignore */ }
-                try { localStorage.removeItem(DAILY_TASKS_UNLOCKED_KEY); } catch { /* ignore */ }
-                clearDailyTasksProgressStorage();
-                setTasksFtueStarted(false);
-                setTasksFtueUnlockRevealed(false);
-                setTasksFtueCompleted(false);
-                tasksFtueRevealPlayedRef.current = false;
-                pendingTasksFtueRevealRef.current = false;
-                setStarterPackUnlocked(false);
-                setStarterPackPurchased(false);
-                setStarterPackCountdownRefreshKey((k) => k + 1);
-                setDailyTasksCountdownRefreshKey((k) => k + 1);
-                persistGameSaveV2(createPostFtueCleanSaveV2());
-                window.location.reload();
-              }}
+              onClearProgress={() =>
+                handlePostFtueCleanRestart(
+                  'You will lose your progress and start from level 1 without the FTUE'
+                )
+              }
               closeOnBackdropClick
               appScale={appScale}
             />

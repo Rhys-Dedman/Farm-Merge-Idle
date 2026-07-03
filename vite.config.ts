@@ -6,10 +6,16 @@ export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     const repoFromEnv = process.env.GITHUB_REPOSITORY?.split('/')?.[1];
     const prodBase = repoFromEnv ? `/${repoFromEnv}/` : '/';
+    const base =
+      mode === 'capacitor'
+        ? './'
+        : mode === 'production'
+          ? prodBase
+          : '/';
     return {
       // GitHub Pages "project" sites are served at /<repo>/.
-      // Use GITHUB_REPOSITORY in CI so renaming the repo doesn't require code changes.
-      base: mode === 'production' ? prodBase : '/',
+      // Capacitor APK uses relative base (`./`) so assets load from the WebView.
+      base,
       server: {
         port: 3000,
         host: '0.0.0.0',

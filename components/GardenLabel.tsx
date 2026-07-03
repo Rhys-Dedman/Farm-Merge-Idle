@@ -7,6 +7,8 @@ import {
 } from '../utils/gardenAssets';
 
 const GARDEN_LABEL_PANEL_WIDTH_PX = 320;
+/** Unscaled label art height at 320px width — layout compensation when `scale` > 1. */
+const GARDEN_LABEL_BASE_HEIGHT_PX = 72;
 
 /** Locked inner layout — change only when retuning icon/panel/text together. */
 const GARDEN_LABEL_INNER_TOP_PAD_PX = 28;
@@ -24,6 +26,8 @@ export interface GardenLabelProps {
   marginTop?: number;
   /** Gap below the label before shelves / next content. */
   marginBottom?: number;
+  /** Visual scale (phone collection tuning); layout margins grow so scaled art does not overlap. */
+  scale?: number;
 }
 
 /** Collection screen garden label: icon + panel + title (e.g. Flower Garden, Coming Soon). */
@@ -33,19 +37,30 @@ export const GardenLabel: React.FC<GardenLabelProps> = ({
   iconSrc,
   marginTop = 0,
   marginBottom = 10,
+  scale = 1,
 }) => {
   const resolvedIconSrc =
     iconSrc ??
     (gardenId != null ? getCollectionGardenSectionIconPath(gardenId) : getCollectionGardenLockedIconPath());
+  const layoutGrowthPx = scale > 1 ? GARDEN_LABEL_BASE_HEIGHT_PX * (scale - 1) : 0;
 
   return (
     <div
       className="pointer-events-none shrink-0 flex justify-center"
-      style={{ marginTop, marginBottom, width: `${GARDEN_LABEL_PANEL_WIDTH_PX}px` }}
+      style={{
+        marginTop,
+        marginBottom: marginBottom + layoutGrowthPx,
+        width: `${GARDEN_LABEL_PANEL_WIDTH_PX}px`,
+      }}
     >
       <div
         className="relative flex items-center justify-center"
-        style={{ width: `${GARDEN_LABEL_PANEL_WIDTH_PX}px`, paddingTop: GARDEN_LABEL_INNER_TOP_PAD_PX }}
+        style={{
+          width: `${GARDEN_LABEL_PANEL_WIDTH_PX}px`,
+          paddingTop: GARDEN_LABEL_INNER_TOP_PAD_PX,
+          transform: scale !== 1 ? `scale(${scale})` : undefined,
+          transformOrigin: 'top center',
+        }}
       >
         <img
           src={getGenericUiAssetPath('ui_collection_garden.png')}

@@ -34,6 +34,22 @@ export const COLLECTION_COMING_SOON_LABEL = 'Coming Soon';
 /** Scroll past the last label so it clears the viewport, with room below. */
 export const COLLECTION_SCROLL_BOTTOM_PAD_PX = 110;
 
+/** Phone collection layout tweaks (viewport < 500px; design column is already 448px). */
+export const COLLECTION_PHONE_ROOF_SCALE = 1.045;
+/** Layout footprint for roof on phone (unchanged when visual scale is tuned). */
+export const COLLECTION_PHONE_ROOF_LAYOUT_SCALE = 1.1;
+export const COLLECTION_PHONE_PLANT_PANEL_SCALE = 1.15;
+export const COLLECTION_PHONE_GARDEN_LABEL_SCALE = 1.2;
+/** Plant mastery panel `top` (design px); default applies on tablet/desktop. */
+export const COLLECTION_PLANT_PANEL_TOP_PX = 170;
+/** Lower on phone; shelves margin moves down with it, then tightened toward Flower Garden. */
+export const COLLECTION_PHONE_PLANT_PANEL_TOP_PX = 214;
+export const COLLECTION_PHONE_SHELVES_MARGIN_TOP_PX = 282;
+/** Tighter gap between a garden label and the shelves directly above it (phone only). */
+export const COLLECTION_PHONE_GARDEN_LABEL_AFTER_SHELVES_MARGIN_TOP_PX = -68;
+/** Extra width fill for shelves on phone (applied to barn scale, capped at 1). */
+export const COLLECTION_PHONE_SHELF_WIDTH_SCALE = 1.08;
+
 export function getCollectionShelfMeta(shelfIndex: number): {
   gardenId: (typeof COLLECTION_GARDEN_IDS)[number];
   shelfInGarden: number;

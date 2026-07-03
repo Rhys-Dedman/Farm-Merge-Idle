@@ -131,7 +131,13 @@ export const SideAction: React.FC<SideActionProps> = ({
   const whiteHeadStrokeDashoffset = circumference - (whiteHeadProgress * circumference);
   const whiteStrokeDashoffset = whiteCircumference - (displayProgress * whiteCircumference);
 
-  const isImageIcon = !iconNode && (icon.startsWith('http') || icon.startsWith('/'));
+  // Capacitor build uses relative base (`./`); absolute `/` check alone would render the path as text.
+  const isImageIcon =
+    !iconNode &&
+    (icon.startsWith('http') ||
+      icon.startsWith('/') ||
+      icon.startsWith('./') ||
+      /\.(png|jpe?g|webp|gif|svg)(\?.*)?$/i.test(icon));
 
   // Tap ripple state - stores active ripples that expand outward on each tap
   const [tapRipples, setTapRipples] = useState<TapRipple[]>([]);

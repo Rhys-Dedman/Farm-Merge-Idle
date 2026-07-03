@@ -21,6 +21,8 @@ export interface FarmLeftFloatingButtonStackProps {
   onCoinBoostClick: () => void;
   gardenId?: GardenId;
   style?: React.CSSProperties;
+  /** Design-space top offset; defaults to header + goals (pass safe-top inset on notched devices). */
+  topPx?: number;
 }
 
 export const FarmLeftFloatingButtonStack: React.FC<FarmLeftFloatingButtonStackProps> = ({
@@ -33,6 +35,7 @@ export const FarmLeftFloatingButtonStack: React.FC<FarmLeftFloatingButtonStackPr
   onCoinBoostClick,
   gardenId,
   style,
+  topPx,
 }) => {
   const starterPackRemainingMs = useStarterPackCountdown(
     starterPackUnlocked,
@@ -101,7 +104,7 @@ export const FarmLeftFloatingButtonStack: React.FC<FarmLeftFloatingButtonStackPr
   if (buttons.length === 0) return null;
 
   return (
-    <FloatingButtonStack side="left" style={style}>
+    <FloatingButtonStack side="left" style={style} topPx={topPx}>
       {buttons}
     </FloatingButtonStack>
   );
