@@ -8801,7 +8801,7 @@ export default function App() {
           }} 
           barnButtonRef={barnButtonRef}
           notifications={{
-            BARN: barnNotification,
+            BARN: barnNotification && isPlantCollectionUiUnlocked,
           }}
           collectionFtueGardenFinger={collectionFtuePhase === 'point_garden_nav' && !collectionFtueCompleted}
           blockInput={tasksFtueActive}
@@ -10248,7 +10248,11 @@ export default function App() {
               containerRef={containerRef}
               barnButtonRef={barnButtonRef}
               appScale={appScale}
-              onImpact={() => setBarnNotification(true)}
+              onImpact={() => {
+                if (isPlantCollectionUiUnlocked) {
+                  setBarnNotification(true);
+                }
+              }}
               onComplete={() => setActiveBarnParticles((prev) => prev.filter((x) => x.id !== p.id))}
             />
           ))}
