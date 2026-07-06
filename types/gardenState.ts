@@ -53,4 +53,6 @@ export interface GardenState {
   storeSlotCooldownEnds?: [number, number];
   /** Epoch ms when this garden last ran in-session idle sim (while another garden was active). */
   lastInactiveSimAt?: number;
+  /** Collection (barn) vertical scroll offset when the player last left that garden's collection. */
+  collectionScrollY?: number;
 }

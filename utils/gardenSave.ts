@@ -35,9 +35,16 @@ export const GAME_SAVE_V2_VERSION = 2 as const;
 export interface GameSaveGlobals {
   collectionFtueCompleted?: boolean;
   collectionFtuePhase?: string | null;
+  collectionFtueBonusesReached?: boolean;
+  collectionFtueRestartPending?: boolean;
   tasksFtueStarted?: boolean;
   tasksFtueUnlockRevealed?: boolean;
   tasksFtueCompleted?: boolean;
+  gardensFtueStarted?: boolean;
+  gardensFtueUnlockRevealed?: boolean;
+  gardensFtueCompleted?: boolean;
+  newGardenFtueCompleted?: boolean;
+  newGardenFtuePhase?: string | null;
   activeTab: TabType;
   activeScreen: ScreenType;
   isExpanded: boolean;
@@ -140,9 +147,16 @@ export function extractGlobalsFromV1(save: GameSaveV1): GameSaveGlobals {
   return {
     collectionFtueCompleted: save.collectionFtueCompleted,
     collectionFtuePhase: save.collectionFtuePhase,
+    collectionFtueBonusesReached: save.collectionFtueBonusesReached,
+    collectionFtueRestartPending: save.collectionFtueRestartPending,
     tasksFtueStarted: save.tasksFtueStarted,
     tasksFtueUnlockRevealed: save.tasksFtueUnlockRevealed,
     tasksFtueCompleted: save.tasksFtueCompleted,
+    gardensFtueStarted: save.gardensFtueStarted,
+    gardensFtueUnlockRevealed: save.gardensFtueUnlockRevealed,
+    gardensFtueCompleted: save.gardensFtueCompleted,
+    newGardenFtueCompleted: save.newGardenFtueCompleted,
+    newGardenFtuePhase: save.newGardenFtuePhase,
     activeTab: save.activeTab,
     activeScreen: save.activeScreen,
     isExpanded: save.isExpanded,
@@ -208,9 +222,16 @@ export function flattenV2ToV1(v2: GameSaveV2): GameSaveV1 {
     plantMasteryIntroBarComplete: garden.plantMasteryIntroBarComplete,
     collectionFtueCompleted: g.collectionFtueCompleted,
     collectionFtuePhase: g.collectionFtuePhase,
+    collectionFtueBonusesReached: g.collectionFtueBonusesReached,
+    collectionFtueRestartPending: g.collectionFtueRestartPending,
     tasksFtueStarted: g.tasksFtueStarted,
     tasksFtueUnlockRevealed: g.tasksFtueUnlockRevealed,
     tasksFtueCompleted: g.tasksFtueCompleted,
+    gardensFtueStarted: g.gardensFtueStarted,
+    gardensFtueUnlockRevealed: g.gardensFtueUnlockRevealed,
+    gardensFtueCompleted: g.gardensFtueCompleted,
+    newGardenFtueCompleted: g.newGardenFtueCompleted,
+    newGardenFtuePhase: g.newGardenFtuePhase,
     activeTab: g.activeTab,
     activeScreen: g.activeScreen,
     isExpanded: g.isExpanded,
@@ -303,7 +324,10 @@ export function mergeV1IntoV2(v2: GameSaveV2, v1: GameSaveV1): GameSaveV2 {
       v2.gardensFeatureUnlocked || garden1Level >= GARDENS_SWITCH_UNLOCK_LEVEL,
     gardens: {
       ...v2.gardens,
-      [activeId]: extractGardenStateFromV1(v1),
+      [activeId]: {
+        ...extractGardenStateFromV1(v1),
+        collectionScrollY: v2.gardens[activeId]?.collectionScrollY,
+      },
     },
     globals: extractGlobalsFromV1(v1),
   };
@@ -438,4 +462,36 @@ export function activateGardenInSave(v2: GameSaveV2, targetId: GardenId): GameSa
     gardens,
     gardensStarted,
   };
+}
+
+/** Read per-garden collection scroll positions from a v2 save. */
+export function readCollectionScrollYFromV2(
+  v2: GameSaveV2 | null | undefined,
+): Partial<Record<GardenId, number>> {
+  const out: Partial<Record<GardenId, number>> = {};
+  if (!v2?.gardens) return out;
+  for (const gardenId of GARDEN_IDS) {
+    const scrollY = v2.gardens[gardenId]?.collectionScrollY;
+    if (scrollY != null && scrollY > 0) out[gardenId] = scrollY;
+  }
+  return out;
+}
+
+/** Write in-memory collection scroll map into each garden's save slice. */
+export function applyCollectionScrollYToV2(
+  v2: GameSaveV2,
+  scrollByGarden: Partial<Record<GardenId, number>>,
+): GameSaveV2 {
+  const gardens = { ...v2.gardens };
+  let changed = false;
+  for (const gardenId of GARDEN_IDS) {
+    const g = gardens[gardenId];
+    if (!g) continue;
+    const scrollY = scrollByGarden[gardenId];
+    if (scrollY == null) continue;
+    if (g.collectionScrollY === scrollY) continue;
+    gardens[gardenId] = { ...g, collectionScrollY: scrollY };
+    changed = true;
+  }
+  return changed ? { ...v2, gardens } : v2;
 }

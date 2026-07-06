@@ -19,11 +19,8 @@ export const GARDEN_PICKER_LIST_INNER_WIDTH_PX =
 /** Text block horizontal inset from design left (prescale). */
 export const GARDEN_PICKER_TEXT_LEFT_PX = 168;
 
-/** Golden pots required to unlock garden 2 (purchase gate). */
-export const GARDEN_PICKER_GOLDEN_POT_UNLOCK_REQUIRED = 12;
-
 /** Coin price to purchase the next garden (prototype). */
-export const GARDEN_PICKER_PURCHASE_COIN_PRICE = 40_000;
+export const GARDEN_PICKER_PURCHASE_COIN_PRICE = 250_000;
 
 /** Pots progress pill overlay (710×175 design px). */
 export const GARDEN_PICKER_POTS_PILL_RIGHT_PX = 48;

@@ -41,3 +41,14 @@ const COLLECTION_GARDEN_DISPLAY_NAMES: Partial<Record<GardenId, string>> = {
 export function getCollectionGardenDisplayName(gardenId: GardenId): string {
   return COLLECTION_GARDEN_DISPLAY_NAMES[gardenId] ?? getGardenDisplayLabel(gardenId);
 }
+
+const COLLECTION_PANEL_TITLES: Partial<Record<GardenId, string>> = {
+  garden_1: 'Flower Collection',
+  garden_2: 'Fruit Collection',
+  garden_3: 'Vegetable Collection',
+};
+
+/** Barn collection panel heading for the active garden. */
+export function getCollectionPanelTitle(gardenId: GardenId): string {
+  return COLLECTION_PANEL_TITLES[gardenId] ?? `${getCollectionGardenDisplayName(gardenId)} Collection`;
+}

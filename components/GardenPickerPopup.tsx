@@ -10,10 +10,8 @@ import {
   isShippedGardenId,
   type GardenId,
 } from '../constants/gardens';
-import { getGoldenPotCountRequiredForGarden, hasGoldenPotNewGardenUnlocked } from '../constants/goldenPotBonuses';
 import {
   GARDEN_PICKER_CARD_HORIZONTAL_PAD_PX,
-  GARDEN_PICKER_GOLDEN_POT_UNLOCK_REQUIRED,
   GARDEN_PICKER_LIST_GAP_PX,
   GARDEN_PICKER_LIST_HORIZONTAL_PAD_PX,
   GARDEN_PICKER_PRESCALE_WIDTH_PX,
@@ -27,6 +25,8 @@ import {
   type GardenPickerPanelState,
   type GardenPickerPurchaseFx,
 } from './GardenPickerRow';
+import { NewGardenPickerFtueOverlay } from './NewGardenPickerFtueOverlay';
+import { NEW_GARDEN_FTUE_VIEW_BUTTON_ID } from '../constants/newGardenFtue';
 
 interface GardenPickerPopupProps {
   isVisible: boolean;
@@ -38,11 +38,12 @@ interface GardenPickerPopupProps {
   onPurchaseSound?: () => void;
   /** Gardens the player has started / owns. */
   gardensStarted?: GardenId[];
-  globalGoldenPotCount?: number;
   /** Active garden coin balance (garden 1 coins pay for garden 2, etc.). */
   playerMoney?: number;
   closeOnBackdropClick?: boolean;
   appScale?: number;
+  /** New Garden FTUE 1: finger on View for this garden; blocks close and other rows. */
+  newGardenFtueViewGardenId?: GardenId | null;
 }
 
 const POPUP_CLOSE_MS = 200;
@@ -94,8 +95,6 @@ export function resolveGardenPickerPanelState(
   activeGardenId: GardenId,
   options: {
     gardensStarted: Set<GardenId>;
-    globalGoldenPotCount: number;
-    playerMoney: number;
   },
 ): GardenPickerPanelState {
   if (!isPreviousGardenOwned(gardenId, options.gardensStarted)) {
@@ -107,16 +106,13 @@ export function resolveGardenPickerPanelState(
   }
 
   const started = options.gardensStarted.has(gardenId);
-  const goldenPotRequired = getGoldenPotCountRequiredForGarden(gardenId);
 
   if (started) {
     return gardenId === activeGardenId ? 'selected' : 'owned';
   }
 
-  if (goldenPotRequired != null) {
-    if (!hasGoldenPotNewGardenUnlocked(options.globalGoldenPotCount)) {
-      return 'pots';
-    }
+  // Level 10 gates the gardens button; unpurchased gardens show coin unlock only.
+  if (gardenId !== DEFAULT_GARDEN_ID) {
     return 'purchase';
   }
 
@@ -132,11 +128,13 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
   onPurchaseGarden,
   onPurchaseSound,
   gardensStarted = [DEFAULT_GARDEN_ID],
-  globalGoldenPotCount = 0,
   playerMoney = 0,
   closeOnBackdropClick = true,
   appScale = 1,
+  newGardenFtueViewGardenId = null,
 }) => {
+  const newGardenFtueActive = newGardenFtueViewGardenId != null;
+  const pickerCloseOnBackdrop = closeOnBackdropClick && !newGardenFtueActive;
   const [animState, setAnimState] = useState<PopupAnimWithPreflight>('hidden');
   const [bounceRowKeys, setBounceRowKeys] = useState<string[]>([]);
   const [leafBursts, setLeafBursts] = useState<GardenPickerLeafBurst[]>([]);
@@ -242,8 +240,10 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
           backgroundColor: 'rgba(0, 0, 0, 0.7)',
           opacity: isLeaving || isPreflight ? 0 : 1,
         }}
-        onClick={closeOnBackdropClick ? dismissToClose : undefined}
+        onClick={pickerCloseOnBackdrop ? dismissToClose : undefined}
       />
+
+      <NewGardenPickerFtueOverlay active={newGardenFtueActive} />
 
       <div
         className="relative flex items-center justify-center"
@@ -392,8 +392,6 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
                   {GARDEN_IDS.map((gardenId) => {
                     const state = resolveGardenPickerPanelState(gardenId, activeGardenId, {
                       gardensStarted: gardensStartedSet,
-                      globalGoldenPotCount,
-                      playerMoney,
                     });
                     return (
                       <GardenPickerRow
@@ -401,11 +399,15 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
                         gardenId={gardenId}
                         state={state}
                         gardenDisplayName={getCollectionGardenDisplayName(gardenId)}
-                        globalGoldenPotCount={globalGoldenPotCount}
-                        goldenPotRequired={GARDEN_PICKER_GOLDEN_POT_UNLOCK_REQUIRED}
                         purchaseCoinPrice={GARDEN_PICKER_PURCHASE_COIN_PRICE}
                         playerMoney={playerMoney}
                         claimBounceActive={bounceRowKeys.includes(gardenId)}
+                        viewButtonDomId={
+                          newGardenFtueViewGardenId === gardenId && state === 'owned'
+                            ? NEW_GARDEN_FTUE_VIEW_BUTTON_ID
+                            : undefined
+                        }
+                        ftueViewOnlyGardenId={newGardenFtueViewGardenId}
                         onView={() => onSelectGarden(gardenId)}
                         onPurchase={(fx) => handlePurchase(gardenId, gardenId, fx)}
                       />
@@ -418,7 +420,7 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
 
           <button
             type="button"
-            onClick={dismissToClose}
+            onClick={newGardenFtueActive ? undefined : dismissToClose}
             className="absolute w-8 h-8 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
             style={{
               top: GARDEN_PICKER_CLOSE_TOP_PX,
@@ -427,8 +429,11 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
               border: 'none',
               color: '#c2b280',
               zIndex: 105,
+              opacity: newGardenFtueActive ? 0.35 : 1,
+              pointerEvents: newGardenFtueActive ? 'none' : 'auto',
             }}
             aria-label="Close"
+            disabled={newGardenFtueActive}
           >
             <svg width="16" height="16" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               <path d="M2 2L12 12M12 2L2 12" />

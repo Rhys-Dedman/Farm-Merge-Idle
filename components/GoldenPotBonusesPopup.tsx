@@ -1,28 +1,18 @@
 /**
- * Golden pot bonuses — discovery-style shell without plant subtitle or collect button.
- * Backdrop and X dismiss; shows golden pot count and bonus tier strip.
+ * Collection bonuses — discovery-style shell; backdrop and X dismiss; bonus tier list.
  */
-import React, { useCallback, useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
 import { PopupVectorBackground } from './PopupVectorBackground';
-import { PlantWithPot } from './PlantWithPot';
+import { getCollectionBonusesIconPath, getCollectionBonusIconPath } from '../utils/gardenAssets';
 import {
-  REWARD_PILL_HEIGHT_PX,
-  REWARD_PILL_STROKE_COLOR,
-  REWARD_PILL_STROKE_WIDTH_PX,
-} from './Reward';
-import {
-  GOLDEN_POT_BONUS_TIER_THRESHOLDS,
-  GOLDEN_POT_BONUS_TIERS,
   getGoldenPotBonusIconSlugForPotCount,
+  getGoldenPotBonusTiersForDisplay,
 } from '../constants/goldenPotBonuses';
-import { getCollectionBonusIconPath } from '../utils/gardenAssets';
 import { COLLECTION_PLANT_COUNT } from '../constants/barnShelves';
 
 const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_green_1.png'), assetPath('/assets/vfx/particle_leaf_green_2.png')];
-
-const GOLDEN_POT_ICON_PX = Math.round(40 * 1.15) + 2;
 
 interface LeafParticle {
   id: number;
@@ -66,6 +56,10 @@ export interface GoldenPotBonusesPopupProps {
    * then after 0.25s it pops to green with a small leaf burst.
    */
   revealTierPotCount?: number | null;
+  /** Scroll the bonus list to this tier row when the popup opens (e.g. shelf progress bar tap). */
+  scrollToTierPotCount?: number | null;
+  /** Tier rows for shelves that currently show the upgrade button (per started garden). */
+  inProgressTierPotCounts?: readonly number[];
 }
 
 const POPUP_LEAF_COUNT = 40;
@@ -192,9 +186,6 @@ function createPopupLeaves(): LeafParticle[] {
 const SUBTITLE_COLOR = '#5c4a32';
 
 /** Tier pot count on locked rows (scaled inner coords). */
-const BONUS_TIER_NUMBER_REM = 1.4;
-const BONUS_TIER_NUMBER_COLOR = '#915c22';
-const BONUS_TIER_NUMBER_LETTER_SPACING_EM = -0.08;
 const BONUS_ROW_REWARD_ICON_PX = 56;
 const BONUS_ROW_REWARD_ICON_LEFT = 'calc(3% + 9px)';
 const BONUS_ROW_DESC_BOX_WIDTH_PX = 318;
@@ -208,14 +199,6 @@ const BONUS_ENABLED_SUBTITLE_COLOR = '#8aa038';
 const BONUS_LOCKED_TITLE_COLOR = '#765041';
 const BONUS_LOCKED_SUBTITLE_COLOR = '#c6b280';
 
-const GOLD_POT_BONUS_TIERS_DISPLAY = GOLDEN_POT_BONUS_TIERS.map((tier, i) => ({
-  ...tier,
-  displayKey: `golden-pot-bonus-row-${i}`,
-}));
-
-function getCompletedGoldenPotBonusCount(goldenPotCount: number): number {
-  return GOLDEN_POT_BONUS_TIER_THRESHOLDS.filter((threshold) => goldenPotCount >= threshold).length;
-}
 
 /** Bonus row sprite is 606×86; full row width in prescale coords (panel frame can be wider). */
 const BONUS_ROW_DISPLAY_WIDTH_PX = 520;
@@ -239,6 +222,53 @@ const BONUS_LIST_PANEL_STROKE_PX = 3;
 const BONUS_LIST_PANEL_RADIUS_PX = 36;
 
 const BONUS_ROW_REVEAL_DELAY_MS = 250;
+const BONUS_LIST_SCROLL_DURATION_MS = 320;
+
+/** Scroll offset to align a bonus tier row with the top of the list viewport (display order). */
+function getBonusTierListScrollTop(tierPotCount: number, goldenPotCount: number): number | null {
+  const displayTiers = getGoldenPotBonusTiersForDisplay(goldenPotCount);
+  const displayIndex = displayTiers.findIndex((t) => t.potCount === tierPotCount);
+  if (displayIndex < 0) return null;
+  return displayIndex * (BONUS_ROW_HEIGHT_PX + BONUS_ROW_GAP_PX);
+}
+
+function easeInOutQuad(t: number): number {
+  return t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+}
+
+function smoothScrollBonusListTo(
+  scrollContainer: HTMLElement,
+  targetTop: number,
+  durationMs = BONUS_LIST_SCROLL_DURATION_MS,
+): () => void {
+  const startTop = scrollContainer.scrollTop;
+  const distance = targetTop - startTop;
+  if (Math.abs(distance) < 1) {
+    scrollContainer.scrollTop = targetTop;
+    return () => {};
+  }
+
+  const startTime = performance.now();
+  let rafId = 0;
+  let cancelled = false;
+
+  const step = (now: number) => {
+    if (cancelled) return;
+    const progress = Math.min(1, (now - startTime) / durationMs);
+    scrollContainer.scrollTop = startTop + distance * easeInOutQuad(progress);
+    if (progress < 1) {
+      rafId = requestAnimationFrame(step);
+    } else {
+      scrollContainer.scrollTop = targetTop;
+    }
+  };
+
+  rafId = requestAnimationFrame(step);
+  return () => {
+    cancelled = true;
+    cancelAnimationFrame(rafId);
+  };
+}
 
 export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
   isVisible,
@@ -248,7 +278,13 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
   maxGoldenPots = COLLECTION_PLANT_COUNT,
   appScale = 1,
   revealTierPotCount = null,
+  scrollToTierPotCount = null,
+  inProgressTierPotCounts = [],
 }) => {
+  const inProgressTierSet = useMemo(
+    () => new Set(inProgressTierPotCounts),
+    [inProgressTierPotCounts],
+  );
   const [animState, setAnimState] = useState<PopupAnimWithPreflight>('hidden');
   const [assetsReady, setAssetsReady] = useState(false);
   const [tierRevealArmed, setTierRevealArmed] = useState(false);
@@ -264,10 +300,15 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
     { x: number; y: number; vx: number; vy: number; opacity: number; rotation: number; scale: number; started: boolean }[]
   >([]);
   const popupCardLayoutRef = useRef<HTMLDivElement>(null);
+  const bonusListScrollRef = useRef<HTMLDivElement>(null);
+  const scrollToTierHandledRef = useRef<number | null>(null);
+  const cancelBonusListScrollRef = useRef<(() => void) | null>(null);
 
   const clampedCount = Math.max(0, Math.min(maxGoldenPots, goldenPotCount));
-  const completedBonusCount = getCompletedGoldenPotBonusCount(clampedCount);
-  const countLabel = `${clampedCount}/${maxGoldenPots}`;
+  const bonusTiersForDisplay = useMemo(
+    () => getGoldenPotBonusTiersForDisplay(clampedCount),
+    [clampedCount],
+  );
 
   useEffect(() => {
     if (!isVisible) {
@@ -379,6 +420,49 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
     const clearT = setTimeout(() => setRowBurstLeaves([]), 720);
     return () => clearTimeout(clearT);
   }, [tierRevealArmed, revealTierPotCount]);
+
+  useEffect(() => {
+    if (!isVisible) {
+      scrollToTierHandledRef.current = null;
+      cancelBonusListScrollRef.current?.();
+      cancelBonusListScrollRef.current = null;
+      return;
+    }
+    if (scrollToTierPotCount == null || animState !== 'visible') return;
+    if (scrollToTierHandledRef.current === scrollToTierPotCount) return;
+
+    let cancelled = false;
+
+    const scrollRowToTop = () => {
+      if (cancelled || scrollToTierHandledRef.current === scrollToTierPotCount) return;
+
+      const scrollContainer = bonusListScrollRef.current;
+      if (!scrollContainer) return;
+
+      const targetTop = getBonusTierListScrollTop(scrollToTierPotCount, clampedCount);
+      if (targetTop == null) return;
+
+      const maxScroll = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
+      const clampedTop = Math.min(Math.max(0, targetTop), maxScroll);
+
+      cancelBonusListScrollRef.current?.();
+      cancelBonusListScrollRef.current = smoothScrollBonusListTo(scrollContainer, clampedTop);
+      scrollToTierHandledRef.current = scrollToTierPotCount;
+    };
+
+    const rafId = requestAnimationFrame(() => {
+      requestAnimationFrame(scrollRowToTop);
+    });
+    const retryId = window.setTimeout(scrollRowToTop, 150);
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(rafId);
+      window.clearTimeout(retryId);
+      cancelBonusListScrollRef.current?.();
+      cancelBonusListScrollRef.current = null;
+    };
+  }, [isVisible, animState, scrollToTierPotCount, clampedCount]);
 
   useEffect(() => {
     if (isVisible && assetsReady && animState === 'hidden') {
@@ -559,7 +643,12 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
                 filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
               }}
             >
-              <PlantWithPot level={0} mastered wrapperClassName="h-full w-full" />
+              <img
+                src={getCollectionBonusesIconPath()}
+                alt=""
+                className="h-full w-full object-contain"
+                draggable={false}
+              />
             </div>
           </div>
 
@@ -587,11 +676,13 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
                   style={{
                     color: SUBTITLE_COLOR,
                     fontFamily: 'Inter, sans-serif',
-                    fontSize: '4.375rem',
+                    fontSize: '3.25rem',
                     lineHeight: 1.05,
+                    whiteSpace: 'nowrap',
+                    maxWidth: '100%',
                   }}
                 >
-                  Golden Pots
+                  Collection Bonuses
                 </h2>
 
                 <div className="w-full flex items-center justify-center" style={{ marginTop: '8px', marginBottom: '24px' }}>
@@ -613,42 +704,8 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
                     fontSize: '2rem',
                   }}
                 >
-                  Collect golden pots to unlock powerful bonuses.
+                  Bonuses you unlock are shared across all gardens.
                 </p>
-
-                <div className="flex items-center justify-center" style={{ marginTop: '20px' }}>
-                  <div
-                    className="inline-flex items-center justify-center box-border rounded-full"
-                    style={{
-                      backgroundColor: '#775041',
-                      border: `${REWARD_PILL_STROKE_WIDTH_PX * 2}px solid ${REWARD_PILL_STROKE_COLOR}`,
-                      minHeight: `${REWARD_PILL_HEIGHT_PX * 2 - 5}px`,
-                      paddingTop: 8,
-                      paddingBottom: 7,
-                      paddingLeft: 20,
-                      paddingRight: 31,
-                      gap: '10px',
-                    }}
-                  >
-                    <img
-                      src={assetPath('/assets/icons/collection/icon_goldenpot.png')}
-                      alt=""
-                      className="object-contain shrink-0"
-                      style={{ width: `${GOLDEN_POT_ICON_PX}px`, height: `${GOLDEN_POT_ICON_PX}px` }}
-                    />
-                    <span
-                      className="font-black tracking-tight"
-                      style={{
-                        color: '#fcf0c7',
-                        fontFamily: 'Inter, sans-serif',
-                        fontSize: '2rem',
-                        lineHeight: 1,
-                      }}
-                    >
-                      {countLabel}
-                    </span>
-                  </div>
-                </div>
 
                 <div
                   style={{
@@ -665,6 +722,7 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
                   aria-label="Golden pot bonuses"
                 >
                   <div
+                    ref={bonusListScrollRef}
                     className="golden-pot-bonus-list-scroll flex flex-col overflow-y-auto overflow-x-hidden"
                     style={{
                       width: `${BONUS_ROW_DISPLAY_WIDTH_PX}px`,
@@ -675,25 +733,34 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
                       gap: `${BONUS_ROW_GAP_PX}px`,
                     }}
                   >
-                  {GOLD_POT_BONUS_TIERS_DISPLAY.map((tier, tierIndex) => {
-                    const rowIsCompleted = tierIndex < completedBonusCount;
+                  {bonusTiersForDisplay.map((tier) => {
+                    const rowIsCompleted = clampedCount >= tier.potCount;
                     const isStagedRevealRow =
-                      revealTierPotCount != null &&
-                      revealTierPotCount === tier.potCount &&
-                      tierIndex === completedBonusCount - 1;
+                      revealTierPotCount != null && revealTierPotCount === tier.potCount;
                     const showAsUnlocked = rowIsCompleted && (!isStagedRevealRow || tierRevealArmed);
+                    const isInProgress = !showAsUnlocked && inProgressTierSet.has(tier.potCount);
                     const rewardIconSrc = getCollectionBonusIconPath(
-                      getGoldenPotBonusIconSlugForPotCount(tier.potCount)
+                      getGoldenPotBonusIconSlugForPotCount(tier.potCount),
+                      !showAsUnlocked,
                     );
                     const bonusSprite = showAsUnlocked
                       ? assetPath('/assets/ui/popup_bonuses_enabled.png')
-                      : assetPath('/assets/ui/popup_bonuses_disabled.png');
-                    const titleColor = showAsUnlocked ? BONUS_ENABLED_TITLE_COLOR : BONUS_LOCKED_TITLE_COLOR;
-                    const subtitleColor = showAsUnlocked ? BONUS_ENABLED_SUBTITLE_COLOR : BONUS_LOCKED_SUBTITLE_COLOR;
+                      : isInProgress
+                        ? assetPath('/assets/ui/popup_bonuses_inprogress.png')
+                        : assetPath('/assets/ui/popup_bonuses_disabled.png');
+                    const titleColor =
+                      showAsUnlocked || isInProgress
+                        ? BONUS_ENABLED_TITLE_COLOR
+                        : BONUS_LOCKED_TITLE_COLOR;
+                    const subtitleColor =
+                      showAsUnlocked || isInProgress
+                        ? BONUS_ENABLED_SUBTITLE_COLOR
+                        : BONUS_LOCKED_SUBTITLE_COLOR;
                     const playRowPop = isStagedRevealRow && tierRevealArmed;
                     return (
                       <div
-                        key={tier.displayKey}
+                        key={`golden-pot-bonus-tier-${tier.potCount}`}
+                        id={`golden-pot-bonus-tier-${tier.potCount}`}
                         className="relative w-full shrink-0 overflow-visible"
                         style={playRowPop ? { animation: 'bonusTierRevealPop 420ms ease-out' } : undefined}
                       >
@@ -747,26 +814,6 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
                             draggable={false}
                           />
                         </div>
-                        {!showAsUnlocked && (
-                          <div
-                            className="pointer-events-none absolute flex items-center justify-center rounded-lg font-bold box-border text-center"
-                            style={{
-                              right: 'calc(4% + 4px)',
-                              top: 'calc(22% + 12px)',
-                              padding: '10px 13px',
-                              width: '3.45rem',
-                              maxWidth: '3.45rem',
-                              backgroundColor: 'transparent',
-                              color: BONUS_TIER_NUMBER_COLOR,
-                              fontFamily: 'Inter, sans-serif',
-                              fontSize: `${BONUS_TIER_NUMBER_REM}rem`,
-                              letterSpacing: `${BONUS_TIER_NUMBER_LETTER_SPACING_EM}em`,
-                              lineHeight: 1,
-                            }}
-                          >
-                            {tier.potCount}
-                          </div>
-                        )}
                         <div
                           className="pointer-events-none absolute flex flex-col box-border overflow-hidden"
                           style={{

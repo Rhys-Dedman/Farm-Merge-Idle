@@ -40,7 +40,9 @@ const AFTER_CENTER_TITLE_BOOST_PAD_PX = 10;
 const RIGHT_DOCK_RESERVE_PX_WITH_FPS = 84;
 const RIGHT_DOCK_RESERVE_PX_NO_FPS = 44;
 /** Settings gear size + gap so FPS can sit to its left (`right-3` is 12px). */
-const SETTINGS_GEAR_PX = 22;
+export const SETTINGS_GEAR_PX = 22;
+/** Gear icon inside the settings button (`w-3.5` / `h-3.5`). */
+export const SETTINGS_GEAR_ICON_PX = 14;
 const DOCK_GAP_PX = 8;
 const FPS_RIGHT_OFFSET_PX = 12 + SETTINGS_GEAR_PX + DOCK_GAP_PX; // 42
 /** Settings dock inset from the right edge (`right-3` = 12px per UI reference). */
@@ -104,6 +106,8 @@ interface PageHeaderProps {
   onXpBoostClick?: () => void;
   /** When provided, settings (gear) button opens pause menu */
   onPauseClick?: () => void;
+  /** FTUE overlay renders its own settings control; hide the in-header gear visually. */
+  settingsButtonVisuallyHidden?: boolean;
   /** Active rewarded-ad boosts (max 5); shown left of level as circles with radial progress */
   activeBoosts?: ActiveBoostData[];
   /** Ref for the boost area (used as particle target when activating a reward) */
@@ -168,6 +172,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   centerTitle,
   onXpBoostClick,
   onPauseClick,
+  settingsButtonVisuallyHidden = false,
   activeBoosts = [],
   activeBoostAreaRef,
   activeBoostMinWidthPx,
@@ -776,6 +781,10 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
             backgroundColor: '#775041',
             borderWidth: 1,
             borderColor: '#e9dcaf',
+            ...(settingsButtonVisuallyHidden && {
+              opacity: 0,
+              pointerEvents: 'none' as const,
+            }),
           }}
         >
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="#fcf0c7" className="w-3.5 h-3.5">

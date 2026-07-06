@@ -18,6 +18,7 @@ import {
 import { normalizeBarnShelvesUnlocked } from '../constants/barnShelves';
 import { PLANT_MASTERY_ORDERS_PER_SEGMENT, getMaxStoredOrdersProgressForTarget } from '../constants/plantMastery';
 import { parseCollectionFtuePhase } from '../constants/collectionFtue';
+import { parseNewGardenFtuePhase } from '../constants/newGardenFtue';
 import { AUTO_MERGE_STORAGE_KEY } from './autoMergeMode';
 import {
   LIMITED_OFFER_INTRO_CYCLE_COMPLETE_KEY,
@@ -121,12 +122,26 @@ export interface GameSaveV1 {
   collectionFtueCompleted?: boolean;
   /** Resumable step for collection FTUE; cleared when completed. */
   collectionFtuePhase?: string | null;
+  /** True after the Collection Bonuses popup has opened during FTUE (fail-safe checkpoint). */
+  collectionFtueBonusesReached?: boolean;
+  /** Set when a mid-FTUE save is reset; triggers collection level-up popup on next load. */
+  collectionFtueRestartPending?: boolean;
   /** Daily tasks FTUE started (level 5 unlock now tapped); cleared when completed. */
   tasksFtueStarted?: boolean;
   /** Tasks floating button swapped from locked to normal (bounce played). */
   tasksFtueUnlockRevealed?: boolean;
   /** Daily tasks FTUE finished (player opened tasks popup). */
   tasksFtueCompleted?: boolean;
+  /** Gardens floating button FTUE started (level 10 unlock now tapped). */
+  gardensFtueStarted?: boolean;
+  /** Gardens floating button swapped from locked to normal (bounce played). */
+  gardensFtueUnlockRevealed?: boolean;
+  /** Gardens FTUE finished (player opened gardens picker). */
+  gardensFtueCompleted?: boolean;
+  /** First garden purchase FTUE finished (player opened gardens picker on garden 2). */
+  newGardenFtueCompleted?: boolean;
+  /** Resumable step for new-garden FTUE; cleared when completed. */
+  newGardenFtuePhase?: string | null;
   activeTab: TabType;
   activeScreen: ScreenType;
   isExpanded: boolean;
@@ -194,7 +209,7 @@ export interface GameSaveV1 {
   storeSlotCooldownEnds?: [number, number];
 }
 
-/** Best-effort when `goalDiscoveryLightGreenActive` missing (undiscovered tier === highest + 1 only). */
+/** Best-effort when `goalDiscoveryLightGreenActive` missing (any goal tier above highest discovered). */
 export function deriveGoalDiscoveryLightGreenActive(
   goalSlots: GameSaveV1['goalSlots'],
   goalPlantTypes: number[],
@@ -202,12 +217,11 @@ export function deriveGoalDiscoveryLightGreenActive(
 ): boolean[] {
   const h = Math.max(0, Math.floor(highestPlantEver));
   if (h >= MAX_PLANT_TIER) return [false, false, false, false, false];
-  const discoveryTier = h + 1;
   return [0, 1, 2, 3, 4].map((i) => {
     const st = goalSlots[i];
     if (st !== 'green' && st !== 'loading') return false;
     const pl = goalPlantTypes[i] ?? 0;
-    return pl >= 1 && pl === discoveryTier;
+    return pl >= 1 && pl > h;
   });
 }
 
@@ -294,17 +308,48 @@ export function normalizeGameSaveV1(data: GameSaveV1): GameSaveV1 {
     if (typeof data.collectionFtueCompleted !== 'boolean') {
       data.collectionFtueCompleted = false;
     }
+    if (typeof data.collectionFtueBonusesReached !== 'boolean') {
+      data.collectionFtueBonusesReached = false;
+    }
     let cPhase = parseCollectionFtuePhase(data.collectionFtuePhase);
     if (data.collectionFtueCompleted) cPhase = null;
-    else {
+    else if (!data.collectionFtueBonusesReached) {
+      const ftueInProgress =
+        cPhase != null ||
+        (Array.isArray(data.plantMasteryUnlockedLevels) && data.plantMasteryUnlockedLevels.includes(1));
+      if (ftueInProgress) {
+        cPhase = null;
+        if (Array.isArray(data.plantMasteryUnlockedLevels)) {
+          data.plantMasteryUnlockedLevels = data.plantMasteryUnlockedLevels.filter((l) => l !== 1);
+        }
+        data.plantMasteryUnlockPending = (data.plantMasteryUnlockPending ?? []).filter((l) => l !== 1);
+        data.collectionFtueBonusesReached = false;
+        data.collectionFtueRestartPending = true;
+      } else if (typeof data.collectionFtueRestartPending !== 'boolean') {
+        data.collectionFtueRestartPending = false;
+      }
+    } else {
+      if (typeof data.collectionFtueRestartPending !== 'boolean') {
+        data.collectionFtueRestartPending = false;
+      }
       if (cPhase === 'popup_free' && data.plantMasteryUnlockPending.includes(1)) {
         cPhase = 'point_unlock';
       }
       if (cPhase === 'wait_reveal' && data.plantMasteryUnlockedLevels.includes(1)) {
         cPhase = 'point_bonuses';
       }
+      if (data.collectionFtueBonusesReached && cPhase === 'point_garden_nav') {
+        data.collectionFtueCompleted = true;
+        cPhase = null;
+      }
     }
     data.collectionFtuePhase = cPhase;
+    if (typeof data.newGardenFtueCompleted !== 'boolean') {
+      data.newGardenFtueCompleted = false;
+    }
+    let ngPhase = parseNewGardenFtuePhase(data.newGardenFtuePhase);
+    if (data.newGardenFtueCompleted) ngPhase = null;
+    data.newGardenFtuePhase = ngPhase;
     const wg = (data as GameSaveV1).wildGrowthAccumulatorMs;
     if (typeof wg !== 'number' || !Number.isFinite(wg)) {
       (data as GameSaveV1).wildGrowthAccumulatorMs = 0;

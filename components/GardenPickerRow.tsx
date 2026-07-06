@@ -2,7 +2,6 @@ import React, { useLayoutEffect, useRef, useState } from 'react';
 import type { GardenId } from '../constants/gardens';
 import { DEFAULT_GARDEN_ID, GARDEN_IDS } from '../constants/gardens';
 import {
-  GARDEN_PICKER_GOLDEN_POT_UNLOCK_REQUIRED,
   GARDEN_PICKER_PANEL_RENDER_HEIGHT_PX,
   GARDEN_PICKER_PANEL_RENDER_WIDTH_PX,
   GARDEN_PICKER_POTS_PILL_HEIGHT_PX,
@@ -113,6 +112,10 @@ export interface GardenPickerRowProps {
   claimBounceActive?: boolean;
   onView?: () => void;
   onPurchase?: (fx: GardenPickerPurchaseFx) => void;
+  /** When set on an owned row, the View button gets this DOM id (FTUE finger target). */
+  viewButtonDomId?: string;
+  /** FTUE: disable row actions except the View button on the target row. */
+  ftueViewOnlyGardenId?: GardenId | null;
 }
 
 function getPreviousGardenId(gardenId: GardenId): GardenId {
@@ -275,12 +278,14 @@ export const GardenPickerRow: React.FC<GardenPickerRowProps> = ({
   state,
   gardenDisplayName,
   globalGoldenPotCount = 0,
-  goldenPotRequired = GARDEN_PICKER_GOLDEN_POT_UNLOCK_REQUIRED,
+  goldenPotRequired = 12,
   purchaseCoinPrice = GARDEN_PICKER_PURCHASE_COIN_PRICE,
   playerMoney = 0,
   claimBounceActive = false,
   onView,
   onPurchase,
+  viewButtonDomId,
+  ftueViewOnlyGardenId = null,
 }) => {
   const [actionPressed, setActionPressed] = useState(false);
   const rowRef = useRef<HTMLDivElement>(null);
@@ -320,6 +325,8 @@ export const GardenPickerRow: React.FC<GardenPickerRowProps> = ({
       style={{
         width: GARDEN_PICKER_PANEL_RENDER_WIDTH_PX,
         height: GARDEN_PICKER_PANEL_RENDER_HEIGHT_PX,
+        pointerEvents:
+          ftueViewOnlyGardenId != null && ftueViewOnlyGardenId !== gardenId ? 'none' : undefined,
       }}
     >
       <img
@@ -377,6 +384,7 @@ export const GardenPickerRow: React.FC<GardenPickerRowProps> = ({
         <div style={claimButtonShellStyle}>
           <button
             type="button"
+            id={viewButtonDomId}
             aria-label="View garden"
             onClick={() => onView?.()}
             onMouseDown={() => setActionPressed(true)}

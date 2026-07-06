@@ -195,8 +195,40 @@ export function getGoldenPotWalletIconPath(): string {
   return assetPath('/assets/icons/collection/icon_goldenpot.png');
 }
 
+/** Golden pot icon on collection shelf progress bars (active upgrade shelf). */
+export function getCollectionShelfGoldenPotIconPath(): string {
+  return assetPath('/assets/icons/collection/icon_collection_goldenpot.png');
+}
+
+/** Golden pot icon when a shelf row is fully completed (all plants mastered). */
+export function getCollectionShelfGoldenPotCompleteIconPath(): string {
+  return assetPath('/assets/icons/collection/icon_collection_goldenpot_complete.png');
+}
+
+/** Locked icon when a shelf is fully discovered but not the garden's active upgrade shelf. */
+export function getCollectionShelfLockedIconPath(): string {
+  return assetPath('/assets/icons/collection/icon_collection_locked.png');
+}
+
 export function getCollectionGardenLockedIconPath(): string {
   return getGenericUiAssetPath('ui_collection_icon_locked.png');
+}
+
+/** Locked collection panel crest — `icon_collection_lock_garden_N.png`. */
+export function getCollectionLockGardenIconPath(gardenId: GardenId): string {
+  const n = GARDEN_IDS.indexOf(gardenId) + 1;
+  return assetPath(`/assets/icons/collection/icon_collection_lock_garden_${n > 0 ? n : 1}.png`);
+}
+
+/** Unlocked collection panel crest — `icon_collection_garden_N.png`. */
+export function getCollectionGardenIconPath(gardenId: GardenId): string {
+  const n = GARDEN_IDS.indexOf(gardenId) + 1;
+  return assetPath(`/assets/icons/collection/icon_collection_garden_${n > 0 ? n : 1}.png`);
+}
+
+/** Collection Bonuses popup header icon. */
+export function getCollectionBonusesIconPath(): string {
+  return assetPath('/assets/icons/collection/icon_collection_bonuses.png');
 }
 
 /** Collection garden section header icon — `ui_collection_icon_garden_N.png`. */
@@ -247,17 +279,18 @@ export function getGardenPickerIconPreloadPaths(): string[] {
   return [...paths];
 }
 
-/** Collection milestone reward icon — `icon_collection_<slug>.png`. */
-export function getCollectionBonusIconPath(iconSlug: string): string {
-  return assetPath(`/assets/icons/collection/icon_collection_${iconSlug}.png`);
+/** Collection milestone reward icon — `icon_collection_<slug>.png` or `icon_collection_<slug>_disabled.png`. */
+export function getCollectionBonusIconPath(iconSlug: string, disabled = false): string {
+  const suffix = disabled ? '_disabled' : '';
+  return assetPath(`/assets/icons/collection/icon_collection_${iconSlug}${suffix}.png`);
 }
 
 /** Preload paths for collection bonus milestone icons. */
 export function getCollectionBonusIconPreloadPaths(): string[] {
-  return [
+  const slugs = [
     'MoreCustomers',
     'DailyAllowance',
-    'FruitGarden',
+    'mergecoins',
     'DailyRewards',
     'SeedStorage',
     'OfflineBoost',
@@ -265,7 +298,11 @@ export function getCollectionBonusIconPreloadPaths(): string[] {
     'ExtraTasks',
     'SeedSpeed',
     'HarvestSpeed',
-  ].map((slug) => `/assets/icons/collection/icon_collection_${slug}.png`);
+  ];
+  return slugs.flatMap((slug) => [
+    `/assets/icons/collection/icon_collection_${slug}.png`,
+    `/assets/icons/collection/icon_collection_${slug}_disabled.png`,
+  ]);
 }
 
 export function getNextShippedGardenId(current: GardenId): GardenId {

@@ -72,7 +72,7 @@ export type GoldenPotProgressImpactTarget = 'progressBar' | 'wallet';
 
 interface GoldenPotProgressParticleProps {
   data: GoldenPotProgressParticleData;
-  progressBarTargetRef: React.RefObject<HTMLElement | null>;
+  progressBarTargetRef?: React.RefObject<HTMLElement | null>;
   walletFallbackTargetRef: React.RefObject<HTMLElement | null>;
   onImpact: (target: GoldenPotProgressImpactTarget) => void;
   onComplete: () => void;
@@ -127,7 +127,7 @@ export const GoldenPotProgressParticle: React.FC<GoldenPotProgressParticleProps>
     const start = { x: data.startX, y: data.startY };
 
     const getTarget = () =>
-      resolveTarget(start, progressBarTargetRef.current, walletFallbackTargetRef.current);
+      resolveTarget(start, progressBarTargetRef?.current ?? null, walletFallbackTargetRef.current);
 
     const finishAndDespawn = () => {
       if (completeScheduledRef.current) return;

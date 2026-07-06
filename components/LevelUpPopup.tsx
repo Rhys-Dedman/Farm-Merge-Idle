@@ -55,7 +55,7 @@ interface LevelUpPopupProps {
   iconScale?: number;
   /** When true, hide "Level X" (for info-style popups) */
   hideLevel?: boolean;
-  /** Level ≥ 6: show Discovery-style reward pill (“Golden Pot Available”). */
+  /** Level ≥ 6: show Discovery-style reward pill (“Upgrades Available”). */
   showGoldenPotAvailableRow?: boolean;
 }
 
@@ -526,7 +526,7 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
                           lineHeight: 1,
                         }}
                       >
-                        Golden Pot Available
+                        Upgrades Available
                       </span>
                     </div>
                   </div>

@@ -5,11 +5,9 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
 import type { GardenId } from '../constants/gardens';
-import { getGardenCoinIconPath } from '../utils/gardenAssets';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
 import { PopupVectorBackground } from './PopupVectorBackground';
 import { PlantWithPot } from './PlantWithPot';
-import { formatCompactNumber } from '../utils/formatCompactNumber';
 
 const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_green_1.png'), assetPath('/assets/vfx/particle_leaf_green_2.png')];
 
@@ -39,17 +37,6 @@ interface PlantInfoPopupProps {
   isUnlocked: boolean;
   masteryPotUnlocked?: boolean;
   appScale?: number;
-  /** When set, show purchase row (shed mastery unlock). */
-  masteryUnlock?: {
-    coinCost: number;
-    canAfford: boolean;
-    isUnlocked?: boolean;
-    onPurchase: (startPoint: { x: number; y: number }) => void;
-  };
-  /** Per-garden coin balance shown top-left (does not affect main header wallet). */
-  coinWalletMoney?: number;
-  /** Collection FTUE: no X, backdrop does not dismiss — player must use Golden Pot button. */
-  restrictClose?: boolean;
 }
 
 const POPUP_LEAF_COUNT = 30;
@@ -59,13 +46,6 @@ const POPUP_WIDTH = 280;
 const POPUP_HEIGHT = 260;
 const POPUP_LEAF_Y_OFFSET = -15;
 const POPUP_CLOSE_MS = 200;
-
-const formatWalletMoney = (amount: number | null | undefined): string => {
-  const n = amount != null && typeof amount === 'number' && Number.isFinite(amount) ? amount : 0;
-  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
-  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
-  return String(n);
-};
 
 function createPopupLeaves(): LeafParticle[] {
   return Array.from({ length: POPUP_LEAF_COUNT }, (_, i) => {
@@ -121,13 +101,9 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
   isUnlocked,
   masteryPotUnlocked = false,
   appScale = 1,
-  masteryUnlock,
-  restrictClose = false,
-  coinWalletMoney,
 }) => {
   const [animState, setAnimState] = useState<PopupAnimWithPreflight>('hidden');
   const [assetsReady, setAssetsReady] = useState(false);
-  const [masteryButtonPressed, setMasteryButtonPressed] = useState(false);
   const [leaves, setLeaves] = useState<LeafParticle[]>([]);
   const [leafPositions, setLeafPositions] = useState<{ x: number; y: number; opacity: number; rotation: number; scale: number }[]>([]);
   const [imgFailed, setImgFailed] = useState<Record<number, boolean>>({});
@@ -135,7 +111,6 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
   const leafStartTimeRef = useRef<number>(0);
   const leafPosRef = useRef<{ x: number; y: number; vx: number; vy: number; opacity: number; rotation: number; scale: number; started: boolean }[]>([]);
   const popupCardLayoutRef = useRef<HTMLDivElement>(null);
-  const masteryButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!isVisible) {
@@ -260,7 +235,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
     <div 
       className="fixed inset-0 flex items-center justify-center"
       style={{ zIndex: 100, overflow: 'hidden', paddingTop: 'clamp(28px, 5vh, 52px)', pointerEvents: isPreflight ? 'none' : 'auto' }}
-      onClick={restrictClose ? undefined : handleClose}
+      onClick={handleClose}
     >
 {/* Backdrop - not scaled, covers full screen */}
       <div
@@ -273,7 +248,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
           backgroundColor: 'rgba(0, 0, 0, 0.7)',
           opacity: isLeaving || isPreflight ? 0 : 1,
           transition: `opacity ${POPUP_CLOSE_MS}ms ease-out`,
-          pointerEvents: restrictClose ? 'none' : 'auto',
+          pointerEvents: 'auto',
         }}
       />
 
@@ -476,121 +451,11 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
 
               {/* Spacer */}
               <div className="min-h-[24px]" />
-
-              {masteryUnlock && isUnlocked && (
-                <div className="w-full flex justify-center px-6" style={{ marginTop: '8px', marginBottom: '8px' }}>
-                  {(() => {
-                    const isMasteryUnlocked = masteryUnlock.isUnlocked === true;
-                    const canAfford = masteryUnlock.canAfford;
-                    const buttonBgColor = isMasteryUnlocked ? '#e3c28c' : (canAfford ? '#cae060' : '#e3c28c');
-                    const buttonPressedBg = isMasteryUnlocked ? '#d4b27d' : (canAfford ? '#61882b' : '#d4b27d');
-                    const buttonBorderColor = isMasteryUnlocked ? '#c7a36e' : (canAfford ? '#9db546' : '#c7a36e');
-                    const buttonTextColor = isMasteryUnlocked ? '#a68e64' : (canAfford ? '#587e26' : '#a68e64');
-                    return (
-                  <button
-                    ref={masteryButtonRef}
-                    type="button"
-                    disabled={isMasteryUnlocked}
-                    onMouseDown={() => canAfford && !isMasteryUnlocked && setMasteryButtonPressed(true)}
-                    onMouseUp={() => setMasteryButtonPressed(false)}
-                    onMouseLeave={() => setMasteryButtonPressed(false)}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setMasteryButtonPressed(false);
-                      if (!canAfford || isMasteryUnlocked) return;
-                      const rect = masteryButtonRef.current?.getBoundingClientRect();
-                      const startPoint = rect
-                        ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
-                        : { x: window.innerWidth / 2, y: window.innerHeight / 2 };
-                      masteryUnlock.onPurchase(startPoint);
-                    }}
-                    className="relative flex select-none items-center justify-center gap-3 rounded-xl font-bold tracking-tight transition-all"
-                    style={{
-                      minWidth: 460,
-                      minHeight: 88,
-                      paddingLeft: 36,
-                      paddingRight: 36,
-                      paddingTop: 14,
-                      paddingBottom: 14,
-                      boxSizing: 'border-box',
-                      backgroundColor: masteryButtonPressed ? buttonPressedBg : buttonBgColor,
-                      border: `4px solid ${buttonBorderColor}`,
-                      borderRadius: '24px',
-                      boxShadow: masteryButtonPressed
-                        ? 'inset 0 4px 8px rgba(0,0,0,0.15)'
-                        : `0 8px 0 ${buttonBorderColor}, 0 12px 24px rgba(0,0,0,0.15)`,
-                      transform: masteryButtonPressed ? 'translateY(4px)' : 'translateY(0)',
-                      color: buttonTextColor,
-                      fontFamily: 'Inter, sans-serif',
-                      fontSize: '2rem',
-                      lineHeight: 1.1,
-                      textShadow: '0 2px 0 rgba(255,255,255,0.3)',
-                      cursor: isMasteryUnlocked ? 'default' : canAfford ? 'pointer' : 'default',
-                      opacity: isMasteryUnlocked ? 0.85 : 1,
-                      WebkitTapHighlightColor: 'transparent',
-                    }}
-                  >
-                    {isMasteryUnlocked ? (
-                      <span>Golden Pot Acquired</span>
-                    ) : (
-                      <>
-                        <span>Upgrade</span>
-                        <img
-                          src={getGardenCoinIconPath(gardenId)}
-                          alt=""
-                          className="object-contain shrink-0"
-                          style={{ width: 40, height: 40, transform: 'scale(1.2)' }}
-                          draggable={false}
-                        />
-                        <span>{masteryUnlock.coinCost === 0 ? 'FREE' : formatCompactNumber(masteryUnlock.coinCost)}</span>
-                      </>
-                    )}
-                  </button>
-                    );
-                  })()}
-                </div>
-              )}
             </div>
           </div>
         </div>
 
-        {/* Coin wallet — top-left, mirrors close X on top-right */}
-        {coinWalletMoney != null && (
-          <div
-            className="absolute top-[56px] left-8 pointer-events-none"
-            style={{ zIndex: 105 }}
-          >
-            <div
-              className="relative inline-flex items-center h-[22px] rounded-full border shadow-2xl overflow-visible w-fit min-w-0"
-              style={{
-                backgroundColor: '#775041',
-                borderWidth: 1,
-                borderColor: '#e9dcaf',
-              }}
-            >
-              <span
-                className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center justify-center leading-none -ml-3 pointer-events-none"
-                aria-hidden
-              >
-                <img
-                  src={getGardenCoinIconPath(gardenId)}
-                  alt=""
-                  className="w-[30px] h-[30px] object-contain object-left outline-none border-0"
-                  style={{ outline: 'none', border: 'none' }}
-                />
-              </span>
-              <span
-                className="relative font-black text-xs tracking-tight text-[#fcf0c7] whitespace-nowrap pl-[20px] pr-3 py-1"
-                style={{ transformOrigin: 'center center' }}
-              >
-                {formatWalletMoney(coinWalletMoney)}
-              </span>
-            </div>
-          </div>
-        )}
-
         {/* Close Button - X */}
-        {!restrictClose && (
         <button
           onClick={handleClose}
           className="absolute top-[56px] right-6 w-8 h-8 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
@@ -605,7 +470,6 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
             <path d="M2 2L12 12M12 2L2 12" />
           </svg>
         </button>
-        )}
       </div>
       </div>
     </div>

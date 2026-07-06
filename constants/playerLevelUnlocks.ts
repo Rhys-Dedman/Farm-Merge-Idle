@@ -3,9 +3,14 @@ import { DEFAULT_GARDEN_ID, type GardenId } from './gardens';
 /** Player level at which barn Plant Collection UI unlocks (FTUE + shelves). */
 export const PLANT_COLLECTION_UI_UNLOCK_LEVEL = 7;
 
-/** True once garden 1 reaches collection unlock — applies to all gardens. */
+/** True when this garden's player level unlocks barn collection (same threshold per garden). */
+export function isPlantCollectionUiUnlockedForGarden(playerLevel: number): boolean {
+  return playerLevel >= PLANT_COLLECTION_UI_UNLOCK_LEVEL;
+}
+
+/** Garden 1 level gate for collection FTUE and cross-garden daily-task hooks. */
 export function isPlantCollectionUiUnlockedGlobally(garden1PlayerLevel: number): boolean {
-  return garden1PlayerLevel >= PLANT_COLLECTION_UI_UNLOCK_LEVEL;
+  return isPlantCollectionUiUnlockedForGarden(garden1PlayerLevel);
 }
 
 /** Collection FTUE intro bar shows this level on the icon (one below collection unlock). */

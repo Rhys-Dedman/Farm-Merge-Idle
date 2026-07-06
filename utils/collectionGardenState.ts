@@ -53,8 +53,12 @@ function iterGardenSnapshots(
   activeGardenId: GardenId,
   active: GardenCollectionSnapshot,
   gardens: Partial<Record<GardenId, GardenState>> | undefined,
+  allowedGardenIds?: readonly GardenId[],
 ): { gardenId: GardenId; snapshot: GardenCollectionSnapshot }[] {
-  return SHIPPED_GARDEN_IDS.map((gardenId) => ({
+  const allowed = allowedGardenIds ? new Set(allowedGardenIds) : null;
+  return SHIPPED_GARDEN_IDS.filter(
+    (gardenId) => gardenId === activeGardenId || !allowed || allowed.has(gardenId),
+  ).map((gardenId) => ({
     gardenId,
     snapshot: getGardenCollectionSnapshot(gardenId, activeGardenId, active, gardens),
   }));
@@ -64,8 +68,9 @@ export function hasAnyDevUnlockPlantRemaining(
   activeGardenId: GardenId,
   active: GardenCollectionSnapshot,
   gardens: Partial<Record<GardenId, GardenState>> | undefined,
+  allowedGardenIds?: readonly GardenId[],
 ): boolean {
-  return iterGardenSnapshots(activeGardenId, active, gardens).some(
+  return iterGardenSnapshots(activeGardenId, active, gardens, allowedGardenIds).some(
     ({ snapshot }) => snapshot.highestPlantEver < MAX_PLANT_TIER,
   );
 }
@@ -74,8 +79,14 @@ export function findNextDevUnlockPlantTarget(
   activeGardenId: GardenId,
   active: GardenCollectionSnapshot,
   gardens: Partial<Record<GardenId, GardenState>> | undefined,
+  allowedGardenIds?: readonly GardenId[],
 ): { gardenId: GardenId; newLevel: number } | null {
-  for (const { gardenId, snapshot } of iterGardenSnapshots(activeGardenId, active, gardens)) {
+  for (const { gardenId, snapshot } of iterGardenSnapshots(
+    activeGardenId,
+    active,
+    gardens,
+    allowedGardenIds,
+  )) {
     if (snapshot.highestPlantEver < MAX_PLANT_TIER) {
       return { gardenId, newLevel: snapshot.highestPlantEver + 1 };
     }
@@ -87,8 +98,14 @@ export function findNextDevGoldenPotTarget(
   activeGardenId: GardenId,
   active: GardenCollectionSnapshot,
   gardens: Partial<Record<GardenId, GardenState>> | undefined,
+  allowedGardenIds?: readonly GardenId[],
 ): { gardenId: GardenId; level: number } | null {
-  for (const { gardenId, snapshot } of iterGardenSnapshots(activeGardenId, active, gardens)) {
+  for (const { gardenId, snapshot } of iterGardenSnapshots(
+    activeGardenId,
+    active,
+    gardens,
+    allowedGardenIds,
+  )) {
     const nextLevel = getGoldenPotUpgradeableLevels(
       snapshot.highestPlantEver,
       snapshot.unlockedLevels,

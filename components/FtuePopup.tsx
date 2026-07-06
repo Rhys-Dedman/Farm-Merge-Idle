@@ -83,6 +83,8 @@ export interface FtuePopupProps {
   header?: { icon: string };
   /** Popup title (e.g. "Welcome Gardener!") */
   title?: string;
+  /** Title size in rem inside the 0.5× prescale card (default 3rem → 1.5rem on screen). */
+  titleFontSizeRem?: number;
   /** Green divider below title */
   showDivider?: boolean;
   /** Description text (shown when descriptionVisibility is 'shown') */
@@ -115,6 +117,7 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
   topOffsetPx = 80,
   header,
   title,
+  titleFontSizeRem = 3,
   showDivider = false,
   description,
   button,
@@ -387,7 +390,7 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
                       color: mainTitleColor,
                       fontFamily: 'Inter, sans-serif',
                       maxWidth: '580px',
-                      fontSize: '3rem',
+                      fontSize: `${titleFontSizeRem}rem`,
                     }}
                   >
                     {title}

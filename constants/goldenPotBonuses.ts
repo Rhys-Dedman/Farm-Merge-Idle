@@ -9,7 +9,7 @@ import { getDailyTaskSlotRewardCoins } from '../utils/dailyTaskRewards';
 export const GOLDEN_POT_BONUS_TIERS = [
   { potCount: 4, title: 'More Customers', subtitle: 'Unlock a 4th order slot', iconSlug: 'MoreCustomers' },
   { potCount: 8, title: 'Daily Allowance', subtitle: 'Free coins from store daily', iconSlug: 'DailyAllowance' },
-  { potCount: 12, title: 'Fruit Garden', subtitle: 'Unlock the next garden', iconSlug: 'FruitGarden' },
+  { potCount: 12, title: 'Merge Bonus', subtitle: '+25% coins from merging', iconSlug: 'mergecoins' },
   { potCount: 16, title: 'Daily Rewards', subtitle: '2x Daily task rewards', iconSlug: 'DailyRewards' },
   { potCount: 20, title: 'Seed Storage', subtitle: '+1 max seed recharges', iconSlug: 'SeedStorage' },
   { potCount: 24, title: 'Offline Boost', subtitle: '+25% offline coins earned', iconSlug: 'OfflineBoost' },
@@ -26,7 +26,7 @@ export const GOLDEN_POT_BONUS_TIER_THRESHOLDS = GOLDEN_POT_BONUS_TIERS.map((t) =
 
 export const GOLDEN_POT_BONUS_FOURTH_ORDER_SLOT_AT = 4;
 export const GOLDEN_POT_BONUS_DAILY_ALLOWANCE_AT = 8;
-export const GOLDEN_POT_BONUS_NEW_GARDEN_AT = 12;
+export const GOLDEN_POT_BONUS_MERGE_COINS_25_AT = 12;
 export const GOLDEN_POT_BONUS_DAILY_TASKS_2X_AT = 16;
 export const GOLDEN_POT_BONUS_SEED_RECHARGE_AT = 20;
 export const GOLDEN_POT_BONUS_OFFLINE_25_AT = 24;
@@ -40,6 +40,27 @@ export type GoldenPotBonusIconSlug = (typeof GOLDEN_POT_BONUS_TIERS)[number]['ic
 
 export function getGoldenPotBonusTierForPotCount(potCount: number): GoldenPotBonusTier | undefined {
   return GOLDEN_POT_BONUS_TIERS.find((tier) => tier.potCount === potCount);
+}
+
+/** Bonuses popup: unlocked tiers first (pot order), then locked tiers (pot order). */
+export function getGoldenPotBonusTiersForDisplay(goldenPotCount: number): GoldenPotBonusTier[] {
+  const completed: GoldenPotBonusTier[] = [];
+  const locked: GoldenPotBonusTier[] = [];
+  for (const tier of GOLDEN_POT_BONUS_TIERS) {
+    if (goldenPotCount >= tier.potCount) completed.push(tier);
+    else locked.push(tier);
+  }
+  return [...completed, ...locked];
+}
+
+/** Bonus tier pot threshold for a collection shelf (shelf 0 → 4 pots, shelf 1 → 8, shelf 2 → 12, …). */
+export function getGoldenPotBonusTierPotCountForShelf(shelfIndex: number): number {
+  return (shelfIndex + 1) * 4;
+}
+
+/** Bonus tier metadata for a shelf, if defined at that shelf's pot threshold. */
+export function getGoldenPotBonusTierForShelf(shelfIndex: number): GoldenPotBonusTier | undefined {
+  return getGoldenPotBonusTierForPotCount(getGoldenPotBonusTierPotCountForShelf(shelfIndex));
 }
 
 /** Bonus tier the collection bar is progressing toward (first threshold strictly above count). */
@@ -80,6 +101,28 @@ export function hasGoldenPotDailyAllowance(count: number): boolean {
   return count >= GOLDEN_POT_BONUS_DAILY_ALLOWANCE_AT;
 }
 
+export function hasGoldenPotMergeCoins25(count: number): boolean {
+  return count >= GOLDEN_POT_BONUS_MERGE_COINS_25_AT;
+}
+
+/** +25% merge coin payout; rounded to nearest 5, at least +5 over base. */
+export const GOLDEN_POT_MERGE_COINS_BONUS_MULTIPLIER = 1.25;
+export const GOLDEN_POT_MERGE_COINS_ROUND_STEP = 5;
+export const GOLDEN_POT_MERGE_COINS_MIN_EXTRA = 5;
+
+/** Non-goal merge coin value after Merge Bonus tier (+25%, nearest 5, min +5). */
+export function applyGoldenPotMergeCoinBonus(
+  baseCoins: number,
+  globalGoldenPotCount: number,
+): number {
+  if (baseCoins <= 0) return baseCoins;
+  if (!hasGoldenPotMergeCoins25(globalGoldenPotCount)) return baseCoins;
+  const boosted = baseCoins * GOLDEN_POT_MERGE_COINS_BONUS_MULTIPLIER;
+  const rounded =
+    Math.round(boosted / GOLDEN_POT_MERGE_COINS_ROUND_STEP) * GOLDEN_POT_MERGE_COINS_ROUND_STEP;
+  return Math.max(rounded, baseCoins + GOLDEN_POT_MERGE_COINS_MIN_EXTRA);
+}
+
 /** Free store coins granted once per garden per local day (Daily Allowance bonus). */
 export function getDailyAllowanceCoinAmount(playerLevel: number): number {
   return getDailyTaskSlotRewardCoins(1, playerLevel);
@@ -111,27 +154,10 @@ export function getTotalGoldenPotCountAcrossGardens(
   return getGlobalGoldenPotCount(activeGardenUnlockedLevels, gardens, activeGardenId);
 }
 
-export function hasGoldenPotNewGardenUnlocked(count: number): boolean {
-  return count >= GOLDEN_POT_BONUS_NEW_GARDEN_AT;
-}
-
-/** Golden pots required to start this garden (null = not golden-pot gated or garden 1). */
-export function getGoldenPotCountRequiredForGarden(gardenId: GardenId): number | null {
-  if (gardenId === 'garden_2') return GOLDEN_POT_BONUS_NEW_GARDEN_AT;
-  return null;
-}
-
-/** Whether the player may switch to / start this garden (account-wide golden pot count). */
-export function isGardenSelectableByGoldenPots(
-  gardenId: GardenId,
-  globalGoldenPotCount: number,
-  alreadyStarted: boolean,
-): boolean {
+/** Whether the player may switch to this garden (started gardens only; purchase via picker). */
+export function isGardenSelectable(gardenId: GardenId, alreadyStarted: boolean): boolean {
   if (gardenId === DEFAULT_GARDEN_ID) return true;
-  if (alreadyStarted) return true;
-  const required = getGoldenPotCountRequiredForGarden(gardenId);
-  if (required == null) return false;
-  return globalGoldenPotCount >= required;
+  return alreadyStarted;
 }
 
 export function hasGoldenPotDailyTasks2x(count: number): boolean {
@@ -230,6 +256,26 @@ export function getCollectionRewardBarState(goldenPotCount: number): CollectionR
     denominator,
     fillPct,
     rewardIconSlug: getCollectionRewardIconSlug(goldenPotCount),
+  };
+}
+
+/** Per-shelf bar: shelf 1 → first bonus tier (4 pots), shelf 2 → second (8 pots), etc. */
+export function getShelfRewardBarState(
+  shelfIndex: number,
+  goldenPotCount: number,
+): CollectionRewardBarState | null {
+  const tier = GOLDEN_POT_BONUS_TIERS[shelfIndex];
+  if (!tier) return null;
+  const segmentStart = shelfIndex === 0 ? 0 : GOLDEN_POT_BONUS_TIERS[shelfIndex - 1]!.potCount;
+  const segmentEnd = tier.potCount;
+  const denominator = Math.max(1, segmentEnd - segmentStart);
+  const numerator = Math.min(denominator, Math.max(0, goldenPotCount - segmentStart));
+  const fillPct = Math.min(100, (numerator / denominator) * 100);
+  return {
+    numerator,
+    denominator,
+    fillPct,
+    rewardIconSlug: tier.iconSlug,
   };
 }
 

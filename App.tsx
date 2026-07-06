@@ -6,6 +6,7 @@ import { UpgradeTabs } from './components/UpgradeTabs';
 import { UpgradeList, createInitialSeedsState, createInitialHarvestState, createInitialCropsState, getSeedLevelFromHighestPlant, getBonusSeedChance, getSeedSurplusValue, getSeedStorageMax, getCropYieldPerHarvest, getHarvestSpeedLevel, getMergeHarvestChance, getGoalLoadingSeconds, getMarketValueMultiplier, getPremiumOrdersMinLevel, getSurplusSalesMultiplier, isSurplusSalesUnlocked, getHappyCustomerChance, HarvestState, UpgradeState, RewardedOffer, getLevelUnlockInfo, MAX_LEVEL_WITH_CUSTOM_UNLOCK_POPUP, isCustomerSpeedMaxed } from './components/UpgradeList';
 import {
   PLANT_COLLECTION_UI_UNLOCK_LEVEL,
+  isPlantCollectionUiUnlockedForGarden,
   isPlantCollectionUiUnlockedGlobally,
   FLOATING_BUTTONS_UNLOCK_LEVEL,
   shouldShowFarmFloatingButtons,
@@ -15,6 +16,7 @@ import {
   STARTER_PACK_FORCE_POPUP_LEVEL,
 } from './constants/playerLevelUnlocks';
 import { TASKS_FTUE_FLOATING_BUTTON_ID } from './constants/tasksFtue';
+import { GARDENS_FTUE_FLOATING_BUTTON_ID } from './constants/gardensFtue';
 import { getFloatingButtonStackTopPx } from './constants/floatingButtonLayout';
 import { FAKE_SAFE_AREA_TOP_PX } from './constants/debugSafeArea';
 import { FakeNotchOverlay } from './components/FakeNotchOverlay';
@@ -36,10 +38,9 @@ import { PlantPanel, PlantPanelData } from './components/PlantPanel';
 import { GoalCoinParticle, GoalCoinParticleData } from './components/GoalCoinParticle';
 import { GoldenPotProgressParticle, type GoldenPotProgressParticleData } from './components/GoldenPotProgressParticle';
 import { WalletImpactBurst } from './components/WalletImpactBurst';
-import { PageHeader, MAX_VISIBLE_BOOST_SLOTS } from './components/PageHeader';
+import { PageHeader, MAX_VISIBLE_BOOST_SLOTS, SETTINGS_GEAR_ICON_PX, SETTINGS_GEAR_PX } from './components/PageHeader';
 import { DiscoveryPopup } from './components/DiscoveryPopup';
 import { GoldenPotBonusesPopup } from './components/GoldenPotBonusesPopup';
-import { GardenLabel } from './components/GardenLabel';
 import { PurchaseSuccessfulPopup, type PurchaseSuccessfulRewardRow } from './components/PurchaseSuccessfulPopup';
 import { IapOfferPopup } from './components/IapOfferPopup';
 import { LevelUpPopup } from './components/LevelUpPopup';
@@ -89,6 +90,7 @@ import {
 } from './utils/dailyTasksProgress';
 import { useDailyTasksCountdown } from './hooks/useDailyTasksCountdown';
 import { FloatingButtonTasks } from './components/FloatingButtonTasks';
+import { FloatingButtonGardens } from './components/FloatingButtonGardens';
 import {
   DAILY_TASKS_AUTO_CLAIM_BEFORE_END_MS,
   DAILY_TASKS_COUNTDOWN_END_MS_KEY,
@@ -172,7 +174,7 @@ import {
   DEFAULT_GARDEN_ID,
   GARDEN_IDS,
   getGardenDisplayLabel,
-  getCollectionGardenDisplayName,
+  getCollectionPanelTitle,
   SHIPPED_GARDEN_IDS,
   type GardenId,
 } from './constants/gardens';
@@ -181,9 +183,14 @@ import {
   getGardenAmbientLeafSpritePath,
   getGardenCoinIconPath,
   getGardenPlantSpritePath,
+  getGardenPickerGardenIconPath,
   getCollectionBonusIconPath,
+  getCollectionShelfGoldenPotIconPath,
+  getCollectionShelfGoldenPotCompleteIconPath,
+  getCollectionGardenIconPath,
+  getCollectionLockGardenIconPath,
+  getCollectionShelfLockedIconPath,
   getPlantPotGoldPath,
-  getCollectionGardenLockedIconPath,
   getSpecialDeliveryPlantLevel,
   getSpecialDeliveryPlantSpritePath,
   setActiveGardenAssetContext,
@@ -195,9 +202,11 @@ import { getGardenGoalTextColors } from './constants/gardenGoalTheme';
 import { setDailyTasksActiveGarden } from './utils/dailyTasksGardenScope';
 import {
   activateGardenInSave,
+  applyCollectionScrollYToV2,
   clearDailyAllowanceClaimedForAllGardens,
   flattenV2ToV1,
   mergeV1IntoV2,
+  readCollectionScrollYFromV2,
 } from './utils/gardenSave';
 import {
   ensureGardenStartedInSave,
@@ -208,6 +217,20 @@ import {
   hasAnyDevUnlockPlantRemaining,
   type GardenCollectionSnapshot,
 } from './utils/collectionGardenState';
+import {
+  getGlobalBonusProgressPotCount,
+  getGlobalCompletedShelfCount,
+  getNextUpgradeablePlantOnShelf,
+  getShelfIndexForGarden,
+  getShelfMasteredCount,
+  getShelfRewardBarStateForSnapshot,
+  isShelfActiveUpgradeTarget,
+  isShelfRewardBarLocked,
+  isShelfFullyDiscovered,
+  isShelfFullyMastered,
+  shouldShowShelfUpgradeUi,
+  getInProgressBonusTierPotCounts,
+} from './utils/collectionShelfMastery';
 import { createPostFtueCleanSaveV2 } from './utils/postFtueCleanSave';
 import {
   getLimitedOfferAutoPopupPool,
@@ -233,8 +256,9 @@ import {
   WILD_GROWTH_UNLOCK_PLAYER_LEVEL,
 } from './utils/wildGrowth';
 import { OfflineEarningsPopup } from './components/OfflineEarningsPopup';
-import { BARN_SHELVES_PER_GARDEN, COLLECTION_COMING_SOON_LABEL, COLLECTION_GARDEN_LABEL_AFTER_SHELVES_MARGIN_TOP_PX, COLLECTION_GARDEN_LABEL_MARGIN_BOTTOM_PX, COLLECTION_PHONE_GARDEN_LABEL_AFTER_SHELVES_MARGIN_TOP_PX, COLLECTION_PHONE_GARDEN_LABEL_SCALE, COLLECTION_PHONE_PLANT_PANEL_SCALE, COLLECTION_PHONE_PLANT_PANEL_TOP_PX, COLLECTION_PHONE_ROOF_LAYOUT_SCALE, COLLECTION_PHONE_ROOF_SCALE, COLLECTION_PHONE_SHELF_WIDTH_SCALE, COLLECTION_PHONE_SHELVES_MARGIN_TOP_PX, COLLECTION_PLANT_COUNT, COLLECTION_PLANT_PANEL_TOP_PX, COLLECTION_SCROLL_BOTTOM_PAD_PX, COLLECTION_SHELVES_MARGIN_TOP_PX, COLLECTION_UNDISCOVERED_GARDEN_LABEL, getCollectionShelfMeta, normalizeBarnShelvesUnlocked } from './constants/barnShelves';
+import { BARN_SHELVES_PER_GARDEN, COLLECTION_PANEL_GARDEN_ICON_PX, COLLECTION_PANEL_GARDEN_ICON_UNLOCKED_SCALE, COLLECTION_PHONE_PLANT_PANEL_SCALE, COLLECTION_PHONE_PLANT_PANEL_TOP_PX, COLLECTION_PHONE_ROOF_LAYOUT_SCALE, COLLECTION_PHONE_ROOF_SCALE, COLLECTION_PHONE_SHELF_WIDTH_SCALE, COLLECTION_PHONE_SHELVES_EXTRA_MARGIN_TOP_UNLOCKED_PX, COLLECTION_PHONE_SHELVES_MARGIN_TOP_PX, COLLECTION_PLANT_COUNT, COLLECTION_PLANT_PANEL_TOP_PX, COLLECTION_SCROLL_BOTTOM_PAD_PX, COLLECTION_SHELF_STACK_MARGIN_TOP_PX, COLLECTION_SHELF_UPGRADE_BUTTON_BORDER_PX, COLLECTION_SHELF_UPGRADE_BUTTON_COIN_PX, COLLECTION_SHELF_UPGRADE_BUTTON_DARK_COLOR, COLLECTION_SHELF_UPGRADE_BUTTON_FONT_PX, COLLECTION_SHELF_UPGRADE_BUTTON_HEIGHT_PX, COLLECTION_SHELF_UPGRADE_BUTTON_RING_COLOR, COLLECTION_SHELF_UPGRADE_BUTTON_TOP_PX, COLLECTION_SHELF_UPGRADE_BUTTON_WIDTH_PX, COLLECTION_SHELF_UPGRADE_SPRITE_SCALE, COLLECTION_SHELF_UPGRADE_SPRITE_TOP_PX, COLLECTION_SHELVES_EXTRA_MARGIN_TOP_UNLOCKED_PX, COLLECTION_SHELVES_MARGIN_TOP_PX, getCollectionShelfMeta, normalizeBarnShelvesUnlocked } from './constants/barnShelves';
 import { GARDEN_PICKER_PURCHASE_COIN_PRICE } from './constants/gardenPicker';
+import { canAffordNextGardenPurchase } from './utils/gardenPickerFloatingButton';
 import { MAX_PLANT_TIER } from './constants/plants';
 import {
   PLANT_MASTERY_GLOW_MS,
@@ -244,24 +268,34 @@ import {
   getPlantMasteryUnlockCost,
 } from './constants/plantMastery';
 import {
-  getCollectionRewardBarState,
   getGoldenPotBonusTierJustUnlocked,
   getHarvestRechargePerMinute,
   getMaxPlantGoalSlots,
-  getGlobalGoldenPotCount,
   getDailyAllowanceCoinAmount,
   hasGoldenPotDailyAllowance,
-  hasGoldenPotNewGardenUnlocked,
-  isGardenSelectableByGoldenPots,
+  isGardenSelectable,
   getHarvestChargesMax,
   getGoldenPotHarvestStorageMaxBonus,
   getGoldenPotSeedStorageMaxBonus,
   applyGoldenPotOfflineEarningsBonus,
+  applyGoldenPotMergeCoinBonus,
   getSeedRechargePerMinute,
+  getGoldenPotBonusTierPotCountForShelf,
 } from './constants/goldenPotBonuses';
 import { CollectionFtueOverlay } from './components/CollectionFtueOverlay';
+import { CollectionBonusesFtueOverlay } from './components/CollectionBonusesFtueOverlay';
+import { CollectionRewardProgressBar } from './components/CollectionRewardProgressBar';
+import { NewGardenGardensFbFtueOverlay } from './components/NewGardenGardensFbFtueOverlay';
 import type { CollectionFtuePhase } from './constants/collectionFtue';
-import { COLLECTION_FTUE_BLOCKER_TINT, parseCollectionFtuePhase } from './constants/collectionFtue';
+import { COLLECTION_FTUE_BLOCKER_TINT, COLLECTION_FTUE_PANEL_COPY_ID, COLLECTION_FTUE_SHELF0_REWARD_ICON_ID, parseCollectionFtuePhase } from './constants/collectionFtue';
+import type { NewGardenFtuePhase } from './constants/newGardenFtue';
+import {
+  NEW_GARDEN_FTUE_GARDENS_BUTTON_ID,
+  NEW_GARDEN_FTUE_WELCOME_DESCRIPTION,
+  NEW_GARDEN_FTUE_WELCOME_TITLE,
+  NEW_GARDEN_FTUE_WELCOME_TITLE_FONT_SIZE_REM,
+  parseNewGardenFtuePhase,
+} from './constants/newGardenFtue';
 import { formatCompactNumber } from './utils/formatCompactNumber';
 import { getPlantData } from './constants/plantData';
 import { getPlantCoinValue } from './utils/plantValue';
@@ -364,7 +398,7 @@ const COIN_GOAL_EXIT_MS = 400;
 
 /**
  * Light-green “undiscovered tier” goal frame (only after FTUE 11 persistence is on).
- * FTUE-11 triple spawn: only plant 3 while highest < 3. After that: standard next discovery (highest+1).
+ * FTUE-11 triple spawn: only plant 3 while highest < 3. Otherwise: any goal tier above highest discovered.
  */
 function isDiscoveryLightGreenEligible(
   postFtue11: boolean,
@@ -374,7 +408,8 @@ function isDiscoveryLightGreenEligible(
 ): boolean {
   if (!postFtue11) return false;
   if (ftue11ThreePlantWindow) return plantLevel === 3 && highestPlantEver < 3;
-  return plantLevel === highestPlantEver + 1 && highestPlantEver < MAX_PLANT_TIER;
+  const h = Math.max(0, Math.floor(highestPlantEver));
+  return plantLevel > h && plantLevel >= 1 && h < MAX_PLANT_TIER;
 }
 
 /** Double Coins duration when granted from a limited-offer / upgrade-panel rewarded ad (offer has no duration in config). */
@@ -1066,7 +1101,133 @@ type BarnShelfPlantSlotProps = {
   onOpenPlantInfo: () => void;
 };
 
-/** Shelf cell: blue hitbox + optional mastery Unlock; shared sprite press feedback (CDN Tailwind :has() was unreliable). */
+type BarnShelfUpgradeButtonProps = {
+  gardenId: GardenId;
+  coinCost?: number;
+  canAfford?: boolean;
+  ftueUnlockTarget?: boolean;
+  /** Disabled CTA when the active shelf has no discovered plants left to upgrade. */
+  discoverMorePlants?: boolean;
+  onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
+};
+
+/** One upgrade CTA per shelf — centered on the upgrade sprite strip. */
+function BarnShelfUpgradeButton({
+  gardenId,
+  coinCost = 0,
+  canAfford = true,
+  ftueUnlockTarget = false,
+  discoverMorePlants = false,
+  onClick,
+}: BarnShelfUpgradeButtonProps) {
+  const [pressed, setPressed] = useState(false);
+  const disabledBrown = discoverMorePlants || !canAfford;
+  const buttonBg = disabledBrown ? '#e3c28c' : '#b8d458';
+  const buttonBorder = disabledBrown ? '#c7a36e' : COLLECTION_SHELF_UPGRADE_BUTTON_DARK_COLOR;
+  const buttonText = disabledBrown ? '#a68e64' : COLLECTION_SHELF_UPGRADE_BUTTON_DARK_COLOR;
+  const buttonShadow = disabledBrown
+    ? 'none'
+    : '0 3px 0 #6e8d2d, 0 5px 10px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.35)';
+
+  useEffect(() => {
+    if (!pressed) return;
+    const clear = () => setPressed(false);
+    window.addEventListener('pointerup', clear);
+    window.addEventListener('pointercancel', clear);
+    return () => {
+      window.removeEventListener('pointerup', clear);
+      window.removeEventListener('pointercancel', clear);
+    };
+  }, [pressed]);
+
+  return (
+    <div
+      className="absolute left-1/2 pointer-events-auto"
+      style={{
+        top: COLLECTION_SHELF_UPGRADE_BUTTON_TOP_PX,
+        transform: 'translate(-50%, -50%)',
+        zIndex: 8,
+      }}
+    >
+      <div
+        className="inline-flex rounded-full"
+        style={{
+          backgroundColor: COLLECTION_SHELF_UPGRADE_BUTTON_RING_COLOR,
+          boxSizing: 'border-box',
+          padding: 2,
+        }}
+      >
+        <button
+            type="button"
+            id={ftueUnlockTarget ? 'collection-ftue-unlock-1' : undefined}
+            disabled={disabledBrown}
+            className={`flex select-none items-center justify-center rounded-full font-bold whitespace-nowrap transition-[transform,box-shadow] ${
+              disabledBrown
+                ? 'cursor-default'
+                : 'shadow-[0_3px_0_#6e8d2d,0_5px_10px_rgba(0,0,0,0.15),inset_0_1px_0_rgba(255,255,255,0.35)] active:translate-y-[1px] active:shadow-[inset_0_2px_4px_rgba(0,0,0,0.15)]'
+            }`}
+            style={{
+              boxSizing: 'border-box',
+              width: COLLECTION_SHELF_UPGRADE_BUTTON_WIDTH_PX,
+              height: COLLECTION_SHELF_UPGRADE_BUTTON_HEIGHT_PX,
+              paddingLeft: discoverMorePlants ? 0 : 10,
+              paddingRight: discoverMorePlants ? 0 : 10,
+              gap: 6,
+              backgroundColor: buttonBg,
+              border: `${COLLECTION_SHELF_UPGRADE_BUTTON_BORDER_PX}px solid ${buttonBorder}`,
+              color: buttonText,
+              fontFamily: 'Inter, sans-serif',
+              fontSize: COLLECTION_SHELF_UPGRADE_BUTTON_FONT_PX,
+              letterSpacing: discoverMorePlants ? '-0.045em' : undefined,
+              lineHeight: 1,
+              textShadow: disabledBrown ? 'none' : '0 1px 0 rgba(255,255,255,0.3)',
+              boxShadow: buttonShadow,
+              WebkitTapHighlightColor: 'transparent',
+              touchAction: 'manipulation',
+            }}
+            onPointerDown={(e) => {
+              if (e.button !== 0 || disabledBrown) return;
+              setPressed(true);
+            }}
+            onKeyDown={(e) => {
+              if (disabledBrown) return;
+              if (e.key === 'Enter' || e.key === ' ') setPressed(true);
+            }}
+            onKeyUp={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') setPressed(false);
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setPressed(false);
+              if (disabledBrown || discoverMorePlants) return;
+              onClick?.(e);
+            }}
+          >
+            {discoverMorePlants ? (
+              'Discover More Plants'
+            ) : (
+              <>
+                Upgrade
+                <img
+                  src={getGardenCoinIconPath(gardenId)}
+                  alt=""
+                  className="shrink-0 object-contain"
+                  style={{
+                    width: COLLECTION_SHELF_UPGRADE_BUTTON_COIN_PX,
+                    height: COLLECTION_SHELF_UPGRADE_BUTTON_COIN_PX,
+                  }}
+                  draggable={false}
+                />
+                {coinCost === 0 ? 'FREE' : formatCompactNumber(coinCost)}
+              </>
+            )}
+          </button>
+      </div>
+    </div>
+  );
+}
+
+/** Shelf cell: plant sprite + tap hitbox; shared sprite press feedback (CDN Tailwind :has() was unreliable). */
 function BarnShelfPlantSlot({
   gardenId,
   plantLevel,
@@ -1106,65 +1267,6 @@ function BarnShelfPlantSlot({
       className="relative flex items-center justify-center shrink-0 pointer-events-none"
       style={{ width: '95px', height: '95px', zIndex: barnCellStackZ }}
     >
-      {showMasteryUnlock && (
-        <div
-          className="absolute left-1/2 pointer-events-auto"
-          style={{
-            top: '100%',
-            transform: 'translateX(-50%)',
-            marginTop: 0,
-            zIndex: 40,
-          }}
-        >
-          <div
-            style={{
-              transform: 'scale(0.5)',
-              transformOrigin: 'top center',
-            }}
-          >
-            <div className="rounded-full p-[10px]" style={{ backgroundColor: '#c4ac7f', boxSizing: 'border-box' }}>
-              <div className="rounded-full p-[3px]" style={{ backgroundColor: '#ad9467', boxSizing: 'border-box' }}>
-                <button
-                  type="button"
-                  id={plantLevel === 1 ? 'collection-ftue-unlock-1' : undefined}
-                  className="flex w-full min-w-0 select-none items-center justify-center rounded-full font-black shadow-[0_5px_0_#6e8d2d,0_8px_16px_rgba(0,0,0,0.15),inset_0_2px_0_rgba(255,255,255,0.35)] transition-[transform,box-shadow] active:translate-y-[2px] active:shadow-[inset_0_3px_6px_rgba(0,0,0,0.15)]"
-                  style={{
-                    boxSizing: 'border-box',
-                    height: 52,
-                    minWidth: 143,
-                    paddingLeft: 22,
-                    paddingRight: 22,
-                    paddingTop: 0,
-                    paddingBottom: 0,
-                    backgroundColor: '#b8d458',
-                    border: '3px solid #6e8d2d',
-                    color: '#4a6b1e',
-                    fontFamily: 'Inter, sans-serif',
-                    fontSize: 'calc(1.28rem + 2px)',
-                    lineHeight: 1,
-                    textShadow: '0 1px 0 rgba(255,255,255,0.3)',
-                    WebkitTapHighlightColor: 'transparent',
-                    touchAction: 'manipulation',
-                  }}
-                  onPointerDown={onSpritePressPointerDown}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') setSpritePressed(true);
-                  }}
-                  onKeyUp={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') setSpritePressed(false);
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onOpenPlantInfo();
-                  }}
-                >
-                  Upgrade
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
       <div
         className={`relative z-10 flex h-full w-full items-center justify-center pointer-events-none ${
           isPlantDiscovered
@@ -1314,14 +1416,26 @@ export default function App() {
   const [goldenPotBonusesPopupOpen, setGoldenPotBonusesPopupOpen] = useState(false);
   /** Auto-reveal this tier row (disabled → green) in bonuses popup after golden pot bounce + open. */
   const [goldenPotBonusRevealTier, setGoldenPotBonusRevealTier] = useState<number | null>(null);
+  /** Scroll bonuses list to this tier when opening from a shelf progress bar tap. */
+  const [goldenPotBonusScrollTierPotCount, setGoldenPotBonusScrollTierPotCount] = useState<number | null>(null);
+  /** Shelf whose upgrade UI is hidden while the bonuses popup celebrates that shelf's completion. */
+  const [goldenPotBonusRevealShelfIndex, setGoldenPotBonusRevealShelfIndex] = useState<number | null>(null);
   const goldenPotTierUnlockPopupTimeoutRef = useRef<number | null>(null);
   const goldenPotCountForTierPopupRef = useRef<number | null>(null);
   /** First-time collection flow after Plant Collection unlock (golden pot + bonuses + garden hint). */
   const [collectionFtuePhase, setCollectionFtuePhase] = useState<CollectionFtuePhase | null>(null);
   const [collectionFtueCompleted, setCollectionFtueCompleted] = useState(false);
+  const [collectionFtueBonusesReached, setCollectionFtueBonusesReached] = useState(false);
+  const [collectionFtueRestartPending, setCollectionFtueRestartPending] = useState(false);
+  const [collectionFtueBonusesFading, setCollectionFtueBonusesFading] = useState(false);
   const [tasksFtueStarted, setTasksFtueStarted] = useState(false);
   const [tasksFtueUnlockRevealed, setTasksFtueUnlockRevealed] = useState(false);
   const [tasksFtueCompleted, setTasksFtueCompleted] = useState(false);
+  const [gardensFtueStarted, setGardensFtueStarted] = useState(false);
+  const [gardensFtueUnlockRevealed, setGardensFtueUnlockRevealed] = useState(false);
+  const [gardensFtueCompleted, setGardensFtueCompleted] = useState(false);
+  const [newGardenFtueCompleted, setNewGardenFtueCompleted] = useState(false);
+  const [newGardenFtuePhase, setNewGardenFtuePhase] = useState<NewGardenFtuePhase | null>(null);
   const [tasksFtueHoleRect, setTasksFtueHoleRect] = useState<{
     left: number;
     top: number;
@@ -1390,8 +1504,6 @@ export default function App() {
     GoldenPotProgressParticleData[]
   >([]);
   const [collectionBarHeldNumeratorCount, setCollectionBarHeldNumeratorCount] = useState<number | null>(null);
-  const [collectionBarHeldFillPotCount, setCollectionBarHeldFillPotCount] = useState<number | null>(null);
-  const [collectionBarPotBounce, setCollectionBarPotBounce] = useState(false);
   // Discovery CTA particle: fly from popup button to Collection nav button.
   const [activeBarnParticles, setActiveBarnParticles] = useState<BarnParticleData[]>([]);
   // Active rewarded-ad boosts (max 5); each has endTime and duration for radial countdown
@@ -1473,6 +1585,22 @@ export default function App() {
   >([]);
   const tasksFloatingButtonRef = useRef<HTMLDivElement>(null);
   const nextTasksFbLeafBurstIdRef = useRef(0);
+  const [gardensFbReadyBounceNonce, setGardensFbReadyBounceNonce] = useState(0);
+  const [gardensFbLeafBursts, setGardensFbLeafBursts] = useState<
+    { id: string; x: number; y: number; startTime: number }[]
+  >([]);
+  const gardensFloatingButtonRef = useRef<HTMLDivElement>(null);
+  const nextGardensFbLeafBurstIdRef = useRef(0);
+  const prevCanAffordGardenPurchaseRef = useRef(false);
+  const gardensAffordThresholdInitializedRef = useRef(false);
+  const pendingGardensFtueRevealRef = useRef(false);
+  const gardensFtueRevealPlayedRef = useRef(false);
+  const [gardensFtueHoleRect, setGardensFtueHoleRect] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } | null>(null);
   const dailyTasksPeriodRolledRef = useRef(false);
   const dailyTasksAutoClaimedAt1sRef = useRef(false);
   const lastDailyPlaytimeTickRef = useRef<number | null>(null);
@@ -1712,57 +1840,66 @@ export default function App() {
     plantMasteryIntroBarComplete: false,
   });
   const goldenPotCount = plantMastery.unlockedLevels.length;
-  const globalGoldenPotCount = useMemo(
-    () =>
-      getGlobalGoldenPotCount(
-        plantMastery.unlockedLevels,
-        loadGameSaveV2()?.gardens,
-        activeGardenId,
-      ),
-    [plantMastery.unlockedLevels, activeGardenId, collectionSaveRevision, dailyAllowanceDayRefreshKey],
-  );
   const goldenPotCountRef = useRef(goldenPotCount);
   goldenPotCountRef.current = goldenPotCount;
-  const globalGoldenPotCountRef = useRef(globalGoldenPotCount);
-  globalGoldenPotCountRef.current = globalGoldenPotCount;
+
+  const collectionV2Gardens = useMemo(
+    () => loadGameSaveV2()?.gardens,
+    [collectionSaveRevision, activeGardenId, plantMastery.unlockedLevels, highestPlantEver, money],
+  );
+  const activeCollectionSnapshot = useMemo(
+    (): GardenCollectionSnapshot => ({
+      highestPlantEver,
+      unlockedLevels: plantMastery.unlockedLevels,
+      money,
+    }),
+    [highestPlantEver, plantMastery.unlockedLevels, money],
+  );
+  const globalBonusPotCount = useMemo(
+    () =>
+      getGlobalBonusProgressPotCount(activeGardenId, activeCollectionSnapshot, collectionV2Gardens),
+    [activeGardenId, activeCollectionSnapshot, collectionV2Gardens],
+  );
+  const globalBonusPotCountRef = useRef(globalBonusPotCount);
+  globalBonusPotCountRef.current = globalBonusPotCount;
 
   const harvestChargesMax = useMemo(
-    () => getHarvestChargesMax(globalGoldenPotCount),
-    [globalGoldenPotCount],
+    () => getHarvestChargesMax(globalBonusPotCount),
+    [globalBonusPotCount],
   );
   const harvestChargesMaxRef = useRef(harvestChargesMax);
   harvestChargesMaxRef.current = harvestChargesMax;
   const seedStorageMax = useMemo(
-    () => getSeedStorageMax(seedsState, globalGoldenPotCount),
-    [seedsState, globalGoldenPotCount, seedStorageLevel],
+    () => getSeedStorageMax(seedsState, globalBonusPotCount),
+    [seedsState, globalBonusPotCount, seedStorageLevel],
   );
   const seedStorageMaxRef = useRef(seedStorageMax);
   seedStorageMaxRef.current = seedStorageMax;
 
-  const prevSeedStorageBonusRef = useRef(getGoldenPotSeedStorageMaxBonus(globalGoldenPotCount));
-  const prevHarvestStorageBonusRef = useRef(getGoldenPotHarvestStorageMaxBonus(globalGoldenPotCount));
+  const prevSeedStorageBonusRef = useRef(getGoldenPotSeedStorageMaxBonus(globalBonusPotCount));
+  const prevHarvestStorageBonusRef = useRef(getGoldenPotHarvestStorageMaxBonus(globalBonusPotCount));
 
   useEffect(() => {
-    const seedBonus = getGoldenPotSeedStorageMaxBonus(globalGoldenPotCount);
-    const harvestBonus = getGoldenPotHarvestStorageMaxBonus(globalGoldenPotCount);
+    const seedBonus = getGoldenPotSeedStorageMaxBonus(globalBonusPotCount);
+    const harvestBonus = getGoldenPotHarvestStorageMaxBonus(globalBonusPotCount);
     const prevSeedBonus = prevSeedStorageBonusRef.current;
     const prevHarvestBonus = prevHarvestStorageBonusRef.current;
 
     if (seedBonus > prevSeedBonus) {
       const added = seedBonus - prevSeedBonus;
-      const newMax = getSeedStorageMax(seedsState, globalGoldenPotCount);
+      const newMax = getSeedStorageMax(seedsState, globalBonusPotCount);
       const oldMax = newMax - added;
       setSeedsInStorage((prev) => {
         if (prev >= oldMax) return Math.min(newMax, prev + added);
         return Math.min(prev, newMax);
       });
     } else if (seedBonus < prevSeedBonus) {
-      setSeedsInStorage((prev) => Math.min(prev, getSeedStorageMax(seedsState, globalGoldenPotCount)));
+      setSeedsInStorage((prev) => Math.min(prev, getSeedStorageMax(seedsState, globalBonusPotCount)));
     }
 
     if (harvestBonus > prevHarvestBonus) {
       const added = harvestBonus - prevHarvestBonus;
-      const newMax = getHarvestChargesMax(globalGoldenPotCount);
+      const newMax = getHarvestChargesMax(globalBonusPotCount);
       const oldMax = newMax - added;
       setHarvestCharges((prev) => {
         const next = prev >= oldMax ? Math.min(newMax, prev + added) : Math.min(prev, newMax);
@@ -1771,7 +1908,7 @@ export default function App() {
       });
     } else if (harvestBonus < prevHarvestBonus) {
       setHarvestCharges((prev) => {
-        const next = Math.min(prev, getHarvestChargesMax(globalGoldenPotCount));
+        const next = Math.min(prev, getHarvestChargesMax(globalBonusPotCount));
         harvestChargesRef.current = next;
         return next;
       });
@@ -1779,7 +1916,7 @@ export default function App() {
 
     prevSeedStorageBonusRef.current = seedBonus;
     prevHarvestStorageBonusRef.current = harvestBonus;
-  }, [globalGoldenPotCount, seedsState, seedStorageLevel]);
+  }, [globalBonusPotCount, seedsState, seedStorageLevel]);
 
   const dailyAllowanceCoinAmount = getDailyAllowanceCoinAmount(playerLevel);
 
@@ -1787,7 +1924,7 @@ export default function App() {
     isDailyAllowanceClaimedForDay(dailyAllowanceClaimedDayKey) && dailyAllowanceUiHoldUntilMs > Date.now();
 
   const dailyAllowanceSlot0 = useMemo(() => {
-    if (!hasGoldenPotDailyAllowance(globalGoldenPotCount)) return null;
+    if (!hasGoldenPotDailyAllowance(globalBonusPotCount)) return null;
     const claimedToday = isDailyAllowanceClaimedForDay(dailyAllowanceClaimedDayKey);
     const holdingAllowanceUi = dailyAllowanceUiHoldUntilMs > Date.now();
     if (claimedToday && !holdingAllowanceUi) return null;
@@ -1796,7 +1933,7 @@ export default function App() {
       coinAmount: dailyAllowanceCoinAmount,
     };
   }, [
-    globalGoldenPotCount,
+    globalBonusPotCount,
     dailyAllowanceClaimedDayKey,
     activeGardenId,
     dailyAllowanceDayRefreshKey,
@@ -1899,14 +2036,14 @@ export default function App() {
       highestPlantEverRef.current,
       dailyTaskUpgradeCtxRef.current,
     ),
-    globalGoldenPotCount: globalGoldenPotCountRef.current,
+    globalGoldenPotCount: globalBonusPotCountRef.current,
     garden1PlayerLevel,
   });
   /** Defer starting loading in plant goal slot 3 until player returns to FARM (see fourth-slot unlock flow). */
   const pendingFourthPlantGoalSlotRef = useRef(false);
 
   useEffect(() => {
-    const n = plantMastery.unlockedLevels.length;
+    const n = globalBonusPotCount;
     if (goldenPotCountForTierPopupRef.current === null) {
       goldenPotCountForTierPopupRef.current = n;
       return;
@@ -1916,12 +2053,15 @@ export default function App() {
     if (n <= prev) return;
     const tier = getGoldenPotBonusTierJustUnlocked(prev, n);
     if (tier == null) return;
+    const completedShelfIndex = tier / 4 - 1;
     if (goldenPotTierUnlockPopupTimeoutRef.current != null) {
       window.clearTimeout(goldenPotTierUnlockPopupTimeoutRef.current);
     }
     goldenPotTierUnlockPopupTimeoutRef.current = window.setTimeout(() => {
       goldenPotTierUnlockPopupTimeoutRef.current = null;
+      setGoldenPotBonusRevealShelfIndex(completedShelfIndex);
       setGoldenPotBonusRevealTier(tier);
+      setGoldenPotBonusScrollTierPotCount(null);
       setGoldenPotBonusesPopupOpen(true);
     }, 650);
     return () => {
@@ -1930,7 +2070,7 @@ export default function App() {
         goldenPotTierUnlockPopupTimeoutRef.current = null;
       }
     };
-  }, [plantMastery.unlockedLevels.length]);
+  }, [globalBonusPotCount]);
   const [masteryPurchaseRevealLevels, setMasteryPurchaseRevealLevels] = useState<string[]>([]);
   const masteryPurchaseRevealTimeoutRef = useRef<number | null>(null);
 
@@ -2006,12 +2146,36 @@ export default function App() {
     ]);
   }, []);
 
+  const triggerGardensFloatingButtonReadyFx = useCallback(() => {
+    setGardensFbReadyBounceNonce((n) => n + 1);
+    if (getPerformanceMode()) return;
+    const el = gardensFloatingButtonRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setGardensFbLeafBursts((prev) => [
+      ...prev,
+      {
+        id: `gardens-fb-lb-${nextGardensFbLeafBurstIdRef.current++}`,
+        x: r.left + r.width / 2,
+        y: r.top + r.height / 2 + 30,
+        startTime: Date.now(),
+      },
+    ]);
+  }, []);
+
   const playTasksFtueUnlockReveal = useCallback(() => {
     if (tasksFtueRevealPlayedRef.current) return;
     tasksFtueRevealPlayedRef.current = true;
     setTasksFtueUnlockRevealed(true);
     triggerTasksFloatingButtonReadyFx();
   }, [triggerTasksFloatingButtonReadyFx]);
+
+  const playGardensFtueUnlockReveal = useCallback(() => {
+    if (gardensFtueRevealPlayedRef.current) return;
+    gardensFtueRevealPlayedRef.current = true;
+    setGardensFtueUnlockRevealed(true);
+    triggerGardensFloatingButtonReadyFx();
+  }, [triggerGardensFloatingButtonReadyFx]);
 
   const spawnTasksFbCoinToWallet = useCallback((value: number) => {
     if (value <= 0) return;
@@ -2134,7 +2298,7 @@ export default function App() {
       if (!rollDailyTasksPeriodIfExpired()) return;
       setDailyAllowanceDayRefreshKey((k) => k + 1);
 
-      if (hasGoldenPotDailyAllowance(globalGoldenPotCount)) {
+      if (hasGoldenPotDailyAllowance(globalBonusPotCount)) {
         const v2 = loadGameSaveV2();
         if (v2) {
           persistGameSaveV2(clearDailyAllowanceClaimedForAllGardens(v2));
@@ -2180,7 +2344,7 @@ export default function App() {
     [
       autoClaimCompleteTasksInPopup,
       finishDailyTasksPeriodRoll,
-      globalGoldenPotCount,
+      globalBonusPotCount,
       spawnTasksFbCoinToWallet,
       triggerTasksFloatingButtonReadyFx,
     ],
@@ -2252,7 +2416,7 @@ export default function App() {
     const next = ensureDailyTasksDay(getDailyTasksCtx());
     dailyTaskRowsRef.current = next;
     setDailyTaskRows(next);
-  }, [isLoading, dailyTasksUnlocked, playerLevel, globalGoldenPotCount]);
+  }, [isLoading, dailyTasksUnlocked, playerLevel, globalBonusPotCount]);
 
   useEffect(() => {
     if (isLoading || !dailyTasksUnlocked || !readDailyTasksUnlocked()) return;
@@ -2361,7 +2525,12 @@ export default function App() {
       money: moneyRef.current,
     };
     const v2 = loadGameSaveV2();
-    const target = findNextDevGoldenPotTarget(activeGardenIdRef.current, activeSnap, v2?.gardens);
+    const target = findNextDevGoldenPotTarget(
+      activeGardenIdRef.current,
+      activeSnap,
+      v2?.gardens,
+      v2?.gardensStarted,
+    );
     if (!target) return;
 
     if (target.gardenId === activeGardenIdRef.current) {
@@ -2428,12 +2597,23 @@ export default function App() {
       unlockedLevels: plantMastery.unlockedLevels,
       money: moneyRef.current,
     };
-    const v2Gardens = loadGameSaveV2()?.gardens;
-    if (!hasAnyDevUnlockPlantRemaining(activeGardenIdRef.current, activeSnap, v2Gardens)) return;
+    const v2ForUnlock = loadGameSaveV2();
+    const v2Gardens = v2ForUnlock?.gardens;
+    const startedForUnlock = v2ForUnlock?.gardensStarted;
+    if (
+      !hasAnyDevUnlockPlantRemaining(
+        activeGardenIdRef.current,
+        activeSnap,
+        v2Gardens,
+        startedForUnlock,
+      )
+    )
+      return;
     const target = findNextDevUnlockPlantTarget(
       activeGardenIdRef.current,
       activeSnap,
       v2Gardens,
+      startedForUnlock,
     );
     if (!target) return;
     const { gardenId: targetGardenId, newLevel } = target;
@@ -2516,6 +2696,15 @@ export default function App() {
     setTasksFtueCompleted(false);
     tasksFtueRevealPlayedRef.current = false;
     pendingTasksFtueRevealRef.current = false;
+    setGardensFtueStarted(false);
+    setGardensFtueUnlockRevealed(false);
+    setGardensFtueCompleted(false);
+    gardensFtueRevealPlayedRef.current = false;
+    pendingGardensFtueRevealRef.current = false;
+    gardensAffordThresholdInitializedRef.current = false;
+    prevCanAffordGardenPurchaseRef.current = false;
+    setNewGardenFtueCompleted(false);
+    setNewGardenFtuePhase(null);
     setStarterPackUnlocked(false);
     setStarterPackPurchased(false);
     setStarterPackCountdownRefreshKey((k) => k + 1);
@@ -2558,22 +2747,30 @@ export default function App() {
       const isActiveGarden = gardenId === activeGardenIdRef.current;
 
       if (isActiveGarden) {
-        setPlantMastery((prev) => {
-          if (!canPurchaseGoldenPotForLevel(level, highestPlantEverRef.current, prev.unlockedLevels)) {
-            return prev;
-          }
-          if (moneyRef.current < cost) return prev;
-          setMoney((m) => m - cost);
-          queueMicrotask(() => {
-            applyDailyTaskRowsUpdate(recordDailyTaskGoldenPot(getDailyTasksCtx()));
-          });
-          return {
-            ...prev,
-            unlockPending: prev.unlockPending.filter((x) => x !== level),
-            unlockedLevels: prev.unlockedLevels.includes(level)
-              ? prev.unlockedLevels
-              : [...prev.unlockedLevels, level].sort((a, b) => a - b),
-          };
+        // Side effects (money deduction, daily-task record) must live OUTSIDE the
+        // setState updater: React double-invokes updaters, which would otherwise
+        // deduct `cost` twice and push the wallet negative.
+        if (
+          !canPurchaseGoldenPotForLevel(
+            level,
+            highestPlantEverRef.current,
+            plantMastery.unlockedLevels,
+          )
+        ) {
+          return;
+        }
+        if (moneyRef.current < cost) return;
+        moneyRef.current -= cost;
+        setMoney((m) => m - cost);
+        setPlantMastery((prev) => ({
+          ...prev,
+          unlockPending: prev.unlockPending.filter((x) => x !== level),
+          unlockedLevels: prev.unlockedLevels.includes(level)
+            ? prev.unlockedLevels
+            : [...prev.unlockedLevels, level].sort((a, b) => a - b),
+        }));
+        queueMicrotask(() => {
+          applyDailyTaskRowsUpdate(recordDailyTaskGoldenPot(getDailyTasksCtx()));
         });
         return;
       }
@@ -2608,7 +2805,7 @@ export default function App() {
         applyDailyTaskRowsUpdate(recordDailyTaskGoldenPot(getDailyTasksCtx()));
       });
     },
-    [applyDailyTaskRowsUpdate, getDailyTasksCtx],
+    [applyDailyTaskRowsUpdate, getDailyTasksCtx, plantMastery.unlockedLevels],
   );
 
   const triggerMasteryPurchaseReveal = useCallback((level: number, gardenId: GardenId) => {
@@ -2649,6 +2846,64 @@ export default function App() {
       masteryPurchaseRevealTimeoutRef.current = null;
     }, 650);
   }, []);
+
+  const handleShelfUpgradeClick = useCallback(
+    (shelfIndex: number, gardenId: GardenId, event: React.MouseEvent<HTMLButtonElement>) => {
+      const gardenSnap = getGardenCollectionSnapshot(
+        gardenId,
+        activeGardenId,
+        activeCollectionSnapshot,
+        collectionV2Gardens,
+      );
+      const nextLevel = getNextUpgradeablePlantOnShelf(gardenSnap, shelfIndex);
+      if (nextLevel == null) return;
+      const cost = getPlantMasteryUnlockCost(nextLevel);
+      if (gardenSnap.money < cost) return;
+
+      playSfx(SFX_IDS.uiConfirmReward);
+      const isFtueShelfPurchase =
+        collectionFtuePhase === 'point_unlock' &&
+        gardenId === DEFAULT_GARDEN_ID &&
+        nextLevel === 1 &&
+        !collectionFtueCompleted;
+
+      const prevBonusPotCount = globalBonusPotCountRef.current;
+      purchasePlantMasteryForLevel(nextLevel, gardenId);
+
+      const btnRect = event.currentTarget.getBoundingClientRect();
+      setActiveGoldenPotProgressParticles((prev) => [
+        ...prev,
+        {
+          id: `golden-pot-bar-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          startX: btnRect.left + btnRect.width / 2,
+          startY: btnRect.top + btnRect.height / 2,
+        },
+      ]);
+      setCollectionBarHeldNumeratorCount(prevBonusPotCount);
+
+      if (isFtueShelfPurchase) {
+        setCollectionFtuePhase('wait_reveal');
+      }
+
+      triggerMasteryPurchaseReveal(nextLevel, gardenId);
+
+      if (isFtueShelfPurchase) {
+        window.setTimeout(() => {
+          setCollectionFtuePhase('point_bonuses');
+        }, 720);
+      }
+    },
+    [
+      activeGardenId,
+      activeCollectionSnapshot,
+      collectionV2Gardens,
+      collectionFtuePhase,
+      collectionFtueCompleted,
+      purchasePlantMasteryForLevel,
+      triggerMasteryPurchaseReveal,
+      playSfx,
+    ],
+  );
 
   const [playerLevelFlashTrigger, setPlayerLevelFlashTrigger] = useState(0);
   const [levelUpPopup, setLevelUpPopup] = useState<{ isVisible: boolean; level: number } | null>(null);
@@ -2717,6 +2972,26 @@ export default function App() {
     tasksFtueStarted,
     tasksFtueUnlockRevealed,
     playTasksFtueUnlockReveal,
+  ]);
+
+  useEffect(() => {
+    if (gardensFtueCompleted || gardensFtueUnlockRevealed) {
+      pendingGardensFtueRevealRef.current = false;
+      return;
+    }
+    if (levelUpPopup?.isVisible) return;
+    const pendingReveal = pendingGardensFtueRevealRef.current;
+    if (!pendingReveal && !gardensFtueStarted) return;
+    if (!pendingReveal && activeScreen !== 'FARM') return;
+    pendingGardensFtueRevealRef.current = false;
+    playGardensFtueUnlockReveal();
+  }, [
+    activeScreen,
+    levelUpPopup?.isVisible,
+    gardensFtueCompleted,
+    gardensFtueStarted,
+    gardensFtueUnlockRevealed,
+    playGardensFtueUnlockReveal,
   ]);
 
   useLayoutEffect(() => {
@@ -2904,7 +3179,6 @@ export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
   /** Full-viewport layer for discovery reward coin VFX — same CSS space as modal popups so spawn matches getBoundingClientRect. */
   const discoveryRewardFxLayerRef = useRef<HTMLDivElement>(null);
-  const collectionBarGoldenPotRef = useRef<HTMLSpanElement>(null);
   // Coin panel portal: compute the scaled game-container position so coin panels can render above FTUE overlays.
   useEffect(() => {
     const update = () => {
@@ -2931,15 +3205,15 @@ export default function App() {
       setCollectionFtueHoleRect(null);
       return;
     }
-    if (collectionFtuePhase === 'wait_reveal' || collectionFtuePhase === 'point_garden_nav') {
+    if (collectionFtuePhase === 'point_bonuses' || collectionFtuePhase === 'point_garden_nav') {
+      setCollectionFtueHoleRect(null);
+      return;
+    }
+    if (collectionFtuePhase === 'wait_reveal') {
       setCollectionFtueHoleRect(null);
       return;
     }
     if (collectionFtuePhase === 'popup_free' && plantInfoPopup?.isVisible) {
-      setCollectionFtueHoleRect(null);
-      return;
-    }
-    if (collectionFtuePhase === 'point_bonuses' && goldenPotBonusesPopupOpen) {
       setCollectionFtueHoleRect(null);
       return;
     }
@@ -2966,9 +3240,7 @@ export default function App() {
         ? 'collection-ftue-cta'
         : collectionFtuePhase === 'point_unlock'
           ? 'collection-ftue-unlock-1'
-          : collectionFtuePhase === 'point_bonuses'
-            ? 'collection-ftue-view-bonuses'
-            : null;
+          : null;
     const apply = () => setCollectionFtueHoleRect(id ? measureEl(id) : null);
     apply();
     const t = window.setTimeout(apply, 120);
@@ -3024,6 +3296,43 @@ export default function App() {
       window.clearTimeout(t);
     };
   }, [tasksFtueStarted, tasksFtueUnlockRevealed, tasksFtueCompleted, activeScreen]);
+
+  useLayoutEffect(() => {
+    const gardensFtueOverlayActive =
+      gardensFtueStarted &&
+      gardensFtueUnlockRevealed &&
+      !gardensFtueCompleted &&
+      activeScreen === 'FARM';
+    if (!gardensFtueOverlayActive) {
+      setGardensFtueHoleRect(null);
+      return;
+    }
+    const container = document.getElementById('game-container');
+    const scale = appScaleRef.current || 1;
+    const apply = () => {
+      const el = document.getElementById(GARDENS_FTUE_FLOATING_BUTTON_ID);
+      if (!el || !container) {
+        setGardensFtueHoleRect(null);
+        return;
+      }
+      const cr = container.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
+      setGardensFtueHoleRect({
+        left: (r.left - cr.left) / scale,
+        top: (r.top - cr.top) / scale,
+        width: r.width / scale,
+        height: r.height / scale,
+      });
+    };
+    apply();
+    const t = window.setTimeout(apply, 120);
+    const onResize = () => apply();
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.clearTimeout(t);
+    };
+  }, [gardensFtueStarted, gardensFtueUnlockRevealed, gardensFtueCompleted, activeScreen]);
 
   useEffect(() => {
     return () => {
@@ -3087,6 +3396,9 @@ export default function App() {
   const barnButtonRef = useRef<HTMLButtonElement>(null);
   const barnScrollRef = useRef<HTMLDivElement>(null);
   const barnScrollYRef = useRef(0);
+  const barnScrollYByGardenRef = useRef<Partial<Record<GardenId, number>>>({});
+  const barnScrollGardenIdRef = useRef<GardenId>(DEFAULT_GARDEN_ID);
+  const prevActiveScreenForBarnScrollRef = useRef<ScreenType>(activeScreen);
   const barnEnterFocusTimeoutRef = useRef<number | null>(null);
   // Slots with in-flight crops that will complete the goal; exclude from routing so follow-up harvests go to next goal
   const goalsPendingCompletionRef = useRef<Set<number>>(new Set());
@@ -3662,10 +3974,6 @@ export default function App() {
   const collectionShelvesMarginTopPx = isCollectionPhoneLayout
     ? COLLECTION_PHONE_SHELVES_MARGIN_TOP_PX
     : COLLECTION_SHELVES_MARGIN_TOP_PX;
-  const collectionGardenLabelAfterShelvesMarginTopPx = isCollectionPhoneLayout
-    ? COLLECTION_PHONE_GARDEN_LABEL_AFTER_SHELVES_MARGIN_TOP_PX
-    : COLLECTION_GARDEN_LABEL_AFTER_SHELVES_MARGIN_TOP_PX;
-  const collectionGardenLabelScale = isCollectionPhoneLayout ? COLLECTION_PHONE_GARDEN_LABEL_SCALE : 1;
   const collectionRoofVisualWidthPx =
     COLLECTION_ROOF_WIDTH_PX * (isCollectionPhoneLayout ? COLLECTION_PHONE_ROOF_SCALE : 1);
   const collectionRoofLayoutWidthPx = isCollectionPhoneLayout
@@ -3683,18 +3991,6 @@ export default function App() {
           (designWidth / COLLECTION_BARN_LAYOUT_WIDTH_PX) * COLLECTION_PHONE_SHELF_WIDTH_SCALE,
         );
 
-  const collectionV2Gardens = useMemo(
-    () => loadGameSaveV2()?.gardens,
-    [collectionSaveRevision, activeGardenId, plantMastery.unlockedLevels, highestPlantEver, money],
-  );
-  const activeCollectionSnapshot = useMemo(
-    (): GardenCollectionSnapshot => ({
-      highestPlantEver,
-      unlockedLevels: plantMastery.unlockedLevels,
-      money,
-    }),
-    [highestPlantEver, plantMastery.unlockedLevels, money],
-  );
   const plantInfoPopupGardenSnap = useMemo(() => {
     if (!plantInfoPopup) return null;
     return getGardenCollectionSnapshot(
@@ -3705,16 +4001,10 @@ export default function App() {
     );
   }, [plantInfoPopup, activeGardenId, activeCollectionSnapshot, collectionV2Gardens]);
 
-  /** Barn Plant Collection bar: golden pots purchased toward the next collection reward tier. */
-  const displayNumeratorPotCount = collectionBarHeldNumeratorCount ?? globalGoldenPotCount;
-  const displayFillPotCount = collectionBarHeldFillPotCount ?? globalGoldenPotCount;
-  const collectionRewardBar = getCollectionRewardBarState(displayNumeratorPotCount);
-  const collectionFillBar = getCollectionRewardBarState(displayFillPotCount);
-  const collectionBarNumerator = collectionRewardBar.numerator;
-  const collectionBarDenominator = collectionRewardBar.denominator;
-  const collectionBarFillPct = collectionFillBar.fillPct;
-  const collectionRewardIconSrc = getCollectionBonusIconPath(collectionRewardBar.rewardIconSlug);
-  const isPlantCollectionUiUnlocked = isPlantCollectionUiUnlockedGlobally(garden1PlayerLevel);
+  /** Barn Plant Collection header wallet: golden pots toward collection rewards. */
+  const displayNumeratorPotCount = collectionBarHeldNumeratorCount ?? globalBonusPotCount;
+  const isPlantCollectionUiUnlocked = isPlantCollectionUiUnlockedForGarden(playerLevel);
+  const collectionPanelTitle = getCollectionPanelTitle(activeGardenId);
   const goldenPotWalletHeaderProps =
     activeScreen === 'BARN' && isPlantCollectionUiUnlocked
     ? {
@@ -3727,7 +4017,18 @@ export default function App() {
       }
     : undefined;
 
-  const isFruitGardenCollectionUnlocked = hasGoldenPotNewGardenUnlocked(globalGoldenPotCount);
+  const openCollectionBonusesFromFtue = useCallback(() => {
+    if (collectionFtueBonusesFading) return;
+    playSfx(SFX_IDS.uiConfirmNormal);
+    setCollectionFtueBonusesFading(true);
+    setCollectionFtueBonusesReached(true);
+    setCollectionFtueRestartPending(false);
+    const tierPotCount = getGoldenPotBonusTierPotCountForShelf(0);
+    setGoldenPotBonusRevealTier(null);
+    setGoldenPotBonusScrollTierPotCount(tierPotCount);
+    setGoldenPotBonusesPopupOpen(true);
+    window.setTimeout(() => setCollectionFtueBonusesFading(false), 320);
+  }, [collectionFtueBonusesFading, playSfx]);
 
   const renderCollectionShelf = useCallback(
     (shelfIndex: number) => {
@@ -3739,12 +4040,46 @@ export default function App() {
         activeCollectionSnapshot,
         collectionV2Gardens,
       );
+      const shelfRewardBar = getShelfRewardBarStateForSnapshot(shelfIndex, gardenSnap);
+      const shelfFullyDiscovered = isShelfFullyDiscovered(gardenSnap, shelfIndex);
+      const shelfFullyMastered = isShelfFullyMastered(gardenSnap, shelfIndex);
+      const isActiveUpgradeShelf = isShelfActiveUpgradeTarget(gardenSnap, shelfIndex, shelfGardenId);
+      const shelfProgressLeftIconSrc = shelfFullyMastered
+        ? getCollectionShelfGoldenPotCompleteIconPath()
+        : isActiveUpgradeShelf
+          ? getCollectionShelfGoldenPotIconPath()
+          : getCollectionShelfLockedIconPath();
+      const shelfUsesLockedLeftIcon =
+        shelfFullyDiscovered && !shelfFullyMastered && !isActiveUpgradeShelf;
+      const shelfRewardBarLocked = isShelfRewardBarLocked(gardenSnap, shelfIndex, shelfGardenId);
+      const shelfProgressBarInteractive = !shelfRewardBarLocked;
+      const showUpgradeUi =
+        isPlantCollectionUiUnlocked &&
+        shouldShowShelfUpgradeUi(shelfIndex, shelfInGarden, shelfGardenId, gardenSnap, {
+          bonusPopupOpen: goldenPotBonusesPopupOpen,
+          bonusRevealShelfIndex: goldenPotBonusRevealShelfIndex,
+        });
+      const nextUpgradeLevel = showUpgradeUi
+        ? getNextUpgradeablePlantOnShelf(gardenSnap, shelfIndex)
+        : null;
+      const showDiscoverMorePlantsCta = showUpgradeUi && nextUpgradeLevel == null;
+      const upgradeCost = nextUpgradeLevel != null ? getPlantMasteryUnlockCost(nextUpgradeLevel) : 0;
+      const canAffordUpgrade = nextUpgradeLevel != null && gardenSnap.money >= upgradeCost;
+      const ftueUpgradeWaitingForIntroCta =
+        collectionFtuePhase === 'intro_cta' &&
+        !collectionFtueCompleted &&
+        shelfGardenId === DEFAULT_GARDEN_ID &&
+        nextUpgradeLevel === 1;
+      const openShelfPlantInfo = (plantLevel: number) => {
+        playSfx(SFX_IDS.uiConfirmNormal);
+        setPlantInfoPopup({ isVisible: true, level: plantLevel, gardenId: shelfGardenId });
+      };
       return (
         <div
           key={`${shelfGardenId}-${shelfIndex}`}
           className="flex-shrink-0 relative"
           style={{
-            marginTop: shelfInGarden === 0 ? 0 : -80,
+            marginTop: shelfInGarden === 0 ? 0 : COLLECTION_SHELF_STACK_MARGIN_TOP_PX,
             width: '490px',
           }}
         >
@@ -3754,6 +4089,35 @@ export default function App() {
             className="pointer-events-none"
             style={{ width: '100%', height: 'auto' }}
           />
+          {showUpgradeUi && (
+            <img
+              src={assetPath('/assets/collection/collection_shelf_upgrade.png')}
+              alt=""
+              className="absolute left-1/2 pointer-events-none"
+              style={{
+                top: COLLECTION_SHELF_UPGRADE_SPRITE_TOP_PX,
+                width: '100%',
+                height: 'auto',
+                transform: `translateX(-50%) scale(${COLLECTION_SHELF_UPGRADE_SPRITE_SCALE})`,
+                transformOrigin: 'center top',
+                zIndex: 5,
+              }}
+            />
+          )}
+          {showUpgradeUi && (
+            <BarnShelfUpgradeButton
+              gardenId={shelfGardenId}
+              coinCost={upgradeCost}
+              canAfford={canAffordUpgrade && !ftueUpgradeWaitingForIntroCta}
+              discoverMorePlants={showDiscoverMorePlantsCta}
+              ftueUnlockTarget={
+                shelfGardenId === DEFAULT_GARDEN_ID &&
+                nextUpgradeLevel === 1 &&
+                collectionFtuePhase === 'point_unlock'
+              }
+              onClick={(e) => handleShelfUpgradeClick(shelfIndex, shelfGardenId, e)}
+            />
+          )}
           {isPlantCollectionUiUnlocked && (
             <div
               className="absolute flex justify-center items-center"
@@ -3796,16 +4160,66 @@ export default function App() {
                       !(isGarden1FtuePlant && collectionFtuePhase === 'intro_cta')
                     }
                     masteryGlowDelaySec={PLANT_MASTERY_GLOW_ANIM_DELAY_SEC}
-                    onOpenPlantInfo={() => {
-                      playSfx(SFX_IDS.uiConfirmNormal);
-                      if (collectionFtuePhase === 'point_unlock' && isGarden1FtuePlant) {
-                        setCollectionFtuePhase('popup_free');
-                      }
-                      setPlantInfoPopup({ isVisible: true, level: plantLevel, gardenId: shelfGardenId });
-                    }}
+                    onOpenPlantInfo={() => openShelfPlantInfo(plantLevel)}
                   />
                 );
               })}
+            </div>
+          )}
+          {isPlantCollectionUiUnlocked && shelfRewardBar && (
+            <div
+              className={`absolute left-1/2 ${shelfProgressBarInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`}
+              style={{
+                bottom: '77px',
+                transform: 'translateX(calc(-50% - 2px))',
+                zIndex: 12,
+              }}
+            >
+              <CollectionRewardProgressBar
+                variant="progress"
+                numerator={shelfRewardBar.numerator}
+                denominator={shelfRewardBar.denominator}
+                fillPct={shelfRewardBar.fillPct}
+                rewardIconSrc={getCollectionBonusIconPath(
+                  shelfRewardBar.rewardIconSlug,
+                  shelfRewardBarLocked,
+                )}
+                rewardIconId={
+                  shelfGardenId === DEFAULT_GARDEN_ID &&
+                  shelfInGarden === 0 &&
+                  collectionFtuePhase === 'point_bonuses'
+                    ? COLLECTION_FTUE_SHELF0_REWARD_ICON_ID
+                    : undefined
+                }
+                leftIconSrc={shelfProgressLeftIconSrc}
+                showCenterLabel={isActiveUpgradeShelf || (shelfFullyDiscovered && !shelfUsesLockedLeftIcon)}
+                scale={0.8}
+                onBarClick={
+                  shelfProgressBarInteractive
+                    ? () => {
+                        if (collectionFtuePhase != null && !collectionFtueCompleted) {
+                          if (collectionFtuePhase === 'wait_reveal') return;
+                          if (
+                            collectionFtuePhase === 'intro_cta' ||
+                            collectionFtuePhase === 'point_unlock'
+                          ) {
+                            return;
+                          }
+                          if (collectionFtuePhase === 'point_bonuses') {
+                            openCollectionBonusesFromFtue();
+                            return;
+                          }
+                        }
+                        const tierPotCount = getGoldenPotBonusTierPotCountForShelf(shelfIndex);
+                        if (tierPotCount == null) return;
+                        playSfx(SFX_IDS.uiConfirmNormal);
+                        setGoldenPotBonusRevealTier(null);
+                        setGoldenPotBonusScrollTierPotCount(tierPotCount);
+                        setGoldenPotBonusesPopupOpen(true);
+                      }
+                    : undefined
+                }
+              />
             </div>
           )}
         </div>
@@ -3817,9 +4231,13 @@ export default function App() {
       collectionV2Gardens,
       isPlantCollectionUiUnlocked,
       collectionFtuePhase,
+      collectionFtueCompleted,
       masteryPurchaseRevealLevels,
       activeScreen,
-      setCollectionFtuePhase,
+      goldenPotBonusesPopupOpen,
+      goldenPotBonusRevealShelfIndex,
+      handleShelfUpgradeClick,
+      openCollectionBonusesFromFtue,
       setPlantInfoPopup,
       playSfx,
     ],
@@ -3834,9 +4252,41 @@ export default function App() {
     !tasksFtueCompleted &&
     activeScreen === 'FARM' &&
     !isLoading;
+
+  const gardensFloatingButtonUnlocked = garden1PlayerLevel >= GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL;
+  const gardensFtueHoldLockedVisual =
+    gardensFloatingButtonUnlocked && !gardensFtueUnlockRevealed && !gardensFtueCompleted;
+  const gardensFtueActive =
+    gardensFtueStarted &&
+    gardensFtueUnlockRevealed &&
+    !gardensFtueCompleted &&
+    activeScreen === 'FARM' &&
+    !isLoading;
+
+  const newGardenGardensFbFtueActive =
+    newGardenFtuePhase === 'point_gardens_fb' &&
+    !newGardenFtueCompleted &&
+    activeGardenId === 'garden_2' &&
+    activeScreen === 'FARM' &&
+    !gardenSwitchOverlayActive &&
+    !isLoading;
+
+  const newGardenWelcomeFtueActive =
+    newGardenFtuePhase === 'welcome' &&
+    !newGardenFtueCompleted &&
+    activeGardenId === 'garden_2' &&
+    activeScreen === 'FARM' &&
+    !gardenSwitchOverlayActive &&
+    !isLoading;
+
+  const newGardenPickerFtueActive =
+    newGardenFtuePhase === 'picker_view' && !newGardenFtueCompleted && gardenPickerOpen;
+
   const hideBonusesForCollectionFtue =
     collectionFtueActive &&
-    (collectionFtuePhase === 'intro_cta' || collectionFtuePhase === 'point_unlock');
+    (collectionFtuePhase === 'intro_cta' ||
+      collectionFtuePhase === 'point_unlock' ||
+      collectionFtuePhase === 'point_bonuses');
   const showCollectionFtueCta =
     collectionFtueActive &&
     (collectionFtuePhase === 'intro_cta' || collectionFtuePhase === 'point_unlock');
@@ -3891,6 +4341,48 @@ export default function App() {
   const [plantCollectionViewBonusesPressed, setPlantCollectionViewBonusesPressed] = useState(false);
   const [collectionFtueCtaPressed, setCollectionFtueCtaPressed] = useState(false);
 
+  const saveBarnScrollForGarden = useCallback((gardenId: GardenId) => {
+    barnScrollYByGardenRef.current[gardenId] = barnScrollYRef.current;
+  }, []);
+
+  const restoreBarnScrollForGarden = useCallback((gardenId: GardenId) => {
+    const scrollY = barnScrollYByGardenRef.current[gardenId] ?? 0;
+    barnScrollGardenIdRef.current = gardenId;
+    barnScrollYRef.current = scrollY;
+    setBarnScrollY(scrollY);
+  }, []);
+
+  const clampBarnScrollToContent = useCallback(() => {
+    const el = barnScrollRef.current;
+    if (!el) return;
+    const scrollEnd = el.querySelector('[data-barn-scroll-end]') as HTMLElement | null;
+    if (!scrollEnd) return;
+    const maxScroll = Math.max(
+      0,
+      (scrollEnd.offsetTop + scrollEnd.offsetHeight) * barnScale - el.clientHeight,
+    );
+    if (barnScrollYRef.current <= maxScroll) return;
+    const clamped = maxScroll;
+    barnScrollYRef.current = clamped;
+    setBarnScrollY(clamped);
+    barnScrollYByGardenRef.current[barnScrollGardenIdRef.current] = clamped;
+  }, [barnScale]);
+
+  useEffect(() => {
+    const prev = prevActiveScreenForBarnScrollRef.current;
+    if (prev === 'BARN' && activeScreen !== 'BARN') {
+      saveBarnScrollForGarden(barnScrollGardenIdRef.current);
+    }
+    prevActiveScreenForBarnScrollRef.current = activeScreen;
+  }, [activeScreen, saveBarnScrollForGarden]);
+
+  useLayoutEffect(() => {
+    if (activeScreen !== 'BARN') return;
+    restoreBarnScrollForGarden(activeGardenId);
+    const raf = requestAnimationFrame(() => clampBarnScrollToContent());
+    return () => cancelAnimationFrame(raf);
+  }, [activeScreen, activeGardenId, barnScale, restoreBarnScrollForGarden, clampBarnScrollToContent]);
+
   useEffect(() => {
     const el = barnScrollRef.current;
     if (!el) return;
@@ -3916,6 +4408,7 @@ export default function App() {
     
     const updateScroll = (newValue: number) => {
       barnScrollYRef.current = newValue;
+      barnScrollYByGardenRef.current[barnScrollGardenIdRef.current] = newValue;
       setBarnScrollY(newValue);
     };
     
@@ -4063,6 +4556,14 @@ export default function App() {
     }, COLLECTION_FTUE_INTRO_CTA_OVERLAY_DELAY_MS);
     return () => window.clearTimeout(t);
   }, [collectionFtuePhase, activeScreen, collectionFtueCompleted]);
+
+  /** Fail-safe: mid-FTUE reload replays the collection level-up popup before barn FTUE. */
+  useEffect(() => {
+    if (isLoading || collectionFtueCompleted || !collectionFtueRestartPending) return;
+    setCollectionFtueRestartPending(false);
+    setCollectionFtuePhase(null);
+    setLevelUpPopup({ isVisible: true, level: PLANT_COLLECTION_UI_UNLOCK_LEVEL });
+  }, [isLoading, collectionFtueCompleted, collectionFtueRestartPending]);
 
   useEffect(() => {
     return () => {
@@ -4243,7 +4744,7 @@ export default function App() {
     
     // Same % scale as upgrade list (10% steps → 100%; golden pot → 150%) mapped to seeds/min.
     const hasRapidSeedsBoost = activeBoosts.some(b => b.offerId === 'rapid_seeds');
-    const perMinute = getSeedRechargePerMinute(seedProductionLevel, globalGoldenPotCount, hasRapidSeedsBoost);
+    const perMinute = getSeedRechargePerMinute(seedProductionLevel, globalBonusPotCount, hasRapidSeedsBoost);
     lastSeedProgressTimeRef.current = Date.now();
     let rafId: number;
     const percentPerMs = (perMinute * 100) / (60 * 1000); // % progress per millisecond
@@ -4283,7 +4784,7 @@ export default function App() {
     };
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [seedProductionLevel, isLoading, activeBoosts, activeFtueStage, globalGoldenPotCount]);
+  }, [seedProductionLevel, isLoading, activeBoosts, activeFtueStage, globalBonusPotCount]);
 
   // Goal loading countdown: Order Speed (15s base - 1s per level, min 5). Rush Orders boost = 0s. Don't start until slot is 100% faded in.
   const goalIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -4364,7 +4865,7 @@ export default function App() {
       setTimeout(() => {
         lastProcessedGoalLoadingSlotRef.current = null;
         const slotsNow = goalSlotsRef.current;
-        const maxSlots = getMaxPlantGoalSlots(globalGoldenPotCountRef.current);
+        const maxSlots = getMaxPlantGoalSlots(globalBonusPotCountRef.current);
         const firstEmptyIdx = slotsNow.findIndex((s, i) => s === 'empty' && i < maxSlots);
         const deferFourthSlotLoad =
           firstEmptyIdx === 3 &&
@@ -4518,7 +5019,7 @@ export default function App() {
   // When 4th plant slot unlocks (golden pots), start loading in slot 3 if empty and no other loading
   useEffect(() => {
     if (isLoading) return;
-    const maxSlots = getMaxPlantGoalSlots(globalGoldenPotCount);
+    const maxSlots = getMaxPlantGoalSlots(globalBonusPotCount);
     const hasLoading = goalSlots.some((s) => s === 'loading');
     if (hasLoading) return;
     for (let i = 3; i < maxSlots; i++) {
@@ -4544,7 +5045,7 @@ export default function App() {
   useEffect(() => {
     if (isLoading || activeScreen !== 'FARM') return;
     if (!pendingFourthPlantGoalSlotRef.current) return;
-    const maxSlots = getMaxPlantGoalSlots(globalGoldenPotCount);
+    const maxSlots = getMaxPlantGoalSlots(globalBonusPotCount);
     if (maxSlots < 4 || goalSlots[3] !== 'empty') {
       pendingFourthPlantGoalSlotRef.current = false;
       return;
@@ -4731,7 +5232,7 @@ export default function App() {
         : seedsState,
       highestPlantEver
     );
-    const maxCap = getSeedStorageMax(seedsState, globalGoldenPotCountRef.current);
+    const maxCap = getSeedStorageMax(seedsState, globalBonusPotCountRef.current);
 
     const total = seedsInStorage + seedsToAdd;
     const capped = Math.min(maxCap, total);
@@ -4825,7 +5326,7 @@ export default function App() {
   useEffect(() => {
     if (isLoading) return;
     const hasRapidHarvestBoost = activeBoosts.some(b => b.offerId === 'rapid_harvest');
-    const perMinute = getHarvestRechargePerMinute(harvestSpeedLevel, globalGoldenPotCount, hasRapidHarvestBoost);
+    const perMinute = getHarvestRechargePerMinute(harvestSpeedLevel, globalBonusPotCount, hasRapidHarvestBoost);
     lastHarvestProgressTimeRef.current = Date.now();
     let rafId: number;
     const percentPerMs = (perMinute * 100) / (60 * 1000);
@@ -4871,7 +5372,7 @@ export default function App() {
     };
     rafId = scheduleNextFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [harvestSpeedLevel, isLoading, activeBoosts, activeFtueStage, ftue7Scheduled, ftueHarvestSurplusActivated, ftueSeedSurplusActivated, seedsState, globalGoldenPotCount]);
+  }, [harvestSpeedLevel, isLoading, activeBoosts, activeFtueStage, ftue7Scheduled, ftueHarvestSurplusActivated, ftueSeedSurplusActivated, seedsState, globalBonusPotCount]);
 
   // Harvest tap zoom: TAP_BAR_PERCENT per tap when no charges (fast smooth zoom)
   useEffect(() => {
@@ -5803,6 +6304,7 @@ export default function App() {
         if (cell.fertile) value *= 2;
         value = Math.floor(value);
         /* Coin panel → wallet when no goal; base tier value only (no Surplus Sales multiplier). */
+        value = applyGoldenPotMergeCoinBonus(value, globalBonusPotCountRef.current);
         value = applyDoubleCoinsVisualAmount(value, activeBoostsRef.current);
         const dist = Math.hypot(hoverX - walletCenterX, hoverY - walletCenterY);
         coinPanelsWithDist.push({
@@ -6007,7 +6509,7 @@ export default function App() {
               : seedsState,
             highestPlantEverRef.current
           );
-          const maxCap = getSeedStorageMax(seedsState, globalGoldenPotCountRef.current);
+          const maxCap = getSeedStorageMax(seedsState, globalBonusPotCountRef.current);
           setSeedsInStorage((prev) => {
             const wasFull = prev >= maxCap;
             const next = Math.min(maxCap, prev + 1);
@@ -6305,9 +6807,26 @@ export default function App() {
       plantMasteryIntroBarComplete: save.plantMasteryIntroBarComplete === true,
     });
     setCollectionFtueCompleted(save.collectionFtueCompleted === true);
+    setCollectionFtueBonusesReached(save.collectionFtueBonusesReached === true);
+    setCollectionFtueRestartPending(save.collectionFtueRestartPending === true);
     setCollectionFtuePhase(
-      save.collectionFtueCompleted ? null : parseCollectionFtuePhase(save.collectionFtuePhase) ?? null
+      (() => {
+        if (save.collectionFtueCompleted) return null;
+        const phase = parseCollectionFtuePhase(save.collectionFtuePhase) ?? null;
+        if (phase === 'popup_free') return 'point_unlock';
+        if (phase === 'point_garden_nav' && save.collectionFtueBonusesReached) {
+          return null;
+        }
+        return phase;
+      })(),
     );
+    if (
+      save.collectionFtueBonusesReached === true &&
+      parseCollectionFtuePhase(save.collectionFtuePhase) === 'point_garden_nav' &&
+      save.collectionFtueCompleted !== true
+    ) {
+      setCollectionFtueCompleted(true);
+    }
     const tasksFtueStartedLoaded = save.tasksFtueStarted === true;
     const tasksFtueCompletedLoaded = save.tasksFtueCompleted === true;
     setTasksFtueStarted(tasksFtueStartedLoaded);
@@ -6319,6 +6838,21 @@ export default function App() {
         save.playerLevel >= TASKS_FLOATING_BUTTON_UNLOCK_LEVEL);
     setTasksFtueUnlockRevealed(tasksFtueUnlockRevealedLoaded);
     tasksFtueRevealPlayedRef.current = tasksFtueUnlockRevealedLoaded;
+    const gardensFtueStartedLoaded = save.gardensFtueStarted === true;
+    const gardensFtueCompletedLoaded = save.gardensFtueCompleted === true;
+    setGardensFtueStarted(gardensFtueStartedLoaded);
+    setGardensFtueCompleted(gardensFtueCompletedLoaded);
+    const gardensFtueUnlockRevealedLoaded =
+      save.gardensFtueUnlockRevealed === true ||
+      gardensFtueCompletedLoaded ||
+      (!gardensFtueStartedLoaded &&
+        save.playerLevel >= GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL);
+    setGardensFtueUnlockRevealed(gardensFtueUnlockRevealedLoaded);
+    gardensFtueRevealPlayedRef.current = gardensFtueUnlockRevealedLoaded;
+    setNewGardenFtueCompleted(save.newGardenFtueCompleted === true);
+    setNewGardenFtuePhase(
+      save.newGardenFtueCompleted ? null : parseNewGardenFtuePhase(save.newGardenFtuePhase) ?? null,
+    );
     setActiveTab(save.activeTab);
     setRewardedOffers(
       normalizeRewardedOffersForLoad(
@@ -6341,17 +6875,19 @@ export default function App() {
     }
     const v2ForPots = loadGameSaveV2();
     const activeIdForPots = v2ForPots?.activeGardenId ?? DEFAULT_GARDEN_ID;
-    const goldenPotN = getGlobalGoldenPotCount(
-      save.plantMasteryUnlockedLevels ?? [],
-      v2ForPots?.gardens,
-      activeIdForPots,
-    );
+    const activeSnap: GardenCollectionSnapshot = {
+      highestPlantEver: save.highestPlantEver,
+      unlockedLevels: save.plantMasteryUnlockedLevels ?? [],
+      money: save.money,
+    };
+    const goldenPotN = getGlobalBonusProgressPotCount(activeIdForPots, activeSnap, v2ForPots?.gardens);
     goldenPotCountForTierPopupRef.current = goldenPotN;
     if (goldenPotTierUnlockPopupTimeoutRef.current != null) {
       window.clearTimeout(goldenPotTierUnlockPopupTimeoutRef.current);
       goldenPotTierUnlockPopupTimeoutRef.current = null;
     }
     setGoldenPotBonusRevealTier(null);
+    setGoldenPotBonusRevealShelfIndex(null);
     const maxPlantSlotsHydrate = getMaxPlantGoalSlots(goldenPotN);
     const slotsNorm = [...save.goalSlots] as GameSaveV1['goalSlots'];
     const typesNorm = [...save.goalPlantTypes];
@@ -6519,6 +7055,8 @@ export default function App() {
     activeGardenIdRef.current = v2.activeGardenId;
     setActiveGardenAssetContext(v2.activeGardenId);
     setDailyTasksActiveGarden(v2.activeGardenId);
+    barnScrollYByGardenRef.current = readCollectionScrollYFromV2(v2);
+    barnScrollGardenIdRef.current = v2.activeGardenId;
     const g1 = v2.gardens[DEFAULT_GARDEN_ID]?.playerLevel;
     if (g1 != null) setGarden1PlayerLevel(g1);
   }, []);
@@ -6526,24 +7064,85 @@ export default function App() {
   const getSelectableGardenIds = useCallback((): GardenId[] => {
     const v2 = loadGameSaveV2();
     const started = new Set(v2?.gardensStarted ?? [DEFAULT_GARDEN_ID]);
-    const globalCount = getGlobalGoldenPotCount(
-      plantMastery.unlockedLevels,
-      v2?.gardens,
-      activeGardenId,
-    );
-    return SHIPPED_GARDEN_IDS.filter((id) =>
-      isGardenSelectableByGoldenPots(id, globalCount, started.has(id)),
-    );
-  }, [plantMastery.unlockedLevels, activeGardenId, collectionSaveRevision]);
+    return SHIPPED_GARDEN_IDS.filter((id) => isGardenSelectable(id, started.has(id)));
+  }, [collectionSaveRevision]);
 
   const gardensStartedList = useMemo((): GardenId[] => {
     return loadGameSaveV2()?.gardensStarted ?? [DEFAULT_GARDEN_ID];
   }, [collectionSaveRevision, gardenPickerOpen, activeGardenId]);
 
+  const canAffordNextGardenPurchaseNow = useMemo(
+    () =>
+      canAffordNextGardenPurchase(
+        gardensStartedList,
+        activeGardenId,
+        money,
+        collectionV2Gardens,
+      ),
+    [gardensStartedList, activeGardenId, money, collectionV2Gardens],
+  );
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (garden1PlayerLevel < GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL) {
+      prevCanAffordGardenPurchaseRef.current = false;
+      gardensAffordThresholdInitializedRef.current = false;
+      return;
+    }
+    if (!gardensAffordThresholdInitializedRef.current) {
+      gardensAffordThresholdInitializedRef.current = true;
+      prevCanAffordGardenPurchaseRef.current = canAffordNextGardenPurchaseNow;
+      return;
+    }
+    const prev = prevCanAffordGardenPurchaseRef.current;
+    if (canAffordNextGardenPurchaseNow && !prev) {
+      triggerGardensFloatingButtonReadyFx();
+    }
+    prevCanAffordGardenPurchaseRef.current = canAffordNextGardenPurchaseNow;
+  }, [
+    canAffordNextGardenPurchaseNow,
+    garden1PlayerLevel,
+    isLoading,
+    triggerGardensFloatingButtonReadyFx,
+  ]);
+
+  const inProgressBonusTierPotCounts = useMemo(
+    () =>
+      getInProgressBonusTierPotCounts(
+        activeGardenId,
+        activeCollectionSnapshot,
+        collectionV2Gardens,
+        gardensStartedList,
+      ),
+    [activeGardenId, activeCollectionSnapshot, collectionV2Gardens, gardensStartedList],
+  );
+
+  const syncNewGardenFtueToSave = useCallback((phase: NewGardenFtuePhase | null, completed: boolean) => {
+    const v2 = loadGameSaveV2();
+    if (!v2) return;
+    persistGameSaveV2({
+      ...v2,
+      globals: {
+        ...v2.globals,
+        newGardenFtueCompleted: completed,
+        newGardenFtuePhase: completed ? null : phase,
+      },
+      savedAt: Date.now(),
+    });
+  }, []);
+
+  const setNewGardenFtuePhasePersisted = useCallback(
+    (phase: NewGardenFtuePhase | null, completed = false) => {
+      setNewGardenFtueCompleted(completed);
+      setNewGardenFtuePhase(completed ? null : phase);
+      syncNewGardenFtueToSave(phase, completed);
+    },
+    [syncNewGardenFtueToSave],
+  );
+
   const purchaseGardenFromPicker = useCallback(
     (gardenId: GardenId) => {
       if (gardenId === DEFAULT_GARDEN_ID) return;
-      if (!hasGoldenPotNewGardenUnlocked(globalGoldenPotCount)) return;
 
       const v2 = loadGameSaveV2();
       if (!v2) return;
@@ -6574,12 +7173,21 @@ export default function App() {
       }
       persistGameSaveV2(nextV2);
       setCollectionSaveRevision((r) => r + 1);
+
+      const isFirstGarden2Purchase =
+        gardenId === 'garden_2' && !newGardenFtueCompleted && !(v2.gardensStarted ?? []).includes('garden_2');
+      if (isFirstGarden2Purchase) {
+        setNewGardenFtuePhasePersisted('picker_view');
+      }
     },
-    [globalGoldenPotCount],
+    [newGardenFtueCompleted, setNewGardenFtuePhasePersisted],
   );
 
   const applyGardenSwitchState = useCallback(
     (targetId: GardenId) => {
+      if (activeScreenRef.current === 'BARN') {
+        barnScrollYByGardenRef.current[activeGardenIdRef.current] = barnScrollYRef.current;
+      }
       persistGameSnapshotRef.current();
       let v2 = loadGameSaveV2();
       if (!v2) return 0;
@@ -6831,9 +7439,16 @@ export default function App() {
       plantMasteryIntroBarComplete: plantMastery.plantMasteryIntroBarComplete,
       collectionFtueCompleted,
       collectionFtuePhase: collectionFtueCompleted ? null : collectionFtuePhase,
+      collectionFtueBonusesReached,
+      collectionFtueRestartPending,
       tasksFtueStarted,
       tasksFtueUnlockRevealed,
       tasksFtueCompleted,
+      gardensFtueStarted,
+      gardensFtueUnlockRevealed,
+      gardensFtueCompleted,
+      newGardenFtueCompleted,
+      newGardenFtuePhase: newGardenFtueCompleted ? null : newGardenFtuePhase,
       activeTab,
       activeScreen,
       isExpanded,
@@ -6899,8 +7514,12 @@ export default function App() {
       return;
     }
     let v2 = mergeV1IntoV2(existing, normalized);
+    if (activeScreenRef.current === 'BARN') {
+      barnScrollYByGardenRef.current[activeGardenIdRef.current] = barnScrollYRef.current;
+    }
     v2.activeGardenId = activeGardenIdRef.current;
     v2 = applyIdleEarningsToInactiveGardens(v2, payload.savedAt);
+    v2 = applyCollectionScrollYToV2(v2, barnScrollYByGardenRef.current);
     persistGameSaveV2(v2);
   };
 
@@ -6912,7 +7531,7 @@ export default function App() {
     // That prevents any chance of double-credit if pagehide happens right after Collect.
     const amtToCollect = applyGoldenPotOfflineEarningsBonus(
       pendingOfflineEarningsRef.current,
-      globalGoldenPotCountRef.current,
+      globalBonusPotCountRef.current,
     );
     if (amtToCollect <= 0) {
       pendingOfflineEarningsRef.current = 0;
@@ -6946,19 +7565,27 @@ export default function App() {
   useEffect(() => {
     const raw = pendingOfflineEarningsRef.current;
     if (raw <= 0) return;
-    const display = applyGoldenPotOfflineEarningsBonus(raw, globalGoldenPotCount);
+    const display = applyGoldenPotOfflineEarningsBonus(raw, globalBonusPotCount);
     if (!offlineEarningsUi?.open) return;
     if (display === offlineEarningsUi.amount) return;
     setOfflineEarningsUi((prev) =>
       prev?.open ? { ...prev, amount: display } : prev,
     );
-  }, [globalGoldenPotCount, offlineEarningsUi?.open, offlineEarningsUi?.amount]);
+  }, [globalBonusPotCount, offlineEarningsUi?.open, offlineEarningsUi?.amount]);
 
   /** Persist once when leaving loading screen so quick refresh doesn’t lose a new session. */
   useEffect(() => {
     if (isLoading) return;
     persistGameSnapshotRef.current();
   }, [isLoading]);
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (newGardenFtueCompleted) return;
+    if (newGardenFtuePhase !== 'picker_view') return;
+    if (gardenPickerOpen) return;
+    setGardenPickerOpen(true);
+  }, [isLoading, newGardenFtueCompleted, newGardenFtuePhase, gardenPickerOpen]);
 
   const appHiddenAtRef = useRef<number | null>(null);
 
@@ -7366,6 +7993,7 @@ export default function App() {
                       setSettingsOpenedFromFtue(false);
                       setPauseMenuOpen(true);
                     }}
+                    settingsButtonVisuallyHidden={activeFtueStage != null}
                     activeBoosts={activeBoosts}
                     activeBoostAreaRef={activeBoostAreaRef}
                     activeBoostMinWidthPx={ACTIVE_BOOST_INDICATOR_SIZE_PX}
@@ -7408,7 +8036,7 @@ export default function App() {
                   style={{ top: -25, height: 110, paddingTop: 25 }}
                 >
                 {[0, 1, 2, 3, 4].map((slotIdx) => {
-                  const maxGoalSlots = getMaxPlantGoalSlots(globalGoldenPotCount);
+                  const maxGoalSlots = getMaxPlantGoalSlots(globalBonusPotCount);
                   const visibleOrder = goalDisplayOrder.filter((i) => goalSlots[i] !== 'empty' && i < maxGoalSlots);
                   const goalDisplayIndex = visibleOrder.indexOf(slotIdx);
                   const state = goalSlots[slotIdx];
@@ -7532,7 +8160,7 @@ export default function App() {
 
                       setTimeout(() => {
                         setGoalCompactionStagger(null);
-                        const maxSlots = getMaxPlantGoalSlots(globalGoldenPotCount);
+                        const maxSlots = getMaxPlantGoalSlots(globalBonusPotCount);
                         setGoalSlots((s) => {
                           if (ftue9NoNewGoalsRef.current) return s; // FTUE 9: no new goal loading; keep slot empty
                           const hasLoading = s.some((state) => state === 'loading');
@@ -7804,25 +8432,40 @@ export default function App() {
                       />
                     </div>
                     {GARDENS_FLOATING_BUTTON_UI_VISIBLE ? (
-                      <FloatingButton
-                        gardenId={activeGardenId}
-                        title="Gardens"
-                        locked={garden1PlayerLevel < GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL}
-                        unlockLevel={GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL}
-                        iconSrc={assetPath(
-                          garden1PlayerLevel >= GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL
-                            ? '/assets/icons/floating_buttons/icon_fb_gardens.png'
-                            : '/assets/icons/floating_buttons/icon_fb_gardens_locked.png',
-                        )}
-                        onClick={() => {
-                          playSfx(SFX_IDS.uiConfirmNormal);
-                          if (garden1PlayerLevel < GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL) {
-                            setLockedGardenPickerPopupOpen(true);
-                            return;
-                          }
-                          setGardenPickerOpen(true);
-                        }}
-                      />
+                      <div
+                        id={GARDENS_FTUE_FLOATING_BUTTON_ID}
+                        ref={gardensFloatingButtonRef}
+                        className="inline-block"
+                      >
+                        <FloatingButtonGardens
+                          gardenId={activeGardenId}
+                          garden1PlayerLevel={garden1PlayerLevel}
+                          unlockLevel={GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL}
+                          gardensStarted={gardensStartedList}
+                          activeGardenId={activeGardenId}
+                          activeMoney={money}
+                          gardens={collectionV2Gardens}
+                          readyBounceNonce={gardensFbReadyBounceNonce}
+                          forceLockedVisual={gardensFtueHoldLockedVisual}
+                          onClick={() => {
+                            playSfx(SFX_IDS.uiConfirmNormal);
+                            if (
+                              garden1PlayerLevel < GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL ||
+                              gardensFtueHoldLockedVisual
+                            ) {
+                              setLockedGardenPickerPopupOpen(true);
+                              return;
+                            }
+                            if (newGardenGardensFbFtueActive) {
+                              setNewGardenFtuePhasePersisted(null, true);
+                            }
+                            if (!gardensFtueCompleted) {
+                              setGardensFtueCompleted(true);
+                            }
+                            setGardenPickerOpen(true);
+                          }}
+                        />
+                      </div>
                     ) : null}
                   </FloatingButtonStack>
                 </>
@@ -8068,6 +8711,7 @@ export default function App() {
                           if (cell?.fertile) value *= 2;
                           value = Math.floor(value);
                           /* Same coin panel + wallet path as surplus harvest; no Surplus Sales multiplier. */
+                          value = applyGoldenPotMergeCoinBonus(value, globalBonusPotCountRef.current);
                           value = applyDoubleCoinsVisualAmount(value, activeBoostsRef.current);
                           setActiveCoinPanels((prev) => [
                             ...prev,
@@ -8226,7 +8870,7 @@ export default function App() {
                       ftue10Phase === 'panel_open_orders' &&
                       activeTab === 'SEEDS'
                     }
-                    goldenPotCount={globalGoldenPotCount}
+                    goldenPotCount={globalBonusPotCount}
                     onUpgradePurchase={(upgradeId, purchaseTab) => {
                       playSfx(SFX_IDS.uiConfirmReward);
                       applyDailyTaskRowsUpdate(
@@ -8411,17 +9055,35 @@ export default function App() {
                             ? assetPath('/assets/ui/ui_plantmastery.png')
                             : assetPath('/assets/ui/ui_plantmastery_locked.png')
                         }
-                        alt="Plant Collection"
+                        alt={collectionPanelTitle}
                         style={{
                           width: '320px',
                           height: 'auto',
                           maxWidth: 'none',
                         }}
                       />
+                      <img
+                        src={
+                          isPlantCollectionUiUnlocked
+                            ? getCollectionGardenIconPath(activeGardenId)
+                            : getCollectionLockGardenIconPath(activeGardenId)
+                        }
+                        alt=""
+                        className="absolute left-1/2 pointer-events-none object-contain"
+                        style={{
+                          top: 23,
+                          width: isPlantCollectionUiUnlocked
+                            ? COLLECTION_PANEL_GARDEN_ICON_PX * COLLECTION_PANEL_GARDEN_ICON_UNLOCKED_SCALE
+                            : COLLECTION_PANEL_GARDEN_ICON_PX,
+                          height: 'auto',
+                          transform: 'translateX(-50%)',
+                        }}
+                        draggable={false}
+                      />
                       <div
                         className="absolute inset-0 flex flex-col items-center"
                         style={{
-                          paddingTop: isPlantCollectionUiUnlocked ? 30 : 121,
+                          paddingTop: 131,
                           paddingLeft: 14,
                           paddingRight: 14,
                         }}
@@ -8435,7 +9097,7 @@ export default function App() {
                             lineHeight: 1,
                           }}
                         >
-                          Plant Collection
+                          {collectionPanelTitle}
                         </h2>
                         <div className="w-full flex items-center justify-center" style={{ marginTop: 4, marginBottom: 6 }}>
                           <img
@@ -8453,6 +9115,10 @@ export default function App() {
                         </div>
                         {isPlantCollectionUiUnlocked ? (
                           <>
+                            <div
+                              id={COLLECTION_FTUE_PANEL_COPY_ID}
+                              className="w-full flex flex-col items-center"
+                            >
                             <p
                               className="font-medium text-center leading-relaxed italic w-full"
                               style={{
@@ -8464,116 +9130,9 @@ export default function App() {
                                 marginBottom: 8,
                               }}
                             >
-                              <span className="block">Upgrade your plants with a Golden Pot.</span>
-                              <span className="block">Collect Golden Pots to unlock bonuses.</span>
+                              <span className="block">Upgrade plants shelf by shelf.</span>
+                              <span className="block">Finish a row to unlock Bonuses.</span>
                             </p>
-                            {/* Collection reward progress: golden pot tally toward the next bonus tier. */}
-                            <div style={{ marginTop: -8 }}>
-                            <div className="flex w-full justify-center">
-                            <div
-                              className="inline-flex items-center justify-center"
-                              style={{ marginTop: 0 }}
-                            >
-                              <span
-                                className="flex items-center justify-center leading-none shrink-0 relative z-20"
-                                style={{
-                                  width: 50,
-                                  height: 50,
-                                  marginRight: -10,
-                                }}
-                              >
-                                <span
-                                  ref={collectionBarGoldenPotRef}
-                                  className={`flex items-center justify-center ${collectionBarPotBounce ? 'collection-bar-pot-bounce' : ''}`}
-                                  style={{ width: 50, height: 50 }}
-                                >
-                                  <img
-                                    src={getPlantPotGoldPath()}
-                                    alt=""
-                                    className="object-contain"
-                                    style={{ width: 50, height: 50, transform: 'translate(2px, -1px)' }}
-                                    draggable={false}
-                                  />
-                                </span>
-                              </span>
-                              <div
-                                className="relative shrink-0"
-                                style={{ width: 159, height: 26 }}
-                              >
-                              <div
-                                className="absolute inset-y-0 inline-flex items-center border overflow-hidden"
-                                style={{
-                                  left: -13,
-                                  right: -13,
-                                  height: 26,
-                                  backgroundColor: '#775041',
-                                  borderWidth: 2,
-                                  borderColor: '#e9dcaf',
-                                  borderRadius: 13,
-                                }}
-                              >
-                                <div className="flex-1 h-full flex items-stretch relative" style={{ padding: 1.5 }}>
-                                  <span
-                                    className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none font-black text-xs leading-none z-10"
-                                    style={{
-                                      color: '#fcf0c7',
-                                      WebkitTextStroke: '1px rgba(0,0,0,0.5)',
-                                      paintOrder: 'stroke fill',
-                                    }}
-                                  >
-                                    {collectionBarNumerator}/{collectionBarDenominator}
-                                  </span>
-                                  <div
-                                    className="w-full h-full relative overflow-hidden"
-                                    style={{
-                                      backgroundColor: '#775041',
-                                      borderRadius: 10,
-                                    }}
-                                  >
-                                    <div
-                                      className="absolute left-0 top-0 bottom-0 overflow-hidden"
-                                      style={{
-                                        width: `${collectionBarFillPct}%`,
-                                        minWidth: collectionBarFillPct > 0 ? 20 : 0,
-                                        transition: 'width 250ms cubic-bezier(0.25, 1, 0.5, 1)',
-                                        borderRadius: '0 10px 10px 0',
-                                      }}
-                                    >
-                                      <div
-                                        className="h-full w-full"
-                                        style={{
-                                          borderRadius: '0 10px 10px 0',
-                                          padding: 1,
-                                          boxSizing: 'border-box',
-                                          background: 'linear-gradient(180deg, #cae060 0%, #9db546 100%)',
-                                        }}
-                                      >
-                                        <div
-                                          className="h-full w-full"
-                                          style={{
-                                            borderRadius: '0 9px 9px 0',
-                                            background: 'linear-gradient(180deg, #b8d458 0%, #61882b 100%)',
-                                          }}
-                                        />
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                              </div>
-                              <div
-                                className="w-[44px] h-[44px] shrink-0 relative z-20 flex items-center justify-center"
-                                style={{ marginLeft: -10 }}
-                              >
-                                <img
-                                  src={collectionRewardIconSrc}
-                                  alt=""
-                                  className="w-[40px] h-[40px] object-contain"
-                                  draggable={false}
-                                />
-                              </div>
-                            </div>
-                            </div>
                             {!hideBonusesForCollectionFtue && (
                             <button
                               id="collection-ftue-view-bonuses"
@@ -8584,10 +9143,17 @@ export default function App() {
                               onClick={() => {
                                 playSfx(SFX_IDS.uiConfirmNormal);
                                 setGoldenPotBonusRevealTier(null);
+                                setGoldenPotBonusScrollTierPotCount(null);
                                 setGoldenPotBonusesPopupOpen(true);
                               }}
-                              className={`relative w-1/2 mx-auto flex items-center justify-center mt-2 h-8 transition-all border outline outline-1 rounded-[8px] shadow-[inset_0_1px_1px_rgba(255,255,255,0.4)] active:translate-y-[2px] active:border-b-0 active:mb-[4px]`}
+                              className={`relative mx-auto flex items-center justify-center whitespace-nowrap transition-all border outline outline-1 rounded-[8px] shadow-[inset_0_1px_1px_rgba(255,255,255,0.4)] active:translate-y-[2px] active:border-b-0 active:mb-[4px]`}
                               style={{
+                                height: 34,
+                                width: 'fit-content',
+                                minWidth: '64%',
+                                marginTop: 3,
+                                paddingLeft: 16,
+                                paddingRight: 16,
                                 backgroundColor: plantCollectionViewBonusesPressed ? '#61882b' : '#cae060',
                                 borderColor: plantCollectionViewBonusesPressed ? '#61882b' : '#9db546',
                                 borderBottomWidth: plantCollectionViewBonusesPressed ? '0px' : '4px',
@@ -8598,14 +9164,15 @@ export default function App() {
                               }}
                             >
                               <span
-                                className="text-[13px] font-black tracking-tighter"
+                                className="font-black tracking-tighter"
                                 style={{
                                   color: plantCollectionViewBonusesPressed ? '#cbe05d' : '#587e26',
+                                  fontSize: 15.6,
                                 }}
                               >
                                 View Bonuses
-                              </span>
-                            </button>
+                                </span>
+                              </button>
                             )}
                             </div>
                             {showCollectionFtueCta && (
@@ -8619,12 +9186,16 @@ export default function App() {
                                   if (collectionFtueCtaDisabled) return;
                                   setCollectionFtuePhase('point_unlock');
                                 }}
-                                className={`relative mx-auto flex items-center justify-center mt-2 min-h-8 px-2 py-2 transition-all border outline outline-1 rounded-[8px] shadow-[inset_0_1px_1px_rgba(255,255,255,0.4)] ${
+                                className={`relative mx-auto flex items-center justify-center whitespace-nowrap transition-all border outline outline-1 rounded-[8px] shadow-[inset_0_1px_1px_rgba(255,255,255,0.4)] ${
                                   collectionFtueCtaDisabled ? '' : 'active:translate-y-[2px] active:border-b-0 active:mb-[4px]'
                                 }`}
                                 style={{
-                                  width: '76.8%',
-                                  maxWidth: 240,
+                                  height: 34,
+                                  width: 'fit-content',
+                                  minWidth: '64%',
+                                  marginTop: 3,
+                                  paddingLeft: 16,
+                                  paddingRight: 16,
                                   boxSizing: 'border-box',
                                   backgroundColor: collectionFtueCtaDisabled
                                     ? '#e3c28c'
@@ -8647,16 +9218,18 @@ export default function App() {
                                 }}
                               >
                                 <span
-                                  className="w-full font-black tracking-tight text-center leading-snug px-0.5 text-[14px]"
+                                  className="font-bold tracking-tighter"
                                   style={{
                                     color: collectionFtueCtaDisabled
                                       ? '#a68e64'
                                       : collectionFtueCtaPressed
                                         ? '#cbe05d'
                                         : '#587e26',
+                                    fontSize: 15.6,
+                                    fontWeight: 700,
                                   }}
                                 >
-                                  Let&apos;s Unlock a Golden Pot
+                                  Let&apos;s Upgrade a plant
                                 </span>
                               </button>
                             )}
@@ -8673,7 +9246,7 @@ export default function App() {
                               marginBottom: 8,
                             }}
                           >
-                            The Collection is unlocked at
+                            The {collectionPanelTitle} is unlocked at:
                             <span
                               className="block font-black not-italic"
                               style={{ color: '#67a4c6', fontFamily: 'Inter, sans-serif' }}
@@ -8686,55 +9259,22 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Shelves: garden labels + unlock pill + glow when mastery is pending */}
+                  {/* Shelves: active garden only */}
                   <div
                     className="relative flex flex-col items-center"
-                    style={{ marginTop: collectionShelvesMarginTopPx }}
+                    style={{
+                      marginTop:
+                        collectionShelvesMarginTopPx +
+                        (isPlantCollectionUiUnlocked
+                          ? isCollectionPhoneLayout
+                            ? COLLECTION_PHONE_SHELVES_EXTRA_MARGIN_TOP_UNLOCKED_PX
+                            : COLLECTION_SHELVES_EXTRA_MARGIN_TOP_UNLOCKED_PX
+                          : 0),
+                    }}
                     data-barn-shelves
                   >
-                    <GardenLabel
-                      gardenId={DEFAULT_GARDEN_ID}
-                      label={getCollectionGardenDisplayName(DEFAULT_GARDEN_ID)}
-                      marginTop={0}
-                      marginBottom={COLLECTION_GARDEN_LABEL_MARGIN_BOTTOM_PX}
-                      scale={collectionGardenLabelScale}
-                    />
                     {Array.from({ length: BARN_SHELVES_PER_GARDEN }, (_, shelfInGarden) =>
-                      renderCollectionShelf(shelfInGarden),
-                    )}
-                    <GardenLabel
-                      gardenId={isFruitGardenCollectionUnlocked ? 'garden_2' : undefined}
-                      label={
-                        isFruitGardenCollectionUnlocked
-                          ? getCollectionGardenDisplayName('garden_2')
-                          : COLLECTION_UNDISCOVERED_GARDEN_LABEL
-                      }
-                      iconSrc={
-                        isFruitGardenCollectionUnlocked
-                          ? undefined
-                          : getCollectionGardenLockedIconPath()
-                      }
-                      marginTop={collectionGardenLabelAfterShelvesMarginTopPx}
-                      marginBottom={
-                        isFruitGardenCollectionUnlocked
-                          ? COLLECTION_GARDEN_LABEL_MARGIN_BOTTOM_PX
-                          : 0
-                      }
-                      scale={collectionGardenLabelScale}
-                    />
-                    {isFruitGardenCollectionUnlocked && (
-                      <>
-                        {Array.from({ length: BARN_SHELVES_PER_GARDEN }, (_, shelfInGarden) =>
-                          renderCollectionShelf(BARN_SHELVES_PER_GARDEN + shelfInGarden),
-                        )}
-                        <GardenLabel
-                          label={COLLECTION_COMING_SOON_LABEL}
-                          iconSrc={getCollectionGardenLockedIconPath()}
-                          marginTop={collectionGardenLabelAfterShelvesMarginTopPx}
-                          marginBottom={0}
-                          scale={collectionGardenLabelScale}
-                        />
-                      </>
+                      renderCollectionShelf(getShelfIndexForGarden(activeGardenId, shelfInGarden)),
                     )}
                   </div>
                   <div
@@ -8804,7 +9344,7 @@ export default function App() {
             BARN: barnNotification && isPlantCollectionUiUnlocked,
           }}
           collectionFtueGardenFinger={collectionFtuePhase === 'point_garden_nav' && !collectionFtueCompleted}
-          blockInput={tasksFtueActive}
+          blockInput={tasksFtueActive || gardensFtueActive || newGardenGardensFbFtueActive}
         />
 
         {/* Leaf burst: portal to body so never clipped; viewport coords */}
@@ -8914,6 +9454,18 @@ export default function App() {
                 appScale={appScale}
                 burstScale={1.25}
                 onComplete={() => setTasksFbLeafBursts((prev) => prev.filter((x) => x.id !== b.id))}
+              />
+            ))}
+            {gardensFbLeafBursts.map((b) => (
+              <LeafBurst
+                key={b.id}
+                x={b.x}
+                y={b.y}
+                startTime={b.startTime}
+                particleCount={LEAF_BURST_BASELINE_COUNT}
+                appScale={appScale}
+                burstScale={1.25}
+                onComplete={() => setGardensFbLeafBursts((prev) => prev.filter((x) => x.id !== b.id))}
               />
             ))}
             {boostBursts.map((b) => (
@@ -9138,7 +9690,7 @@ export default function App() {
                   window.setTimeout(() => setFtue11ThreePlantGoalWindowActive(false), 3200);
 
                   // Spawn 3 starter goals (plant 1/2/3) with 0.5s stagger and bounce.
-                  const maxSlots = getMaxPlantGoalSlots(globalGoldenPotCount);
+                  const maxSlots = getMaxPlantGoalSlots(globalBonusPotCount);
                   const cropYieldLevel = getCropYieldPerHarvest(cropsState);
                   const plantLevels = [1, 2, 3];
                   const emptySlots: number[] = [];
@@ -9219,8 +9771,20 @@ export default function App() {
             {activeScreen === 'BARN' &&
               collectionFtuePhase &&
               !collectionFtueCompleted &&
+              collectionFtuePhase === 'point_bonuses' &&
+              !goldenPotBonusesPopupOpen && (
+                <CollectionBonusesFtueOverlay
+                  active
+                  appScale={appScale}
+                  isFadingOut={collectionFtueBonusesFading}
+                  onViewBonuses={openCollectionBonusesFromFtue}
+                />
+              )}
+            {activeScreen === 'BARN' &&
+              collectionFtuePhase &&
+              !collectionFtueCompleted &&
               !(collectionFtuePhase === 'popup_free' && plantInfoPopup?.isVisible) &&
-              !(collectionFtuePhase === 'point_bonuses' && goldenPotBonusesPopupOpen) &&
+              collectionFtuePhase !== 'point_bonuses' &&
               collectionFtuePhase !== 'point_garden_nav' && (
                 <CollectionFtueOverlay
                   active
@@ -9230,7 +9794,7 @@ export default function App() {
                       ? null
                       : collectionFtueHoleRect
                   }
-                  fingerStyle={collectionFtuePhase === 'point_bonuses' ? 'point_right' : 'seed'}
+                  fingerStyle="seed"
                   blockerTint={COLLECTION_FTUE_BLOCKER_TINT}
                   holePaddingPx={6}
                 />
@@ -9243,6 +9807,18 @@ export default function App() {
                 blockerTint={COLLECTION_FTUE_BLOCKER_TINT}
                 holePaddingPx={8}
               />
+            )}
+            {gardensFtueActive && (
+              <CollectionFtueOverlay
+                active
+                holeRect={gardensFtueHoleRect}
+                fingerStyle="point_right"
+                blockerTint={COLLECTION_FTUE_BLOCKER_TINT}
+                holePaddingPx={8}
+              />
+            )}
+            {newGardenGardensFbFtueActive && (
+              <NewGardenGardensFbFtueOverlay active appScale={appScale} />
             )}
           </div>,
           document.body
@@ -9265,7 +9841,7 @@ export default function App() {
                 setSettingsOpenedFromFtue(true);
                 setPauseMenuOpen(true);
               }}
-              className="pointer-events-auto flex h-full w-full items-center justify-center rounded-full transition-all active:scale-95"
+              className="pointer-events-auto flex h-full w-full flex-shrink-0 items-center justify-center rounded-full transition-all active:scale-95"
               style={{
                 backgroundColor: '#775041',
                 borderWidth: 1,
@@ -9273,7 +9849,18 @@ export default function App() {
               }}
               aria-label="Settings"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="#fcf0c7" className="w-6 h-6">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={2.5}
+                stroke="#fcf0c7"
+                style={{
+                  width: ftueSettingsButtonRect.width * (SETTINGS_GEAR_ICON_PX / SETTINGS_GEAR_PX),
+                  height: ftueSettingsButtonRect.height * (SETTINGS_GEAR_ICON_PX / SETTINGS_GEAR_PX),
+                  flexShrink: 0,
+                }}
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
@@ -9340,6 +9927,13 @@ export default function App() {
                       setTasksFtueStarted(true);
                       pendingTasksFtueRevealRef.current = true;
                     }
+                    if (
+                      levelUpPopup.level === GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL &&
+                      !gardensFtueCompleted
+                    ) {
+                      setGardensFtueStarted(true);
+                      pendingGardensFtueRevealRef.current = true;
+                    }
                     // Settings "Level Up" already advances `playerLevel` before showing the popup.
                     // Only increment here if the player is still below the popup level.
                     setPlayerLevel((l) => {
@@ -9354,6 +9948,7 @@ export default function App() {
                       setActiveScreen('BARN');
                       skipNextBarnPendingBounceRef.current = true;
                       if (!collectionFtueCompleted) {
+                        setCollectionFtueRestartPending(false);
                         setCollectionFtuePhase('intro_cta');
                       }
                     }
@@ -9375,14 +9970,18 @@ export default function App() {
             {goldenPotBonusesPopupOpen && (
               <GoldenPotBonusesPopup
                 isVisible
-                goldenPotCount={globalGoldenPotCount}
+                goldenPotCount={globalBonusPotCount}
                 maxGoldenPots={COLLECTION_PLANT_COUNT}
                 appScale={appScale}
                 revealTierPotCount={goldenPotBonusRevealTier}
+                scrollToTierPotCount={goldenPotBonusScrollTierPotCount}
+                inProgressTierPotCounts={inProgressBonusTierPotCounts}
                 onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
                 onClose={() => {
                   lastOtherPopupClosedAtRef.current = Date.now();
                   setGoldenPotBonusRevealTier(null);
+                  setGoldenPotBonusScrollTierPotCount(null);
+                  setGoldenPotBonusRevealShelfIndex(null);
                   setGoldenPotBonusesPopupOpen(false);
                   setCollectionFtuePhase((p) => (p === 'point_bonuses' ? 'point_garden_nav' : p));
                   queueMicrotask(() => {
@@ -9639,62 +10238,7 @@ export default function App() {
                 plantDescription={getPlantData(plantInfoPopup.level, plantInfoPopup.gardenId).description}
                 isUnlocked={plantInfoPopup.level <= plantInfoPopupGardenSnap.highestPlantEver}
                 masteryPotUnlocked={plantInfoPopupGardenSnap.unlockedLevels.includes(plantInfoPopup.level)}
-                coinWalletMoney={plantInfoPopupGardenSnap.money}
                 appScale={appScale}
-                restrictClose={
-                  collectionFtuePhase === 'popup_free' &&
-                  plantInfoPopup.gardenId === DEFAULT_GARDEN_ID &&
-                  plantInfoPopup.level === 1 &&
-                  !collectionFtueCompleted
-                }
-                masteryUnlock={
-                  plantInfoPopup.level <= plantInfoPopupGardenSnap.highestPlantEver
-                    ? {
-                        coinCost: getPlantMasteryUnlockCost(plantInfoPopup.level),
-                        canAfford:
-                          plantInfoPopupGardenSnap.money >= getPlantMasteryUnlockCost(plantInfoPopup.level),
-                        isUnlocked: plantInfoPopupGardenSnap.unlockedLevels.includes(plantInfoPopup.level),
-                        onPurchase: (startPoint) => {
-                          if (plantInfoPopupGardenSnap.unlockedLevels.includes(plantInfoPopup.level)) return;
-                          playSfx(SFX_IDS.uiConfirmReward);
-                          suppressPlantInfoDeclineSfxRef.current = true;
-                          const level = plantInfoPopup.level;
-                          const popupGardenId = plantInfoPopup.gardenId;
-                          const wasCollectionFtuePopup =
-                            collectionFtuePhase === 'popup_free' &&
-                            popupGardenId === DEFAULT_GARDEN_ID &&
-                            level === 1 &&
-                            !collectionFtueCompleted;
-                          skipNextBarnPendingBounceRef.current = true;
-                          const prevPotCount = globalGoldenPotCountRef.current;
-                          purchasePlantMasteryForLevel(level, popupGardenId);
-                          setCollectionBarHeldNumeratorCount(prevPotCount);
-                          setCollectionBarHeldFillPotCount(prevPotCount);
-                          setActiveGoldenPotProgressParticles((prev) => [
-                            ...prev,
-                            {
-                              id: `golden-pot-bar-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-                              startX: startPoint.x,
-                              startY: startPoint.y,
-                            },
-                          ]);
-                          if (wasCollectionFtuePopup) {
-                            setCollectionFtuePhase('wait_reveal');
-                          }
-                          lastOtherPopupClosedAtRef.current = Date.now();
-                          setPlantInfoPopup(null);
-                          window.setTimeout(() => {
-                            triggerMasteryPurchaseReveal(level, popupGardenId);
-                            if (wasCollectionFtuePopup) {
-                              window.setTimeout(() => {
-                                setCollectionFtuePhase('point_bonuses');
-                              }, 720);
-                            }
-                          }, 0);
-                        },
-                      }
-                    : undefined
-                }
               />
             )}
 
@@ -9967,21 +10511,45 @@ export default function App() {
               appScale={appScale}
             />
 
+            {newGardenWelcomeFtueActive ? (
+              <FtuePopup
+                isVisible
+                onClose={() => {
+                  playSfx(SFX_IDS.uiConfirmNormal);
+                  setNewGardenFtuePhasePersisted('point_gardens_fb');
+                }}
+                blockBackdropClick
+                header={{ icon: getGardenPickerGardenIconPath('garden_2') }}
+                title={NEW_GARDEN_FTUE_WELCOME_TITLE}
+                titleFontSizeRem={NEW_GARDEN_FTUE_WELCOME_TITLE_FONT_SIZE_REM}
+                showDivider
+                description={NEW_GARDEN_FTUE_WELCOME_DESCRIPTION}
+                button={{ text: "Lets go!" }}
+                burstWidth={260}
+                burstHeight={320}
+                appScale={appScale}
+              />
+            ) : null}
+
             <GardenPickerPopup
               isVisible={gardenPickerOpen}
               onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
               onClose={() => setGardenPickerOpen(false)}
               activeGardenId={activeGardenId}
               gardensStarted={gardensStartedList}
-              globalGoldenPotCount={globalGoldenPotCount}
               playerMoney={money}
+              newGardenFtueViewGardenId={newGardenPickerFtueActive ? 'garden_2' : null}
               onSelectGarden={(gardenId) => {
                 playSfx(SFX_IDS.uiConfirmNormal);
+                if (newGardenFtuePhase === 'picker_view' && gardenId !== 'garden_2') return;
+                if (newGardenFtuePhase === 'picker_view') {
+                  setNewGardenFtuePhasePersisted('welcome');
+                }
                 switchToGarden(gardenId);
               }}
               onPurchaseGarden={purchaseGardenFromPicker}
               onPurchaseSound={() => playSfx(SFX_IDS.uiConfirmReward)}
-              closeOnBackdropClick
+              closeOnBackdropClick={!newGardenPickerFtueActive}
               appScale={appScale}
             />
 
@@ -10024,7 +10592,7 @@ export default function App() {
                 setActiveBoosts([]);
                 setStoreFreeOfferSlots(pickInitialStoreFreeOfferSlots());
                 setStoreSlotCooldownEnds([0, 0]);
-                if (hasGoldenPotDailyAllowance(globalGoldenPotCount)) {
+                if (hasGoldenPotDailyAllowance(globalBonusPotCount)) {
                   const v2 = loadGameSaveV2();
                   if (v2) {
                     persistGameSaveV2(clearDailyAllowanceClaimedForAllGardens(v2));
@@ -10086,6 +10654,7 @@ export default function App() {
                 activeGardenId,
                 activeCollectionSnapshot,
                 collectionV2Gardens,
+                gardensStartedList,
               )}
               onUnlockPlantClick={handleDevUnlockPlantClick}
               onGoldenPotClick={handleDevGoldenPotClick}
@@ -10135,7 +10704,7 @@ export default function App() {
                     pendingOfflineEarningsRef.current *= 2;
                     const nextAmount = applyGoldenPotOfflineEarningsBonus(
                       pendingOfflineEarningsRef.current,
-                      globalGoldenPotCountRef.current,
+                      globalBonusPotCountRef.current,
                     );
                     setOfflineEarningsUi((prev) => {
                       if (!prev) return prev;
@@ -10205,29 +10774,20 @@ export default function App() {
                 <GoldenPotProgressParticle
                   key={p.id}
                   data={p}
-                  progressBarTargetRef={collectionBarGoldenPotRef}
                   walletFallbackTargetRef={goldenPotWalletIconRef}
-                  onImpact={(target) => {
+                  onImpact={() => {
                     playSfx(SFX_IDS.coinImpact);
-                    if (target === 'wallet') {
-                      setGoldenPotWalletFlashActive(true);
-                      setGoldenPotWalletBounceTrigger((t) => t + 1);
-                      if (goldenPotWalletFlashTimeoutRef.current) {
-                        clearTimeout(goldenPotWalletFlashTimeoutRef.current);
-                      }
-                      goldenPotWalletFlashTimeoutRef.current = setTimeout(
-                        () => setGoldenPotWalletFlashActive(false),
-                        120,
-                      );
-                    } else {
-                      setCollectionBarPotBounce(true);
+                    setGoldenPotWalletFlashActive(true);
+                    setGoldenPotWalletBounceTrigger((t) => t + 1);
+                    if (goldenPotWalletFlashTimeoutRef.current) {
+                      clearTimeout(goldenPotWalletFlashTimeoutRef.current);
                     }
+                    goldenPotWalletFlashTimeoutRef.current = setTimeout(
+                      () => setGoldenPotWalletFlashActive(false),
+                      120,
+                    );
                     window.setTimeout(() => {
-                      setCollectionBarPotBounce(false);
                       setCollectionBarHeldNumeratorCount(null);
-                      window.setTimeout(() => {
-                        setCollectionBarHeldFillPotCount(null);
-                      }, 80);
                     }, 200);
                   }}
                   onComplete={() =>

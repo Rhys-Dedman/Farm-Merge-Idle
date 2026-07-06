@@ -66,6 +66,7 @@ const ASSETS_TO_PRELOAD = [
   '/assets/background/background_loading.png',
   // Barn
   '/assets/collection/collection_shelf.png',
+  '/assets/collection/collection_shelf_upgrade.png',
   '/assets/collection/collection_roof.png',
   '/assets/collection/collection_tools.png',
   '/assets/ui/generic/ui_collection_garden.png',
