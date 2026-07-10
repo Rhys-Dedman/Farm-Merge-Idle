@@ -36,6 +36,7 @@ const ASSETS_TO_PRELOAD = [
   '/assets/icons/upgrades/icon_harvest.png',
   '/assets/icons/generic_buttons/icon_watchad.png',
   '/assets/icons/generic_buttons/icon_watchad_large.png',
+  '/assets/ui/generic/ui_adbreak.png',
   '/assets/icons/coins/icon_coin_watchad.png',
   '/assets/ui/ui_logo.png',
   '/assets/icons/generic_buttons/icon_lock.png',

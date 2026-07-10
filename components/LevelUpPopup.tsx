@@ -57,6 +57,8 @@ interface LevelUpPopupProps {
   hideLevel?: boolean;
   /** Level ≥ 6: show Discovery-style reward pill (“Upgrades Available”). */
   showGoldenPotAvailableRow?: boolean;
+  /** When true after primary button tap, skip close animation (e.g. ad break playing). */
+  shouldDeferPrimaryClose?: () => boolean;
 }
 
 const POPUP_LEAF_COUNT = 40;
@@ -124,6 +126,7 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
   iconScale = 1,
   hideLevel = false,
   showGoldenPotAvailableRow = false,
+  shouldDeferPrimaryClose,
 }) => {
   const [animState, setAnimState] = useState<PopupAnimWithPreflight>('hidden');
   const [assetsReady, setAssetsReady] = useState(false);
@@ -240,10 +243,11 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
 
   const handleButtonClick = () => {
     if (animState === 'preflight') return;
+    if (shouldDeferPrimaryClose?.()) return;
+    onUnlockNow?.();
     setAnimState('leaving');
     setTimeout(() => {
       setAnimState('hidden');
-      onUnlockNow?.();
       onClose();
     }, POPUP_CLOSE_MS);
   };

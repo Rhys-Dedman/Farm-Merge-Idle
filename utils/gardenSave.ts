@@ -43,6 +43,9 @@ export interface GameSaveGlobals {
   gardensFtueStarted?: boolean;
   gardensFtueUnlockRevealed?: boolean;
   gardensFtueCompleted?: boolean;
+  lastAdBreakAt?: number;
+  lastRewardedAdAt?: number;
+  adBreakActivePlaytimeMs?: number;
   newGardenFtueCompleted?: boolean;
   newGardenFtuePhase?: string | null;
   activeTab: TabType;
@@ -155,6 +158,9 @@ export function extractGlobalsFromV1(save: GameSaveV1): GameSaveGlobals {
     gardensFtueStarted: save.gardensFtueStarted,
     gardensFtueUnlockRevealed: save.gardensFtueUnlockRevealed,
     gardensFtueCompleted: save.gardensFtueCompleted,
+    lastAdBreakAt: save.lastAdBreakAt,
+    lastRewardedAdAt: save.lastRewardedAdAt,
+    adBreakActivePlaytimeMs: save.adBreakActivePlaytimeMs,
     newGardenFtueCompleted: save.newGardenFtueCompleted,
     newGardenFtuePhase: save.newGardenFtuePhase,
     activeTab: save.activeTab,
@@ -230,6 +236,9 @@ export function flattenV2ToV1(v2: GameSaveV2): GameSaveV1 {
     gardensFtueStarted: g.gardensFtueStarted,
     gardensFtueUnlockRevealed: g.gardensFtueUnlockRevealed,
     gardensFtueCompleted: g.gardensFtueCompleted,
+    lastAdBreakAt: g.lastAdBreakAt,
+    lastRewardedAdAt: g.lastRewardedAdAt,
+    adBreakActivePlaytimeMs: g.adBreakActivePlaytimeMs,
     newGardenFtueCompleted: g.newGardenFtueCompleted,
     newGardenFtuePhase: g.newGardenFtuePhase,
     activeTab: g.activeTab,

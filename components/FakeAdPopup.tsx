@@ -1,19 +1,24 @@
 /**
- * Fake Ad Popup - "Ad" shown when player taps Watch Ad.
+ * Fake Ad Popup - loading plate under real ads (rewarded or ad break).
  * Constrained to the game area (same size as game) so it matches splash/game layout.
  */
-import React, { useState, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { assetPath } from '../utils/assetPath';
 import { playSfx, SFX_IDS } from '../utils/sfx';
-import { POPUP_PREFLIGHT_MIN_MS } from '../hooks/usePopupPreflightEnter';
+import {
+  AD_BREAK_LOADING_PROGRESS_MS,
+  AD_BREAK_LOADING_UI_FADE_MS,
+  type FakeAdVariant,
+} from '../constants/adPresentation';
 
 const GAME_DESIGN_WIDTH = 448;
 const GAME_DESIGN_HEIGHT = 796;
 
 interface FakeAdPopupProps {
   isVisible: boolean;
+  variant?: FakeAdVariant;
   onComplete: () => void;
-  /** Called with the Activate Reward button rect (screen coords) when user clicks it; use to spawn particle. */
+  /** Called with the complete button rect (screen coords) when user clicks it; use to spawn particle. */
   onActivateRewardClick?: (buttonRect: DOMRect) => void;
   /** Scale factor so ad matches game area size (same as app scale) */
   appScale?: number;
@@ -23,15 +28,55 @@ interface FakeAdPopupProps {
   gameDesignHeight?: number;
 }
 
-const GRADIENT_TOP = '#ffd554';
-const GRADIENT_BOTTOM = '#f17d3e';
-const BUTTON_BG = '#ffd856';
-const BUTTON_BORDER = '#f59d42';
-const BUTTON_TEXT_COLOR = '#e6803a';
-const BUTTON_PRESSED_BG = '#f0c840';
+const FAKE_AD_THEMES: Record<
+  FakeAdVariant,
+  {
+    buttonBg: string;
+    buttonBorder: string;
+    buttonTextColor: string;
+    buttonPressedBg: string;
+    buttonText: string;
+  }
+> = {
+  rewarded: {
+    buttonBg: '#ffd856',
+    buttonBorder: '#f59d42',
+    buttonTextColor: '#e6803a',
+    buttonPressedBg: '#f0c840',
+    buttonText: 'Claim Reward',
+  },
+  adBreak: {
+    buttonBg: '#b8d458',
+    buttonBorder: '#8fb33a',
+    buttonTextColor: '#4a6b1e',
+    buttonPressedBg: '#9fc044',
+    buttonText: 'Return To Game',
+  },
+};
+
+const AD_LOADING_LOADER_STYLE_ID = 'ad-loading-progress-keyframes';
+const AD_LOADING_LOADER_SIZE = 52;
+const AD_LOADING_LOADER_STROKE = 7;
+const AD_LOADING_LOADER_RADIUS = (AD_LOADING_LOADER_SIZE - AD_LOADING_LOADER_STROKE) / 2;
+const AD_LOADING_LOADER_CIRCUMFERENCE = 2 * Math.PI * AD_LOADING_LOADER_RADIUS;
+
+function ensureAdLoadingLoaderKeyframes() {
+  if (typeof document === 'undefined') return;
+  if (document.getElementById(AD_LOADING_LOADER_STYLE_ID)) return;
+  const style = document.createElement('style');
+  style.id = AD_LOADING_LOADER_STYLE_ID;
+  style.textContent = `
+    @keyframes adLoadingProgress {
+      from { stroke-dashoffset: ${AD_LOADING_LOADER_CIRCUMFERENCE}; }
+      to { stroke-dashoffset: 0; }
+    }
+  `;
+  document.head.appendChild(style);
+}
 
 export const FakeAdPopup: React.FC<FakeAdPopupProps> = ({
   isVisible,
+  variant = 'rewarded',
   onComplete,
   onActivateRewardClick,
   appScale = 1,
@@ -39,133 +84,181 @@ export const FakeAdPopup: React.FC<FakeAdPopupProps> = ({
   gameDesignHeight = GAME_DESIGN_HEIGHT,
 }) => {
   const [buttonPressed, setButtonPressed] = useState(false);
-  const [layoutReady, setLayoutReady] = useState(false);
+  const [escapeReady, setEscapeReady] = useState(false);
+  const theme = FAKE_AD_THEMES[variant];
 
   useEffect(() => {
-    if (!isVisible) setLayoutReady(false);
-  }, [isVisible]);
+    ensureAdLoadingLoaderKeyframes();
+  }, []);
 
-  useLayoutEffect(() => {
-    if (!isVisible) return;
-    setLayoutReady(false);
-    let cancelled = false;
-    const t0 = Date.now();
-    let r1 = 0;
-    let r2 = 0;
-    let to = 0;
-    r1 = requestAnimationFrame(() => {
-      r2 = requestAnimationFrame(() => {
-        if (cancelled) return;
-        const rest = Math.max(0, POPUP_PREFLIGHT_MIN_MS - (Date.now() - t0));
-        to = window.setTimeout(() => {
-          if (!cancelled) setLayoutReady(true);
-        }, rest);
-      });
-    });
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(r1);
-      cancelAnimationFrame(r2);
-      clearTimeout(to);
-    };
-  }, [isVisible]);
+  useEffect(() => {
+    if (!isVisible) {
+      setEscapeReady(false);
+      setButtonPressed(false);
+      return;
+    }
+    setEscapeReady(false);
+    const t = window.setTimeout(() => setEscapeReady(true), AD_BREAK_LOADING_PROGRESS_MS);
+    return () => window.clearTimeout(t);
+  }, [isVisible, variant]);
 
   if (!isVisible) return null;
 
   const gameWidth = gameDesignWidth * appScale;
   const gameHeight = gameDesignHeight * appScale;
+  const buttonWidth = 'min(288px, 80%)';
+  const buttonHeight = 45;
+  const showLoading = !escapeReady;
+
+  const handleCompleteClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    setButtonPressed(false);
+    playSfx(SFX_IDS.uiConfirmNormal);
+    const rect = e.currentTarget.getBoundingClientRect();
+    onActivateRewardClick?.(rect);
+    onComplete();
+  };
 
   return (
-    <>
-      {/* Full-screen overlay: black pillarbox, centered game-sized area */}
+    <div
+      className="fixed inset-0 flex items-center justify-center"
+      style={{
+        zIndex: 117,
+        backgroundColor: 'transparent',
+        opacity: 1,
+        visibility: 'visible',
+        pointerEvents: 'auto',
+      }}
+    >
       <div
-        className="fixed inset-0 flex items-center justify-center"
+        className="relative overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.9)]"
         style={{
-          zIndex: 110,
-          backgroundColor: '#050608',
-          opacity: layoutReady ? 1 : 0,
-          visibility: layoutReady ? 'visible' : 'hidden',
-          pointerEvents: layoutReady ? 'auto' : 'none',
+          width: gameWidth,
+          height: gameHeight,
+          background: 'radial-gradient(circle at center, #2a2a2a 0%, #000000 70%)',
         }}
       >
-        {/* Ad content constrained to same size as game (splash-style) */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <img
+            src={assetPath('/assets/icons/generic_buttons/icon_watchad_large.png')}
+            alt=""
+            className="object-contain select-none"
+            style={{
+              width: 'min(160px, 32%)',
+              height: 'min(160px, 32%)',
+              maxWidth: '144px',
+              maxHeight: '144px',
+              filter: 'grayscale(1) brightness(0.42) drop-shadow(0 4px 12px rgba(0,0,0,0.45))',
+            }}
+          />
+        </div>
+
         <div
-          className="flex flex-col items-center justify-between overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.9)]"
-          style={{
-            width: gameWidth,
-            height: gameHeight,
-            background: `linear-gradient(to bottom, ${GRADIENT_TOP} 0%, ${GRADIENT_BOTTOM} 100%)`,
-          }}
+          className="absolute inset-x-0 bottom-0"
+          style={{ paddingBottom: '6rem', height: 160 }}
         >
-          {/* Spacer so content is centered vertically with button at bottom */}
-          <div className="flex-1 flex flex-col items-center justify-center w-full min-h-0">
-            {/* Center: large watch ad icon */}
-            <img
-              src={assetPath('/assets/icons/generic_buttons/icon_watchad_large.png')}
-              alt=""
-              className="object-contain select-none"
-              style={{
-                width: 'min(200px, 40%)',
-                height: 'min(200px, 40%)',
-                maxWidth: '180px',
-                maxHeight: '180px',
-                filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.2))',
-              }}
-            />
-            {/* Text under icon */}
-            <p
-              className="font-semibold text-center mt-6 px-4"
-              style={{
-                color: '#5c4a32',
-                fontFamily: 'Inter, sans-serif',
-                fontSize: 'clamp(14px, 4vw, 20px)',
-              }}
+          <div
+            className="absolute inset-x-0 bottom-0 flex justify-center px-4"
+            style={{
+              paddingBottom: '6rem',
+              opacity: showLoading ? 1 : 0,
+              transition: `opacity ${AD_BREAK_LOADING_UI_FADE_MS}ms ease`,
+              pointerEvents: 'none',
+            }}
+          >
+            <div
+              className="relative flex items-center justify-center"
+              style={{ width: '100%', height: buttonHeight }}
             >
-              You are now watching an ad
-            </p>
+              <svg
+                width={AD_LOADING_LOADER_SIZE}
+                height={AD_LOADING_LOADER_SIZE}
+                viewBox={`0 0 ${AD_LOADING_LOADER_SIZE} ${AD_LOADING_LOADER_SIZE}`}
+                className="absolute"
+                style={{ bottom: `calc(100% + 14px)` }}
+                aria-hidden
+              >
+                <circle
+                  cx={AD_LOADING_LOADER_SIZE / 2}
+                  cy={AD_LOADING_LOADER_SIZE / 2}
+                  r={AD_LOADING_LOADER_RADIUS}
+                  fill="none"
+                  stroke="#6b6b6b"
+                  strokeWidth={AD_LOADING_LOADER_STROKE}
+                />
+                <circle
+                  cx={AD_LOADING_LOADER_SIZE / 2}
+                  cy={AD_LOADING_LOADER_SIZE / 2}
+                  r={AD_LOADING_LOADER_RADIUS}
+                  fill="none"
+                  stroke="#b0b0b0"
+                  strokeWidth={AD_LOADING_LOADER_STROKE}
+                  strokeLinecap="round"
+                  strokeDasharray={AD_LOADING_LOADER_CIRCUMFERENCE}
+                  strokeDashoffset={AD_LOADING_LOADER_CIRCUMFERENCE}
+                  transform={`rotate(-90 ${AD_LOADING_LOADER_SIZE / 2} ${AD_LOADING_LOADER_SIZE / 2})`}
+                  style={{
+                    animation: showLoading
+                      ? `adLoadingProgress ${AD_BREAK_LOADING_PROGRESS_MS}ms linear forwards`
+                      : 'none',
+                  }}
+                />
+              </svg>
+              <p
+                className="font-semibold text-center px-4"
+                style={{
+                  color: '#c8c8c8',
+                  fontFamily: 'Inter, sans-serif',
+                  fontSize: 'clamp(14px, 4vw, 18px)',
+                  lineHeight: 1,
+                }}
+              >
+                Ad Loading...
+              </p>
+            </div>
           </div>
 
-          {/* Bottom: Complete ad button (same style as Accept Offer but no icon) */}
-          <div className="w-full flex justify-center px-4 flex-shrink-0" style={{ paddingBottom: '6rem' }}>
+          <div
+            className="absolute inset-x-0 bottom-0 flex justify-center px-4"
+            style={{
+              paddingBottom: '6rem',
+              opacity: escapeReady ? 1 : 0,
+              transition: `opacity ${AD_BREAK_LOADING_UI_FADE_MS}ms ease`,
+              pointerEvents: escapeReady ? 'auto' : 'none',
+            }}
+          >
             <button
               onMouseDown={() => setButtonPressed(true)}
               onMouseUp={() => setButtonPressed(false)}
               onMouseLeave={() => setButtonPressed(false)}
-              onClick={(e) => {
-                setButtonPressed(false);
-                playSfx(SFX_IDS.uiConfirmNormal);
-                const rect = e.currentTarget.getBoundingClientRect();
-                onActivateRewardClick?.(rect);
-                onComplete();
-              }}
+              onClick={handleCompleteClick}
               className="relative flex items-center justify-center rounded-xl transition-all"
               style={{
-                width: 'min(360px, 100%)',
-                height: '56px',
-                backgroundColor: buttonPressed ? BUTTON_PRESSED_BG : BUTTON_BG,
-                border: `4px solid ${BUTTON_BORDER}`,
-                borderRadius: '24px',
+                width: buttonWidth,
+                height: buttonHeight,
+                backgroundColor: buttonPressed ? theme.buttonPressedBg : theme.buttonBg,
+                border: `3px solid ${theme.buttonBorder}`,
+                borderRadius: '12px',
                 boxShadow: buttonPressed
-                  ? 'inset 0 4px 8px rgba(0,0,0,0.15)'
-                  : `0 8px 0 ${BUTTON_BORDER}, 0 12px 24px rgba(0,0,0,0.15)`,
-                transform: buttonPressed ? 'translateY(4px)' : 'translateY(0)',
+                  ? 'inset 0 3px 6px rgba(0,0,0,0.15)'
+                  : `0 6px 0 ${theme.buttonBorder}, 0 10px 20px rgba(0,0,0,0.25)`,
+                transform: buttonPressed ? 'translateY(3px)' : 'translateY(0)',
               }}
             >
               <span
                 className="font-bold tracking-tight"
                 style={{
-                  color: BUTTON_TEXT_COLOR,
+                  color: theme.buttonTextColor,
                   fontFamily: 'Inter, sans-serif',
-                  textShadow: '0 2px 0 rgba(255,255,255,0.3)',
-                  fontSize: '1.25rem',
+                  textShadow: '0 1px 0 rgba(255,255,255,0.3)',
+                  fontSize: '1.2rem',
                 }}
-            >
-              Activate Reward
-            </span>
+              >
+                {theme.buttonText}
+              </span>
             </button>
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 };

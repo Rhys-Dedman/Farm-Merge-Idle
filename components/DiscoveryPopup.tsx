@@ -52,6 +52,8 @@ interface DiscoveryPopupProps {
   buttonText: string;
   rewardAmount?: number;
   onButtonClick?: (startPoint: { x: number; y: number }) => void;
+  /** When true after primary button tap, skip close animation (e.g. ad break playing). */
+  shouldDeferPrimaryClose?: (startPoint: { x: number; y: number }) => boolean;
   showCloseButton?: boolean;
   imageLevel?: number;
   closeOnBackdropClick?: boolean;
@@ -171,6 +173,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
   buttonText,
   rewardAmount = 1000,
   onButtonClick,
+  shouldDeferPrimaryClose,
   showCloseButton = true,
   imageLevel,
   closeOnBackdropClick = true,
@@ -307,14 +310,17 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
   const handleButtonClick = () => {
     if (isClosing || animState === 'preflight') return;
     setIsClosing(true);
-    if (onButtonClick) {
-      if (rewardCoinRef.current) {
-        const r = rewardCoinRef.current.getBoundingClientRect();
-        onButtonClick({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
-      } else if (buttonRef.current) {
-        const r = buttonRef.current.getBoundingClientRect();
-        onButtonClick({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
-      }
+    let startPoint: { x: number; y: number } | null = null;
+    if (rewardCoinRef.current) {
+      const r = rewardCoinRef.current.getBoundingClientRect();
+      startPoint = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    } else if (buttonRef.current) {
+      const r = buttonRef.current.getBoundingClientRect();
+      startPoint = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }
+    if (startPoint && shouldDeferPrimaryClose?.(startPoint)) return;
+    if (startPoint && onButtonClick) {
+      onButtonClick(startPoint);
     }
     setAnimState('leaving');
     setTimeout(() => {

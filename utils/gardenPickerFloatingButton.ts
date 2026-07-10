@@ -65,6 +65,18 @@ export function getGardensFloatingButtonIconSrc(visual: GardensFloatingButtonVis
   return assetPath(GARDENS_FB_ICON_PATHS[visual]);
 }
 
+/** True when the gardens picker may be opened (level gate, or already on / owns another garden). */
+export function isGardensFloatingButtonUnlocked(
+  garden1PlayerLevel: number,
+  unlockLevel: number,
+  gardensStarted: readonly GardenId[],
+  activeGardenId: GardenId,
+): boolean {
+  if (activeGardenId !== DEFAULT_GARDEN_ID) return true;
+  if (gardensStarted.length > 1) return true;
+  return garden1PlayerLevel >= unlockLevel;
+}
+
 export function getGardensFloatingButtonVisual(
   garden1PlayerLevel: number,
   unlockLevel: number,
@@ -74,7 +86,16 @@ export function getGardensFloatingButtonVisual(
   gardens: Partial<Record<GardenId, GardenState>> | undefined,
   forceLockedVisual = false,
 ): GardensFloatingButtonVisual {
-  if (forceLockedVisual || garden1PlayerLevel < unlockLevel) return 'locked';
+  if (
+    forceLockedVisual &&
+    activeGardenId === DEFAULT_GARDEN_ID &&
+    isGardensFloatingButtonUnlocked(garden1PlayerLevel, unlockLevel, gardensStarted, activeGardenId)
+  ) {
+    return 'locked';
+  }
+  if (!isGardensFloatingButtonUnlocked(garden1PlayerLevel, unlockLevel, gardensStarted, activeGardenId)) {
+    return 'locked';
+  }
   if (canAffordNextGardenPurchase(gardensStarted, activeGardenId, activeMoney, gardens)) {
     return 'claim';
   }

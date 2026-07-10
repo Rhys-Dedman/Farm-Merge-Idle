@@ -138,6 +138,12 @@ export interface GameSaveV1 {
   gardensFtueUnlockRevealed?: boolean;
   /** Gardens FTUE finished (player opened gardens picker). */
   gardensFtueCompleted?: boolean;
+  /** Epoch ms when the last interstitial ad break finished. */
+  lastAdBreakAt?: number;
+  /** Epoch ms when the last rewarded ad finished. */
+  lastRewardedAdAt?: number;
+  /** Active playtime (ms) toward the ad-break unlock gate. */
+  adBreakActivePlaytimeMs?: number;
   /** First garden purchase FTUE finished (player opened gardens picker on garden 2). */
   newGardenFtueCompleted?: boolean;
   /** Resumable step for new-garden FTUE; cleared when completed. */

@@ -48,6 +48,29 @@ import { PlantInfoPopup } from './components/PlantInfoPopup';
 import { PlantWithPot } from './components/PlantWithPot';
 import { LimitedOfferPopup } from './components/LimitedOfferPopup';
 import { FakeAdPopup } from './components/FakeAdPopup';
+import { AdFullscreenFadeOverlay } from './components/AdFullscreenFadeOverlay';
+import { AdBreakIntroOverlay } from './components/AdBreakIntroOverlay';
+import { InterstitialAdLayer } from './components/InterstitialAdLayer';
+import { RewardedAdLayer } from './components/RewardedAdLayer';
+import {
+  AD_REWARDED_FADE_IN_MS,
+  AD_REWARDED_FADE_OUT_MS,
+  SCREEN_NAV_AD_BREAK_DELAY_MS,
+} from './constants/adPresentation';
+import type { FakeAdVariant } from './constants/adPresentation';
+import type { AdBreakTriggerId } from './constants/adBreakSettings';
+import { AD_BREAK_SETTINGS } from './constants/adBreakSettings';
+import {
+  canShowAdBreakNow,
+  shouldFlagAdBreakFallback,
+  interstitialAdBridge,
+  rewardedAdBridge,
+  shouldSkipLevelUpAdBreak,
+  type AdBreakBlockerContext,
+  type AdBreakRuntimeState,
+  type InterstitialAdCloseResult,
+  type RewardedAdCloseResult,
+} from './utils/adBreak';
 import { FakeReviewPopup } from './components/FakeReviewPopup';
 import { PauseMenuPopup } from './components/PauseMenuPopup';
 import { SettingsPopup } from './components/SettingsPopup';
@@ -147,6 +170,7 @@ import {
   normalizeStoreSlotCooldownEnds,
   STORE_DAILY_ALLOWANCE_OFFER_ID,
   getStorePurchaseBoostGrants,
+  hasActiveRemoveAdsBoost,
   STORE_STARTER_PACK_COUNTDOWN_END_MS_KEY,
   STORE_STARTER_PACK_PURCHASED_KEY,
   STORE_STARTER_PACK_UNLOCKED_KEY,
@@ -258,7 +282,7 @@ import {
 import { OfflineEarningsPopup } from './components/OfflineEarningsPopup';
 import { BARN_SHELVES_PER_GARDEN, COLLECTION_PANEL_GARDEN_ICON_PX, COLLECTION_PANEL_GARDEN_ICON_UNLOCKED_SCALE, COLLECTION_PHONE_PLANT_PANEL_SCALE, COLLECTION_PHONE_PLANT_PANEL_TOP_PX, COLLECTION_PHONE_ROOF_LAYOUT_SCALE, COLLECTION_PHONE_ROOF_SCALE, COLLECTION_PHONE_SHELF_WIDTH_SCALE, COLLECTION_PHONE_SHELVES_EXTRA_MARGIN_TOP_UNLOCKED_PX, COLLECTION_PHONE_SHELVES_MARGIN_TOP_PX, COLLECTION_PLANT_COUNT, COLLECTION_PLANT_PANEL_TOP_PX, COLLECTION_SCROLL_BOTTOM_PAD_PX, COLLECTION_SHELF_STACK_MARGIN_TOP_PX, COLLECTION_SHELF_UPGRADE_BUTTON_BORDER_PX, COLLECTION_SHELF_UPGRADE_BUTTON_COIN_PX, COLLECTION_SHELF_UPGRADE_BUTTON_DARK_COLOR, COLLECTION_SHELF_UPGRADE_BUTTON_FONT_PX, COLLECTION_SHELF_UPGRADE_BUTTON_HEIGHT_PX, COLLECTION_SHELF_UPGRADE_BUTTON_RING_COLOR, COLLECTION_SHELF_UPGRADE_BUTTON_TOP_PX, COLLECTION_SHELF_UPGRADE_BUTTON_WIDTH_PX, COLLECTION_SHELF_UPGRADE_SPRITE_SCALE, COLLECTION_SHELF_UPGRADE_SPRITE_TOP_PX, COLLECTION_SHELVES_EXTRA_MARGIN_TOP_UNLOCKED_PX, COLLECTION_SHELVES_MARGIN_TOP_PX, getCollectionShelfMeta, normalizeBarnShelvesUnlocked } from './constants/barnShelves';
 import { GARDEN_PICKER_PURCHASE_COIN_PRICE } from './constants/gardenPicker';
-import { canAffordNextGardenPurchase } from './utils/gardenPickerFloatingButton';
+import { canAffordNextGardenPurchase, isGardensFloatingButtonUnlocked } from './utils/gardenPickerFloatingButton';
 import { MAX_PLANT_TIER } from './constants/plants';
 import {
   PLANT_MASTERY_GLOW_MS,
@@ -417,6 +441,8 @@ const REWARDED_DOUBLE_COINS_AD_DURATION_MS = 30 * 60 * 1000;
 /** Pause after fake ad closes before daily-task 2× claim VFX (lets ad dismiss finish). */
 /** Pause after daily allowance claim before swapping card art to the normal free offer. */
 const DAILY_ALLOWANCE_UI_HOLD_AFTER_CLAIM_MS = 1000;
+/** Delay after rewarded ad closes before applying daily-task 2x claim presentation. */
+const DAILY_TASK_2X_CLAIM_AFTER_AD_MS = 250;
 
 function buildPurchaseSuccessRewards(config: StoreCoinOfferConfig): PurchaseSuccessfulRewardRow[] {
   const rows: PurchaseSuccessfulRewardRow[] = [
@@ -1604,6 +1630,7 @@ export default function App() {
   const dailyTasksPeriodRolledRef = useRef(false);
   const dailyTasksAutoClaimedAt1sRef = useRef(false);
   const lastDailyPlaytimeTickRef = useRef<number | null>(null);
+  const lastAdBreakPlaytimeTickRef = useRef<number | null>(null);
   const [dailyTaskClaimBounceIds, setDailyTaskClaimBounceIds] = useState<string[]>([]);
   const [dailyTaskLeafBursts, setDailyTaskLeafBursts] = useState<
     { id: string; x: number; y: number; rectWidth: number; rectHeight: number }[]
@@ -1694,7 +1721,34 @@ export default function App() {
 
   // Fake ad popup: show full-screen "ad", on Complete ad run callback then close
   const [showFakeAd, setShowFakeAd] = useState(false);
-  showFakeAdRef.current = showFakeAd;
+  const [rewardedAdFadeInActive, setRewardedAdFadeInActive] = useState(false);
+  const [rewardedAdBlackHoldActive, setRewardedAdBlackHoldActive] = useState(false);
+  const [rewardedAdFadeOutActive, setRewardedAdFadeOutActive] = useState(false);
+  const [adBreakIntroActive, setAdBreakIntroActive] = useState(false);
+  const [adBreakFadeOutActive, setAdBreakFadeOutActive] = useState(false);
+  /** Real interstitial slot — active after fade-to-black while loading plate is up. */
+  const [interstitialAdSlotActive, setInterstitialAdSlotActive] = useState(false);
+  /** Real rewarded slot — active after fade-to-black while loading plate is up. */
+  const [rewardedAdSlotActive, setRewardedAdSlotActive] = useState(false);
+  const [fakeAdVariant, setFakeAdVariant] = useState<FakeAdVariant>('rewarded');
+  const rewardedAdFadeTimeoutRef = useRef<number | null>(null);
+  const adBreakRuntimeRef = useRef<AdBreakRuntimeState>({
+    lastAdBreakAt: 0,
+    lastRewardedAdAt: 0,
+    activePlaytimeMs: 0,
+    fallbackPending: false,
+  });
+  const pendingAdBreakCompleteRef = useRef<(() => void) | null>(null);
+  const pendingSwitchGardenAdBreakRef = useRef(false);
+  const prevActiveScreenForAdBreakRef = useRef<ScreenType>(activeScreen);
+  showFakeAdRef.current =
+    showFakeAd ||
+    rewardedAdFadeInActive ||
+    rewardedAdBlackHoldActive ||
+    rewardedAdFadeOutActive ||
+    adBreakIntroActive ||
+    interstitialAdSlotActive ||
+    rewardedAdSlotActive;
   const [pendingAdComplete, setPendingAdComplete] = useState<(() => void) | null>(null);
   // Ref for upgrade tabs to get tab element positions
   const upgradeTabsRef = useRef<UpgradeTabsRef>(null);
@@ -1768,7 +1822,14 @@ export default function App() {
   const lastCoinGoalHiddenAtRef = useRef<number>(Date.now());
   const nextCoinGoalDelayRef = useRef<number>(30000 + Math.random() * 30000); // 30–60s until next spawn, new random each hide
   const pendingAdSourceRef = useRef<
-    'limitedOffer' | 'upgradeList' | 'coinGoal' | 'offlineEarnings' | 'storeFreeOffer' | 'dailyTaskClaim2x' | null
+    | 'limitedOffer'
+    | 'upgradeList'
+    | 'coinGoal'
+    | 'offlineEarnings'
+    | 'storeFreeOffer'
+    | 'dailyTaskClaim2x'
+    | 'adBreak'
+    | null
   >(null);
   const pendingOfferIdRef = useRef<string | null>(null); // for boost particle: only shoot if offer has duration
   const [activePlantPanels, setActivePlantPanels] = useState<PlantPanelData[]>([]);
@@ -2482,6 +2543,97 @@ export default function App() {
     };
   }, [isLoading, dailyTasksUnlocked, triggerTasksFloatingButtonReadyFx]);
 
+  const openRewardedFakeAd = useCallback(() => {
+    setFakeAdVariant('rewarded');
+    setRewardedAdFadeOutActive(false);
+    setRewardedAdBlackHoldActive(false);
+    setRewardedAdSlotActive(false);
+    setRewardedAdFadeInActive(true);
+    if (rewardedAdFadeTimeoutRef.current != null) {
+      window.clearTimeout(rewardedAdFadeTimeoutRef.current);
+    }
+    rewardedAdFadeTimeoutRef.current = window.setTimeout(() => {
+      // Loading plate + real rewarded slot after fade-to-black (same timing contract as interstitial).
+      setRewardedAdBlackHoldActive(true);
+      setShowFakeAd(true);
+      setRewardedAdSlotActive(true);
+      setRewardedAdFadeInActive(false);
+      rewardedAdFadeTimeoutRef.current = null;
+    }, AD_REWARDED_FADE_IN_MS);
+  }, []);
+
+  const beginRewardedOutro = useCallback(() => {
+    rewardedAdBridge.cancel();
+    setRewardedAdSlotActive(false);
+    setShowFakeAd(false);
+    setRewardedAdBlackHoldActive(false);
+    setRewardedAdFadeOutActive(true);
+  }, []);
+
+  useEffect(() => {
+    if (!rewardedAdFadeOutActive) return;
+    const t = window.setTimeout(() => setRewardedAdFadeOutActive(false), AD_REWARDED_FADE_OUT_MS);
+    return () => window.clearTimeout(t);
+  }, [rewardedAdFadeOutActive]);
+
+  const openAdBreakFakeAd = useCallback((onComplete?: () => void) => {
+    setFakeAdVariant('adBreak');
+    pendingAdSourceRef.current = 'adBreak';
+    setPendingAdComplete(null);
+    pendingAdBreakCompleteRef.current = onComplete ?? null;
+    setAdBreakFadeOutActive(false);
+    setInterstitialAdSlotActive(false);
+    setAdBreakIntroActive(true);
+  }, []);
+
+  const handleAdBreakIntroComplete = useCallback(() => {
+    // Loading plate first, then real-ad slot (above it) — SDK show happens in InterstitialAdLayer.
+    setShowFakeAd(true);
+    setInterstitialAdSlotActive(true);
+  }, []);
+
+  const beginAdBreakOutro = useCallback(() => {
+    interstitialAdBridge.cancel();
+    setInterstitialAdSlotActive(false);
+    setShowFakeAd(false);
+    pendingAdSourceRef.current = null;
+    setAdBreakFadeOutActive(true);
+  }, []);
+
+  const handleInterstitialAdClosed = useCallback(
+    (result: InterstitialAdCloseResult) => {
+      // No creative available — keep loading plate + Return To Game escape.
+      if (result === 'no_fill') {
+        setInterstitialAdSlotActive(false);
+        return;
+      }
+      // completed / failed / skipped / cancelled-from-SDK — dismiss plate and fade back.
+      beginAdBreakOutro();
+    },
+    [beginAdBreakOutro],
+  );
+
+  const handleAdBreakFadeOutComplete = useCallback(() => {
+    const now = Date.now();
+    adBreakRuntimeRef.current.lastAdBreakAt = now;
+    adBreakRuntimeRef.current.fallbackPending = false;
+    persistGameSnapshotRef.current();
+    setAdBreakIntroActive(false);
+    setAdBreakFadeOutActive(false);
+    setInterstitialAdSlotActive(false);
+    const onAdBreakDone = pendingAdBreakCompleteRef.current;
+    pendingAdBreakCompleteRef.current = null;
+    onAdBreakDone?.();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (rewardedAdFadeTimeoutRef.current != null) {
+        window.clearTimeout(rewardedAdFadeTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handleDailyTaskClaim2x = useCallback((taskId: string, fx: DailyTaskClaimFx) => {
     const task = dailyTaskRows.find((t) => t.id === taskId);
     if (!task || task.state !== 'complete') return;
@@ -2489,8 +2641,8 @@ export default function App() {
     pendingDailyTaskClaimRef.current = { taskId, fx, coinMultiplier: 2 };
     pendingAdSourceRef.current = 'dailyTaskClaim2x';
     setPendingAdComplete(null);
-    setShowFakeAd(true);
-  }, [dailyTaskRows]);
+    openRewardedFakeAd();
+  }, [dailyTaskRows, openRewardedFakeAd]);
 
   const performDailyTaskClaim = useCallback(
     (taskId: string, fx: DailyTaskClaimFx, coinMultiplier = 1) => {
@@ -2515,6 +2667,52 @@ export default function App() {
       performDailyTaskClaim(taskId, fx);
     },
     [performDailyTaskClaim],
+  );
+
+  const applyPendingRewardedAdCompletion = useCallback(() => {
+    lastFakeAdClosedAtRef.current = Date.now();
+    const adSource = pendingAdSourceRef.current;
+    pendingAdSourceRef.current = null;
+
+    adBreakRuntimeRef.current.lastRewardedAdAt = Date.now();
+    persistGameSnapshotRef.current();
+
+    if (adSource === 'dailyTaskClaim2x') {
+      const pending = pendingDailyTaskClaimRef.current;
+      pendingDailyTaskClaimRef.current = null;
+      if (pending) {
+        window.setTimeout(() => {
+          performDailyTaskClaim(pending.taskId, pending.fx, pending.coinMultiplier);
+        }, DAILY_TASK_2X_CLAIM_AFTER_AD_MS);
+      }
+      return;
+    }
+
+    if (adSource === 'storeFreeOffer') {
+      applyDailyTaskRowsUpdate(recordDailyTaskFreeOfferClaimed(getDailyTasksCtx()));
+    }
+
+    const applyReward = pendingAdComplete;
+    setPendingAdComplete(null);
+    window.setTimeout(() => applyReward?.(), 250);
+  }, [applyDailyTaskRowsUpdate, getDailyTasksCtx, performDailyTaskClaim]);
+
+  const handleRewardedLoadingPlateComplete = useCallback(() => {
+    // Claim Reward on loading plate — cancel any in-flight real ad, grant reward, fade out.
+    beginRewardedOutro();
+    applyPendingRewardedAdCompletion();
+  }, [applyPendingRewardedAdCompletion, beginRewardedOutro]);
+
+  const handleRewardedAdClosed = useCallback(
+    (result: RewardedAdCloseResult) => {
+      if (result === 'no_fill') {
+        setRewardedAdSlotActive(false);
+        return;
+      }
+      beginRewardedOutro();
+      applyPendingRewardedAdCompletion();
+    },
+    [applyPendingRewardedAdCompletion, beginRewardedOutro],
   );
 
   // Testing cheat: grant the next purchasable golden pot (active garden first, then garden 2+).
@@ -3125,11 +3323,322 @@ export default function App() {
     setFtue11StartQueued(false);
     ftue11InFlightRef.current = false;
   }, [ftue11StartQueued, panelHeight, ftue10PostClosePending]);
+
+  const buildAdBreakBlockerContext = useCallback(
+    (now: number): AdBreakBlockerContext => ({
+      now,
+      playerLevel,
+      activePlaytimeMs: adBreakRuntimeRef.current.activePlaytimeMs,
+      hasNoAds: hasActiveRemoveAdsBoost(activeBoostsRef.current),
+      isDragging: dragState != null,
+      isLoading,
+      activeFtueStage,
+      ftue11StartQueued,
+      collectionFtueActive: collectionFtuePhase != null && !collectionFtueCompleted,
+      tasksFtueActive: tasksFtueStarted && !tasksFtueCompleted,
+      gardensFtueActive: gardensFtueStarted && !gardensFtueCompleted,
+      newGardenFtueActive: newGardenFtuePhase != null && !newGardenFtueCompleted,
+      adPresentationActive:
+        showFakeAd ||
+        rewardedAdFadeInActive ||
+        rewardedAdBlackHoldActive ||
+        rewardedAdFadeOutActive ||
+        adBreakIntroActive ||
+        interstitialAdSlotActive ||
+        rewardedAdSlotActive,
+      gardenSwitchActive: gardenSwitchOverlayActive || gardenSwitchTransitionRef.current,
+      offlineEarningsOpen: offlineEarningsUi?.open === true,
+      pauseMenuOpen,
+      devToolsOpen,
+      blockingPopupOpen:
+        purchaseSuccessfulUi != null ||
+        iapOfferUi != null ||
+        rateUsPopupOpen ||
+        showFakeReview ||
+        rateUsThankYouOpen ||
+        dailyTasksPopupOpen ||
+        plantInfoPopup?.isVisible === true ||
+        limitedOfferPopup?.isVisible === true,
+      discoveryPopupOpen: discoveryPopup != null,
+      levelUpPopupOpen: levelUpPopup != null,
+      goldenPotBonusesPopupOpen,
+    }),
+    [
+      playerLevel,
+      dragState,
+      isLoading,
+      activeFtueStage,
+      ftue11StartQueued,
+      collectionFtuePhase,
+      collectionFtueCompleted,
+      tasksFtueStarted,
+      tasksFtueCompleted,
+      gardensFtueStarted,
+      gardensFtueCompleted,
+      newGardenFtuePhase,
+      newGardenFtueCompleted,
+      showFakeAd,
+      rewardedAdFadeInActive,
+      rewardedAdBlackHoldActive,
+      rewardedAdFadeOutActive,
+      adBreakIntroActive,
+      interstitialAdSlotActive,
+      rewardedAdSlotActive,
+      gardenSwitchOverlayActive,
+      offlineEarningsUi?.open,
+      pauseMenuOpen,
+      devToolsOpen,
+      purchaseSuccessfulUi,
+      iapOfferUi,
+      rateUsPopupOpen,
+      showFakeReview,
+      rateUsThankYouOpen,
+      dailyTasksPopupOpen,
+      plantInfoPopup?.isVisible,
+      limitedOfferPopup?.isVisible,
+      discoveryPopup,
+      levelUpPopup,
+      goldenPotBonusesPopupOpen,
+    ],
+  );
+
+  const tryShowAdBreak = useCallback(
+    (trigger: AdBreakTriggerId, onComplete?: () => void): boolean => {
+      const now = Date.now();
+      const state = adBreakRuntimeRef.current;
+      if (shouldFlagAdBreakFallback(state, now)) {
+        state.fallbackPending = true;
+      }
+      const ctx = buildAdBreakBlockerContext(now);
+      if (!canShowAdBreakNow(state, ctx, trigger)) {
+        return false;
+      }
+      state.fallbackPending = false;
+      openAdBreakFakeAd(onComplete);
+      return true;
+    },
+    [buildAdBreakBlockerContext, openAdBreakFakeAd],
+  );
+
+  const tryShowAdBreakRef = useRef(tryShowAdBreak);
+  tryShowAdBreakRef.current = tryShowAdBreak;
+
+  const applyDiscoveryAddToCollectionEffects = useCallback(
+    (level: number, startPoint: { x: number; y: number }) => {
+      suppressDiscoveryDeclineSfxRef.current = true;
+      const rewardValue = applyDoubleCoinsVisualAmount(
+        getCoinValueForLevel(level) * PLANT_DISCOVERY_COIN_MULTIPLIER,
+        activeBoostsRef.current,
+      );
+      const layer = discoveryRewardFxLayerRef.current;
+      if (layer) {
+        const lr = layer.getBoundingClientRect();
+        const startX = startPoint.x - lr.left;
+        const startY = startPoint.y - lr.top;
+        setActiveDiscoveryCoinParticles((prev) => [
+          ...prev,
+          {
+            id: `discovery-reward-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            startX,
+            startY,
+            value: rewardValue,
+          },
+        ]);
+      }
+      if (containerRef.current) {
+        const cr = containerRef.current.getBoundingClientRect();
+        const scale = appScaleRef.current;
+        setActiveBarnParticles((prev) => [
+          ...prev,
+          {
+            id: `discovery-collection-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            startX: (startPoint.x - cr.left) / scale,
+            startY: (startPoint.y - cr.top) / scale,
+          },
+        ]);
+      }
+      if (level === 2 && ftue4Pending) {
+        setFtue4Pending(false);
+        setActiveFtueStage('first_goal');
+        setGoalSlots(['green', 'empty', 'empty', 'empty', 'empty']);
+        setGoalPlantTypes([2, 0, 0, 0, 0]);
+        setDiscoveryGoalLightGreenDismissed([false, false, false, false, false]);
+        setGoalDiscoveryLightGreenActive([false, false, false, false, false]);
+        recordSpawnedGoalPlantLevel(2, lastSpawnedGoalLevelsRef, lastSpawnedGoalPlantLevelHUDRef);
+        setGoalCounts([3, 0, 0, 0, 0]);
+        setGoalAmountsRequired([3, 0, 0, 0, 0]);
+        setGoalDisplayOrder([0]);
+      }
+    },
+    [ftue4Pending],
+  );
+
+  const finishDiscoveryPopupAfterAdBreak = useCallback(() => {
+    suppressDiscoveryDeclineSfxRef.current = true;
+    lastOtherPopupClosedAtRef.current = Date.now();
+    setDiscoveryPopup(null);
+    queueMicrotask(() => {
+      tryStartAutoMergeRef.current();
+      scheduleAutoMergeRecheckRef.current(0);
+    });
+  }, []);
+
+  const finishLevelUpPopupAfterAdBreak = useCallback(() => {
+    suppressLevelUpDeclineSfxRef.current = true;
+    lastOtherPopupClosedAtRef.current = Date.now();
+    setLevelUpPopup(null);
+    setLevelUpPopupQueue((q) => {
+      if (q.length > 0) {
+        setLevelUpPopup({ isVisible: true, level: q[0] });
+        return q.slice(1);
+      }
+      return q;
+    });
+    queueMicrotask(() => {
+      tryStartAutoMergeRef.current();
+      scheduleAutoMergeRecheckRef.current(0);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (isLoading || !ftue11PersistenceEnabledRef.current) return;
+    const id = window.setInterval(() => {
+      const now = Date.now();
+      const state = adBreakRuntimeRef.current;
+      if (shouldFlagAdBreakFallback(state, now)) {
+        state.fallbackPending = true;
+      }
+      if (!state.fallbackPending) return;
+      tryShowAdBreakRef.current('fallback_idle');
+    }, AD_BREAK_SETTINGS.fallbackPollMs);
+    return () => window.clearInterval(id);
+  }, [isLoading, activeFtueStage]);
+
+  useEffect(() => {
+    if (isLoading) return;
+    prevActiveScreenForAdBreakRef.current = activeScreen;
+  }, [isLoading]);
+
+  useEffect(() => {
+    const prev = prevActiveScreenForAdBreakRef.current;
+    prevActiveScreenForAdBreakRef.current = activeScreen;
+
+    let trigger: AdBreakTriggerId | null = null;
+    if (activeScreen === 'FARM' && prev === 'STORE') {
+      trigger = 'leave_store';
+    } else if (activeScreen === 'FARM' && prev === 'BARN') {
+      trigger = 'leave_collection';
+    }
+    if (!trigger) return;
+
+    // One-shot at mid-nav only — if cooldown/blockers aren't ready, miss this trigger
+    // (do not retry later while idle on Farm).
+    const timeoutId = window.setTimeout(() => {
+      tryShowAdBreak(trigger);
+    }, SCREEN_NAV_AD_BREAK_DELAY_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [activeScreen, tryShowAdBreak]);
+
+  useEffect(() => {
+    if (isLoading || !ftue11PersistenceEnabledRef.current) return;
+
+    const resetPlaytimeClock = () => {
+      lastAdBreakPlaytimeTickRef.current = Date.now();
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        resetPlaytimeClock();
+      } else {
+        lastAdBreakPlaytimeTickRef.current = null;
+      }
+    };
+
+    if (document.visibilityState === 'visible') {
+      resetPlaytimeClock();
+    }
+
+    const TICK_MS = 1000;
+
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+
+      const now = Date.now();
+      const last = lastAdBreakPlaytimeTickRef.current;
+      if (last == null) {
+        lastAdBreakPlaytimeTickRef.current = now;
+        return;
+      }
+      lastAdBreakPlaytimeTickRef.current = now;
+      const deltaMs = Math.min(Math.max(0, now - last), 60_000);
+      if (deltaMs === 0) return;
+
+      adBreakRuntimeRef.current.activePlaytimeMs += deltaMs;
+    }, TICK_MS);
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      lastAdBreakPlaytimeTickRef.current = null;
+    };
+  }, [isLoading, activeFtueStage]);
+
   /** FTUE 10: purchase button rect (measured in App like harvest/seed) so overlay uses same viewport coords */
   const [ftue10PurchaseButtonRect, setFtue10PurchaseButtonRect] = useState<FtueRect | null>(null);
   const ftue10PurchaseButtonRef = useRef<HTMLButtonElement | null>(null);
   /** FTUE: hide upgrade panel until we reveal it (set to true when ready) */
   const [ftueUpgradePanelVisible, setFtueUpgradePanelVisible] = useState(false);
+
+  const applyLevelUpPopupUnlock = useCallback((level: number) => {
+    const unlockInfo = getLevelUnlockInfo(level);
+    suppressLevelUpDeclineSfxRef.current = true;
+    if (level === TASKS_FLOATING_BUTTON_UNLOCK_LEVEL && !tasksFtueCompleted) {
+      setTasksFtueStarted(true);
+      pendingTasksFtueRevealRef.current = true;
+    }
+    if (level === GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL && !gardensFtueCompleted) {
+      setGardensFtueStarted(true);
+      pendingGardensFtueRevealRef.current = true;
+    }
+    setPlayerLevel((l) => {
+      if (l < level) {
+        recordDailyTaskPlayerLeveledUp();
+        return l + 1;
+      }
+      return l;
+    });
+    setPlayerLevelProgress(0);
+    if (unlockInfo.navigateToBarnOnUnlock) {
+      // Collection FTUE needs the shelf at the top; clear any remembered scroll first.
+      if (!collectionFtueCompleted) {
+        const gardenId = activeGardenIdRef.current;
+        barnScrollYByGardenRef.current[gardenId] = 0;
+        barnScrollYRef.current = 0;
+        setBarnScrollY(0);
+        setCollectionFtueRestartPending(false);
+        setCollectionFtuePhase('intro_cta');
+      }
+      setActiveScreen('BARN');
+      skipNextBarnPendingBounceRef.current = true;
+    }
+    if (unlockInfo.tab && ftueUpgradePanelVisible && !unlockInfo.navigateToBarnOnUnlock) {
+      setIsExpanded(true);
+      setActiveTab(unlockInfo.tab);
+      if (unlockInfo.upgradeId) {
+        setPendingUnlockUpgradeId(unlockInfo.upgradeId);
+        setTimeout(() => setPendingUnlockUpgradeId(null), 2500);
+      }
+    }
+  }, [
+    tasksFtueCompleted,
+    gardensFtueCompleted,
+    collectionFtueCompleted,
+    ftueUpgradePanelVisible,
+  ]);
+
   /** FTUE: hide seeds button during loading and welcome; reveal when FTUE_2 (seed_tap) shows. Hidden from first frame so no fade-in flash. */
   const ftueHideSeedsButton = isLoading || activeFtueStage === 'welcome';
   /** FTUE: hide harvest button during loading and welcome/seed_tap/merge_drag/first_goal (visible during first_harvest and first_harvest_multi for FTUE 5 & 8). */
@@ -4253,9 +4762,17 @@ export default function App() {
     activeScreen === 'FARM' &&
     !isLoading;
 
-  const gardensFloatingButtonUnlocked = garden1PlayerLevel >= GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL;
+  const gardensFloatingButtonUnlocked = isGardensFloatingButtonUnlocked(
+    garden1PlayerLevel,
+    GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL,
+    loadGameSaveV2()?.gardensStarted ?? [DEFAULT_GARDEN_ID],
+    activeGardenId,
+  );
   const gardensFtueHoldLockedVisual =
-    gardensFloatingButtonUnlocked && !gardensFtueUnlockRevealed && !gardensFtueCompleted;
+    activeGardenId === DEFAULT_GARDEN_ID &&
+    gardensFloatingButtonUnlocked &&
+    !gardensFtueUnlockRevealed &&
+    !gardensFtueCompleted;
   const gardensFtueActive =
     gardensFtueStarted &&
     gardensFtueUnlockRevealed &&
@@ -4342,15 +4859,27 @@ export default function App() {
   const [collectionFtueCtaPressed, setCollectionFtueCtaPressed] = useState(false);
 
   const saveBarnScrollForGarden = useCallback((gardenId: GardenId) => {
+    // Locked, or collection FTUE still pending: never remember scroll — always top.
+    if (!isPlantCollectionUiUnlockedForGarden(playerLevel) || !collectionFtueCompleted) {
+      barnScrollYByGardenRef.current[gardenId] = 0;
+      return;
+    }
     barnScrollYByGardenRef.current[gardenId] = barnScrollYRef.current;
-  }, []);
+  }, [playerLevel, collectionFtueCompleted]);
 
   const restoreBarnScrollForGarden = useCallback((gardenId: GardenId) => {
-    const scrollY = barnScrollYByGardenRef.current[gardenId] ?? 0;
     barnScrollGardenIdRef.current = gardenId;
+    // Locked, or collection FTUE still pending: always land at top (View Collection → FTUE).
+    if (!isPlantCollectionUiUnlockedForGarden(playerLevel) || !collectionFtueCompleted) {
+      barnScrollYRef.current = 0;
+      barnScrollYByGardenRef.current[gardenId] = 0;
+      setBarnScrollY(0);
+      return;
+    }
+    const scrollY = barnScrollYByGardenRef.current[gardenId] ?? 0;
     barnScrollYRef.current = scrollY;
     setBarnScrollY(scrollY);
-  }, []);
+  }, [playerLevel, collectionFtueCompleted]);
 
   const clampBarnScrollToContent = useCallback(() => {
     const el = barnScrollRef.current;
@@ -6607,7 +7136,18 @@ export default function App() {
     // Intentionally allow auto-merge while discovery / level-up are open so merge chains do not stall
     // (e.g. L2+L2→L3 opens discovery while two L1 pairs are still on the board).
     if (offlineEarningsUi?.open) return;
-    if (showFakeAd || showFakeReview) return;
+    if (
+      showFakeAd ||
+      showFakeReview ||
+      rewardedAdFadeInActive ||
+      rewardedAdBlackHoldActive ||
+      rewardedAdFadeOutActive ||
+      adBreakIntroActive ||
+      interstitialAdSlotActive ||
+      rewardedAdSlotActive
+    ) {
+      return;
+    }
     if (purchaseSuccessfulUi) return;
     if (iapOfferUi) return;
     if (limitedOfferPopup?.isVisible) return;
@@ -6656,6 +7196,12 @@ export default function App() {
     showFakeReview,
     offlineEarningsUi?.open,
     showFakeAd,
+    rewardedAdFadeInActive,
+    rewardedAdBlackHoldActive,
+    rewardedAdFadeOutActive,
+    adBreakIntroActive,
+    interstitialAdSlotActive,
+    rewardedAdSlotActive,
     purchaseSuccessfulUi,
     iapOfferUi,
     limitedOfferPopup?.isVisible,
@@ -6970,6 +7516,12 @@ export default function App() {
       save.pendingUnlockUpgradeId === 'fertile_soil' ? 'wild_growth' : save.pendingUnlockUpgradeId
     );
     setLevelUpPopupQueue(save.levelUpPopupQueue);
+    adBreakRuntimeRef.current = {
+      lastAdBreakAt: save.lastAdBreakAt ?? 0,
+      lastRewardedAdAt: save.lastRewardedAdAt ?? 0,
+      activePlaytimeMs: save.adBreakActivePlaytimeMs ?? 0,
+      fallbackPending: false,
+    };
 
     seedProgressRef.current = save.seedProgress;
     setSeedProgress(save.seedProgress);
@@ -7260,7 +7812,12 @@ export default function App() {
             GARDEN_SWITCH_FADE_IN_MS,
           );
 
-          showIdleEarningsPopup(idleDisplay, 300);
+          if (idleDisplay > 0) {
+            pendingSwitchGardenAdBreakRef.current = true;
+            showIdleEarningsPopup(idleDisplay, 300);
+          } else {
+            tryShowAdBreakRef.current('switch_garden');
+          }
         } finally {
           gardenSwitchTransitionRef.current = false;
           setGardenSwitchOverlayOpacity(0);
@@ -7506,6 +8063,9 @@ export default function App() {
       dailyAllowanceClaimedDayKey,
       storeFreeOfferSlots,
       storeSlotCooldownEnds,
+      lastAdBreakAt: adBreakRuntimeRef.current.lastAdBreakAt || undefined,
+      lastRewardedAdAt: adBreakRuntimeRef.current.lastRewardedAdAt || undefined,
+      adBreakActivePlaytimeMs: adBreakRuntimeRef.current.activePlaytimeMs || undefined,
     };
     const normalized = normalizeGameSaveV1({ ...payload, v: GAME_SAVE_VERSION });
     const existing = loadGameSaveV2();
@@ -7751,7 +8311,7 @@ export default function App() {
                   playSfx(SFX_IDS.uiConfirmReward);
                   pendingAdSourceRef.current = 'storeFreeOffer';
                   pendingOfferIdRef.current = offerId;
-                  setShowFakeAd(true);
+                  openRewardedFakeAd();
                   setPendingAdComplete(() => () => {
                     setShowFakeAd(false);
                     setStoreSlotCooldownEnds((ends) => {
@@ -8289,10 +8849,21 @@ export default function App() {
                       zIndex: 10,
                     }}
                     onClick={() => {
-                      if (showFakeAd || showFakeReview) return;
+                      if (
+                        showFakeAd ||
+                        showFakeReview ||
+                        rewardedAdFadeInActive ||
+                        rewardedAdBlackHoldActive ||
+                        rewardedAdFadeOutActive ||
+                        adBreakIntroActive ||
+                        interstitialAdSlotActive ||
+                        rewardedAdSlotActive
+                      ) {
+                        return;
+                      }
                       playSfx(SFX_IDS.uiConfirmReward);
                       pendingAdSourceRef.current = 'coinGoal';
-                      setShowFakeAd(true);
+                      openRewardedFakeAd();
                       setPendingAdComplete(() => () => {
                         pendingAdSourceRef.current = null;
                         playSfx(SFX_IDS.goalClaim);
@@ -8450,7 +9021,7 @@ export default function App() {
                           onClick={() => {
                             playSfx(SFX_IDS.uiConfirmNormal);
                             if (
-                              garden1PlayerLevel < GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL ||
+                              !gardensFloatingButtonUnlocked ||
                               gardensFtueHoldLockedVisual
                             ) {
                               setLockedGardenPickerPopupOpen(true);
@@ -8897,7 +9468,7 @@ export default function App() {
                       // Tap on Watch Ad button: open fake ad directly (skip popup), grant reward on Activate Reward
                       pendingAdSourceRef.current = 'upgradeList';
                       pendingOfferIdRef.current = offerId;
-                      setShowFakeAd(true);
+                      openRewardedFakeAd();
                       setPendingAdComplete(() => () => {
                         setRewardedOffers(prev => prev.filter(o => o.id !== offerId));
                         setShowFakeAd(false);
@@ -9918,49 +10489,25 @@ export default function App() {
                   buttonText={unlockInfo.levelUpButtonText}
                   iconScale={unlockInfo.headerIconScale ?? 1}
                   showGoldenPotAvailableRow={levelUpPopup.level === PLANT_COLLECTION_UI_UNLOCK_LEVEL}
-                  onUnlockNow={() => {
-                    suppressLevelUpDeclineSfxRef.current = true;
+                  shouldDeferPrimaryClose={() => {
                     if (
-                      levelUpPopup.level === TASKS_FLOATING_BUTTON_UNLOCK_LEVEL &&
-                      !tasksFtueCompleted
+                      shouldSkipLevelUpAdBreak({
+                        level: levelUpPopup.level,
+                        collectionFtueCompleted,
+                        tasksFtueCompleted,
+                        gardensFtueCompleted,
+                      })
                     ) {
-                      setTasksFtueStarted(true);
-                      pendingTasksFtueRevealRef.current = true;
+                      return false;
                     }
-                    if (
-                      levelUpPopup.level === GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL &&
-                      !gardensFtueCompleted
-                    ) {
-                      setGardensFtueStarted(true);
-                      pendingGardensFtueRevealRef.current = true;
-                    }
-                    // Settings "Level Up" already advances `playerLevel` before showing the popup.
-                    // Only increment here if the player is still below the popup level.
-                    setPlayerLevel((l) => {
-                      if (l < levelUpPopup.level) {
-                        recordDailyTaskPlayerLeveledUp();
-                        return l + 1;
-                      }
-                      return l;
+                    const showed = tryShowAdBreak('level_up_continue', () => {
+                      applyLevelUpPopupUnlock(levelUpPopup.level);
+                      finishLevelUpPopupAfterAdBreak();
                     });
-                    setPlayerLevelProgress(0);
-                    if (unlockInfo.navigateToBarnOnUnlock) {
-                      setActiveScreen('BARN');
-                      skipNextBarnPendingBounceRef.current = true;
-                      if (!collectionFtueCompleted) {
-                        setCollectionFtueRestartPending(false);
-                        setCollectionFtuePhase('intro_cta');
-                      }
-                    }
-                    if (unlockInfo.tab && ftueUpgradePanelVisible && !unlockInfo.navigateToBarnOnUnlock) {
-                      setIsExpanded(true);
-                      setActiveTab(unlockInfo.tab);
-                      if (unlockInfo.upgradeId) {
-                        setPendingUnlockUpgradeId(unlockInfo.upgradeId);
-                        setTimeout(() => setPendingUnlockUpgradeId(null), 2500);
-                      }
-                    }
+                    if (showed) suppressLevelUpDeclineSfxRef.current = true;
+                    return showed;
                   }}
+                  onUnlockNow={() => applyLevelUpPopupUnlock(levelUpPopup.level)}
                   appScale={appScale}
                 />
               );
@@ -9978,6 +10525,7 @@ export default function App() {
                 inProgressTierPotCounts={inProgressBonusTierPotCounts}
                 onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
                 onClose={() => {
+                  const hadUnlockReveal = goldenPotBonusRevealTier != null;
                   lastOtherPopupClosedAtRef.current = Date.now();
                   setGoldenPotBonusRevealTier(null);
                   setGoldenPotBonusScrollTierPotCount(null);
@@ -9988,6 +10536,9 @@ export default function App() {
                     tryStartAutoMergeRef.current();
                     scheduleAutoMergeRecheckRef.current(0);
                   });
+                  if (hadUnlockReveal) {
+                    tryShowAdBreak('collection_bonus_close');
+                  }
                 }}
               />
             )}
@@ -10027,53 +10578,20 @@ export default function App() {
                 showCloseButton={false}
                 closeOnBackdropClick={false}
                 appScale={appScale}
+                shouldDeferPrimaryClose={(startPoint) => {
+                  const showed = tryShowAdBreak('discovery_add', () => {
+                    applyDiscoveryAddToCollectionEffects(discoveryPopup.level, startPoint);
+                    finishDiscoveryPopupAfterAdBreak();
+                  });
+                  if (showed) {
+                    playSfx(SFX_IDS.uiConfirmReward);
+                    suppressDiscoveryDeclineSfxRef.current = true;
+                  }
+                  return showed;
+                }}
                 onButtonClick={(startPoint) => {
                   playSfx(SFX_IDS.uiConfirmReward);
-                  suppressDiscoveryDeclineSfxRef.current = true;
-                  const rewardValue = applyDoubleCoinsVisualAmount(
-                    getCoinValueForLevel(discoveryPopup.level) * PLANT_DISCOVERY_COIN_MULTIPLIER,
-                    activeBoostsRef.current
-                  );
-                  // Render particles in a fixed full-viewport layer (portaled with modals) so coords match
-                  // the popup's viewport getBoundingClientRect — avoids scaled #game-container transform mismatch.
-                  const layer = discoveryRewardFxLayerRef.current;
-                  if (layer) {
-                    const lr = layer.getBoundingClientRect();
-                    const startX = startPoint.x - lr.left;
-                    const startY = startPoint.y - lr.top;
-                    setActiveDiscoveryCoinParticles((prev) => [...prev, {
-                      id: `discovery-reward-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-                      startX,
-                      startY,
-                      value: rewardValue,
-                    }]);
-                  }
-                  if (containerRef.current) {
-                    const cr = containerRef.current.getBoundingClientRect();
-                    const scale = appScaleRef.current;
-                    setActiveBarnParticles((prev) => [
-                      ...prev,
-                      {
-                        id: `discovery-collection-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-                        startX: (startPoint.x - cr.left) / scale,
-                        startY: (startPoint.y - cr.top) / scale,
-                      },
-                    ]);
-                  }
-
-                  // FTUE 4 progression from first plant-2 discovery still happens on confirm.
-                  if (discoveryPopup.level === 2 && ftue4Pending) {
-                    setFtue4Pending(false);
-                    setActiveFtueStage('first_goal');
-                    setGoalSlots(['green', 'empty', 'empty', 'empty', 'empty']);
-                    setGoalPlantTypes([2, 0, 0, 0, 0]);
-                    setDiscoveryGoalLightGreenDismissed([false, false, false, false, false]);
-                    setGoalDiscoveryLightGreenActive([false, false, false, false, false]);
-                    recordSpawnedGoalPlantLevel(2, lastSpawnedGoalLevelsRef, lastSpawnedGoalPlantLevelHUDRef);
-                    setGoalCounts([3, 0, 0, 0, 0]);
-                    setGoalAmountsRequired([3, 0, 0, 0, 0]);
-                    setGoalDisplayOrder([0]);
-                  }
+                  applyDiscoveryAddToCollectionEffects(discoveryPopup.level, startPoint);
                 }}
               />
             )}
@@ -10293,7 +10811,7 @@ export default function App() {
                   pendingAdSourceRef.current = 'limitedOffer';
                   pendingOfferIdRef.current = offerId ?? null;
                   setLimitedOfferPopup(null);
-                  setShowFakeAd(true);
+                  openRewardedFakeAd();
                   setPendingAdComplete(() => () => {
                     if (offerId) {
                       setRewardedOffers(prev => prev.filter(o => o.id !== offerId));
@@ -10353,13 +10871,42 @@ export default function App() {
               />
             )}
 
-            {/* Fake Ad - constrained to game area (same size as game); Complete ad runs pendingAdComplete then closes */}
+            {/* Rewarded ad: full-black fade-in before fake ad */}
+            <AdFullscreenFadeOverlay
+              active={rewardedAdFadeInActive}
+              durationMs={AD_REWARDED_FADE_IN_MS}
+            />
+            {rewardedAdBlackHoldActive ? (
+              <div
+                className="fixed inset-0"
+                style={{ zIndex: 115, backgroundColor: '#000', pointerEvents: 'none' }}
+                aria-hidden
+              />
+            ) : null}
+            <AdFullscreenFadeOverlay
+              active={rewardedAdFadeOutActive}
+              durationMs={AD_REWARDED_FADE_OUT_MS}
+              fromOpacity={1}
+              toOpacity={0}
+            />
+
+            {/* Interstitial ad break: icon intro before fake ad (wired via openAdBreakFakeAd) */}
+            <AdBreakIntroOverlay
+              active={adBreakIntroActive}
+              fadeOut={adBreakFadeOutActive}
+              onIntroComplete={handleAdBreakIntroComplete}
+              onFadeOutComplete={handleAdBreakFadeOutComplete}
+            />
+
+            {/* Loading plate under real ads (rewarded = Claim Reward, ad-break = Return To Game). */}
             <FakeAdPopup
               isVisible={showFakeAd}
+              variant={fakeAdVariant}
               appScale={appScale}
               gameDesignWidth={designWidth}
               gameDesignHeight={designHeight}
               onActivateRewardClick={(buttonRect) => {
+                if (pendingAdSourceRef.current === 'adBreak') return;
                 if (pendingAdSourceRef.current === 'offlineEarnings') return;
                 if (pendingAdSourceRef.current === 'coinGoal') return;
                 if (pendingAdSourceRef.current === 'dailyTaskClaim2x') return;
@@ -10393,30 +10940,30 @@ export default function App() {
                 ]);
               }}
               onComplete={() => {
-                lastFakeAdClosedAtRef.current = Date.now();
-                const adSource = pendingAdSourceRef.current;
-                pendingAdSourceRef.current = null;
-                setShowFakeAd(false);
-
-                if (adSource === 'dailyTaskClaim2x') {
-                  const pending = pendingDailyTaskClaimRef.current;
-                  pendingDailyTaskClaimRef.current = null;
-                  if (pending) {
-                    window.setTimeout(() => {
-                      performDailyTaskClaim(pending.taskId, pending.fx, pending.coinMultiplier);
-                    }, DAILY_TASK_2X_CLAIM_AFTER_AD_MS);
-                  }
+                if (pendingAdSourceRef.current === 'adBreak' || fakeAdVariant === 'adBreak') {
+                  beginAdBreakOutro();
                   return;
                 }
-
-                if (adSource === 'storeFreeOffer') {
-                  applyDailyTaskRowsUpdate(recordDailyTaskFreeOfferClaimed(getDailyTasksCtx()));
-                }
-
-                const applyReward = pendingAdComplete;
-                setPendingAdComplete(null);
-                setTimeout(() => applyReward?.(), 250);
+                handleRewardedLoadingPlateComplete();
               }}
+            />
+
+            {/*
+              REAL INTERSTITIAL AD SLOT (above loading plate).
+              Wire SDK in utils/adBreak/interstitialAdBridge.ts — this layer is the mount/cover.
+            */}
+            <InterstitialAdLayer
+              active={interstitialAdSlotActive}
+              onClosed={handleInterstitialAdClosed}
+            />
+
+            {/*
+              REAL REWARDED AD SLOT (above loading plate).
+              Wire SDK in utils/adBreak/rewardedAdBridge.ts — this layer is the mount/cover.
+            */}
+            <RewardedAdLayer
+              active={rewardedAdSlotActive}
+              onClosed={handleRewardedAdClosed}
             />
 
             <FakeReviewPopup
@@ -10658,6 +11205,11 @@ export default function App() {
               )}
               onUnlockPlantClick={handleDevUnlockPlantClick}
               onGoldenPotClick={handleDevGoldenPotClick}
+              onTestAdBreakClick={() => {
+                playSfx(SFX_IDS.uiConfirmNormal);
+                setDevToolsOpen(false);
+                queueMicrotask(() => tryShowAdBreak('fallback_idle'));
+              }}
               fakeNotchPreviewEnabled={fakeNotchPreviewEnabled}
               onFakeNotchToggle={() => {
                 playSfx(SFX_IDS.uiConfirmNormal);
@@ -10716,7 +11268,7 @@ export default function App() {
                       };
                     });
                   });
-                  setShowFakeAd(true);
+                  openRewardedFakeAd();
                 }}
                 onCollectClick={(startPoint) => {
                   playSfx(SFX_IDS.uiConfirmReward);
@@ -10724,6 +11276,11 @@ export default function App() {
                   const payout = amt;
                   pendingOfflineEarningsRef.current = 0;
                   setOfflineEarningsUi(null);
+                  lastOfflineEarningsClosedAtRef.current = Date.now();
+                  if (pendingSwitchGardenAdBreakRef.current) {
+                    pendingSwitchGardenAdBreakRef.current = false;
+                    queueMicrotask(() => tryShowAdBreakRef.current('switch_garden'));
+                  }
                   const layer = discoveryRewardFxLayerRef.current;
                   if (layer) {
                     const lr = layer.getBoundingClientRect();

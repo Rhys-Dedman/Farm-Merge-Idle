@@ -18,6 +18,8 @@ interface PauseMenuPopupProps {
   onUnlockPlantClick?: () => void;
   /** Dev/cheat: complete current golden pot progress segment instantly. */
   onGoldenPotClick?: () => void;
+  /** Dev: preview ad break intro + interstitial fake ad. */
+  onTestAdBreakClick?: () => void;
   /** Dev/cheat: add coins (e.g. +100k). Does not close pause menu. */
   onAddMoney?: (amount: number) => void;
   /** Dev/cheat: set wallet to 0 on every garden. */
@@ -106,6 +108,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   onLevelUpClick,
   onUnlockPlantClick,
   onGoldenPotClick,
+  onTestAdBreakClick,
   onAddMoney,
   onClearCoins,
   onClearProgress,
@@ -123,6 +126,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   const [levelUpPressed, setLevelUpPressed] = useState(false);
   const [unlockPlantPressed, setUnlockPlantPressed] = useState(false);
   const [goldenPotPressed, setGoldenPotPressed] = useState(false);
+  const [adBreakPressed, setAdBreakPressed] = useState(false);
   const [addCoinsPressed, setAddCoinsPressed] = useState(false);
   const [clearCoinsPressed, setClearCoinsPressed] = useState(false);
   const [clearProgressPressed, setClearProgressPressed] = useState(false);
@@ -361,6 +365,21 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                   >
                     <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.blue)}>
                       Golden Pot
+                    </span>
+                  </button>
+                ) : null}
+                {onTestAdBreakClick ? (
+                  <button
+                    type="button"
+                    onMouseDown={() => setAdBreakPressed(true)}
+                    onMouseUp={() => setAdBreakPressed(false)}
+                    onMouseLeave={() => setAdBreakPressed(false)}
+                    onClick={() => onTestAdBreakClick()}
+                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.yellow, adBreakPressed)}
+                  >
+                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.yellow)}>
+                      Test Ad Break
                     </span>
                   </button>
                 ) : null}

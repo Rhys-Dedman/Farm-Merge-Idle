@@ -33,6 +33,8 @@ const LEAF_LIFETIME_MS_MAX = 700;
 /** Baseline particle count for "leaf burst" (merge). Use 30% for "leaf burst small" (seed impact). */
 export const LEAF_BURST_BASELINE_COUNT = 18;
 export const LEAF_BURST_SMALL_COUNT = Math.max(1, Math.round(LEAF_BURST_BASELINE_COUNT * 0.3));
+/** Circular burst boundary radius (px, before burstScale) when `useCircle` is true. */
+export const LEAF_BURST_CIRCLE_RADIUS_PX = ELLIPSE_A;
 
 interface LeafParticle {
   id: number;
@@ -61,8 +63,10 @@ interface LeafBurstProps {
   spriteVariant?: 'default' | 'gold';
   /** Scale multiplier for burst size (default: 1) */
   burstScale?: number;
-  /** Stacking order for fixed burst root (default: 70) */
+  /** Stacking order for burst root (default: 70) */
   zIndex?: number;
+  /** Positioning mode for burst root (default: fixed viewport coords). */
+  anchorPosition?: 'fixed' | 'absolute';
   /** Vertical shift applied to burst origin (default: plant spawn offset). Pass 0 to center on `x`/`y`. */
   spawnOffsetUpPx?: number;
 }
@@ -92,6 +96,7 @@ export const LeafBurst: React.FC<LeafBurstProps> = ({
   spriteVariant = 'default',
   burstScale = 1,
   zIndex = 70,
+  anchorPosition = 'fixed',
   spawnOffsetUpPx = SPAWN_OFFSET_UP_PX,
 }) => {
   const sprites = spriteVariant === 'gold' ? LEAF_SPRITES_GOLD : LEAF_SPRITES;
@@ -204,7 +209,7 @@ export const LeafBurst: React.FC<LeafBurstProps> = ({
     <div
       className="pointer-events-none"
       style={{
-        position: 'fixed',
+        position: anchorPosition,
         left: x,
         top: y - spawnOffsetUpPx * appScale,
         width: 1,
