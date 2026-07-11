@@ -39,10 +39,49 @@ export interface AdBreakBlockerContext {
   goldenPotBonusesPopupOpen: boolean;
 }
 
-/** Start / extend the post-return grace window (load finish, offline earnings close). */
+/** Failsafe interval used for overdue fallback + new-session detection. */
+export function getAdBreakMaxIntervalMs(): number {
+  return AD_BREAK_SETTINGS.cooldownMs * AD_BREAK_SETTINGS.maxIntervalCooldownMultiplier;
+}
+
+/** Start / extend the post-return grace window (short same-session breaks only). */
 export function bumpAdBreakReturnGrace(state: AdBreakRuntimeState, now: number): void {
   state.graceUntil = Math.max(state.graceUntil, now + AD_BREAK_SETTINGS.returnGraceMs);
   state.fallbackPending = false;
+}
+
+export type AdBreakReturnKind = 'new_session' | 'short_break' | 'within_cooldown';
+
+/**
+ * Apply return policy from how long the player was away (since last background).
+ *
+ * - **new_session** (away >= max interval): no grace; if they had a prior session, stamp
+ *   `lastAdBreakAt = now` so the full interstitial cooldown starts fresh.
+ * - **short_break** / **within_cooldown** (away < max interval): 60s grace so a near-ready
+ *   cooldown (e.g. 2:59) cannot fire an ad the instant they return.
+ */
+export function applyAdBreakReturnPolicy(
+  state: AdBreakRuntimeState,
+  now: number,
+  awayMs: number,
+  opts?: { hadPriorSession?: boolean },
+): AdBreakReturnKind {
+  const maxIntervalMs = getAdBreakMaxIntervalMs();
+  const cooldownMs = AD_BREAK_SETTINGS.cooldownMs;
+  const hadPriorSession = opts?.hadPriorSession === true;
+
+  if (awayMs >= maxIntervalMs) {
+    state.fallbackPending = false;
+    state.graceUntil = 0;
+    if (hadPriorSession || state.lastAdBreakAt > 0) {
+      state.lastAdBreakAt = now;
+    }
+    return 'new_session';
+  }
+
+  // Same session (any away under max interval): always grace on return.
+  bumpAdBreakReturnGrace(state, now);
+  return awayMs >= cooldownMs ? 'short_break' : 'within_cooldown';
 }
 
 export function isAdBreakUnlockGateOpen(ctx: AdBreakBlockerContext): boolean {
@@ -111,10 +150,7 @@ export function shouldFlagAdBreakFallback(
   now: number,
 ): boolean {
   if (state.lastAdBreakAt <= 0) return false;
-  const maxIntervalMs =
-    AD_BREAK_SETTINGS.maxIntervalMs ??
-    AD_BREAK_SETTINGS.cooldownMs * AD_BREAK_SETTINGS.maxIntervalCooldownMultiplier;
-  return now - state.lastAdBreakAt >= maxIntervalMs;
+  return now - state.lastAdBreakAt >= getAdBreakMaxIntervalMs();
 }
 
 export function canShowAdBreakNow(

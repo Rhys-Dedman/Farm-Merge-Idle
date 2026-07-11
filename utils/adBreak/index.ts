@@ -2,14 +2,17 @@ export type { AdBreakTriggerId } from '../../constants/adBreakSettings';
 export { AD_BREAK_SETTINGS } from '../../constants/adBreakSettings';
 export type { AdBreakBlockerContext, AdBreakRuntimeState } from './evaluateAdBreak';
 export {
+  applyAdBreakReturnPolicy,
   areAdBreakBlockersClear,
   bumpAdBreakReturnGrace,
   canShowAdBreakNow,
   getAdBreakBlockers,
+  getAdBreakMaxIntervalMs,
   isAdBreakCooldownReady,
   isAdBreakUnlockGateOpen,
   shouldFlagAdBreakFallback,
 } from './evaluateAdBreak';
+export type { AdBreakReturnKind } from './evaluateAdBreak';
 export type {
   InterstitialAdBridge,
   InterstitialAdCloseResult,

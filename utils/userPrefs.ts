@@ -21,6 +21,8 @@ export type UserPrefs = {
   returnReminderLastCategory: ReminderCopyCategory | null;
   /** Recently used bodies (avoid repeats). */
   returnReminderRecentBodies: string[];
+  /** When the app last went to background (for ad-break return policy). */
+  adBreakLastBackgroundAt: number;
 };
 
 const DEFAULT_USER_PREFS: UserPrefs = {
@@ -32,6 +34,7 @@ const DEFAULT_USER_PREFS: UserPrefs = {
   returnReminderDeliveryAts: [],
   returnReminderLastCategory: null,
   returnReminderRecentBodies: [],
+  adBreakLastBackgroundAt: 0,
 };
 
 function normalizeCategory(raw: unknown): ReminderCopyCategory | null {
@@ -67,6 +70,10 @@ function normalizeUserPrefs(raw: unknown): UserPrefs {
     returnReminderDeliveryAts,
     returnReminderLastCategory: normalizeCategory(o.returnReminderLastCategory),
     returnReminderRecentBodies,
+    adBreakLastBackgroundAt:
+      typeof o.adBreakLastBackgroundAt === 'number' && Number.isFinite(o.adBreakLastBackgroundAt)
+        ? o.adBreakLastBackgroundAt
+        : DEFAULT_USER_PREFS.adBreakLastBackgroundAt,
   };
 }
 

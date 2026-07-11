@@ -27,7 +27,7 @@
  * | Loading | Game still loading |
  * | Garden switch overlay | Garden transition in progress |
  * | Offline earnings open | Welcome-back popup visible |
- * | Return grace | Within `returnGraceMs` after load finish or offline-earnings close |
+ * | Return grace | Same-session returns under max interval: `returnGraceMs` (covers near-ready cooldowns) |
  * | In Store | Never show interstitial ads on the Store screen (wait until they leave) |
  * | Pause / dev tools open | Settings or debugger open |
  * | Other blocking popups | IAP, purchase success, rate-us, fake review, limited offer, daily tasks |
@@ -41,7 +41,11 @@
  * | `cooldownMs` | 3 min | Minimum time since last ad break |
  * | `rewardedBufferMs` | 2 min | Minimum time since last rewarded ad |
  * | `maxIntervalMs` | omitted → 2× cooldown (6 min) | Failsafe: flag fallback if no ad for this long |
- * | `returnGraceMs` | 60s | No ad breaks after load finish or offline-earnings close |
+ * | `returnGraceMs` | 60s | Same-session return buffer (any away under max interval) |
+ *
+ * **Return policy (away time vs last background):**
+ * - Away at least max interval → **new session**: no grace; stamp `lastAdBreakAt = now` so full cooldown applies
+ * - Away under max interval → **same session**: apply `returnGraceMs` (even if cooldown is almost ready)
  *
  * First ad break only after **minPlayerLevel** OR **minActivePlaytimeMs** (whichever comes first).
  * No daily cap.
@@ -70,8 +74,8 @@ export const AD_BREAK_SETTINGS = {
   /** How often to re-check fallback while playing. */
   fallbackPollMs: 5 * 1000,
   /**
-   * After session load finishes (and again when offline earnings closes),
-   * block all ad breaks for this long so returning players aren't hit immediately.
+   * Short same-session break buffer only (see `applyAdBreakReturnPolicy`).
+   * Not used for long absences / new sessions.
    */
   returnGraceMs: 60 * 1000,
 } as const;

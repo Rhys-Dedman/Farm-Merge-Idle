@@ -61,7 +61,7 @@ import type { FakeAdVariant } from './constants/adPresentation';
 import type { AdBreakTriggerId } from './constants/adBreakSettings';
 import { AD_BREAK_SETTINGS } from './constants/adBreakSettings';
 import {
-  bumpAdBreakReturnGrace,
+  applyAdBreakReturnPolicy,
   canShowAdBreakNow,
   shouldFlagAdBreakFallback,
   interstitialAdBridge,
@@ -1732,12 +1732,14 @@ export default function App() {
 
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
+        persistUserPrefs({ adBreakLastBackgroundAt: Date.now() });
         void scheduleReturnReminders(Date.now());
       } else {
         void cancelReturnReminders();
       }
     };
     const onPageHide = () => {
+      persistUserPrefs({ adBreakLastBackgroundAt: Date.now() });
       void scheduleReturnReminders(Date.now());
     };
 
@@ -3566,14 +3568,35 @@ export default function App() {
     return () => window.clearInterval(id);
   }, [isLoading, activeFtueStage]);
 
-  /** 60s return grace when loading finishes (covers cold start without offline popup). */
-  const prevIsLoadingForAdGraceRef = useRef(true);
+  /** New session vs short-break ad policy when loading finishes or app resumes. */
+  const applyAdBreakReturnFromAway = useCallback(() => {
+    const now = Date.now();
+    const lastBg = loadUserPrefs().adBreakLastBackgroundAt;
+    const awayMs = lastBg > 0 ? Math.max(0, now - lastBg) : Number.POSITIVE_INFINITY;
+    applyAdBreakReturnPolicy(adBreakRuntimeRef.current, now, awayMs, {
+      hadPriorSession: lastBg > 0,
+    });
+  }, []);
+
+  const prevIsLoadingForAdReturnRef = useRef(true);
   useEffect(() => {
-    if (prevIsLoadingForAdGraceRef.current && !isLoading) {
-      bumpAdBreakReturnGrace(adBreakRuntimeRef.current, Date.now());
+    if (prevIsLoadingForAdReturnRef.current && !isLoading) {
+      applyAdBreakReturnFromAway();
     }
-    prevIsLoadingForAdGraceRef.current = isLoading;
-  }, [isLoading]);
+    prevIsLoadingForAdReturnRef.current = isLoading;
+  }, [isLoading, applyAdBreakReturnFromAway]);
+
+  /** Resume from background without a full reload (same policy as load finish). */
+  useEffect(() => {
+    if (isLoading) return;
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        applyAdBreakReturnFromAway();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [isLoading, applyAdBreakReturnFromAway]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -4283,11 +4306,11 @@ export default function App() {
     }
     if (prevOfflineEarningsOpenRef.current && !open) {
       lastOfflineEarningsClosedAtRef.current = Date.now();
-      // Full 60s grace after welcome-back, even if load grace already started ticking.
-      bumpAdBreakReturnGrace(adBreakRuntimeRef.current, Date.now());
+      // Re-apply return policy so new-session cooldown starts after welcome-back, not during splash.
+      applyAdBreakReturnFromAway();
     }
     prevOfflineEarningsOpenRef.current = open;
-  }, [offlineEarningsUi?.open]);
+  }, [offlineEarningsUi?.open, applyAdBreakReturnFromAway]);
 
   /** Dismiss limited offer if offline earnings takes priority (no double popup). */
   useEffect(() => {
