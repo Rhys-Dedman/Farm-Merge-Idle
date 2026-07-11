@@ -41,5 +41,26 @@ export const STARTER_PACK_FORCE_POPUP_LEVEL = 4;
 /** Wild Growth feature + upgrade row unlock (keep in sync with `CROPS_UNLOCK_LEVELS.wild_growth`). */
 export const WILD_GROWTH_UNLOCK_PLAYER_LEVEL = 8;
 
+/**
+ * Crop Yield unlock level.
+ * Garden 1: 11 (after New Gardens at 10). Garden 2+: 10 (New Gardens omitted).
+ */
+export function getCropYieldUnlockLevel(gardenId: GardenId = DEFAULT_GARDEN_ID): number {
+  return gardenId === DEFAULT_GARDEN_ID ? 11 : 10;
+}
+
+/**
+ * Happy Customers unlock level.
+ * Garden 1: 12. Garden 2+: 11 (shifted forward one after dropping New Gardens).
+ */
+export function getHappyCustomerUnlockLevel(gardenId: GardenId = DEFAULT_GARDEN_ID): number {
+  return gardenId === DEFAULT_GARDEN_ID ? 12 : 11;
+}
+
 /** Highest level with a scripted level-up unlock popup (excludes starter-pack level 4). */
+export function getMaxLevelWithCustomUnlockPopup(gardenId: GardenId = DEFAULT_GARDEN_ID): number {
+  return gardenId === DEFAULT_GARDEN_ID ? 12 : 11;
+}
+
+/** Garden 1 max custom unlock level (legacy constant; prefer `getMaxLevelWithCustomUnlockPopup`). */
 export const MAX_LEVEL_WITH_CUSTOM_UNLOCK_POPUP = 12;

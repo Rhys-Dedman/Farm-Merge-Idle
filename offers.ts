@@ -50,8 +50,15 @@ export const REMOVE_ADS_HEADER_ICON = '/assets/icons/store/icon_noads.png';
 export const STORE_IAP_OFFER_REMOVE_ADS_ID = 'store_no_ads' as const;
 /** Bundle row id for Starter Pack — also used by **`IapOfferPopup`** (“Starter Pack popup”). */
 export const STORE_IAP_OFFER_STARTER_PACK_ID = 'store_bundle_starter_pack' as const;
+/**
+ * Field Pack — garden 2+ level-4 limited bundle.
+ * Own rewards / price / 24h timer keys (independent of Starter Pack; edit freely).
+ */
+export const STORE_IAP_OFFER_FIELD_PACK_ID = 'store_bundle_field_pack' as const;
 /** Bundle main-column art (top of stacked pair). */
 export const STARTER_PACK_HEADER_ICON = '/assets/icons/store/icon_starterpack.png';
+/** Field Pack header art (own constant so it can diverge from Starter Pack later). */
+export const FIELD_PACK_HEADER_ICON = '/assets/icons/store/icon_starterpack.png';
 export const HARVESTER_PACK_HEADER_ICON = '/assets/icons/store/icon_farmerpack.png';
 export const STORE_NO_ADS_ROW_BACKGROUND = '/assets/ui/ui_store_noads.png';
 
@@ -453,6 +460,11 @@ export const STORE_STARTER_PACK_UNLOCKED_KEY = 'store_bundle_starter_pack_unlock
 /** Set when starter pack IAP succeeds; removed in `clearGameSave` with the countdown key. */
 export const STORE_STARTER_PACK_PURCHASED_KEY = 'store_bundle_starter_pack_purchased';
 
+/** Field Pack (garden 2+ level 4) — own 24h limited-offer keys (independent of Starter Pack). */
+export const STORE_FIELD_PACK_COUNTDOWN_END_MS_KEY = 'store_bundle_field_pack_countdown_end_ms';
+export const STORE_FIELD_PACK_UNLOCKED_KEY = 'store_bundle_field_pack_unlocked';
+export const STORE_FIELD_PACK_PURCHASED_KEY = 'store_bundle_field_pack_purchased';
+
 export const STORE_BUNDLE_OFFERS: StoreBundleOfferConfig[] = [
   {
     ...STORE_COIN_OFFERS[0],
@@ -485,6 +497,40 @@ export const STORE_BUNDLE_OFFERS: StoreBundleOfferConfig[] = [
     originalPriceLabel: '$49.99',
     valueCalloutText: 'Limited Offer',
     limitedOfferCountdownStorageKey: STORE_STARTER_PACK_COUNTDOWN_END_MS_KEY,
+    limitedOfferCountdownDurationMs: 24 * 60 * 60 * 1000,
+  },
+  {
+    // Field Pack — duplicate of Starter Pack values today; edit this block independently later.
+    ...STORE_COIN_OFFERS[0],
+    id: STORE_IAP_OFFER_FIELD_PACK_ID,
+    title: 'Field Pack',
+    headerIcon: FIELD_PACK_HEADER_ICON,
+    headerIconStack: [FIELD_PACK_HEADER_ICON, REMOVE_ADS_HEADER_ICON],
+    offerLineText: 'Remove Ads',
+    durationText: '24hr',
+    rewardStripIconPath: REMOVE_ADS_HEADER_ICON,
+    extraRewardRows: [
+      { offerLineText: 'Double Coins', durationText: '2hr', coinIconPath: DOUBLE_COINS_REWARD_ICON },
+      {
+        offerLineText: 'Rapid Harvest',
+        durationText: '30m',
+        coinIconPath: '/assets/icons/upgrades/icon_harvestspeed.png',
+        coinIconScale: 0.95,
+      },
+    ],
+    iapBoostGrants: [
+      { offerId: REMOVE_ADS_OFFER_ID, durationMs: 24 * 60 * 60 * 1000, icon: REMOVE_ADS_HEADER_ICON },
+      { offerId: DOUBLE_COINS_OFFER_ID, durationMs: 2 * 60 * 60 * 1000, icon: DOUBLE_COINS_REWARD_ICON },
+      {
+        offerId: 'rapid_harvest',
+        durationMs: 30 * 60 * 1000,
+        icon: '/assets/icons/upgrades/icon_harvestspeed.png',
+      },
+    ],
+    priceLabel: '$9.99',
+    originalPriceLabel: '$49.99',
+    valueCalloutText: 'Limited Offer',
+    limitedOfferCountdownStorageKey: STORE_FIELD_PACK_COUNTDOWN_END_MS_KEY,
     limitedOfferCountdownDurationMs: 24 * 60 * 60 * 1000,
   },
   {
@@ -537,6 +583,7 @@ export function markStarterPackPurchased(): void {
 }
 
 const STARTER_PACK_BUNDLE = STORE_BUNDLE_OFFERS.find((o) => o.id === STORE_IAP_OFFER_STARTER_PACK_ID);
+const FIELD_PACK_BUNDLE = STORE_BUNDLE_OFFERS.find((o) => o.id === STORE_IAP_OFFER_FIELD_PACK_ID);
 
 export function readStarterPackCountdownEndMs(): number | null {
   if (!STARTER_PACK_BUNDLE?.limitedOfferCountdownStorageKey) return null;
@@ -624,8 +671,106 @@ export function isStarterPackOfferAvailable(atTimeMs = Date.now()): boolean {
   return isStarterPackFloatingButtonVisible(atTimeMs);
 }
 
+export function readFieldPackPurchased(): boolean {
+  try {
+    return localStorage.getItem(STORE_FIELD_PACK_PURCHASED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function markFieldPackPurchased(): void {
+  try {
+    localStorage.setItem(STORE_FIELD_PACK_PURCHASED_KEY, '1');
+  } catch {
+    /* ignore */
+  }
+}
+
+export function readFieldPackCountdownEndMs(): number | null {
+  if (!FIELD_PACK_BUNDLE?.limitedOfferCountdownStorageKey) return null;
+  try {
+    const raw = localStorage.getItem(FIELD_PACK_BUNDLE.limitedOfferCountdownStorageKey);
+    if (raw == null) return null;
+    const endMs = parseInt(raw, 10);
+    return Number.isFinite(endMs) ? endMs : null;
+  } catch {
+    return null;
+  }
+}
+
+export function readFieldPackUnlocked(): boolean {
+  try {
+    if (localStorage.getItem(STORE_FIELD_PACK_UNLOCKED_KEY) === '1') return true;
+  } catch {
+    /* ignore */
+  }
+  return readFieldPackCountdownEndMs() != null;
+}
+
+/** Call when the Field Pack unlock IAP popup is shown; starts its own 24h timer once. */
+export function markFieldPackUnlocked(): void {
+  try {
+    localStorage.setItem(STORE_FIELD_PACK_UNLOCKED_KEY, '1');
+  } catch {
+    /* ignore */
+  }
+  if (readFieldPackCountdownEndMs() == null) {
+    startFieldPackCountdown();
+  }
+}
+
+export function startFieldPackCountdown(atTimeMs = Date.now()): number {
+  const durationMs = FIELD_PACK_BUNDLE?.limitedOfferCountdownDurationMs ?? 24 * 60 * 60 * 1000;
+  const key = FIELD_PACK_BUNDLE?.limitedOfferCountdownStorageKey ?? STORE_FIELD_PACK_COUNTDOWN_END_MS_KEY;
+  const endMs = atTimeMs + durationMs;
+  try {
+    localStorage.setItem(key, String(endMs));
+  } catch {
+    /* ignore */
+  }
+  return endMs;
+}
+
+export function restoreFieldPackOfferAfterClearBoosts(): boolean {
+  if (!readFieldPackUnlocked()) return false;
+  try {
+    localStorage.removeItem(STORE_FIELD_PACK_PURCHASED_KEY);
+    localStorage.setItem(STORE_FIELD_PACK_UNLOCKED_KEY, '1');
+  } catch {
+    /* ignore */
+  }
+  startFieldPackCountdown();
+  return true;
+}
+
+export function getFieldPackCountdownRemainingMs(atTimeMs = Date.now()): number {
+  if (!readFieldPackUnlocked()) return 0;
+  const endMs = readFieldPackCountdownEndMs();
+  if (endMs == null) return 0;
+  return Math.max(0, endMs - atTimeMs);
+}
+
+export function isFieldPackStoreRowVisible(atTimeMs = Date.now()): boolean {
+  return isFieldPackFloatingButtonVisible(atTimeMs);
+}
+
+/** Farm floating button: unlocked, not purchased, Field Pack countdown still running. */
+export function isFieldPackFloatingButtonVisible(atTimeMs = Date.now()): boolean {
+  if (readFieldPackPurchased()) return false;
+  if (!readFieldPackUnlocked()) return false;
+  return getFieldPackCountdownRemainingMs(atTimeMs) > 0;
+}
+
+/** True for Starter Pack or Field Pack IAP popup chrome (purple limited-offer shell). */
+export function isLimitedStarterStyleBundleOfferId(offerId: string): boolean {
+  return offerId === STORE_IAP_OFFER_STARTER_PACK_ID || offerId === STORE_IAP_OFFER_FIELD_PACK_ID;
+}
+
 export function getVisibleStoreBundleOffers(): StoreBundleOfferConfig[] {
-  return STORE_BUNDLE_OFFERS.filter(
-    (o) => o.id !== STORE_IAP_OFFER_STARTER_PACK_ID || isStarterPackStoreRowVisible(),
-  );
+  return STORE_BUNDLE_OFFERS.filter((o) => {
+    if (o.id === STORE_IAP_OFFER_STARTER_PACK_ID) return isStarterPackStoreRowVisible();
+    if (o.id === STORE_IAP_OFFER_FIELD_PACK_ID) return isFieldPackStoreRowVisible();
+    return true;
+  });
 }

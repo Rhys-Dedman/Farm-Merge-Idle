@@ -8,6 +8,13 @@ import { getRewardedOfferTimeRemainingSec } from '../utils/rewardedOfferPanel';
 import { playSfx, SFX_IDS } from '../utils/sfx';
 import { getPlantCoinValue } from '../utils/plantValue';
 import {
+  DEFAULT_GARDEN_ID,
+  type GardenId,
+} from '../constants/gardens';
+import {
+  getCropYieldUnlockLevel,
+  getHappyCustomerUnlockLevel,
+  getMaxLevelWithCustomUnlockPopup,
   MAX_LEVEL_WITH_CUSTOM_UNLOCK_POPUP,
   WILD_GROWTH_UNLOCK_PLAYER_LEVEL,
 } from '../constants/playerLevelUnlocks';
@@ -204,6 +211,8 @@ interface UpgradeListProps {
   onRewardedOfferClick?: (offerId: string) => void;
   /** Player level (for Seeds tab upgrade locking) */
   playerLevel?: number;
+  /** Active garden — Crop Yield / Happy Customers unlock levels differ on garden 2+. */
+  gardenId?: GardenId;
   /** When set, scroll to this upgrade and flash it blue (from level-up Unlock Now) */
   pendingUnlockUpgradeId?: string | null;
   /** When set (e.g. after declining limited offer), scroll to this offer and flash yellow, then return to light yellow */
@@ -262,6 +271,7 @@ const SEEDS_UNLOCK_LEVELS: Record<string, number> = {
   bonus_seeds: 9,
 };
 
+/** Base crops unlock levels; `crop_value` is garden-aware via `getUpgradeUnlockLevel`. */
 const CROPS_UNLOCK_LEVELS: Record<string, number> = {
   harvest_speed: 1,
   plot_expansion: 2,
@@ -269,10 +279,11 @@ const CROPS_UNLOCK_LEVELS: Record<string, number> = {
   crop_value: 11,
 };
 
+/** Base harvest unlock levels; `happy_customer` is garden-aware via `getUpgradeUnlockLevel`. */
 const HARVEST_UNLOCK_LEVELS: Record<string, number> = {
   customer_speed: 1,
   market_value: 3,
-  seed_surplus: 3,
+  seed_surplus: 9,
   happy_customer: 12,
 };
 
@@ -342,8 +353,19 @@ export function roundUpgradeCost(value: number): number {
   return Math.round(value / 1000) * 1000;
 }
 
-const getUpgradeUnlockLevel = (upgradeId: string): number =>
-  SEEDS_UNLOCK_LEVELS[upgradeId] ?? CROPS_UNLOCK_LEVELS[upgradeId] ?? HARVEST_UNLOCK_LEVELS[upgradeId] ?? 1;
+export const getUpgradeUnlockLevel = (
+  upgradeId: string,
+  gardenId: GardenId = DEFAULT_GARDEN_ID,
+): number => {
+  if (upgradeId === 'crop_value') return getCropYieldUnlockLevel(gardenId);
+  if (upgradeId === 'happy_customer') return getHappyCustomerUnlockLevel(gardenId);
+  return (
+    SEEDS_UNLOCK_LEVELS[upgradeId] ??
+    CROPS_UNLOCK_LEVELS[upgradeId] ??
+    HARVEST_UNLOCK_LEVELS[upgradeId] ??
+    1
+  );
+};
 
 const getUpgradeCostStrength = (upgradeId: string): number => {
   const tier = UPGRADE_COST_TIER_BY_ID[upgradeId] ?? 'normal';
@@ -351,7 +373,11 @@ const getUpgradeCostStrength = (upgradeId: string): number => {
 };
 
 /** Next purchase cost (currentLevel = level before buying). Single source for all upgrades. */
-export function calculateUpgradeCost(upgradeId: string, currentLevel: number): number {
+export function calculateUpgradeCost(
+  upgradeId: string,
+  currentLevel: number,
+  gardenId: GardenId = DEFAULT_GARDEN_ID,
+): number {
   if (currentLevel < 0) return 0;
 
   // Garden Expansion uses a fixed special-case curve:
@@ -365,7 +391,7 @@ export function calculateUpgradeCost(upgradeId: string, currentLevel: number): n
   }
 
   const tierScale = getUpgradeCostStrength(upgradeId);
-  const unlockLevel = getUpgradeUnlockLevel(upgradeId);
+  const unlockLevel = getUpgradeUnlockLevel(upgradeId, gardenId);
   const unlockFactor = Math.max(INITIAL_COST_MIN_UNLOCK_FACTOR, unlockLevel * INITIAL_COST_UNLOCK_MULTIPLIER);
   let cost = roundUpgradeCost(INITIAL_COST_BASE * unlockFactor);
 
@@ -375,7 +401,7 @@ export function calculateUpgradeCost(upgradeId: string, currentLevel: number): n
   return cost;
 }
 
-export { MAX_LEVEL_WITH_CUSTOM_UNLOCK_POPUP };
+export { MAX_LEVEL_WITH_CUSTOM_UNLOCK_POPUP, getMaxLevelWithCustomUnlockPopup };
 
 export type LevelUnlockInfo = {
   title: string;
@@ -394,7 +420,10 @@ export type LevelUnlockInfo = {
 };
 
 /** Get level unlock info for level-up popup. Returns title, description, icon, and optionally upgradeId/tab for Unlock Now behavior. */
-export const getLevelUnlockInfo = (level: number): LevelUnlockInfo => {
+export const getLevelUnlockInfo = (
+  level: number,
+  gardenId: GardenId = DEFAULT_GARDEN_ID,
+): LevelUnlockInfo => {
   type Row = {
     level: number;
     upgradeId: string;
@@ -408,6 +437,9 @@ export const getLevelUnlockInfo = (level: number): LevelUnlockInfo => {
     buttonText?: string;
     headerIconScale?: number;
   };
+  const isGarden1 = gardenId === DEFAULT_GARDEN_ID;
+  const cropYieldLevel = getCropYieldUnlockLevel(gardenId);
+  const happyCustomerLevel = getHappyCustomerUnlockLevel(gardenId);
   const allUnlocks: Row[] = [
     { level: 2, upgradeId: 'plot_expansion', tab: 'CROPS', name: 'Garden Expansion', description: 'Unlock additional plots in the garden', icon: 'icon_plotexpansion.png', popupDescription: 'You can now unlock additional plots in the garden' },
     { level: 3, upgradeId: 'market_value', tab: 'HARVEST', name: 'Market Value', description: 'Increase the coins earned when completing orders', icon: 'icon_marketvalue.png', popupDescription: 'You can now increase the coins earned when completing orders' },
@@ -435,18 +467,38 @@ export const getLevelUnlockInfo = (level: number): LevelUnlockInfo => {
     },
     { level: 8, upgradeId: 'wild_growth', tab: 'CROPS', name: 'Wild Growth', description: 'Plants automatically duplicate over time', icon: 'icon_luckymerge.png', popupDescription: 'Plants in your garden will now automatically duplicate over time' },
     { level: 9, upgradeId: 'bonus_seeds', tab: 'SEEDS', name: 'Lucky Seed', description: 'Increase chance to produce a bonus higher level seed', icon: 'icon_luckyseed.png', popupDescription: 'Seeds now have a chance to produce an extra higher level plant' },
+    ...(isGarden1
+      ? [
+          {
+            level: 10,
+            upgradeId: '',
+            tab: 'CROPS' as TabType,
+            name: 'New Garden',
+            description: 'New garden areas to explore.',
+            icon: 'icon_fb_gardens.png',
+            popupDescription: 'New Gardens are now available.',
+            headerIconScale: 1.2,
+          },
+        ]
+      : []),
     {
-      level: 10,
-      upgradeId: '',
+      level: cropYieldLevel,
+      upgradeId: 'crop_value',
       tab: 'CROPS',
-      name: 'New Garden',
-      description: 'New garden areas to explore.',
-      icon: 'icon_fb_gardens.png',
-      popupDescription: 'New Gardens are now available.',
-      headerIconScale: 1.2,
+      name: 'Crop Yield',
+      description: 'Increase how many crops your plants produce when harvesting',
+      icon: 'icon_cropvalue.png',
+      popupDescription: 'You can now increase how many crops your plants produce when harvesting',
     },
-    { level: 11, upgradeId: 'crop_value', tab: 'CROPS', name: 'Crop Yield', description: 'Increase how many crops your plants produce when harvesting', icon: 'icon_cropvalue.png', popupDescription: 'You can now increase how many crops your plants produce when harvesting' },
-    { level: 12, upgradeId: 'happy_customer', tab: 'HARVEST', name: 'Happy Customers', description: 'Increase chance that customers pay double for orders', icon: 'icon_happycustomer.png', popupDescription: 'You can now increase the chance for customers to pay double coins for orders' },
+    {
+      level: happyCustomerLevel,
+      upgradeId: 'happy_customer',
+      tab: 'HARVEST',
+      name: 'Happy Customers',
+      description: 'Increase chance that customers pay double for orders',
+      icon: 'icon_happycustomer.png',
+      popupDescription: 'You can now increase the chance for customers to pay double coins for orders',
+    },
   ];
   const match = allUnlocks.find((u) => u.level === level);
   if (match) {
@@ -633,14 +685,22 @@ const parseCost = (cost: string): number => {
 };
 
 /** Get the display cost string for an upgrade based on its current level */
-const getUpgradeCost = (upgradeId: string, currentLevel: number): string => {
-  const cost = calculateUpgradeCost(upgradeId, currentLevel);
+const getUpgradeCost = (
+  upgradeId: string,
+  currentLevel: number,
+  gardenId: GardenId = DEFAULT_GARDEN_ID,
+): string => {
+  const cost = calculateUpgradeCost(upgradeId, currentLevel, gardenId);
   return formatCost(cost);
 };
 
 /** Get the numeric cost for an upgrade based on its current level */
-const getUpgradeCostValue = (upgradeId: string, currentLevel: number): number => {
-  return calculateUpgradeCost(upgradeId, currentLevel);
+const getUpgradeCostValue = (
+  upgradeId: string,
+  currentLevel: number,
+  gardenId: GardenId = DEFAULT_GARDEN_ID,
+): number => {
+  return calculateUpgradeCost(upgradeId, currentLevel, gardenId);
 };
 
 const createInitialState = (upgrades: UpgradeDef[]) =>
@@ -676,7 +736,7 @@ export const createInitialHarvestState = (): Record<string, UpgradeState> => ({
   happy_customer: { level: 0, progress: 0 },
 });
 
-export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange, money, setMoney, seedsState: propsSeedsState, setSeedsState: propsSetSeedsState, harvestState: propsHarvestState, setHarvestState: propsSetHarvestState, cropsState: propsCropsState, setCropsState: propsSetCropsState, lockedCellCount = 0, onUnlockCell, fertilizableCellCount = 0, onFertilizeCell, highestPlantEver = 1, masteredPlantLevels = [], rewardedOffers = [], onRewardedOfferPanelClick, onRewardedOfferClick, playerLevel = 1, pendingUnlockUpgradeId = null, pendingOfferHighlightId = null, isExpanded = false, protectedOfferId = null, ftue10GreenFlashUpgradeId = null, ftue10PurchaseButtonRef, ftue10LockScroll = false, ftue10DisableSeedProductionPurchase = false, onUpgradePurchase, goldenPotCount = 0 }) => {
+export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange, money, setMoney, seedsState: propsSeedsState, setSeedsState: propsSetSeedsState, harvestState: propsHarvestState, setHarvestState: propsSetHarvestState, cropsState: propsCropsState, setCropsState: propsSetCropsState, lockedCellCount = 0, onUnlockCell, fertilizableCellCount = 0, onFertilizeCell, highestPlantEver = 1, masteredPlantLevels = [], rewardedOffers = [], onRewardedOfferPanelClick, onRewardedOfferClick, playerLevel = 1, gardenId = DEFAULT_GARDEN_ID, pendingUnlockUpgradeId = null, pendingOfferHighlightId = null, isExpanded = false, protectedOfferId = null, ftue10GreenFlashUpgradeId = null, ftue10PurchaseButtonRef, ftue10LockScroll = false, ftue10DisableSeedProductionPurchase = false, onUpgradePurchase, goldenPotCount = 0 }) => {
   const [internalSeedsState, setInternalSeedsState] = useState<Record<string, UpgradeState>>(createInitialSeedsState);
   const seedsState = propsSeedsState ?? internalSeedsState;
   const setSeedsState = propsSetSeedsState ?? setInternalSeedsState;
@@ -1010,7 +1070,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
   }, []);
 
   const handleUpgrade = (id: string, category: TabType, currentLevel: number) => {
-    const cost = getUpgradeCostValue(id, currentLevel);
+    const cost = getUpgradeCostValue(id, currentLevel, gardenId);
     if (money < cost) return;
     setMoney(prev => prev - cost);
 
@@ -1175,8 +1235,8 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
           category === 'HARVEST' && upgrade.id === 'seed_surplus'
             ? (seedsState as any)[upgrade.id] ?? { level: 0, progress: 0 }
             : stateMap[upgrade.id] ?? { level: 0, progress: 0 };
-        const currentCost = getUpgradeCostValue(upgrade.id, state.level);
-        const currentCostDisplay = getUpgradeCost(upgrade.id, state.level);
+        const currentCost = getUpgradeCostValue(upgrade.id, state.level, gardenId);
+        const currentCostDisplay = getUpgradeCost(upgrade.id, state.level, gardenId);
         const canAfford = money >= currentCost;
         const effectiveCanAfford =
           canAfford && !(ftue10DisableSeedProductionPurchase && upgrade.id === 'seed_production');
@@ -1185,10 +1245,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
         const isPressed = pressedId === upgrade.id;
 
         // Check if upgrade is locked by player level (unlocks only when "Unlock Now" tapped on level-up popup)
-        const unlockLevel =
-          category === 'SEEDS' ? (SEEDS_UNLOCK_LEVELS[upgrade.id] ?? 1) :
-          category === 'CROPS' ? (CROPS_UNLOCK_LEVELS[upgrade.id] ?? 1) :
-          category === 'HARVEST' ? (HARVEST_UNLOCK_LEVELS[upgrade.id] ?? 1) : 1;
+        const unlockLevel = getUpgradeUnlockLevel(upgrade.id, gardenId);
         // Keep showing locked until flash fades out (button switches to green when blue fade-out starts)
         const isPendingUntilFadeOut = pendingUnlockUpgradeId === upgrade.id && !completedUnlockFlashIds.has(upgrade.id);
         const isLocked = playerLevel < unlockLevel || isPendingUntilFadeOut;
@@ -1211,9 +1268,10 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
         
         const descTextColor = '#c2b180';
         // Locked (Seeds): blue theme
-        const LOCKED_MAIN = '#9cbed0';
-        const LOCKED_DEPTH = '#7497b0';
-        const LOCKED_FONT = '#507493';
+        /** Locked (untappable) — muted blues. */
+        const LOCKED_MAIN = '#9cccdb';
+        const LOCKED_DEPTH = '#6aa3b7';
+        const LOCKED_FONT = '#3d7493';
         // Normal: green/brown
         const buttonColor = isLocked ? LOCKED_MAIN : '#cae060';
         const buttonActiveColor = isLocked ? LOCKED_MAIN : '#61882b';

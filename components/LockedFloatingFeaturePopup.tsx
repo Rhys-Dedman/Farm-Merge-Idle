@@ -23,11 +23,14 @@ const DIVIDER_ROW_MIN_HEIGHT_PX = 40;
 /** Prescale rem — reads as 2rem on screen after 0.5× (matches Discovery / Golden Pot popups). */
 const DESCRIPTION_FONT_SIZE_REM = '2rem';
 
+/** Locked CTA — muted blues (untappable / level-gated). */
 const DISABLED_CTA = {
-  bg: '#e3c28c',
-  border: '#c7a36e',
-  text: '#a68e64',
+  bg: '#9cccdb',
+  border: '#6aa3b7',
+  text: '#3d7493',
 } as const;
+
+const ICON_LOCK = '/assets/icons/generic_buttons/icon_lock.png';
 
 export interface LockedFloatingFeaturePopupProps {
   isVisible: boolean;
@@ -241,12 +244,10 @@ export const LockedFloatingFeaturePopup: React.FC<LockedFloatingFeaturePopupProp
                   type="button"
                   disabled
                   aria-disabled
-                  className="relative flex select-none items-center justify-center rounded-xl font-bold tracking-tight"
+                  className="relative flex select-none items-center justify-center gap-3 rounded-xl font-bold tracking-tight"
                   style={{
-                    minWidth: 460,
-                    minHeight: 88,
-                    paddingLeft: 36,
-                    paddingRight: 36,
+                    width: '360px',
+                    height: '88px',
                     boxSizing: 'border-box',
                     backgroundColor: DISABLED_CTA.bg,
                     border: `4px solid ${DISABLED_CTA.border}`,
@@ -258,10 +259,37 @@ export const LockedFloatingFeaturePopup: React.FC<LockedFloatingFeaturePopupProp
                     lineHeight: 1.1,
                     textShadow: '0 2px 0 rgba(255,255,255,0.3)',
                     cursor: 'default',
-                    opacity: 0.85,
                   }}
                 >
-                  {unlockLabel}
+                  <span
+                    aria-hidden
+                    style={{
+                      width: 32,
+                      height: 32,
+                      flexShrink: 0,
+                      backgroundColor: DISABLED_CTA.text,
+                      maskImage: `url(${assetPath(ICON_LOCK)})`,
+                      maskSize: 'contain',
+                      maskRepeat: 'no-repeat',
+                      maskPosition: 'center',
+                      WebkitMaskImage: `url(${assetPath(ICON_LOCK)})`,
+                      WebkitMaskSize: 'contain',
+                      WebkitMaskRepeat: 'no-repeat',
+                      WebkitMaskPosition: 'center',
+                      transform: 'translateY(-1px)',
+                    }}
+                  />
+                  <span
+                    className="font-bold tracking-tight"
+                    style={{
+                      color: DISABLED_CTA.text,
+                      fontFamily: 'Inter, sans-serif',
+                      textShadow: '0 2px 0 rgba(255,255,255,0.3)',
+                      fontSize: '2rem',
+                    }}
+                  >
+                    {unlockLabel}
+                  </span>
                 </button>
               </div>
             </div>

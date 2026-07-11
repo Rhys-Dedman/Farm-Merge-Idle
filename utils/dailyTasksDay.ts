@@ -21,7 +21,7 @@ import {
 } from '../constants/dailyTaskCatalog';
 import { getPlantDisplayName } from '../constants/plantData';
 import { MAX_PLANT_TIER } from '../constants/plants';
-import { SHIPPED_GARDEN_IDS, type GardenId } from '../constants/gardens';
+import { SHIPPED_GARDEN_IDS, DEFAULT_GARDEN_ID, type GardenId } from '../constants/gardens';
 import {
   clearAllDailyTasksDayStorage,
   DAILY_TASKS_DAY_STATE_LEGACY_KEY,
@@ -103,7 +103,62 @@ const SINGLE_COUNT_TASKS: ReadonlySet<DailyTaskPoolId> = new Set([
   'collection_upgrade',
   'activate_any_booster',
   'claim_free_store_offer',
+  'ftue_open_daily_tasks',
 ]);
+
+/** One-shot garden-1 intro task for Daily Tasks unlock (not re-rolled on later periods). */
+export const DAILY_TASKS_FTUE_INTRO_SEEDED_KEY = 'daily_tasks_ftue_intro_seeded_v1';
+
+export function readDailyTasksFtueIntroSeeded(): boolean {
+  try {
+    return localStorage.getItem(DAILY_TASKS_FTUE_INTRO_SEEDED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function markDailyTasksFtueIntroSeeded(): void {
+  try {
+    localStorage.setItem(DAILY_TASKS_FTUE_INTRO_SEEDED_KEY, '1');
+  } catch {
+    /* ignore */
+  }
+}
+
+function shouldSeedFtueOpenDailyTask(gardenId: GardenId = getDailyTasksActiveGarden()): boolean {
+  return gardenId === DEFAULT_GARDEN_ID && !readDailyTasksFtueIntroSeeded();
+}
+
+function createFtueOpenDailyTaskInstance(): DailyTaskInstanceState {
+  return {
+    instanceId: 'daily-slot-1',
+    templateId: 'ftue_open_daily_tasks',
+    slot: 1,
+    progress: 1,
+    target: 1,
+    claimed: false,
+    fillGardenLocked: false,
+    seedRushWindowStartMs: null,
+    seedRushWindowCount: 0,
+    orderRushWindowStartMs: null,
+    orderRushWindowCount: 0,
+  };
+}
+
+/** Replace slot 1 with the FTUE intro task when garden 1 has not seeded yet. */
+function maybeSeedFtueOpenDailyTaskIntoState(state: DailyTasksDayState): boolean {
+  if (!shouldSeedFtueOpenDailyTask()) return false;
+  if (state.tasks.some((t) => t.templateId === 'ftue_open_daily_tasks')) {
+    markDailyTasksFtueIntroSeeded();
+    return false;
+  }
+  const intro = createFtueOpenDailyTaskInstance();
+  const idx = state.tasks.findIndex((t) => t.slot === 1);
+  if (idx >= 0) state.tasks[idx] = intro;
+  else state.tasks.push(intro);
+  markDailyTasksFtueIntroSeeded();
+  return true;
+}
 
 const HARVEST_THREE_CELLS_REQUIRED = 3;
 
@@ -112,6 +167,7 @@ const TEMPLATE_CATEGORY_BY_ID = Object.fromEntries(
 ) as Record<DailyTaskPoolId, DailyTaskCatalogCategory>;
 
 function getTemplateCategory(templateId: DailyTaskPoolId): DailyTaskCatalogCategory {
+  if (templateId === 'ftue_open_daily_tasks') return 'gameplay';
   return TEMPLATE_CATEGORY_BY_ID[templateId];
 }
 
@@ -356,6 +412,11 @@ const TEMPLATE_META: Record<
     title: 'Free Offer',
     description: 'Claim a {free} store offer.',
     icon: assetPath('/assets/icons/upgrades/icon_freeoffer.png'),
+  },
+  ftue_open_daily_tasks: {
+    title: 'Task Complete',
+    description: 'Open up the daily task menu.',
+    icon: assetPath('/assets/icons/floating_buttons/icon_fb_tasks_normal.png'),
   },
 };
 
@@ -832,6 +893,15 @@ export function rollDailyTasksDay(
   const tasks: DailyTaskInstanceState[] = [];
 
   for (const slot of buildRollSlots(ctx)) {
+    if (slot === 1 && shouldSeedFtueOpenDailyTask()) {
+      const task = createFtueOpenDailyTaskInstance();
+      markDailyTasksFtueIntroSeeded();
+      picked.add(task.templateId);
+      pickedCategories.add(getTemplateCategory(task.templateId));
+      pickedIcons.add(getTaskIconForInstance(task));
+      tasks.push(task);
+      continue;
+    }
     const task = rollTaskForSlot(
       slot,
       picked,
@@ -985,6 +1055,10 @@ export function ensureDailyTasksDay(
   }
 
   if (syncExtraDailyTaskSlot(state, ctx)) {
+    writeDayState(state);
+  }
+
+  if (maybeSeedFtueOpenDailyTaskIntoState(state)) {
     writeDayState(state);
   }
 

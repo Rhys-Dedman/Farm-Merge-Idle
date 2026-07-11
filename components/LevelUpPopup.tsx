@@ -259,7 +259,7 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
   const isLeaving = animState === 'leaving';
 
   const buttonBgColor = '#89c8e1';
-  const buttonBorderColor = '#66a4c6';
+  const buttonBorderColor = '#6fa4c5';
   const buttonTextColor = '#4580a8';
   const buttonPressedBg = '#7ab8d1';
 

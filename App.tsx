@@ -3,7 +3,7 @@ import React, { useState, useCallback, useRef, useEffect, useLayoutEffect, useMe
 import { createPortal, flushSync } from 'react-dom';
 import { HexBoard, type HexBoardHandle } from './components/HexBoard';
 import { UpgradeTabs } from './components/UpgradeTabs';
-import { UpgradeList, createInitialSeedsState, createInitialHarvestState, createInitialCropsState, getSeedLevelFromHighestPlant, getBonusSeedChance, getSeedSurplusValue, getSeedStorageMax, getCropYieldPerHarvest, getHarvestSpeedLevel, getMergeHarvestChance, getGoalLoadingSeconds, getMarketValueMultiplier, getPremiumOrdersMinLevel, getSurplusSalesMultiplier, isSurplusSalesUnlocked, getHappyCustomerChance, HarvestState, UpgradeState, RewardedOffer, getLevelUnlockInfo, MAX_LEVEL_WITH_CUSTOM_UNLOCK_POPUP, isCustomerSpeedMaxed } from './components/UpgradeList';
+import { UpgradeList, createInitialSeedsState, createInitialHarvestState, createInitialCropsState, getSeedLevelFromHighestPlant, getBonusSeedChance, getSeedSurplusValue, getSeedStorageMax, getCropYieldPerHarvest, getHarvestSpeedLevel, getMergeHarvestChance, getGoalLoadingSeconds, getMarketValueMultiplier, getPremiumOrdersMinLevel, getSurplusSalesMultiplier, isSurplusSalesUnlocked, getHappyCustomerChance, HarvestState, UpgradeState, RewardedOffer, getLevelUnlockInfo, getMaxLevelWithCustomUnlockPopup, isCustomerSpeedMaxed } from './components/UpgradeList';
 import {
   PLANT_COLLECTION_UI_UNLOCK_LEVEL,
   isPlantCollectionUiUnlockedForGarden,
@@ -166,9 +166,11 @@ import {
   LIMITED_OFFERS_AD_POOL,
   STORE_BUNDLE_OFFERS,
   STORE_COIN_OFFERS,
+  STORE_IAP_OFFER_FIELD_PACK_ID,
   STORE_IAP_OFFER_REMOVE_ADS_ID,
   STORE_IAP_OFFER_STARTER_PACK_ID,
   getOfferById,
+  isLimitedStarterStyleBundleOfferId,
   isStorePremiumOnlyOfferId,
   applyDoubleCoinsVisualAmount,
   isCoinMultiplierBoostId,
@@ -179,13 +181,21 @@ import {
   STORE_DAILY_ALLOWANCE_OFFER_ID,
   getStorePurchaseBoostGrants,
   hasActiveRemoveAdsBoost,
+  STORE_FIELD_PACK_COUNTDOWN_END_MS_KEY,
+  STORE_FIELD_PACK_PURCHASED_KEY,
+  STORE_FIELD_PACK_UNLOCKED_KEY,
   STORE_STARTER_PACK_COUNTDOWN_END_MS_KEY,
   STORE_STARTER_PACK_PURCHASED_KEY,
   STORE_STARTER_PACK_UNLOCKED_KEY,
+  markFieldPackPurchased,
+  markFieldPackUnlocked,
   markStarterPackPurchased,
   markStarterPackUnlocked,
+  readFieldPackPurchased,
+  readFieldPackUnlocked,
   readStarterPackPurchased,
   readStarterPackUnlocked,
+  restoreFieldPackOfferAfterClearBoosts,
   restoreStarterPackOfferAfterClearBoosts,
   type StoreBundleOfferConfig,
   type StoreCoinOfferConfig,
@@ -278,7 +288,12 @@ import {
   normalizeRewardedOffersForLoad,
   pruneExpiredRewardedOffers,
 } from './utils/rewardedOfferPanel';
-import { markRateUsPermanentlyDismissed } from './utils/rateUsDismiss';
+import {
+  canAutoShowRateUsPrompt,
+  canOpenRateUsFromSettings,
+  markRateUsPermanentlyDismissed,
+  markRateUsSoftDismissed,
+} from './utils/rateUsDismiss';
 import { isOfflineCoinEarningsBlockedByFtue, simulateOfflineSeedHarvest, simulateWildGrowthOffline } from './utils/offlineSimulate';
 import { applyIdleEarningsToInactiveGardens, loadGameSaveWithIdleAbsenceApplied, markGardenBecameInactive } from './utils/gardenIdleEarnings';
 import { clampOfflineEarningsBank } from './utils/offlineEarningsCap';
@@ -1408,6 +1423,9 @@ export default function App() {
   const [starterPackPurchased, setStarterPackPurchased] = useState(readStarterPackPurchased);
   const [starterPackUnlocked, setStarterPackUnlocked] = useState(readStarterPackUnlocked);
   const [starterPackCountdownRefreshKey, setStarterPackCountdownRefreshKey] = useState(0);
+  const [fieldPackPurchased, setFieldPackPurchased] = useState(readFieldPackPurchased);
+  const [fieldPackUnlocked, setFieldPackUnlocked] = useState(readFieldPackUnlocked);
+  const [fieldPackCountdownRefreshKey, setFieldPackCountdownRefreshKey] = useState(0);
   const [dailyTasksCountdownRefreshKey, setDailyTasksCountdownRefreshKey] = useState(0);
   const [isExpanded, setIsExpanded] = useState(false);
   const panelHeight = useUpgradePanelAnimation(isExpanded);
@@ -1525,8 +1543,12 @@ export default function App() {
   const suppressPlantInfoDeclineSfxRef = useRef(false);
   const suppressPurchaseSuccessDeclineSfxRef = useRef(false);
   const lastFakeAdClosedAtRef = useRef<number>(0); // 10s cooldown before showing limited offer popup after closing fake ad
-  const lastOtherPopupClosedAtRef = useRef<number>(0); // 5–10s cooldown after closing level up / discovery / seed progression / plant info before showing limited offer
+  /** 10s cooldown after any blocking popup closes before auto limited-offer popups. */
+  const lastOtherPopupClosedAtRef = useRef<number>(0);
   const showFakeAdRef = useRef<boolean>(false); // so timers can pause while fake ad is visible
+  /** True while any modal/popup should suppress auto limited-offer popups (kept fresh for the 2s poll). */
+  const blockingPopupOpenForLimitedOfferRef = useRef(false);
+  const prevBlockingPopupForLimitedOfferRef = useRef(false);
   const limitedOfferCooldownInitializedRef = useRef(false);
   // Rewarded offers shown in upgrade list (when player declines popup)
   const [rewardedOffers, setRewardedOffers] = useState<RewardedOffer[]>([]);
@@ -1610,6 +1632,8 @@ export default function App() {
   const [lockedDailyTasksPopupOpen, setLockedDailyTasksPopupOpen] = useState(false);
   const dailyTasksPopupOpenRef = useRef(dailyTasksPopupOpen);
   dailyTasksPopupOpenRef.current = dailyTasksPopupOpen;
+  /** After first Daily Tasks FTUE open, show Rate Us when that popup closes. */
+  const pendingRateUsAfterDailyTasksCloseRef = useRef(false);
   const [dailyTaskRows, setDailyTaskRows] = useState<DailyTaskDefinition[]>([]);
   const dailyTaskRowsRef = useRef(dailyTaskRows);
   dailyTaskRowsRef.current = dailyTaskRows;
@@ -2119,6 +2143,7 @@ export default function App() {
     seedsState: createInitialSeedsState(),
     harvestState: createInitialHarvestState(),
     cropsState: createInitialCropsState(),
+    gardenId: DEFAULT_GARDEN_ID as GardenId,
   });
   dailyTaskUpgradeCtxRef.current = {
     playerLevel,
@@ -2132,6 +2157,7 @@ export default function App() {
     seedsState,
     harvestState,
     cropsState,
+    gardenId: activeGardenId,
   };
   const getDailyTasksCtx = () => ({
     ...getDailyTaskRollContext(
@@ -2810,17 +2836,24 @@ export default function App() {
     playSfx(SFX_IDS.uiConfirmNormal);
     const nextLevel = playerLevel + 1;
     if (nextLevel === STARTER_PACK_FORCE_POPUP_LEVEL) {
-      markStarterPackUnlocked();
-      setStarterPackUnlocked(true);
-      pendingLevelUpAfterStarterPackRef.current = nextLevel;
-      setIapOfferUi({ offerId: STORE_IAP_OFFER_STARTER_PACK_ID });
+      if (activeGardenIdRef.current === DEFAULT_GARDEN_ID) {
+        markStarterPackUnlocked();
+        setStarterPackUnlocked(true);
+        pendingLevelUpAfterStarterPackRef.current = nextLevel;
+        setIapOfferUi({ offerId: STORE_IAP_OFFER_STARTER_PACK_ID });
+      } else {
+        markFieldPackUnlocked();
+        setFieldPackUnlocked(true);
+        pendingLevelUpAfterStarterPackRef.current = nextLevel;
+        setIapOfferUi({ offerId: STORE_IAP_OFFER_FIELD_PACK_ID });
+      }
       return;
     }
     setPlayerLevel(nextLevel);
     recordDailyTaskPlayerLeveledUp();
     setPlayerLevelProgress(0);
     setPlayerLevelFlashTrigger((t) => t + 1);
-    if (nextLevel <= MAX_LEVEL_WITH_CUSTOM_UNLOCK_POPUP) {
+    if (nextLevel <= getMaxLevelWithCustomUnlockPopup(activeGardenIdRef.current)) {
       if (deferPopups) {
         setLevelUpPopupQueue((q) => [...q, nextLevel]);
       } else {
@@ -2928,6 +2961,9 @@ export default function App() {
     try { localStorage.removeItem(STORE_STARTER_PACK_COUNTDOWN_END_MS_KEY); } catch { /* ignore */ }
     try { localStorage.removeItem(STORE_STARTER_PACK_UNLOCKED_KEY); } catch { /* ignore */ }
     try { localStorage.removeItem(STORE_STARTER_PACK_PURCHASED_KEY); } catch { /* ignore */ }
+    try { localStorage.removeItem(STORE_FIELD_PACK_COUNTDOWN_END_MS_KEY); } catch { /* ignore */ }
+    try { localStorage.removeItem(STORE_FIELD_PACK_UNLOCKED_KEY); } catch { /* ignore */ }
+    try { localStorage.removeItem(STORE_FIELD_PACK_PURCHASED_KEY); } catch { /* ignore */ }
     try { localStorage.removeItem(DAILY_TASKS_COUNTDOWN_END_MS_KEY); } catch { /* ignore */ }
     try { localStorage.removeItem(DAILY_TASKS_UNLOCKED_KEY); } catch { /* ignore */ }
     clearDailyTasksProgressStorage();
@@ -2948,6 +2984,9 @@ export default function App() {
     setStarterPackUnlocked(false);
     setStarterPackPurchased(false);
     setStarterPackCountdownRefreshKey((k) => k + 1);
+    setFieldPackUnlocked(false);
+    setFieldPackPurchased(false);
+    setFieldPackCountdownRefreshKey((k) => k + 1);
     setDailyTasksCountdownRefreshKey((k) => k + 1);
     persistGameSaveV2(createPostFtueCleanSaveV2());
     window.location.reload();
@@ -3410,6 +3449,9 @@ export default function App() {
         showFakeReview ||
         rateUsThankYouOpen ||
         dailyTasksPopupOpen ||
+        lockedDailyTasksPopupOpen ||
+        lockedGardenPickerPopupOpen ||
+        gardenPickerOpen ||
         plantInfoPopup?.isVisible === true ||
         limitedOfferPopup?.isVisible === true,
       discoveryPopupOpen: discoveryPopup != null,
@@ -3448,6 +3490,9 @@ export default function App() {
       showFakeReview,
       rateUsThankYouOpen,
       dailyTasksPopupOpen,
+      lockedDailyTasksPopupOpen,
+      lockedGardenPickerPopupOpen,
+      gardenPickerOpen,
       plantInfoPopup?.isVisible,
       limitedOfferPopup?.isVisible,
       discoveryPopup,
@@ -3677,13 +3722,18 @@ export default function App() {
   const [ftueUpgradePanelVisible, setFtueUpgradePanelVisible] = useState(false);
 
   const applyLevelUpPopupUnlock = useCallback((level: number) => {
-    const unlockInfo = getLevelUnlockInfo(level);
+    const gardenId = activeGardenIdRef.current;
+    const unlockInfo = getLevelUnlockInfo(level, gardenId);
     suppressLevelUpDeclineSfxRef.current = true;
     if (level === TASKS_FLOATING_BUTTON_UNLOCK_LEVEL && !tasksFtueCompleted) {
       setTasksFtueStarted(true);
       pendingTasksFtueRevealRef.current = true;
     }
-    if (level === GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL && !gardensFtueCompleted) {
+    if (
+      gardenId === DEFAULT_GARDEN_ID &&
+      level === GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL &&
+      !gardensFtueCompleted
+    ) {
       setGardensFtueStarted(true);
       pendingGardensFtueRevealRef.current = true;
     }
@@ -3698,7 +3748,6 @@ export default function App() {
     if (unlockInfo.navigateToBarnOnUnlock) {
       // Collection FTUE needs the shelf at the top; clear any remembered scroll first.
       if (!collectionFtueCompleted) {
-        const gardenId = activeGardenIdRef.current;
         barnScrollYByGardenRef.current[gardenId] = 0;
         barnScrollYRef.current = 0;
         setBarnScrollY(0);
@@ -4334,6 +4383,10 @@ export default function App() {
       markStarterPackPurchased();
       setStarterPackPurchased(true);
     }
+    if (offerId === STORE_IAP_OFFER_FIELD_PACK_ID) {
+      markFieldPackPurchased();
+      setFieldPackPurchased(true);
+    }
     pendingPurchaseBoostsRef.current = getStorePurchaseBoostGrants(config);
     setPurchaseSuccessfulUi({
       headerImageSrc: assetPath(config.headerIcon),
@@ -4363,10 +4416,17 @@ export default function App() {
 
   const showLevelUpForNextLevel = useCallback((nextLevel: number) => {
     if (nextLevel === STARTER_PACK_FORCE_POPUP_LEVEL) {
-      markStarterPackUnlocked();
-      setStarterPackUnlocked(true);
-      pendingLevelUpAfterStarterPackRef.current = nextLevel;
-      setIapOfferUi({ offerId: STORE_IAP_OFFER_STARTER_PACK_ID });
+      if (activeGardenIdRef.current === DEFAULT_GARDEN_ID) {
+        markStarterPackUnlocked();
+        setStarterPackUnlocked(true);
+        pendingLevelUpAfterStarterPackRef.current = nextLevel;
+        setIapOfferUi({ offerId: STORE_IAP_OFFER_STARTER_PACK_ID });
+      } else {
+        markFieldPackUnlocked();
+        setFieldPackUnlocked(true);
+        pendingLevelUpAfterStarterPackRef.current = nextLevel;
+        setIapOfferUi({ offerId: STORE_IAP_OFFER_FIELD_PACK_ID });
+      }
       return;
     }
     if (
@@ -4380,7 +4440,7 @@ export default function App() {
       }, 0);
       return;
     }
-    if (nextLevel <= MAX_LEVEL_WITH_CUSTOM_UNLOCK_POPUP) {
+    if (nextLevel <= getMaxLevelWithCustomUnlockPopup(activeGardenIdRef.current)) {
       setLevelUpPopup({ isVisible: true, level: nextLevel });
     } else {
       setPlayerLevel((l) => l + 1);
@@ -4397,6 +4457,51 @@ export default function App() {
     if (t > 0 && Date.now() - t < 10000) return false;
     return true;
   }, [offlineEarningsUi?.open]);
+
+  /** Auto Rate Us (post Daily Tasks FTUE, soft-dismiss retries). Never overlaps other popups. */
+  const tryOpenRateUsAuto = useCallback((options?: { forceFirstShow?: boolean }) => {
+    if (options?.forceFirstShow) {
+      if (!canOpenRateUsFromSettings()) return false;
+    } else if (!canAutoShowRateUsPrompt()) {
+      return false;
+    } else if (blockingPopupOpenForLimitedOfferRef.current) {
+      return false;
+    }
+    if (showFakeAdRef.current) return false;
+    // Don't ask for a rating right after an ad — feels punitive.
+    const now = Date.now();
+    const RATE_US_POST_AD_COOLDOWN_MS = 60_000;
+    if (
+      lastFakeAdClosedAtRef.current > 0 &&
+      now - lastFakeAdClosedAtRef.current < RATE_US_POST_AD_COOLDOWN_MS
+    ) {
+      return false;
+    }
+    if (
+      adBreakRuntimeRef.current.lastRewardedAdAt > 0 &&
+      now - adBreakRuntimeRef.current.lastRewardedAdAt < RATE_US_POST_AD_COOLDOWN_MS
+    ) {
+      return false;
+    }
+    if (
+      adBreakRuntimeRef.current.lastAdBreakAt > 0 &&
+      now - adBreakRuntimeRef.current.lastAdBreakAt < RATE_US_POST_AD_COOLDOWN_MS
+    ) {
+      return false;
+    }
+    if (!options?.forceFirstShow && dailyTasksPopupOpenRef.current) return false;
+    if (rateUsPopupOpen || showFakeReview || rateUsThankYouOpen) return false;
+    if (activeScreen !== 'FARM') return false;
+    if (activeFtueStage != null) return false;
+    setRateUsPopupOpen(true);
+    return true;
+  }, [
+    rateUsPopupOpen,
+    showFakeReview,
+    rateUsThankYouOpen,
+    activeScreen,
+    activeFtueStage,
+  ]);
 
   /** After intro cycle: yellow upgrade-row hint only (open panel, scroll, flash) — no interrupt popup. */
   const notifyLimitedOfferSoft = useCallback(
@@ -4420,6 +4525,60 @@ export default function App() {
     [ftueUpgradePanelVisible],
   );
 
+  // Keep a live “any popup open?” flag for the limited-offer auto poll (avoids stale interval closures).
+  useEffect(() => {
+    const blocking =
+      !!limitedOfferPopup?.isVisible ||
+      !!levelUpPopup?.isVisible ||
+      !!discoveryPopup?.isVisible ||
+      goldenPotBonusesPopupOpen ||
+      !!purchaseSuccessfulUi ||
+      !!iapOfferUi ||
+      !!plantInfoPopup?.isVisible ||
+      rateUsPopupOpen ||
+      showFakeReview ||
+      rateUsThankYouOpen ||
+      dailyTasksPopupOpen ||
+      lockedDailyTasksPopupOpen ||
+      lockedGardenPickerPopupOpen ||
+      gardenPickerOpen ||
+      pauseMenuOpen ||
+      devToolsOpen ||
+      !!offlineEarningsUi?.open ||
+      showFakeAdRef.current;
+
+    if (prevBlockingPopupForLimitedOfferRef.current && !blocking) {
+      lastOtherPopupClosedAtRef.current = Date.now();
+    }
+    prevBlockingPopupForLimitedOfferRef.current = blocking;
+    blockingPopupOpenForLimitedOfferRef.current = blocking;
+  }, [
+    limitedOfferPopup?.isVisible,
+    levelUpPopup?.isVisible,
+    discoveryPopup?.isVisible,
+    goldenPotBonusesPopupOpen,
+    purchaseSuccessfulUi,
+    iapOfferUi,
+    plantInfoPopup?.isVisible,
+    rateUsPopupOpen,
+    showFakeReview,
+    rateUsThankYouOpen,
+    dailyTasksPopupOpen,
+    lockedDailyTasksPopupOpen,
+    lockedGardenPickerPopupOpen,
+    gardenPickerOpen,
+    pauseMenuOpen,
+    devToolsOpen,
+    offlineEarningsUi?.open,
+    showFakeAd,
+    rewardedAdFadeInActive,
+    rewardedAdBlackHoldActive,
+    rewardedAdFadeOutActive,
+    adBreakIntroActive,
+    interstitialAdSlotActive,
+    rewardedAdSlotActive,
+  ]);
+
   // Auto-trigger limited offers: intro cycle shows each unique popup once, then soft-only upgrade hints.
   useEffect(() => {
     if (playerLevel < 2 || LIMITED_OFFERS.length === 0) return;
@@ -4433,22 +4592,14 @@ export default function App() {
       syncLimitedOfferIntroCyclePersistedState();
       const introCycleComplete = isLimitedOfferIntroCycleComplete();
       const autoPopupPool = getLimitedOfferAutoPopupPool();
-      if (limitedOfferPopup?.isVisible) return;
+      if (blockingPopupOpenForLimitedOfferRef.current) return;
       if (showFakeAdRef.current) return;
       if (activeScreen !== 'FARM') return;
-      if (offlineEarningsUi?.open) return;
       if (lastOfflineEarningsClosedAtRef.current > 0 && Date.now() - lastOfflineEarningsClosedAtRef.current < 10000) return;
-      if (levelUpPopup?.isVisible) return;
-      if (discoveryPopup?.isVisible) return;
-      if (goldenPotBonusesPopupOpen) return;
-      if (purchaseSuccessfulUi) return;
-      if (iapOfferUi) return;
-      if (plantInfoPopup?.isVisible) return;
-      if (rateUsPopupOpen || showFakeReview || rateUsThankYouOpen || dailyTasksPopupOpen) return;
       const now = Date.now();
       if (lastLimitedOfferClosedAtRef.current && now - lastLimitedOfferClosedAtRef.current < 10000) return;
       if (lastFakeAdClosedAtRef.current && now - lastFakeAdClosedAtRef.current < 10000) return;
-      if (lastOtherPopupClosedAtRef.current && now - lastOtherPopupClosedAtRef.current < 7500) return;
+      if (lastOtherPopupClosedAtRef.current && now - lastOtherPopupClosedAtRef.current < 10000) return;
       const elapsed = now - lastLimitedOfferShownAtRef.current;
       if (elapsed < 90000) return;
       const unlockedCount = grid.filter((c) => !c.locked).length;
@@ -4499,6 +4650,9 @@ export default function App() {
         return;
       }
 
+      // Re-check immediately before opening — a popup may have opened since the poll started.
+      if (blockingPopupOpenForLimitedOfferRef.current || showFakeAdRef.current) return;
+
       lastShownOfferIdRef.current = offerToShow.id;
       lastShownOfferTabRef.current = offerToShow.upgradeTab;
       lastLimitedOfferShownAtRef.current = now;
@@ -4518,18 +4672,9 @@ export default function App() {
     playerLevel,
     grid,
     money,
-    limitedOfferPopup?.isVisible,
     goalSlots,
     harvestState,
     highestPlantEver,
-    levelUpPopup?.isVisible,
-    discoveryPopup?.isVisible,
-    goldenPotBonusesPopupOpen,
-    purchaseSuccessfulUi,
-    iapOfferUi,
-    plantInfoPopup?.isVisible,
-    rateUsPopupOpen,
-    offlineEarningsUi?.open,
     activeScreen,
     goldenPotCount,
     farmFloatingButtonsVisible,
@@ -8445,6 +8590,9 @@ export default function App() {
                 starterPackPurchased={starterPackPurchased}
                 starterPackUnlocked={starterPackUnlocked}
                 starterPackCountdownRefreshKey={starterPackCountdownRefreshKey}
+                fieldPackPurchased={fieldPackPurchased}
+                fieldPackUnlocked={fieldPackUnlocked}
+                fieldPackCountdownRefreshKey={fieldPackCountdownRefreshKey}
               />
             </div>
 
@@ -8619,7 +8767,7 @@ export default function App() {
                             levelUpGuardRef.current = true;
                             const nextLevel = playerLevel + 1;
                             showLevelUpForNextLevel(nextLevel);
-                            if (nextLevel > MAX_LEVEL_WITH_CUSTOM_UNLOCK_POPUP) {
+                            if (nextLevel > getMaxLevelWithCustomUnlockPopup(activeGardenId)) {
                               setTimeout(() => { levelUpGuardRef.current = false; }, 0);
                               return 0;
                             }
@@ -8760,7 +8908,7 @@ export default function App() {
                             levelUpGuardRef.current = true;
                             const nextLevel = playerLevel + 1;
                             showLevelUpForNextLevel(nextLevel);
-                            if (nextLevel > MAX_LEVEL_WITH_CUSTOM_UNLOCK_POPUP) {
+                            if (nextLevel > getMaxLevelWithCustomUnlockPopup(activeGardenId)) {
                               setTimeout(() => { levelUpGuardRef.current = false; }, 0);
                               return 0;
                             }
@@ -9034,6 +9182,13 @@ export default function App() {
                       playSfx(SFX_IDS.uiConfirmNormal);
                       setIapOfferUi({ offerId: STORE_IAP_OFFER_STARTER_PACK_ID });
                     }}
+                    fieldPackPurchased={fieldPackPurchased}
+                    fieldPackUnlocked={fieldPackUnlocked}
+                    fieldPackCountdownRefreshKey={fieldPackCountdownRefreshKey}
+                    onFieldPackClick={() => {
+                      playSfx(SFX_IDS.uiConfirmNormal);
+                      setIapOfferUi({ offerId: STORE_IAP_OFFER_FIELD_PACK_ID });
+                    }}
                     onNoAdsClick={() => {
                       playSfx(SFX_IDS.uiConfirmNormal);
                       setIapOfferUi({ offerId: STORE_IAP_OFFER_REMOVE_ADS_ID });
@@ -9071,8 +9226,15 @@ export default function App() {
                             return;
                           }
                           playSfx(SFX_IDS.uiConfirmNormal);
-                          if (!tasksFtueCompleted) {
+                          const completingTasksFtue = !tasksFtueCompleted;
+                          if (completingTasksFtue) {
                             setTasksFtueCompleted(true);
+                            if (
+                              activeGardenId === DEFAULT_GARDEN_ID &&
+                              canOpenRateUsFromSettings()
+                            ) {
+                              pendingRateUsAfterDailyTasksCloseRef.current = true;
+                            }
                           }
                           if (dailyTasksRemainingMs <= 0) {
                             if (!dailyTasksPeriodRolledRef.current) {
@@ -9517,6 +9679,7 @@ export default function App() {
                     masteredPlantLevels={plantMastery.unlockedLevels}
                     rewardedOffers={rewardedOffers}
                     playerLevel={playerLevel}
+                    gardenId={activeGardenId}
                     pendingUnlockUpgradeId={pendingUnlockUpgradeId}
                     pendingOfferHighlightId={pendingOfferHighlightId}
                     isExpanded={isExpanded}
@@ -9742,7 +9905,7 @@ export default function App() {
                       <div
                         className="absolute inset-0 flex flex-col items-center"
                         style={{
-                          paddingTop: 131,
+                          paddingTop: 126,
                           paddingLeft: 14,
                           paddingRight: 14,
                         }}
@@ -9894,25 +10057,61 @@ export default function App() {
                             )}
                           </>
                         ) : (
-                          <p
-                            className="font-medium text-center leading-relaxed italic w-full"
-                            style={{
-                              color: '#c2b280',
-                              fontFamily: 'Inter, sans-serif',
-                              fontSize: '0.875rem',
-                              paddingLeft: 10,
-                              paddingRight: 10,
-                              marginBottom: 8,
-                            }}
-                          >
-                            The {collectionPanelTitle} is unlocked at:
-                            <span
-                              className="block font-black not-italic"
-                              style={{ color: '#67a4c6', fontFamily: 'Inter, sans-serif' }}
+                          <div className="flex w-full flex-col items-center" style={{ marginBottom: 8 }}>
+                            <p
+                              className="font-medium text-center leading-relaxed italic w-full"
+                              style={{
+                                color: '#c2b280',
+                                fontFamily: 'Inter, sans-serif',
+                                fontSize: '0.875rem',
+                                paddingLeft: 10,
+                                paddingRight: 10,
+                                marginBottom: 10,
+                              }}
                             >
-                              Level {PLANT_COLLECTION_UI_UNLOCK_LEVEL}
-                            </span>
-                          </p>
+                              The {collectionPanelTitle} is unlocked at:
+                            </p>
+                            <button
+                              type="button"
+                              disabled
+                              aria-disabled
+                              className="relative flex items-center justify-center gap-1 h-8 rounded-[8px] shadow-[inset_0_1px_1px_rgba(255,255,255,0.4)] border outline outline-1"
+                              style={{
+                                backgroundColor: '#9cccdb',
+                                borderColor: '#6aa3b7',
+                                borderBottomWidth: '4px',
+                                outlineColor: '#6aa3b7',
+                                cursor: 'default',
+                                minWidth: 96,
+                                paddingLeft: 18,
+                                paddingRight: 18,
+                              }}
+                            >
+                              <span className="flex items-center gap-0.5 -translate-x-0.5">
+                                <span
+                                  aria-hidden
+                                  className="w-4 h-4 shrink-0"
+                                  style={{
+                                    backgroundColor: '#3d7493',
+                                    maskImage: `url(${assetPath('/assets/icons/generic_buttons/icon_lock.png')})`,
+                                    maskSize: 'contain',
+                                    maskRepeat: 'no-repeat',
+                                    maskPosition: 'center',
+                                    WebkitMaskImage: `url(${assetPath('/assets/icons/generic_buttons/icon_lock.png')})`,
+                                    WebkitMaskSize: 'contain',
+                                    WebkitMaskRepeat: 'no-repeat',
+                                    WebkitMaskPosition: 'center',
+                                  }}
+                                />
+                                <span
+                                  className="text-[13px] font-black tracking-tighter"
+                                  style={{ color: '#3d7493' }}
+                                >
+                                  lvl {PLANT_COLLECTION_UI_UNLOCK_LEVEL}
+                                </span>
+                              </span>
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -10543,7 +10742,7 @@ export default function App() {
             ))}
             {/* Level Up Popup */}
             {levelUpPopup && (() => {
-              const unlockInfo = getLevelUnlockInfo(levelUpPopup.level);
+              const unlockInfo = getLevelUnlockInfo(levelUpPopup.level, activeGardenId);
               return (
                 <LevelUpPopup
                   isVisible={levelUpPopup.isVisible}
@@ -10563,6 +10762,13 @@ export default function App() {
                     queueMicrotask(() => {
                       tryStartAutoMergeRef.current();
                       scheduleAutoMergeRecheckRef.current(0);
+                      // Soft-dismiss Rate Us retry: calm moment after a normal level-up.
+                      if (
+                        !pendingTasksFtueRevealRef.current &&
+                        !pendingGardensFtueRevealRef.current
+                      ) {
+                        tryOpenRateUsAuto();
+                      }
                     });
                   }}
                   level={levelUpPopup.level}
@@ -10581,6 +10787,7 @@ export default function App() {
                     if (
                       shouldSkipLevelUpAdBreak({
                         level: levelUpPopup.level,
+                        gardenId: activeGardenId,
                         collectionFtueCompleted,
                         tasksFtueCompleted,
                         gardensFtueCompleted,
@@ -10689,9 +10896,16 @@ export default function App() {
                 STORE_BUNDLE_OFFERS.find((c) => c.id === iapOfferUi.offerId) ??
                 STORE_COIN_OFFERS.find((c) => c.id === iapOfferUi.offerId);
               if (!config) return null;
+              const isStarterStyleBundlePopup = isLimitedStarterStyleBundleOfferId(iapOfferUi.offerId);
               const isStarterPackPopup = iapOfferUi.offerId === STORE_IAP_OFFER_STARTER_PACK_ID;
+              const isFieldPackPopup = iapOfferUi.offerId === STORE_IAP_OFFER_FIELD_PACK_ID;
               const isRemoveAdsPopup = iapOfferUi.offerId === STORE_IAP_OFFER_REMOVE_ADS_ID;
-              const usesPremiumIapOfferChrome = isStarterPackPopup || isRemoveAdsPopup;
+              const usesPremiumIapOfferChrome = isStarterStyleBundlePopup || isRemoveAdsPopup;
+              const limitedBundleUnlocked = isStarterPackPopup
+                ? readStarterPackUnlocked()
+                : isFieldPackPopup
+                  ? readFieldPackUnlocked()
+                  : false;
               return (
                 <IapOfferPopup
                   isVisible
@@ -10706,9 +10920,11 @@ export default function App() {
                   description={
                     isStarterPackPopup
                       ? 'Everything you need to get started'
-                      : isRemoveAdsPopup
-                        ? 'Remove all forced Ads'
-                        : undefined
+                      : isFieldPackPopup
+                        ? 'A special boost for your new field'
+                        : isRemoveAdsPopup
+                          ? 'Remove all forced Ads'
+                          : undefined
                   }
                   titleColor={
                     isRemoveAdsPopup
@@ -10737,15 +10953,15 @@ export default function App() {
                   premiumIapTopAccentStrokeWide={isRemoveAdsPopup ? '#d33d57' : undefined}
                   iapPopupShellOffsetYPx={isRemoveAdsPopup ? -80 : undefined}
                   leafBurstVariant={
-                    isStarterPackPopup ? 'starter' : isRemoveAdsPopup ? 'removeAds' : undefined
+                    isStarterStyleBundlePopup ? 'starter' : isRemoveAdsPopup ? 'removeAds' : undefined
                   }
                   limitedOfferCountdownStorageKey={
-                    isStarterPackPopup && readStarterPackUnlocked()
+                    isStarterStyleBundlePopup && limitedBundleUnlocked
                       ? (config as StoreBundleOfferConfig).limitedOfferCountdownStorageKey
                       : undefined
                   }
                   limitedOfferCountdownDurationMs={
-                    isStarterPackPopup && readStarterPackUnlocked()
+                    isStarterStyleBundlePopup && limitedBundleUnlocked
                       ? (config as StoreBundleOfferConfig).limitedOfferCountdownDurationMs
                       : undefined
                   }
@@ -11073,6 +11289,12 @@ export default function App() {
                 setDailyTasksPopupOpen(false);
                 setDailyTaskClaimBounceIds([]);
                 lastOtherPopupClosedAtRef.current = Date.now();
+                if (pendingRateUsAfterDailyTasksCloseRef.current) {
+                  pendingRateUsAfterDailyTasksCloseRef.current = false;
+                  queueMicrotask(() => {
+                    tryOpenRateUsAuto({ forceFirstShow: true });
+                  });
+                }
               }}
               closeOnBackdropClick
               appScale={appScale}
@@ -11126,7 +11348,7 @@ export default function App() {
               isVisible={rateUsPopupOpen}
               onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
               onDismissWithoutComplete={() => {
-                // TODO: schedule Rate Us popup to return later (timing TBD).
+                markRateUsSoftDismissed();
               }}
               onFifthStarChosen={() => {
                 playSfx(SFX_IDS.uiConfirmNormal);
@@ -11193,12 +11415,16 @@ export default function App() {
               onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
               activeGardenLabel={getGardenDisplayLabel(activeGardenId)}
               onCycleGardenClick={cycleActiveGarden}
-              onRateUs={() => {
-                playSfx(SFX_IDS.uiConfirmNormal);
-                setRateUsPopupOpen(true);
-                setPauseMenuOpen(false);
-                setSettingsOpenedFromFtue(false);
-              }}
+              onRateUs={
+                canOpenRateUsFromSettings()
+                  ? () => {
+                      playSfx(SFX_IDS.uiConfirmNormal);
+                      setRateUsPopupOpen(true);
+                      setPauseMenuOpen(false);
+                      setSettingsOpenedFromFtue(false);
+                    }
+                  : undefined
+              }
               showAutoMergeSetting={goldenPotCount >= MAX_PLANT_TIER}
               onAutoMergeChange={setAutoMergeSetting}
               showDevToolsButton={!settingsOpenedFromFtue}
@@ -11263,6 +11489,14 @@ export default function App() {
                   setStarterPackPurchased(false);
                   setStarterPackUnlocked(true);
                   setStarterPackCountdownRefreshKey((k) => k + 1);
+                }
+                if (fieldPackUnlocked && !readFieldPackUnlocked()) {
+                  markFieldPackUnlocked();
+                }
+                if (restoreFieldPackOfferAfterClearBoosts()) {
+                  setFieldPackPurchased(false);
+                  setFieldPackUnlocked(true);
+                  setFieldPackCountdownRefreshKey((k) => k + 1);
                 }
               }}
               onResetProgress={() => {

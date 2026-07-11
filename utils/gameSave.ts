@@ -11,6 +11,9 @@ import type {
 } from '../components/UpgradeList';
 import type { ActiveBoostData } from '../components/ActiveBoostIndicator';
 import {
+  STORE_FIELD_PACK_COUNTDOWN_END_MS_KEY,
+  STORE_FIELD_PACK_PURCHASED_KEY,
+  STORE_FIELD_PACK_UNLOCKED_KEY,
   STORE_STARTER_PACK_COUNTDOWN_END_MS_KEY,
   STORE_STARTER_PACK_PURCHASED_KEY,
   STORE_STARTER_PACK_UNLOCKED_KEY,
@@ -24,7 +27,7 @@ import {
   LIMITED_OFFER_INTRO_CYCLE_COMPLETE_KEY,
   LIMITED_OFFER_INTRO_CYCLE_SEEN_IDS_KEY,
 } from './limitedOfferIntroCycle';
-import { RATE_US_PERMANENTLY_DISMISSED_KEY } from './rateUsDismiss';
+import { clearRateUsPromptStorage } from './rateUsDismiss';
 import {
   DAILY_TASKS_COUNTDOWN_END_MS_KEY,
   DAILY_TASKS_UNLOCKED_KEY,
@@ -459,6 +462,29 @@ export function clearGameSave(): void {
     /* ignore */
   }
   try {
+    localStorage.removeItem(STORE_FIELD_PACK_COUNTDOWN_END_MS_KEY);
+  } catch {
+    /* ignore */
+  }
+  try {
+    localStorage.removeItem(STORE_FIELD_PACK_UNLOCKED_KEY);
+  } catch {
+    /* ignore */
+  }
+  try {
+    localStorage.removeItem(STORE_FIELD_PACK_PURCHASED_KEY);
+  } catch {
+    /* ignore */
+  }
+  // Provisional garden_pack keys from early Field Pack wiring (safe no-op if unused).
+  try {
+    localStorage.removeItem('store_bundle_garden_pack_countdown_end_ms');
+    localStorage.removeItem('store_bundle_garden_pack_unlocked');
+    localStorage.removeItem('store_bundle_garden_pack_purchased');
+  } catch {
+    /* ignore */
+  }
+  try {
     localStorage.removeItem(AUTO_MERGE_STORAGE_KEY);
   } catch {
     /* ignore */
@@ -470,7 +496,12 @@ export function clearGameSave(): void {
   }
   try {
     localStorage.removeItem(LIMITED_OFFER_INTRO_CYCLE_COMPLETE_KEY);
-    localStorage.removeItem(RATE_US_PERMANENTLY_DISMISSED_KEY);
+  } catch {
+    /* ignore */
+  }
+  clearRateUsPromptStorage();
+  try {
+    localStorage.removeItem('daily_tasks_ftue_intro_seeded_v1');
   } catch {
     /* ignore */
   }

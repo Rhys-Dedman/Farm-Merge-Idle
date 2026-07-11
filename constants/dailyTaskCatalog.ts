@@ -428,6 +428,20 @@ export const DAILY_TASK_CATALOG: DailyTaskCatalogEntry[] = [
 
   },
 
+  {
+
+    id: 'ftue_open_daily_tasks',
+
+    category: 'gameplay',
+
+    title: 'Task Complete',
+
+    description: 'Open up the daily task menu.',
+
+    notes: 'Garden 1 Daily Tasks unlock intro only — not rolled randomly',
+
+  },
+
 ];
 
 
@@ -542,6 +556,9 @@ export type DailyTaskGameplayExtraPoolId = (typeof DAILY_TASK_GAMEPLAY_EXTRA_POO
 
 export type DailyTaskBoosterPoolId = (typeof DAILY_TASK_BOOSTER_POOL_IDS)[number];
 
+/** One-shot garden-1 Daily Tasks unlock intro (not in the random roll pool). */
+export type DailyTaskFtuePoolId = 'ftue_open_daily_tasks';
+
 export type DailyTaskPoolId =
 
   | DailyTaskCorePoolId
@@ -560,7 +577,9 @@ export type DailyTaskPoolId =
 
   | DailyTaskGameplayExtraPoolId
 
-  | DailyTaskBoosterPoolId;
+  | DailyTaskBoosterPoolId
+
+  | DailyTaskFtuePoolId;
 
 
 

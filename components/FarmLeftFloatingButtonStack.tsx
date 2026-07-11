@@ -2,8 +2,14 @@ import React, { useMemo } from 'react';
 import { type GardenId } from '../constants/gardens';
 import { FloatingButton } from './FloatingButton';
 import { FloatingButtonStack } from './FloatingButtonStack';
-import { FloatingButtonStarterPack } from './FloatingButtonStarterPack';
-import { useStarterPackCountdown } from '../hooks/useStarterPackCountdown';
+import {
+  FloatingButtonFieldPack,
+  FloatingButtonStarterPack,
+} from './FloatingButtonStarterPack';
+import {
+  useFieldPackCountdown,
+  useStarterPackCountdown,
+} from '../hooks/useStarterPackCountdown';
 import { assetPath } from '../utils/assetPath';
 import type { ActiveBoostData } from './ActiveBoostIndicator';
 import {
@@ -17,6 +23,10 @@ export interface FarmLeftFloatingButtonStackProps {
   starterPackUnlocked: boolean;
   starterPackCountdownRefreshKey?: number;
   onStarterPackClick: () => void;
+  fieldPackPurchased?: boolean;
+  fieldPackUnlocked?: boolean;
+  fieldPackCountdownRefreshKey?: number;
+  onFieldPackClick?: () => void;
   onNoAdsClick: () => void;
   onCoinBoostClick: () => void;
   gardenId?: GardenId;
@@ -31,6 +41,10 @@ export const FarmLeftFloatingButtonStack: React.FC<FarmLeftFloatingButtonStackPr
   starterPackUnlocked,
   starterPackCountdownRefreshKey = 0,
   onStarterPackClick,
+  fieldPackPurchased = false,
+  fieldPackUnlocked = false,
+  fieldPackCountdownRefreshKey = 0,
+  onFieldPackClick,
   onNoAdsClick,
   onCoinBoostClick,
   gardenId,
@@ -41,9 +55,19 @@ export const FarmLeftFloatingButtonStack: React.FC<FarmLeftFloatingButtonStackPr
     starterPackUnlocked,
     starterPackCountdownRefreshKey,
   );
+  const fieldPackRemainingMs = useFieldPackCountdown(
+    fieldPackUnlocked,
+    fieldPackCountdownRefreshKey,
+  );
 
   const showStarterPackFb =
     !starterPackPurchased && starterPackUnlocked && starterPackRemainingMs > 0;
+  const showFieldPackFb =
+    !showStarterPackFb &&
+    !fieldPackPurchased &&
+    fieldPackUnlocked &&
+    fieldPackRemainingMs > 0;
+  const showLimitedBundleFb = showStarterPackFb || showFieldPackFb;
   const showNoAdsFb = !hasActiveRemoveAdsBoost(activeBoosts);
   /** Coin Boost fills an empty offer slot (never stacks with an active double-coins boost). */
   const coinBoostFillerEligible = !hasActiveDoubleCoinsBoost(activeBoosts);
@@ -60,7 +84,7 @@ export const FarmLeftFloatingButtonStack: React.FC<FarmLeftFloatingButtonStackPr
         gardenId={gardenId}
       />
     );
-    // Slot 1: Starter Pack, or Coin Boost when that slot has no primary offer.
+    // Slot 1: Starter / Field Pack, or Coin Boost when that slot has no primary offer.
     if (showStarterPackFb) {
       items.push(
         <FloatingButtonStarterPack
@@ -68,6 +92,16 @@ export const FarmLeftFloatingButtonStack: React.FC<FarmLeftFloatingButtonStackPr
           starterPackUnlocked={starterPackUnlocked}
           starterPackCountdownRefreshKey={starterPackCountdownRefreshKey}
           onClick={onStarterPackClick}
+          gardenId={gardenId}
+        />,
+      );
+    } else if (showFieldPackFb) {
+      items.push(
+        <FloatingButtonFieldPack
+          key="field-pack"
+          fieldPackUnlocked={fieldPackUnlocked}
+          fieldPackCountdownRefreshKey={fieldPackCountdownRefreshKey}
+          onClick={onFieldPackClick}
           gardenId={gardenId}
         />,
       );
@@ -85,20 +119,27 @@ export const FarmLeftFloatingButtonStack: React.FC<FarmLeftFloatingButtonStackPr
           gardenId={gardenId}
         />,
       );
-    } else if (showStarterPackFb && coinBoostFillerEligible) {
+    } else if (showLimitedBundleFb && coinBoostFillerEligible) {
       items.push(coinBoostButton);
     }
     return items;
   }, [
     showStarterPackFb,
+    showFieldPackFb,
+    showLimitedBundleFb,
     showNoAdsFb,
     coinBoostFillerEligible,
     starterPackRemainingMs,
     starterPackUnlocked,
+    fieldPackRemainingMs,
+    fieldPackUnlocked,
     onStarterPackClick,
+    onFieldPackClick,
     onNoAdsClick,
     onCoinBoostClick,
     gardenId,
+    starterPackCountdownRefreshKey,
+    fieldPackCountdownRefreshKey,
   ]);
 
   if (buttons.length === 0) return null;

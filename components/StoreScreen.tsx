@@ -9,9 +9,10 @@ import {
   STORE_COIN_OFFERS,
   STORE_DAILY_ALLOWANCE_OFFER_ID,
   STORE_FREE_OFFER_HEADER_ICON_PX,
+  STORE_IAP_OFFER_FIELD_PACK_ID,
   STORE_IAP_OFFER_STARTER_PACK_ID,
 } from '../offers';
-import { useStarterPackCountdown } from '../hooks/useStarterPackCountdown';
+import { useFieldPackCountdown, useStarterPackCountdown } from '../hooks/useStarterPackCountdown';
 import { StoreBundleOffer } from './StoreBundleOffer';
 import { StoreCoinOffer } from './StoreCoinOffer';
 import { formatCompactNumber } from '../utils/formatCompactNumber';
@@ -479,6 +480,10 @@ interface StoreScreenProps {
   /** After level-4 unlock popup; enables the 24h countdown in store + farm FB. */
   starterPackUnlocked?: boolean;
   starterPackCountdownRefreshKey?: number;
+  /** Garden 2+ level-4 limited bundle (same pattern as starter pack). */
+  fieldPackPurchased?: boolean;
+  fieldPackUnlocked?: boolean;
+  fieldPackCountdownRefreshKey?: number;
   /** Design-space inset below notch; brown chrome bleeds above this, UI starts here. */
   safeTopInsetPx?: number;
 }
@@ -505,6 +510,9 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
   starterPackPurchased = false,
   starterPackUnlocked = false,
   starterPackCountdownRefreshKey = 0,
+  fieldPackPurchased = false,
+  fieldPackUnlocked = false,
+  fieldPackCountdownRefreshKey = 0,
   safeTopInsetPx = 0,
 }) => {
   const storeTopChromeBleedPx =
@@ -513,14 +521,31 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
     starterPackUnlocked,
     starterPackCountdownRefreshKey,
   );
+  const fieldPackRemainingMs = useFieldPackCountdown(
+    fieldPackUnlocked,
+    fieldPackCountdownRefreshKey,
+  );
   const visibleBundleOffers = React.useMemo(
     () =>
       STORE_BUNDLE_OFFERS.filter((o) => {
-        if (o.id !== STORE_IAP_OFFER_STARTER_PACK_ID) return true;
-        if (starterPackPurchased) return false;
-        return starterPackUnlocked && starterPackRemainingMs > 0;
+        if (o.id === STORE_IAP_OFFER_STARTER_PACK_ID) {
+          if (starterPackPurchased) return false;
+          return starterPackUnlocked && starterPackRemainingMs > 0;
+        }
+        if (o.id === STORE_IAP_OFFER_FIELD_PACK_ID) {
+          if (fieldPackPurchased) return false;
+          return fieldPackUnlocked && fieldPackRemainingMs > 0;
+        }
+        return true;
       }),
-    [starterPackPurchased, starterPackUnlocked, starterPackRemainingMs],
+    [
+      starterPackPurchased,
+      starterPackUnlocked,
+      starterPackRemainingMs,
+      fieldPackPurchased,
+      fieldPackUnlocked,
+      fieldPackRemainingMs,
+    ],
   );
   // Store scroll: reuse Shed/Barn-style momentum drag, but move the store top-ui list with transforms.
   // This avoids relying on native scroll (which isn't responding correctly on mobile in this screen).
@@ -850,12 +875,18 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
                   config={config}
                   onPurchase={onStoreCoinPurchase}
                   limitedOfferCountdownEnabled={
-                    config.id !== STORE_IAP_OFFER_STARTER_PACK_ID || starterPackUnlocked
+                    config.id === STORE_IAP_OFFER_STARTER_PACK_ID
+                      ? starterPackUnlocked
+                      : config.id === STORE_IAP_OFFER_FIELD_PACK_ID
+                        ? fieldPackUnlocked
+                        : true
                   }
                   limitedOfferCountdownRefreshKey={
                     config.id === STORE_IAP_OFFER_STARTER_PACK_ID
                       ? starterPackCountdownRefreshKey
-                      : 0
+                      : config.id === STORE_IAP_OFFER_FIELD_PACK_ID
+                        ? fieldPackCountdownRefreshKey
+                        : 0
                   }
                 />
               ))}

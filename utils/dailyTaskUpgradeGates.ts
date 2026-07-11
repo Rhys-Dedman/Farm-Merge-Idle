@@ -10,7 +10,12 @@ import {
   isPlotExpansionMaxed,
   isSurplusRechargesMaxed,
 } from '../components/UpgradeList';
-import { WILD_GROWTH_UNLOCK_PLAYER_LEVEL } from '../constants/playerLevelUnlocks';
+import { DEFAULT_GARDEN_ID, type GardenId } from '../constants/gardens';
+import {
+  getCropYieldUnlockLevel,
+  getHappyCustomerUnlockLevel,
+  WILD_GROWTH_UNLOCK_PLAYER_LEVEL,
+} from '../constants/playerLevelUnlocks';
 import { isWildGrowthMaxLevel, WILD_GROWTH_MAX_LEVEL } from './wildGrowth';
 
 export const SEEDS_TAB_UPGRADE_IDS = [
@@ -49,7 +54,7 @@ const UNLOCK_LEVEL_BY_ID: Record<string, number> = {
   crop_value: 11,
   customer_speed: 1,
   market_value: 3,
-  seed_surplus: 3,
+  seed_surplus: 9,
   happy_customer: 12,
 };
 
@@ -76,6 +81,8 @@ export interface UpgradeGateContext {
   seedsState: SeedsState;
   harvestState: HarvestState;
   cropsState: Record<string, UpgradeState>;
+  /** Active garden — Crop Yield / Happy Customers unlock earlier on garden 2+. */
+  gardenId?: GardenId;
 }
 
 function getUpgradeLevel(upgradeId: string, ctx: UpgradeGateContext): number {
@@ -91,8 +98,21 @@ function getUpgradeLevel(upgradeId: string, ctx: UpgradeGateContext): number {
   return ctx.harvestState[upgradeId]?.level ?? 0;
 }
 
-export function isUpgradeUnlockedForPlayer(upgradeId: string, playerLevel: number): boolean {
-  return playerLevel >= (UNLOCK_LEVEL_BY_ID[upgradeId] ?? 1);
+export function getUpgradeUnlockLevelForDailyTasks(
+  upgradeId: string,
+  gardenId: GardenId = DEFAULT_GARDEN_ID,
+): number {
+  if (upgradeId === 'crop_value') return getCropYieldUnlockLevel(gardenId);
+  if (upgradeId === 'happy_customer') return getHappyCustomerUnlockLevel(gardenId);
+  return UNLOCK_LEVEL_BY_ID[upgradeId] ?? 1;
+}
+
+export function isUpgradeUnlockedForPlayer(
+  upgradeId: string,
+  playerLevel: number,
+  gardenId: GardenId = DEFAULT_GARDEN_ID,
+): boolean {
+  return playerLevel >= getUpgradeUnlockLevelForDailyTasks(upgradeId, gardenId);
 }
 
 export function isUpgradeMaxedForDailyTasks(upgradeId: string, ctx: UpgradeGateContext): boolean {
@@ -129,7 +149,8 @@ export function getRemainingPurchasesForUpgrade(
   upgradeId: string,
   ctx: UpgradeGateContext,
 ): number {
-  if (!isUpgradeUnlockedForPlayer(upgradeId, ctx.playerLevel)) return 0;
+  const gardenId = ctx.gardenId ?? DEFAULT_GARDEN_ID;
+  if (!isUpgradeUnlockedForPlayer(upgradeId, ctx.playerLevel, gardenId)) return 0;
   if (isUpgradeMaxedForDailyTasks(upgradeId, ctx)) return 0;
 
   const level = getUpgradeLevel(upgradeId, ctx);
@@ -170,9 +191,10 @@ export function canRollPurchaseUpgradeTask(slot: 1 | 2 | 3, ctx: UpgradeGateCont
 }
 
 export function canRollExpandGardenTask(ctx: UpgradeGateContext): boolean {
+  const gardenId = ctx.gardenId ?? DEFAULT_GARDEN_ID;
   return (
     ctx.lockedCellCount > 0 &&
-    isUpgradeUnlockedForPlayer('plot_expansion', ctx.playerLevel) &&
+    isUpgradeUnlockedForPlayer('plot_expansion', ctx.playerLevel, gardenId) &&
     !isPlotExpansionMaxed(ctx.lockedCellCount)
   );
 }
