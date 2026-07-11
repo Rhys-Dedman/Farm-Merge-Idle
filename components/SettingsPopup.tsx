@@ -16,6 +16,9 @@ interface SettingsPopupProps {
   sfxEnabled: boolean;
   onMusicEnabledChange: (enabled: boolean) => void;
   onSfxEnabledChange: (enabled: boolean) => void;
+  /** OS local “come back” reminders (native only; still shown in settings). */
+  returnRemindersEnabled?: boolean;
+  onReturnRemindersEnabledChange?: (enabled: boolean) => void;
   onClearBoosts?: () => void;
   onResetProgress?: () => void;
   /** Shown during FTUE settings — same end state as dev Clear Progress. */
@@ -97,6 +100,8 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
   sfxEnabled,
   onMusicEnabledChange,
   onSfxEnabledChange,
+  returnRemindersEnabled = true,
+  onReturnRemindersEnabledChange,
   onClearBoosts,
   onResetProgress,
   onSkipTutorial,
@@ -271,6 +276,21 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
                     Sound Effects {sfxEnabled ? 'ON' : 'OFF'}
                   </span>
                 </button>
+                {onReturnRemindersEnabledChange ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onAnyButtonClick?.();
+                      onReturnRemindersEnabledChange(!returnRemindersEnabled);
+                    }}
+                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                    style={btnStyle(returnRemindersEnabled ? PALETTES.green : PALETTES.disabled, false)}
+                  >
+                    <span className="font-bold tracking-tight" style={labelStyle(returnRemindersEnabled ? PALETTES.green : PALETTES.disabled)}>
+                      Reminders {returnRemindersEnabled ? 'ON' : 'OFF'}
+                    </span>
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => {

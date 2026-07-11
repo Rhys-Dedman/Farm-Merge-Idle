@@ -3,6 +3,7 @@ export { AD_BREAK_SETTINGS } from '../../constants/adBreakSettings';
 export type { AdBreakBlockerContext, AdBreakRuntimeState } from './evaluateAdBreak';
 export {
   areAdBreakBlockersClear,
+  bumpAdBreakReturnGrace,
   canShowAdBreakNow,
   getAdBreakBlockers,
   isAdBreakCooldownReady,

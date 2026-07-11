@@ -61,6 +61,7 @@ import type { FakeAdVariant } from './constants/adPresentation';
 import type { AdBreakTriggerId } from './constants/adBreakSettings';
 import { AD_BREAK_SETTINGS } from './constants/adBreakSettings';
 import {
+  bumpAdBreakReturnGrace,
   canShowAdBreakNow,
   shouldFlagAdBreakFallback,
   interstitialAdBridge,
@@ -151,6 +152,13 @@ import { getPerformanceMode } from './utils/performanceMode';
 import { getAutoMergeMode, setAutoMergeMode } from './utils/autoMergeMode';
 import { playMusicLoop, playSfx, setAudioSettings, SFX_IDS, applySavedAudioSettingsEarly } from './utils/sfx';
 import { loadUserPrefs, persistUserPrefs } from './utils/userPrefs';
+import {
+  cancelReturnReminders,
+  ensureReturnReminderDeliveryListener,
+  scheduleReturnReminders,
+  tryRequestPermissionOnceAfterFtue,
+  requestNotificationPermission,
+} from './utils/localNotifications';
 import {
   getDoubleCoinsActiveBoostIcon,
   DOUBLE_COINS_OFFER_ID,
@@ -1654,6 +1662,9 @@ export default function App() {
   );
   const [musicEnabled, setMusicEnabled] = useState(_earlyAudio.musicEnabled);
   const [sfxEnabled, setSfxEnabled] = useState(_earlyAudio.sfxEnabled);
+  const [returnRemindersEnabled, setReturnRemindersEnabled] = useState(
+    () => _earlyUserPrefs.returnRemindersEnabled,
+  );
   const [settingsOpenedFromFtue, setSettingsOpenedFromFtue] = useState(false);
   const [ftueSettingsButtonRect, setFtueSettingsButtonRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const [autoMergeSetting, setAutoMergeSetting] = useState(() => getAutoMergeMode());
@@ -1711,6 +1722,34 @@ export default function App() {
   }, [musicEnabled, sfxEnabled]);
 
   useEffect(() => {
+    persistUserPrefs({ returnRemindersEnabled });
+  }, [returnRemindersEnabled]);
+
+  /** Schedule return reminders when leaving; cancel when returning / on mount. */
+  useEffect(() => {
+    void ensureReturnReminderDeliveryListener();
+    void cancelReturnReminders();
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        void scheduleReturnReminders(Date.now());
+      } else {
+        void cancelReturnReminders();
+      }
+    };
+    const onPageHide = () => {
+      void scheduleReturnReminders(Date.now());
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pagehide', onPageHide);
+    };
+  }, []);
+
+  useEffect(() => {
     persistUserPrefs({ fakeNotchPreviewEnabled });
   }, [fakeNotchPreviewEnabled]);
 
@@ -1737,6 +1776,7 @@ export default function App() {
     lastRewardedAdAt: 0,
     activePlaytimeMs: 0,
     fallbackPending: false,
+    graceUntil: 0,
   });
   const pendingAdBreakCompleteRef = useRef<(() => void) | null>(null);
   const pendingSwitchGardenAdBreakRef = useRef(false);
@@ -3143,6 +3183,15 @@ export default function App() {
   }, [levelUpPopup, discoveryPopup, limitedOfferPopup, plantInfoPopup, goldenPotBonusesPopupOpen, purchaseSuccessfulUi, iapOfferUi, rateUsPopupOpen, dailyTasksPopupOpen]);
   /** FTUE: current stage (e.g. 'welcome' after splash); null when not in FTUE */
   const [activeFtueStage, setActiveFtueStage] = useState<FtueStageId | null>(null);
+
+  /** After main FTUE (or on load for completed saves): ask once for notification permission. */
+  useEffect(() => {
+    if (isLoading) return;
+    if (activeFtueStage != null) return;
+    if (!ftue11PersistenceEnabledRef.current) return;
+    void tryRequestPermissionOnceAfterFtue();
+  }, [isLoading, activeFtueStage]);
+
   const prevWelcomeFtueOpenRef = useRef(false);
   useEffect(() => {
     const isWelcomeOpen = activeFtueStage === 'welcome';
@@ -3348,6 +3397,8 @@ export default function App() {
         rewardedAdSlotActive,
       gardenSwitchActive: gardenSwitchOverlayActive || gardenSwitchTransitionRef.current,
       offlineEarningsOpen: offlineEarningsUi?.open === true,
+      returnGraceUntil: adBreakRuntimeRef.current.graceUntil,
+      inStore: activeScreen === 'STORE',
       pauseMenuOpen,
       devToolsOpen,
       blockingPopupOpen:
@@ -3386,6 +3437,7 @@ export default function App() {
       rewardedAdSlotActive,
       gardenSwitchOverlayActive,
       offlineEarningsUi?.open,
+      activeScreen,
       pauseMenuOpen,
       devToolsOpen,
       purchaseSuccessfulUi,
@@ -3513,6 +3565,15 @@ export default function App() {
     }, AD_BREAK_SETTINGS.fallbackPollMs);
     return () => window.clearInterval(id);
   }, [isLoading, activeFtueStage]);
+
+  /** 60s return grace when loading finishes (covers cold start without offline popup). */
+  const prevIsLoadingForAdGraceRef = useRef(true);
+  useEffect(() => {
+    if (prevIsLoadingForAdGraceRef.current && !isLoading) {
+      bumpAdBreakReturnGrace(adBreakRuntimeRef.current, Date.now());
+    }
+    prevIsLoadingForAdGraceRef.current = isLoading;
+  }, [isLoading]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -4222,6 +4283,8 @@ export default function App() {
     }
     if (prevOfflineEarningsOpenRef.current && !open) {
       lastOfflineEarningsClosedAtRef.current = Date.now();
+      // Full 60s grace after welcome-back, even if load grace already started ticking.
+      bumpAdBreakReturnGrace(adBreakRuntimeRef.current, Date.now());
     }
     prevOfflineEarningsOpenRef.current = open;
   }, [offlineEarningsUi?.open]);
@@ -7511,6 +7574,7 @@ export default function App() {
     const userPrefs = loadUserPrefs();
     setMusicEnabled(userPrefs.musicEnabled);
     setSfxEnabled(userPrefs.sfxEnabled);
+    setReturnRemindersEnabled(userPrefs.returnRemindersEnabled);
     setFakeNotchPreviewEnabled(userPrefs.fakeNotchPreviewEnabled);
     setPendingUnlockUpgradeId(
       save.pendingUnlockUpgradeId === 'fertile_soil' ? 'wild_growth' : save.pendingUnlockUpgradeId
@@ -7521,6 +7585,7 @@ export default function App() {
       lastRewardedAdAt: save.lastRewardedAdAt ?? 0,
       activePlaytimeMs: save.adBreakActivePlaytimeMs ?? 0,
       fallbackPending: false,
+      graceUntil: 0,
     };
 
     seedProgressRef.current = save.seedProgress;
@@ -11127,6 +11192,23 @@ export default function App() {
               sfxEnabled={sfxEnabled}
               onMusicEnabledChange={setMusicEnabled}
               onSfxEnabledChange={setSfxEnabled}
+              returnRemindersEnabled={returnRemindersEnabled}
+              onReturnRemindersEnabledChange={(enabled) => {
+                setReturnRemindersEnabled(enabled);
+                persistUserPrefs({ returnRemindersEnabled: enabled });
+                if (!enabled) {
+                  void cancelReturnReminders();
+                  return;
+                }
+                void (async () => {
+                  const prefs = loadUserPrefs();
+                  if (!prefs.returnRemindersPermissionAsked && ftue11PersistenceEnabledRef.current) {
+                    await tryRequestPermissionOnceAfterFtue();
+                  } else if (prefs.returnRemindersPermissionAsked) {
+                    await requestNotificationPermission();
+                  }
+                })();
+              }}
               onClose={() => {
                 setPauseMenuOpen(false);
                 setSettingsOpenedFromFtue(false);

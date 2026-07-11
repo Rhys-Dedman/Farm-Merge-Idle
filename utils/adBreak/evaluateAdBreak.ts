@@ -7,6 +7,8 @@ export interface AdBreakRuntimeState {
   lastRewardedAdAt: number;
   activePlaytimeMs: number;
   fallbackPending: boolean;
+  /** Epoch ms until which all ad breaks are blocked (session return grace). Not persisted. */
+  graceUntil: number;
 }
 
 export interface AdBreakBlockerContext {
@@ -25,12 +27,22 @@ export interface AdBreakBlockerContext {
   adPresentationActive: boolean;
   gardenSwitchActive: boolean;
   offlineEarningsOpen: boolean;
+  /** From `AdBreakRuntimeState.graceUntil` - session return buffer. */
+  returnGraceUntil: number;
+  /** Player is on the Store screen - never show interstitial ads here. */
+  inStore: boolean;
   pauseMenuOpen: boolean;
   devToolsOpen: boolean;
   blockingPopupOpen: boolean;
   discoveryPopupOpen: boolean;
   levelUpPopupOpen: boolean;
   goldenPotBonusesPopupOpen: boolean;
+}
+
+/** Start / extend the post-return grace window (load finish, offline earnings close). */
+export function bumpAdBreakReturnGrace(state: AdBreakRuntimeState, now: number): void {
+  state.graceUntil = Math.max(state.graceUntil, now + AD_BREAK_SETTINGS.returnGraceMs);
+  state.fallbackPending = false;
 }
 
 export function isAdBreakUnlockGateOpen(ctx: AdBreakBlockerContext): boolean {
@@ -58,6 +70,8 @@ export function getAdBreakBlockers(
   if (ctx.adPresentationActive) blockers.push('ad_presentation');
   if (ctx.gardenSwitchActive) blockers.push('garden_switch');
   if (ctx.offlineEarningsOpen) blockers.push('offline_earnings');
+  if (ctx.now < ctx.returnGraceUntil) blockers.push('return_grace');
+  if (ctx.inStore) blockers.push('in_store');
   if (ctx.pauseMenuOpen) blockers.push('pause_menu');
   if (ctx.devToolsOpen) blockers.push('dev_tools');
   if (ctx.blockingPopupOpen) blockers.push('blocking_popup');

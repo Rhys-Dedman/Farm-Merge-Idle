@@ -75,4 +75,21 @@ npx cap build android --androidreleasetype APK
 - **Internet required on device** for Tailwind CDN and Google Fonts (loaded from `index.html`).
 - App id: `com.infinitygames.pocketgarden` — change in `capacitor.config.ts` if needed.
 - Portrait lock is set in `android/app/src/main/AndroidManifest.xml`.
-- Replace launcher icons under `android/app/src/main/res/mipmap-*` when you have final art.
+- **App / notification icon source:** `public/assets/ui/generic/app_icon.png` (also copied to `resources/icon.png` for future iOS).
+  - Android launcher mipmaps + `drawable/ic_stat_pocket_garden` are generated from that sprite.
+  - Re-run icon generation after replacing `app_icon.png`, then `npm run cap:sync`.
+
+### Local notifications (return reminders)
+
+- Uses `@capacitor/local-notifications` (Android now; same code path for iOS when `ios/` is added).
+- **Does not fire in `npm run dev` / browser** — test on a device or emulator APK after `npm run cap:sync`.
+- Permission is requested once after main FTUE completes (Settings → **Reminders** can toggle off/on).
+- Timing / copy in `constants/localNotificationSettings.ts`:
+  - Soft ping **~4h** after leave (pushed out of quiet hours if needed)
+  - Follow-up at next **09:00** or **19:00** local
+  - Quiet hours **22:00–08:00** local
+  - Max **2** delivered reminders per local calendar day
+  - Copy pools: offline / daily tasks / anytime / morning / evening
+  - Morning prefers daily tasks; daily-task lines are morning-only (reset timing)
+  - Morning/evening-only lines stay in their slots
+  - Never the same copy category twice in a row

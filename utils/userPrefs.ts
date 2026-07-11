@@ -2,6 +2,8 @@
  * Player preferences that survive game save clears / progress resets.
  */
 import { GAME_SAVE_STORAGE_KEY } from './gameSave';
+import type { ReminderCopyCategory } from '../constants/localNotificationSettings';
+import { REMINDER_COPY_POOLS } from '../constants/localNotificationSettings';
 
 export const USER_PREFS_STORAGE_KEY = 'pocket-garden-user-prefs-v1';
 
@@ -9,16 +11,44 @@ export type UserPrefs = {
   musicEnabled: boolean;
   sfxEnabled: boolean;
   fakeNotchPreviewEnabled: boolean;
+  /** Player wants OS return reminders (local notifications). */
+  returnRemindersEnabled: boolean;
+  /** We already showed the OS permission prompt (or skipped on web). */
+  returnRemindersPermissionAsked: boolean;
+  /** Epoch ms when return reminders were delivered (for max-per-day). */
+  returnReminderDeliveryAts: number[];
+  /** Last delivered copy category (avoid same type twice in a row). */
+  returnReminderLastCategory: ReminderCopyCategory | null;
+  /** Recently used bodies (avoid repeats). */
+  returnReminderRecentBodies: string[];
 };
 
 const DEFAULT_USER_PREFS: UserPrefs = {
   musicEnabled: true,
   sfxEnabled: true,
   fakeNotchPreviewEnabled: false,
+  returnRemindersEnabled: true,
+  returnRemindersPermissionAsked: false,
+  returnReminderDeliveryAts: [],
+  returnReminderLastCategory: null,
+  returnReminderRecentBodies: [],
 };
+
+function normalizeCategory(raw: unknown): ReminderCopyCategory | null {
+  if (typeof raw !== 'string') return null;
+  return raw in REMINDER_COPY_POOLS ? (raw as ReminderCopyCategory) : null;
+}
 
 function normalizeUserPrefs(raw: unknown): UserPrefs {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const deliveriesRaw = o.returnReminderDeliveryAts;
+  const returnReminderDeliveryAts = Array.isArray(deliveriesRaw)
+    ? deliveriesRaw.filter((t): t is number => typeof t === 'number' && Number.isFinite(t))
+    : DEFAULT_USER_PREFS.returnReminderDeliveryAts;
+  const recentRaw = o.returnReminderRecentBodies;
+  const returnReminderRecentBodies = Array.isArray(recentRaw)
+    ? recentRaw.filter((t): t is string => typeof t === 'string' && t.length > 0)
+    : DEFAULT_USER_PREFS.returnReminderRecentBodies;
   return {
     musicEnabled: typeof o.musicEnabled === 'boolean' ? o.musicEnabled : DEFAULT_USER_PREFS.musicEnabled,
     sfxEnabled: typeof o.sfxEnabled === 'boolean' ? o.sfxEnabled : DEFAULT_USER_PREFS.sfxEnabled,
@@ -26,6 +56,17 @@ function normalizeUserPrefs(raw: unknown): UserPrefs {
       typeof o.fakeNotchPreviewEnabled === 'boolean'
         ? o.fakeNotchPreviewEnabled
         : DEFAULT_USER_PREFS.fakeNotchPreviewEnabled,
+    returnRemindersEnabled:
+      typeof o.returnRemindersEnabled === 'boolean'
+        ? o.returnRemindersEnabled
+        : DEFAULT_USER_PREFS.returnRemindersEnabled,
+    returnRemindersPermissionAsked:
+      typeof o.returnRemindersPermissionAsked === 'boolean'
+        ? o.returnRemindersPermissionAsked
+        : DEFAULT_USER_PREFS.returnRemindersPermissionAsked,
+    returnReminderDeliveryAts,
+    returnReminderLastCategory: normalizeCategory(o.returnReminderLastCategory),
+    returnReminderRecentBodies,
   };
 }
 
