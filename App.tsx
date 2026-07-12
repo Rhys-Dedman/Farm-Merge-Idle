@@ -3,7 +3,7 @@ import React, { useState, useCallback, useRef, useEffect, useLayoutEffect, useMe
 import { createPortal, flushSync } from 'react-dom';
 import { HexBoard, type HexBoardHandle } from './components/HexBoard';
 import { UpgradeTabs } from './components/UpgradeTabs';
-import { UpgradeList, createInitialSeedsState, createInitialHarvestState, createInitialCropsState, getSeedLevelFromHighestPlant, getBonusSeedChance, getSeedSurplusValue, getSeedStorageMax, getCropYieldPerHarvest, getHarvestSpeedLevel, getMergeHarvestChance, getGoalLoadingSeconds, getMarketValueMultiplier, getPremiumOrdersMinLevel, getSurplusSalesMultiplier, isSurplusSalesUnlocked, getHappyCustomerChance, HarvestState, UpgradeState, RewardedOffer, getLevelUnlockInfo, getMaxLevelWithCustomUnlockPopup, isCustomerSpeedMaxed } from './components/UpgradeList';
+import { UpgradeList, createInitialSeedsState, createInitialHarvestState, createInitialCropsState, getSeedLevelFromHighestPlant, getBonusSeedChance, getSeedSurplusValue, getSeedStorageMax, getCropYieldPerHarvest, getHarvestSpeedLevel, getMergeHarvestChance, getGoalLoadingSeconds, getMarketValueMultiplier, getPremiumOrdersMinLevel, getSurplusSalesMultiplier, isSurplusSalesUnlocked, getHappyCustomerChance, HarvestState, UpgradeState, RewardedOffer, getLevelUnlockInfo, isCustomerSpeedMaxed } from './components/UpgradeList';
 import {
   PLANT_COLLECTION_UI_UNLOCK_LEVEL,
   isPlantCollectionUiUnlockedForGarden,
@@ -1480,6 +1480,8 @@ export default function App() {
   const [collectionFtueBonusesReached, setCollectionFtueBonusesReached] = useState(false);
   const [collectionFtueRestartPending, setCollectionFtueRestartPending] = useState(false);
   const [collectionFtueBonusesFading, setCollectionFtueBonusesFading] = useState(false);
+  /** Shows a level-up popup; collection unlock stays forced across refresh until View Collection. */
+  const presentLevelUpPopupRef = useRef<(level: number) => void>(() => {});
   const [tasksFtueStarted, setTasksFtueStarted] = useState(false);
   const [tasksFtueUnlockRevealed, setTasksFtueUnlockRevealed] = useState(false);
   const [tasksFtueCompleted, setTasksFtueCompleted] = useState(false);
@@ -2783,8 +2785,9 @@ export default function App() {
     [applyPendingRewardedAdCompletion, beginRewardedOutro],
   );
 
-  // Testing cheat: grant the next purchasable golden pot (active garden first, then garden 2+).
+  // Testing cheat: grant the next purchasable golden pot on the active garden only.
   const completeMasterySegmentCheat = useCallback(() => {
+    const activeId = activeGardenIdRef.current;
     const activeSnap: GardenCollectionSnapshot = {
       highestPlantEver: highestPlantEverRef.current,
       unlockedLevels: plantMastery.unlockedLevels,
@@ -2792,14 +2795,14 @@ export default function App() {
     };
     const v2 = loadGameSaveV2();
     const target = findNextDevGoldenPotTarget(
-      activeGardenIdRef.current,
+      activeId,
       activeSnap,
       v2?.gardens,
-      v2?.gardensStarted,
+      [activeId],
     );
     if (!target) return;
 
-    if (target.gardenId === activeGardenIdRef.current) {
+    if (target.gardenId === activeId) {
       setPlantMastery((m) => ({
         ...m,
         unlockedLevels: m.unlockedLevels.includes(target.level)
@@ -2834,8 +2837,39 @@ export default function App() {
   const handleDevLevelUpClick = useCallback((options?: DevCheatOptions) => {
     const deferPopups = options?.deferPopups !== false;
     playSfx(SFX_IDS.uiConfirmNormal);
+
+    const presentOrQueueLevel = (level: number) => {
+      setPlayerLevel(level);
+      recordDailyTaskPlayerLeveledUp();
+      setPlayerLevelProgress(0);
+      setPlayerLevelFlashTrigger((t) => t + 1);
+      if (deferPopups) {
+        if (
+          level === PLANT_COLLECTION_UI_UNLOCK_LEVEL &&
+          !collectionFtueCompleted &&
+          activeGardenIdRef.current === DEFAULT_GARDEN_ID
+        ) {
+          setCollectionFtueRestartPending(true);
+        }
+        setLevelUpPopupQueue((q) => [...q, level]);
+      } else {
+        presentLevelUpPopupRef.current(level);
+      }
+    };
+
+    // Shift+L while Starter/Field Pack is open: dismiss it and continue to the next level-up.
+    if (!deferPopups && pendingLevelUpAfterStarterPackRef.current != null) {
+      const grantedLevel = pendingLevelUpAfterStarterPackRef.current;
+      pendingLevelUpAfterStarterPackRef.current = null;
+      setIapOfferUi(null);
+      levelUpGuardRef.current = false;
+      presentOrQueueLevel(grantedLevel + 1);
+      return;
+    }
+
     const nextLevel = playerLevel + 1;
     if (nextLevel === STARTER_PACK_FORCE_POPUP_LEVEL) {
+      setLevelUpPopup(null);
       if (activeGardenIdRef.current === DEFAULT_GARDEN_ID) {
         markStarterPackUnlocked();
         setStarterPackUnlocked(true);
@@ -2849,22 +2883,13 @@ export default function App() {
       }
       return;
     }
-    setPlayerLevel(nextLevel);
-    recordDailyTaskPlayerLeveledUp();
-    setPlayerLevelProgress(0);
-    setPlayerLevelFlashTrigger((t) => t + 1);
-    if (nextLevel <= getMaxLevelWithCustomUnlockPopup(activeGardenIdRef.current)) {
-      if (deferPopups) {
-        setLevelUpPopupQueue((q) => [...q, nextLevel]);
-      } else {
-        setLevelUpPopup({ isVisible: true, level: nextLevel });
-      }
-    }
-  }, [playerLevel, recordDailyTaskPlayerLeveledUp]);
+    presentOrQueueLevel(nextLevel);
+  }, [playerLevel, recordDailyTaskPlayerLeveledUp, collectionFtueCompleted]);
 
   const handleDevUnlockPlantClick = useCallback((options?: DevCheatOptions) => {
     const deferPopups = options?.deferPopups !== false;
     playSfx(SFX_IDS.uiConfirmNormal);
+    const activeId = activeGardenIdRef.current;
     const activeSnap: GardenCollectionSnapshot = {
       highestPlantEver: highestPlantEverRef.current,
       unlockedLevels: plantMastery.unlockedLevels,
@@ -2872,26 +2897,14 @@ export default function App() {
     };
     const v2ForUnlock = loadGameSaveV2();
     const v2Gardens = v2ForUnlock?.gardens;
-    const startedForUnlock = v2ForUnlock?.gardensStarted;
-    if (
-      !hasAnyDevUnlockPlantRemaining(
-        activeGardenIdRef.current,
-        activeSnap,
-        v2Gardens,
-        startedForUnlock,
-      )
-    )
-      return;
-    const target = findNextDevUnlockPlantTarget(
-      activeGardenIdRef.current,
-      activeSnap,
-      v2Gardens,
-      startedForUnlock,
-    );
+    // Active garden only (same scope as Shift+G golden pot cheat).
+    const activeOnly = [activeId] as const;
+    if (!hasAnyDevUnlockPlantRemaining(activeId, activeSnap, v2Gardens, activeOnly)) return;
+    const target = findNextDevUnlockPlantTarget(activeId, activeSnap, v2Gardens, activeOnly);
     if (!target) return;
     const { gardenId: targetGardenId, newLevel } = target;
 
-    if (targetGardenId === activeGardenIdRef.current) {
+    if (targetGardenId === activeId) {
       setHighestPlantEver(newLevel);
       highestPlantEverRef.current = newLevel;
       discoveryGoalsRemainingRef.current = getDiscoveryGoalBuffer(newLevel);
@@ -3000,7 +3013,7 @@ export default function App() {
     }
     setLevelUpPopupQueue((q) => {
       if (q.length > 0) {
-        setLevelUpPopup({ isVisible: true, level: q[0] });
+        presentLevelUpPopupRef.current(q[0]);
         return q.slice(1);
       }
       return q;
@@ -3188,6 +3201,16 @@ export default function App() {
   const [levelUpPopup, setLevelUpPopup] = useState<{ isVisible: boolean; level: number } | null>(null);
   /** Queued level-up popups (e.g. from pause menu fast-level); shown one by one after pause menu closes. */
   const [levelUpPopupQueue, setLevelUpPopupQueue] = useState<number[]>([]);
+  presentLevelUpPopupRef.current = (level: number) => {
+    if (
+      level === PLANT_COLLECTION_UI_UNLOCK_LEVEL &&
+      !collectionFtueCompleted &&
+      activeGardenIdRef.current === DEFAULT_GARDEN_ID
+    ) {
+      setCollectionFtueRestartPending(true);
+    }
+    setLevelUpPopup({ isVisible: true, level });
+  };
   useEffect(() => {
     const was = prevPopupOpenRef.current;
     const isLevelUpOpen = !!levelUpPopup?.isVisible;
@@ -3588,7 +3611,7 @@ export default function App() {
     setLevelUpPopup(null);
     setLevelUpPopupQueue((q) => {
       if (q.length > 0) {
-        setLevelUpPopup({ isVisible: true, level: q[0] });
+        presentLevelUpPopupRef.current(q[0]);
         return q.slice(1);
       }
       return q;
@@ -3721,7 +3744,29 @@ export default function App() {
   /** FTUE: hide upgrade panel until we reveal it (set to true when ready) */
   const [ftueUpgradePanelVisible, setFtueUpgradePanelVisible] = useState(false);
 
-  const applyLevelUpPopupUnlock = useCallback((level: number) => {
+  const applyLevelUpCoinReward = useCallback(
+    (amount: number, startPoint?: { x: number; y: number }) => {
+      if (amount <= 0) return;
+      const layer = discoveryRewardFxLayerRef.current;
+      if (layer && startPoint) {
+        const lr = layer.getBoundingClientRect();
+        setActiveDiscoveryCoinParticles((prev) => [
+          ...prev,
+          {
+            id: `levelup-reward-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            startX: startPoint.x - lr.left,
+            startY: startPoint.y - lr.top,
+            value: amount,
+          },
+        ]);
+        return;
+      }
+      setMoney((m) => m + amount);
+    },
+    [],
+  );
+
+  const applyLevelUpPopupUnlock = useCallback((level: number, rewardStartPoint?: { x: number; y: number }) => {
     const gardenId = activeGardenIdRef.current;
     const unlockInfo = getLevelUnlockInfo(level, gardenId);
     suppressLevelUpDeclineSfxRef.current = true;
@@ -3745,6 +3790,9 @@ export default function App() {
       return l;
     });
     setPlayerLevelProgress(0);
+    if (unlockInfo.rewardCoins != null && unlockInfo.rewardCoins > 0) {
+      applyLevelUpCoinReward(unlockInfo.rewardCoins, rewardStartPoint);
+    }
     if (unlockInfo.navigateToBarnOnUnlock) {
       // Collection FTUE needs the shelf at the top; clear any remembered scroll first.
       if (!collectionFtueCompleted) {
@@ -3770,6 +3818,7 @@ export default function App() {
     gardensFtueCompleted,
     collectionFtueCompleted,
     ftueUpgradePanelVisible,
+    applyLevelUpCoinReward,
   ]);
 
   /** FTUE: hide seeds button during loading and welcome; reveal when FTUE_2 (seed_tap) shows. Hidden from first frame so no fade-in flash. */
@@ -4429,27 +4478,8 @@ export default function App() {
       }
       return;
     }
-    if (
-      nextLevel === PLANT_COLLECTION_UI_UNLOCK_LEVEL &&
-      isPlantCollectionUiUnlockedGlobally(garden1PlayerLevel)
-    ) {
-      setPlayerLevel((l) => l + 1);
-      recordDailyTaskPlayerLeveledUp();
-      setTimeout(() => {
-        levelUpGuardRef.current = false;
-      }, 0);
-      return;
-    }
-    if (nextLevel <= getMaxLevelWithCustomUnlockPopup(activeGardenIdRef.current)) {
-      setLevelUpPopup({ isVisible: true, level: nextLevel });
-    } else {
-      setPlayerLevel((l) => l + 1);
-      recordDailyTaskPlayerLeveledUp();
-      setTimeout(() => {
-        levelUpGuardRef.current = false;
-      }, 0);
-    }
-  }, [garden1PlayerLevel, recordDailyTaskPlayerLeveledUp]);
+    presentLevelUpPopupRef.current(nextLevel);
+  }, [recordDailyTaskPlayerLeveledUp]);
 
   const canOpenLimitedOfferRewardPopup = useCallback(() => {
     if (offlineEarningsUi?.open) return false;
@@ -4763,6 +4793,9 @@ export default function App() {
     setCollectionFtueBonusesFading(true);
     setCollectionFtueBonusesReached(true);
     setCollectionFtueRestartPending(false);
+    // Opening bonuses ends forced collection FTUE — player can freely explore after this.
+    setCollectionFtuePhase(null);
+    setCollectionFtueCompleted(true);
     const tierPotCount = getGoldenPotBonusTierPotCountForShelf(0);
     setGoldenPotBonusRevealTier(null);
     setGoldenPotBonusScrollTierPotCount(tierPotCount);
@@ -5317,12 +5350,12 @@ export default function App() {
     return () => window.clearTimeout(t);
   }, [collectionFtuePhase, activeScreen, collectionFtueCompleted]);
 
-  /** Fail-safe: mid-FTUE reload replays the collection level-up popup before barn FTUE. */
+  /** Fail-safe: collection level-up / mid-FTUE reload keeps forcing the popup until View Collection. */
   useEffect(() => {
     if (isLoading || collectionFtueCompleted || !collectionFtueRestartPending) return;
-    setCollectionFtueRestartPending(false);
+    // Keep restartPending true until View Collection clears it — refresh while the popup is open must still restore it.
     setCollectionFtuePhase(null);
-    setLevelUpPopup({ isVisible: true, level: PLANT_COLLECTION_UI_UNLOCK_LEVEL });
+    presentLevelUpPopupRef.current(PLANT_COLLECTION_UI_UNLOCK_LEVEL);
   }, [isLoading, collectionFtueCompleted, collectionFtueRestartPending]);
 
   useEffect(() => {
@@ -7583,27 +7616,24 @@ export default function App() {
       unlockedLevels: [...save.plantMasteryUnlockedLevels],
       plantMasteryIntroBarComplete: save.plantMasteryIntroBarComplete === true,
     });
-    setCollectionFtueCompleted(save.collectionFtueCompleted === true);
+    setCollectionFtueCompleted(
+      save.collectionFtueCompleted === true || save.collectionFtueBonusesReached === true,
+    );
     setCollectionFtueBonusesReached(save.collectionFtueBonusesReached === true);
-    setCollectionFtueRestartPending(save.collectionFtueRestartPending === true);
+    setCollectionFtueRestartPending(
+      save.collectionFtueCompleted === true || save.collectionFtueBonusesReached === true
+        ? false
+        : save.collectionFtueRestartPending === true,
+    );
     setCollectionFtuePhase(
       (() => {
-        if (save.collectionFtueCompleted) return null;
+        if (save.collectionFtueCompleted || save.collectionFtueBonusesReached) return null;
         const phase = parseCollectionFtuePhase(save.collectionFtuePhase) ?? null;
         if (phase === 'popup_free') return 'point_unlock';
-        if (phase === 'point_garden_nav' && save.collectionFtueBonusesReached) {
-          return null;
-        }
+        if (phase === 'point_garden_nav') return null;
         return phase;
       })(),
     );
-    if (
-      save.collectionFtueBonusesReached === true &&
-      parseCollectionFtuePhase(save.collectionFtuePhase) === 'point_garden_nav' &&
-      save.collectionFtueCompleted !== true
-    ) {
-      setCollectionFtueCompleted(true);
-    }
     const tasksFtueStartedLoaded = save.tasksFtueStarted === true;
     const tasksFtueCompletedLoaded = save.tasksFtueCompleted === true;
     setTasksFtueStarted(tasksFtueStartedLoaded);
@@ -8767,10 +8797,6 @@ export default function App() {
                             levelUpGuardRef.current = true;
                             const nextLevel = playerLevel + 1;
                             showLevelUpForNextLevel(nextLevel);
-                            if (nextLevel > getMaxLevelWithCustomUnlockPopup(activeGardenId)) {
-                              setTimeout(() => { levelUpGuardRef.current = false; }, 0);
-                              return 0;
-                            }
                             setTimeout(() => { levelUpGuardRef.current = false; }, 0);
                           }
                           return goalsRequired;
@@ -8908,10 +8934,6 @@ export default function App() {
                             levelUpGuardRef.current = true;
                             const nextLevel = playerLevel + 1;
                             showLevelUpForNextLevel(nextLevel);
-                            if (nextLevel > getMaxLevelWithCustomUnlockPopup(activeGardenId)) {
-                              setTimeout(() => { levelUpGuardRef.current = false; }, 0);
-                              return 0;
-                            }
                             setTimeout(() => { levelUpGuardRef.current = false; }, 0);
                           }
                           return goalsRequired; // Stay at 100% until Unlock Now clicked
@@ -10754,7 +10776,7 @@ export default function App() {
                     setLevelUpPopup(null);
                     setLevelUpPopupQueue((q) => {
                       if (q.length > 0) {
-                        setLevelUpPopup({ isVisible: true, level: q[0] });
+                        presentLevelUpPopupRef.current(q[0]);
                         return q.slice(1);
                       }
                       return q;
@@ -10783,7 +10805,9 @@ export default function App() {
                   buttonText={unlockInfo.levelUpButtonText}
                   iconScale={unlockInfo.headerIconScale ?? 1}
                   showGoldenPotAvailableRow={levelUpPopup.level === PLANT_COLLECTION_UI_UNLOCK_LEVEL}
-                  shouldDeferPrimaryClose={() => {
+                  rewardAmount={unlockInfo.rewardCoins}
+                  gardenId={activeGardenId}
+                  shouldDeferPrimaryClose={(startPoint) => {
                     if (
                       shouldSkipLevelUpAdBreak({
                         level: levelUpPopup.level,
@@ -10796,13 +10820,13 @@ export default function App() {
                       return false;
                     }
                     const showed = tryShowAdBreak('level_up_continue', () => {
-                      applyLevelUpPopupUnlock(levelUpPopup.level);
+                      applyLevelUpPopupUnlock(levelUpPopup.level, startPoint);
                       finishLevelUpPopupAfterAdBreak();
                     });
                     if (showed) suppressLevelUpDeclineSfxRef.current = true;
                     return showed;
                   }}
-                  onUnlockNow={() => applyLevelUpPopupUnlock(levelUpPopup.level)}
+                  onUnlockNow={(startPoint) => applyLevelUpPopupUnlock(levelUpPopup.level, startPoint)}
                   appScale={appScale}
                 />
               );
@@ -11540,7 +11564,7 @@ export default function App() {
                 activeGardenId,
                 activeCollectionSnapshot,
                 collectionV2Gardens,
-                gardensStartedList,
+                [activeGardenId],
               )}
               onUnlockPlantClick={handleDevUnlockPlantClick}
               onGoldenPotClick={handleDevGoldenPotClick}

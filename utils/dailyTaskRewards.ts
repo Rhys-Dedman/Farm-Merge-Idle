@@ -19,6 +19,14 @@ export function getDailyTaskSlotRewardCoins(slot: 1 | 2 | 3, playerLevel: number
   );
 }
 
+/**
+ * Garden coin reward for generic (post-feature) level-up popups.
+ * Matches daily task slot 2 base scaling — no golden-pot 2× (that bonus is task-only).
+ */
+export function getLevelUpRewardCoins(playerLevel: number): number {
+  return getDailyTaskSlotRewardCoins(2, playerLevel);
+}
+
 /** Slot + level base reward, with Daily Rewards golden pot bonus (2×) applied when unlocked. */
 export function getDailyTaskRewardCoins(
   slot: 1 | 2 | 3,

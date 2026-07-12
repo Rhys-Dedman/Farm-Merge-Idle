@@ -4,6 +4,9 @@
  */
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { formatCompactNumber } from '../utils/formatCompactNumber';
+import { getGardenCoinIconPath } from '../utils/gardenAssets';
+import { DEFAULT_GARDEN_ID, type GardenId } from '../constants/gardens';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
 import { PopupVectorBackground } from './PopupVectorBackground';
 import {
@@ -45,7 +48,7 @@ interface LevelUpPopupProps {
   icon: string;
   /** When set, shown inside the blue header circle instead of `icon` (e.g. PlantWithPot). */
   headerIcon?: React.ReactNode;
-  onUnlockNow?: () => void;
+  onUnlockNow?: (rewardStartPoint?: { x: number; y: number }) => void;
   appScale?: number;
   /** When provided, show smaller text above title (e.g. "New Feature") */
   subtitle?: string;
@@ -57,8 +60,12 @@ interface LevelUpPopupProps {
   hideLevel?: boolean;
   /** Level ≥ 6: show Discovery-style reward pill (“Upgrades Available”). */
   showGoldenPotAvailableRow?: boolean;
+  /** Garden coin reward amount (generic level-ups). Discovery-style pill. */
+  rewardAmount?: number;
+  /** Garden for coin icon when `rewardAmount` is set. */
+  gardenId?: GardenId;
   /** When true after primary button tap, skip close animation (e.g. ad break playing). */
-  shouldDeferPrimaryClose?: () => boolean;
+  shouldDeferPrimaryClose?: (rewardStartPoint?: { x: number; y: number }) => boolean;
 }
 
 const POPUP_LEAF_COUNT = 40;
@@ -126,6 +133,8 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
   iconScale = 1,
   hideLevel = false,
   showGoldenPotAvailableRow = false,
+  rewardAmount,
+  gardenId = DEFAULT_GARDEN_ID,
   shouldDeferPrimaryClose,
 }) => {
   const [animState, setAnimState] = useState<PopupAnimWithPreflight>('hidden');
@@ -240,11 +249,20 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
 
   const buttonRef = useRef<HTMLButtonElement>(null);
   const goldenPotRewardIconRef = useRef<HTMLImageElement>(null);
+  const rewardCoinRef = useRef<HTMLImageElement>(null);
 
   const handleButtonClick = () => {
     if (animState === 'preflight') return;
-    if (shouldDeferPrimaryClose?.()) return;
-    onUnlockNow?.();
+    let startPoint: { x: number; y: number } | undefined;
+    if (rewardCoinRef.current) {
+      const r = rewardCoinRef.current.getBoundingClientRect();
+      startPoint = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    } else if (buttonRef.current) {
+      const r = buttonRef.current.getBoundingClientRect();
+      startPoint = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }
+    if (shouldDeferPrimaryClose?.(startPoint)) return;
+    onUnlockNow?.(startPoint);
     setAnimState('leaving');
     setTimeout(() => {
       setAnimState('hidden');
@@ -536,7 +554,53 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
                   </div>
                 )}
 
-                <div className={`flex-grow ${showGoldenPotAvailableRow ? 'min-h-[40px]' : 'min-h-[48px]'}`} />
+                {rewardAmount != null && rewardAmount > 0 && !showGoldenPotAvailableRow && (
+                  <div className="flex items-center justify-center" style={{ marginTop: '20px' }}>
+                    <div
+                      className="inline-flex items-center justify-center box-border rounded-full"
+                      style={{
+                        backgroundColor: REWARD_PILL_FILL_COLOR,
+                        border: `${REWARD_PILL_STROKE_WIDTH_PX * 2}px solid ${REWARD_PILL_STROKE_COLOR}`,
+                        minHeight: `${REWARD_PILL_HEIGHT_PX * 2}px`,
+                        paddingTop: 12,
+                        paddingBottom: 12,
+                        paddingLeft: 20,
+                        paddingRight: 31,
+                        gap: '10px',
+                      }}
+                    >
+                      <img
+                        ref={rewardCoinRef}
+                        src={getGardenCoinIconPath(gardenId)}
+                        alt=""
+                        className="object-contain shrink-0"
+                        style={{
+                          width: `${LEVEL_UP_REWARD_ICON_PX}px`,
+                          height: `${LEVEL_UP_REWARD_ICON_PX}px`,
+                        }}
+                      />
+                      <span
+                        className="font-black tracking-tight"
+                        style={{
+                          color: REWARD_OFFER_LINE_TEXT_COLOR,
+                          fontFamily: 'Inter, sans-serif',
+                          fontSize: '2rem',
+                          lineHeight: 1,
+                        }}
+                      >
+                        {formatCompactNumber(rewardAmount)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div
+                  className={`flex-grow ${
+                    showGoldenPotAvailableRow || (rewardAmount != null && rewardAmount > 0)
+                      ? 'min-h-[40px]'
+                      : 'min-h-[48px]'
+                  }`}
+                />
 
                 {/* Unlock Now Button - blue */}
                 <button

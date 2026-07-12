@@ -3,12 +3,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { TabType } from '../types';
 import { assetPath } from '../utils/assetPath';
 import { iconAssetPath } from '../utils/iconAssetPath';
-import { getGardenCoinSmallIconPath, getGardenLevelIconPath, getSpecialDeliveryPlantLevel } from '../utils/gardenAssets';
+import { getGardenCoinSmallIconPath, getSpecialDeliveryPlantLevel } from '../utils/gardenAssets';
 import { getRewardedOfferTimeRemainingSec } from '../utils/rewardedOfferPanel';
 import { playSfx, SFX_IDS } from '../utils/sfx';
 import { getPlantCoinValue } from '../utils/plantValue';
 import {
   DEFAULT_GARDEN_ID,
+  getCollectionPanelTitle,
   type GardenId,
 } from '../constants/gardens';
 import {
@@ -18,6 +19,7 @@ import {
   MAX_LEVEL_WITH_CUSTOM_UNLOCK_POPUP,
   WILD_GROWTH_UNLOCK_PLAYER_LEVEL,
 } from '../constants/playerLevelUnlocks';
+import { getLevelUpRewardCoins } from '../utils/dailyTaskRewards';
 import {
   getWildGrowthDisplaySecForLevel,
   isWildGrowthMaxLevel,
@@ -417,6 +419,8 @@ export type LevelUnlockInfo = {
   levelUpButtonText?: string;
   /** Level-up header icon scale (default 1). */
   headerIconScale?: number;
+  /** Garden coins granted on continue (generic post-feature level-ups). */
+  rewardCoins?: number;
 };
 
 /** Get level unlock info for level-up popup. Returns title, description, icon, and optionally upgradeId/tab for Unlock Now behavior. */
@@ -457,10 +461,10 @@ export const getLevelUnlockInfo = (
       level: 7,
       upgradeId: '',
       tab: 'CROPS',
-      name: 'Plant Collection',
-      description: 'Upgrade your plants with a Golden Pot. Collect Golden Pots to unlock bonuses.',
+      name: getCollectionPanelTitle(gardenId),
+      description: 'Discover and Upgrade plants to unlock powerful bonuses!',
       icon: 'icon_plantmastery.png',
-      popupDescription: 'Upgrade your plants with a Golden Pot. Collect Golden Pots to unlock bonuses.',
+      popupDescription: 'Discover and Upgrade plants to unlock powerful bonuses!',
       plantCollectionHeader: true,
       navigateToBarnOnUnlock: true,
       buttonText: 'View Collection',
@@ -517,11 +521,13 @@ export const getLevelUnlockInfo = (
     };
   }
   return {
-    title: `Level ${level}`,
-    description: "You've reached a new level!",
-    icon: getGardenLevelIconPath(),
+    title: 'Level Up!',
+    description: "Great progress! Here's a coin reward for reaching a new level.",
+    icon: assetPath('/assets/icons/upgrades/icon_levelup.png'),
     upgradeId: undefined,
     tab: undefined,
+    levelUpButtonText: 'Continue!',
+    rewardCoins: getLevelUpRewardCoins(level),
   };
 };
 

@@ -22,6 +22,8 @@ import { normalizeBarnShelvesUnlocked } from '../constants/barnShelves';
 import { PLANT_MASTERY_ORDERS_PER_SEGMENT, getMaxStoredOrdersProgressForTarget } from '../constants/plantMastery';
 import { parseCollectionFtuePhase } from '../constants/collectionFtue';
 import { parseNewGardenFtuePhase } from '../constants/newGardenFtue';
+import { PLANT_COLLECTION_UI_UNLOCK_LEVEL } from '../constants/playerLevelUnlocks';
+import { getGoalsRequiredForLevel } from './playerLevelGoals';
 import { AUTO_MERGE_STORAGE_KEY } from './autoMergeMode';
 import {
   LIMITED_OFFER_INTRO_CYCLE_COMPLETE_KEY,
@@ -321,8 +323,10 @@ export function normalizeGameSaveV1(data: GameSaveV1): GameSaveV1 {
       data.collectionFtueBonusesReached = false;
     }
     let cPhase = parseCollectionFtuePhase(data.collectionFtuePhase);
-    if (data.collectionFtueCompleted) cPhase = null;
-    else if (!data.collectionFtueBonusesReached) {
+    if (data.collectionFtueCompleted) {
+      cPhase = null;
+      data.collectionFtueRestartPending = false;
+    } else if (!data.collectionFtueBonusesReached) {
       const ftueInProgress =
         cPhase != null ||
         (Array.isArray(data.plantMasteryUnlockedLevels) && data.plantMasteryUnlockedLevels.includes(1));
@@ -334,23 +338,25 @@ export function normalizeGameSaveV1(data: GameSaveV1): GameSaveV1 {
         data.plantMasteryUnlockPending = (data.plantMasteryUnlockPending ?? []).filter((l) => l !== 1);
         data.collectionFtueBonusesReached = false;
         data.collectionFtueRestartPending = true;
-      } else if (typeof data.collectionFtueRestartPending !== 'boolean') {
-        data.collectionFtueRestartPending = false;
+      } else {
+        // Level-up popup shown (or earned) but View Collection not clicked yet — force it on load.
+        const level = Math.max(1, Math.floor(Number(data.playerLevel) || 1));
+        const progress = Math.max(0, Math.floor(Number(data.playerLevelProgress) || 0));
+        const awaitingCollectionLevelUpClick =
+          level === PLANT_COLLECTION_UI_UNLOCK_LEVEL - 1 &&
+          progress >= getGoalsRequiredForLevel(level);
+        const unlockedWithoutFtue = level >= PLANT_COLLECTION_UI_UNLOCK_LEVEL;
+        if (awaitingCollectionLevelUpClick || unlockedWithoutFtue || data.collectionFtueRestartPending === true) {
+          data.collectionFtueRestartPending = true;
+        } else if (typeof data.collectionFtueRestartPending !== 'boolean') {
+          data.collectionFtueRestartPending = false;
+        }
       }
     } else {
-      if (typeof data.collectionFtueRestartPending !== 'boolean') {
-        data.collectionFtueRestartPending = false;
-      }
-      if (cPhase === 'popup_free' && data.plantMasteryUnlockPending.includes(1)) {
-        cPhase = 'point_unlock';
-      }
-      if (cPhase === 'wait_reveal' && data.plantMasteryUnlockedLevels.includes(1)) {
-        cPhase = 'point_bonuses';
-      }
-      if (data.collectionFtueBonusesReached && cPhase === 'point_garden_nav') {
-        data.collectionFtueCompleted = true;
-        cPhase = null;
-      }
+      // Bonuses opened = collection FTUE finished (even if refresh happens mid-popup).
+      data.collectionFtueRestartPending = false;
+      data.collectionFtueCompleted = true;
+      cPhase = null;
     }
     data.collectionFtuePhase = cPhase;
     if (typeof data.newGardenFtueCompleted !== 'boolean') {
