@@ -1,5 +1,9 @@
 import { TASKS_FLOATING_BUTTON_UNLOCK_LEVEL } from '../constants/playerLevelUnlocks';
-import { GOLDEN_POT_BONUS_DAILY_TASKS_2X_AT } from '../constants/goldenPotBonuses';
+import {
+  GOLDEN_POT_BONUS_DAILY_TASKS_2X_AT,
+  type GoldenPotUnlockInput,
+  hasGoldenPotDailyTasks2x,
+} from '../constants/goldenPotBonuses';
 
 /** Base coin rewards per slot at tasks unlock level. */
 const DAILY_TASK_SLOT_REWARD_BASE: readonly [number, number, number] = [250, 500, 1000];
@@ -31,8 +35,8 @@ export function getLevelUpRewardCoins(playerLevel: number): number {
 export function getDailyTaskRewardCoins(
   slot: 1 | 2 | 3,
   playerLevel: number,
-  globalGoldenPotCount: number,
+  unlocked: GoldenPotUnlockInput,
 ): number {
   const base = getDailyTaskSlotRewardCoins(slot, playerLevel);
-  return globalGoldenPotCount >= GOLDEN_POT_BONUS_DAILY_TASKS_2X_AT ? base * 2 : base;
+  return hasGoldenPotDailyTasks2x(unlocked) ? base * 2 : base;
 }

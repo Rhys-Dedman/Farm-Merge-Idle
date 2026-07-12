@@ -47,8 +47,10 @@ export interface GoldenPotBonusesPopupProps {
   onClose: () => void;
   /** Fired on tap when dismissing via X or backdrop (immediate), not when the close animation ends. */
   onUserDismiss?: () => void;
-  /** Plants that currently have a golden pot (mastered). */
+  /** Plants that currently have a golden pot (mastered) — header progress. */
   goldenPotCount: number;
+  /** Pot thresholds unlocked by completing that shelf (drives green rows). */
+  unlockedTierPotCounts?: readonly number[];
   maxGoldenPots?: number;
   appScale?: number;
   /**
@@ -225,8 +227,12 @@ const BONUS_ROW_REVEAL_DELAY_MS = 250;
 const BONUS_LIST_SCROLL_DURATION_MS = 320;
 
 /** Scroll offset to align a bonus tier row with the top of the list viewport (display order). */
-function getBonusTierListScrollTop(tierPotCount: number, goldenPotCount: number): number | null {
-  const displayTiers = getGoldenPotBonusTiersForDisplay(goldenPotCount);
+function getBonusTierListScrollTop(
+  tierPotCount: number,
+  unlocked: number | ReadonlySet<number>,
+  inProgress: ReadonlySet<number> | readonly number[] = [],
+): number | null {
+  const displayTiers = getGoldenPotBonusTiersForDisplay(unlocked, inProgress);
   const displayIndex = displayTiers.findIndex((t) => t.potCount === tierPotCount);
   if (displayIndex < 0) return null;
   return displayIndex * (BONUS_ROW_HEIGHT_PX + BONUS_ROW_GAP_PX);
@@ -275,12 +281,20 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
   onClose,
   onUserDismiss,
   goldenPotCount,
+  unlockedTierPotCounts,
   maxGoldenPots = COLLECTION_PLANT_COUNT,
   appScale = 1,
   revealTierPotCount = null,
   scrollToTierPotCount = null,
   inProgressTierPotCounts = [],
 }) => {
+  const unlockedTiersSet = useMemo(() => {
+    if (unlockedTierPotCounts) return new Set(unlockedTierPotCounts);
+    // Legacy fallback: pot-count threshold unlocks.
+    return new Set(
+      [4, 8, 12, 16, 20, 24, 28, 32, 36, 40].filter((t) => goldenPotCount >= t),
+    );
+  }, [unlockedTierPotCounts, goldenPotCount]);
   const inProgressTierSet = useMemo(
     () => new Set(inProgressTierPotCounts),
     [inProgressTierPotCounts],
@@ -306,8 +320,8 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
 
   const clampedCount = Math.max(0, Math.min(maxGoldenPots, goldenPotCount));
   const bonusTiersForDisplay = useMemo(
-    () => getGoldenPotBonusTiersForDisplay(clampedCount),
-    [clampedCount],
+    () => getGoldenPotBonusTiersForDisplay(unlockedTiersSet, inProgressTierSet),
+    [unlockedTiersSet, inProgressTierSet],
   );
 
   useEffect(() => {
@@ -439,7 +453,11 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
       const scrollContainer = bonusListScrollRef.current;
       if (!scrollContainer) return;
 
-      const targetTop = getBonusTierListScrollTop(scrollToTierPotCount, clampedCount);
+      const targetTop = getBonusTierListScrollTop(
+        scrollToTierPotCount,
+        unlockedTiersSet,
+        inProgressTierSet,
+      );
       if (targetTop == null) return;
 
       const maxScroll = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
@@ -462,7 +480,7 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
       cancelBonusListScrollRef.current?.();
       cancelBonusListScrollRef.current = null;
     };
-  }, [isVisible, animState, scrollToTierPotCount, clampedCount]);
+  }, [isVisible, animState, scrollToTierPotCount, unlockedTiersSet, inProgressTierSet]);
 
   useEffect(() => {
     if (isVisible && assetsReady && animState === 'hidden') {
@@ -734,7 +752,7 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
                     }}
                   >
                   {bonusTiersForDisplay.map((tier) => {
-                    const rowIsCompleted = clampedCount >= tier.potCount;
+                    const rowIsCompleted = unlockedTiersSet.has(tier.potCount);
                     const isStagedRevealRow =
                       revealTierPotCount != null && revealTierPotCount === tier.potCount;
                     const showAsUnlocked = rowIsCompleted && (!isStagedRevealRow || tierRevealArmed);

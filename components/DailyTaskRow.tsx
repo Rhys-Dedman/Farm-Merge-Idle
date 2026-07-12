@@ -151,14 +151,14 @@ const ICON_TICK = assetPath('/assets/ui/icon_tick.png');
 const ICON_TICK_BROWN = assetPath('/assets/ui/icon_tick_brown.png');
 const TASKS_COMPLETE_TICK = assetPath('/assets/ui/tasks_complete_tick.png');
 
-const ICON_BOX_SCALE = 1.1 * 0.95;
+const ICON_BOX_SCALE = 1.1 * 0.95 * 1.12;
 const ICON_BOX_PX = s(Math.round(128 * ICON_BOX_SCALE));
 const ICON_IMG_PX = s(Math.round(88 * ICON_BOX_SCALE * 1.2 * 0.9));
 
-const BUTTON_W_PX = s(Math.round(200 * 1.2 * 1.1));
-const BUTTON_H_PX = s(Math.round(72 * 1.2 * 1.1));
+const BUTTON_W_PX = s(Math.round(200 * 1.2 * 1.1 * 1.15));
+const BUTTON_H_PX = s(Math.round(72 * 1.2 * 1.1 * 1.06));
 const BUTTON_GAP_PX = s(26);
-const BUTTON_LABEL_PX = s(Math.round(28 * 1.2 * 1.08));
+const BUTTON_LABEL_PX = 26;
 const WATCH_AD_ICON_PX = s(Math.round(32 * 1.2 * 1.5));
 const BUTTON_BORDER_PX = 7 * TASK_ROW_SCALE - 0.5;
 const BUTTON_BEVEL_DEPTH_PX = s(8);
@@ -342,25 +342,24 @@ export const DailyTaskRow: React.FC<DailyTaskRowProps> = ({
             ) : null}
           </div>
 
-          <div className="flex flex-1 flex-col min-w-0 justify-start" style={{ gap: `${s(6)}px` }}>
+          <div className="flex flex-1 flex-col min-w-0 justify-start">
             <h3
               className="font-black tracking-tight truncate"
               style={{
                 color: theme.title,
                 fontFamily: 'Inter, sans-serif',
-                fontSize: `${s(48)}px`,
+                fontSize: '30px',
                 lineHeight: 1.05,
               }}
             >
               {title}
             </h3>
             <p
-              className="font-medium leading-snug"
+              className="font-semibold tracking-tight leading-[1.1]"
               style={{
                 color: theme.description,
-                fontFamily: 'Inter, sans-serif',
-                fontSize: `${s(32)}px`,
-                lineHeight: 1.25,
+                fontSize: '24px',
+                marginTop: 8,
               }}
             >
               {renderTaskDescription(description, descriptionValues)}
@@ -445,7 +444,7 @@ export const DailyTaskRow: React.FC<DailyTaskRowProps> = ({
         style={{
           right: cardPadPx,
           top: '50%',
-          transform: 'translateY(-50%)',
+          transform: 'translateY(calc(-50% - 1px))',
           width: BUTTON_W_PX,
           gap: `${BUTTON_GAP_PX}px`,
           height: buttonColHeightPx,

@@ -15,12 +15,12 @@ export const FLOATING_BUTTON_PILL_LOCKED_GRADIENT_BOTTOM = G1.pillLockedGradient
 export const FLOATING_BUTTON_PILL_OUTLINE_COLOR = G1.pillOutlineColor;
 export const FLOATING_BUTTON_PILL_TEXT_COLOR = G1.pillTextColor;
 export const FLOATING_BUTTON_PILL_OUTLINE_WIDTH_PX = 2;
-export const FLOATING_BUTTON_PILL_FONT_SIZE_PX = 8;
-export const FLOATING_BUTTON_PILL_HEIGHT_PX = 22;
+export const FLOATING_BUTTON_PILL_FONT_SIZE_PX = 9;
+export const FLOATING_BUTTON_PILL_HEIGHT_PX = 21;
 export const FLOATING_BUTTON_PILL_HORIZONTAL_PADDING_PX = 8;
 /** Fixed pill width so every floating button label matches the Gardens pill. */
-export const FLOATING_BUTTON_PILL_WIDTH_PX = 60;
-export const FLOATING_BUTTON_ICON_SIZE_PX = 65;
+export const FLOATING_BUTTON_PILL_WIDTH_PX = 65;
+export const FLOATING_BUTTON_ICON_SIZE_PX = 68;
 export const FLOATING_BUTTON_ICON_OFFSET_Y_PX = 8;
 
 const FLOATING_BUTTON_LOCK_ICON = assetPath('/assets/icons/generic_buttons/icon_lock.png');
@@ -109,7 +109,7 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
         }}
       >
         {locked && unlockLevel != null ? (
-          <span className="flex items-center gap-px whitespace-nowrap">
+          <span className="flex items-center gap-px whitespace-nowrap" style={{ transform: 'translateY(0.5px)' }}>
             <span
               className="shrink-0"
               aria-hidden
@@ -130,7 +130,7 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
             <span>{`LEVEL ${unlockLevel}`}</span>
           </span>
         ) : (
-          <span className="whitespace-nowrap">{pillLabelText}</span>
+          <span className="whitespace-nowrap" style={{ transform: 'translateY(0.5px)' }}>{pillLabelText}</span>
         )}
       </span>
     </button>

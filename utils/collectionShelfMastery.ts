@@ -6,9 +6,8 @@ import {
 } from '../constants/barnShelves';
 import type { GoldenPotBonusIconSlug } from '../constants/goldenPotBonuses';
 import {
-  getGoldenPotBonusTierForShelf,
+  getGoldenPotBonusTierForPotCount,
   getGoldenPotBonusTierInProgress,
-  getGoldenPotBonusTierPotCountForShelf,
 } from '../constants/goldenPotBonuses';
 import { SHIPPED_GARDEN_IDS, type GardenId } from '../constants/gardens';
 import {
@@ -70,7 +69,7 @@ export function getShelfIndexForGarden(gardenId: GardenId, shelfInGarden: number
 
 /**
  * First shelf in this garden that is not fully mastered (shelf 0 before shelf 1, etc.).
- * Does not require all plants on the shelf to be discovered first.
+ * Garden-local only — other gardens do not block this.
  */
 export function getActiveUpgradeShelfInGarden(
   snapshot: GardenCollectionSnapshot,
@@ -121,7 +120,7 @@ export function isShelfActiveUpgradeTarget(
 
 /**
  * Progress bar / bonus icons are non-interactive only when locked:
- * undiscovered shelves with no mastery yet, or shelves waiting on a prior row.
+ * undiscovered shelves with no mastery yet, or shelves waiting on a prior row in this garden.
  * In-progress and completed shelves open View Bonuses (scrolled to that tier).
  */
 export function isShelfRewardBarLocked(
@@ -146,6 +145,14 @@ export function isShelfRewardBarLocked(
   return !shelfFullyDiscovered;
 }
 
+/**
+ * Bonus tier pot threshold for a shelf icon / scroll target.
+ * Fixed by shelf position (shelf 0 → 4, shelf 1 → 8, …) — does not change with unlock order.
+ */
+export function getShelfBonusTargetPotCount(shelfIndex: number): number {
+  return (shelfIndex + 1) * PLANTS_PER_SHELF;
+}
+
 /** Bonus tier pot counts for shelves currently showing the upgrade button (one per started garden). */
 export function getInProgressBonusTierPotCounts(
   activeGardenId: GardenId,
@@ -160,7 +167,7 @@ export function getInProgressBonusTierPotCounts(
     const activeShelfInGarden = getActiveUpgradeShelfInGarden(snapshot, gardenId);
     if (activeShelfInGarden === null) continue;
     const shelfIndex = getShelfIndexForGarden(gardenId, activeShelfInGarden);
-    potCounts.push(getGoldenPotBonusTierPotCountForShelf(shelfIndex));
+    potCounts.push(getShelfBonusTargetPotCount(shelfIndex));
   }
   return potCounts;
 }
@@ -179,20 +186,43 @@ export function getGlobalCompletedShelfCount(
   return count;
 }
 
-/** Effective pot tally for bonus tiers: completed shelves × 4 + partial progress on the active shelf. */
+/**
+ * Account-wide pot tally for bonus unlocks: sum of mastered plants across all gardens.
+ * Shelves are ordered per-garden only; Flower progress does not gate Fruit pots.
+ * Gameplay bonus unlocks use {@link getUnlockedGoldenPotBonusTierPotCounts} (per completed shelf).
+ */
 export function getGlobalBonusProgressPotCount(
   activeGardenId: GardenId,
   activeSnapshot: GardenCollectionSnapshot,
   gardens: Partial<Record<GardenId, GardenState>> | undefined,
 ): number {
+  let count = 0;
   for (let shelfIndex = 0; shelfIndex < BARN_SHELF_COUNT; shelfIndex++) {
     const { gardenId } = getCollectionShelfMeta(shelfIndex);
     const snap = getGardenCollectionSnapshot(gardenId, activeGardenId, activeSnapshot, gardens);
-    if (!isShelfFullyMastered(snap, shelfIndex)) {
-      return shelfIndex * PLANTS_PER_SHELF + getShelfMasteredCount(snap, shelfIndex);
+    count += getShelfMasteredCount(snap, shelfIndex);
+  }
+  return count;
+}
+
+/**
+ * Pot thresholds for bonuses granted by fully mastered shelves.
+ * Each shelf unlocks its fixed bonus (shelf 0 → 4, shelf 5 → 24, …), independent of other shelves.
+ */
+export function getUnlockedGoldenPotBonusTierPotCounts(
+  activeGardenId: GardenId,
+  activeSnapshot: GardenCollectionSnapshot,
+  gardens: Partial<Record<GardenId, GardenState>> | undefined,
+): number[] {
+  const out: number[] = [];
+  for (let shelfIndex = 0; shelfIndex < BARN_SHELF_COUNT; shelfIndex++) {
+    const { gardenId } = getCollectionShelfMeta(shelfIndex);
+    const snap = getGardenCollectionSnapshot(gardenId, activeGardenId, activeSnapshot, gardens);
+    if (isShelfFullyMastered(snap, shelfIndex)) {
+      out.push(getShelfBonusTargetPotCount(shelfIndex));
     }
   }
-  return BARN_SHELF_COUNT * PLANTS_PER_SHELF;
+  return out;
 }
 
 export type ShelfRewardBarState = {
@@ -200,24 +230,27 @@ export type ShelfRewardBarState = {
   denominator: number;
   fillPct: number;
   rewardIconSlug: GoldenPotBonusIconSlug;
+  /** Fixed pot threshold for this shelf (View Bonuses scroll / highlight). */
+  rewardTierPotCount: number;
 };
 
-/** Per-shelf bar: plants mastered on this shelf toward that shelf's bonus (0–4). */
+/** Per-shelf bar: plants mastered on this shelf toward that shelf's fixed bonus (0–4). */
 export function getShelfRewardBarStateForSnapshot(
   shelfIndex: number,
   snapshot: GardenCollectionSnapshot,
 ): ShelfRewardBarState | null {
-  const tier = getGoldenPotBonusTierForShelf(shelfIndex);
-  const potThreshold = (shelfIndex + 1) * 4;
+  const potThreshold = getShelfBonusTargetPotCount(shelfIndex);
+  const tier =
+    getGoldenPotBonusTierForPotCount(potThreshold) ??
+    getGoldenPotBonusTierInProgress(potThreshold);
   const numerator = getShelfMasteredCount(snapshot, shelfIndex);
   const denominator = PLANTS_PER_SHELF;
   const fillPct = Math.min(100, (numerator / denominator) * 100);
-  const rewardIconSlug: GoldenPotBonusIconSlug =
-    tier?.iconSlug ?? getGoldenPotBonusTierInProgress(potThreshold).iconSlug;
   return {
     numerator,
     denominator,
     fillPct,
-    rewardIconSlug,
+    rewardIconSlug: tier.iconSlug,
+    rewardTierPotCount: potThreshold,
   };
 }

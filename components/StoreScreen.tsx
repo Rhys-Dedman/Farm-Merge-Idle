@@ -41,7 +41,7 @@ const STORE_FREE_OFFER_SCALE = 1.05;
 const STORE_FREE_OFFER_LAYOUT_W_PX = 214;
 
 /** Match `PageHeader` total block height (pt-4 + bar + pb-2) so brown can sit flush under the bar art. */
-const STORE_PAGE_HEADER_HEIGHT_PX = 68;
+const STORE_PAGE_HEADER_HEIGHT_PX = 84;
 /** Brown band below the header (above scroll); 0 = scroll sits flush under header bar. */
 const STORE_TOP_CHROME_BELOW_HEADER_PX = 10;
 /** Horizontal rule inset above the scroll clip (gap between line bottom and scroll top). */

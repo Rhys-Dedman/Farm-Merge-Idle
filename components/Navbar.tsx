@@ -247,7 +247,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <span 
                     className="font-bold tracking-wider uppercase transition-opacity duration-300"
                     style={{
-                      fontSize: '9px',
+                      fontSize: '11px',
                       color: '#7f7265',
                       marginTop: '4px',
                       letterSpacing: '0.1em',

@@ -147,13 +147,13 @@ export const UpgradeTabs = forwardRef<UpgradeTabsRef, UpgradeTabsProps>(
             <img
               src={TAB_ICONS[tab]}
               alt=""
-              className={`relative z-[1] w-[12px] h-[12px] object-contain flex-shrink-0 filter saturate-[0.8] transition-all duration-300 -mt-[1px] ${
+              className={`relative z-[1] w-[14px] h-[14px] object-contain flex-shrink-0 filter saturate-[0.8] transition-all duration-300 -mt-[1px] ${
                 ftueGardenVisual || isActive ? 'opacity-100' : 'opacity-40 grayscale'
               }`}
             />
             <span 
               ref={(el) => { tabRefs.current[tab] = el; }}
-              className="relative z-[1] text-[11px] font-black tracking-[0.1em] transition-colors duration-300"
+              className="relative z-[1] text-[12px] font-black tracking-[0.1em] transition-colors duration-300"
               style={{ color: getTextColor() }}
             >
               {TAB_LABELS[tab]}

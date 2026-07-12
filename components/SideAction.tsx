@@ -38,6 +38,16 @@ interface SideActionProps {
   onClick?: (e: React.MouseEvent) => void;
 }
 
+/** Circle button size (96px base × 1.15). */
+const SIDE_ACTION_SIZE_PX = 110;
+/** Icon base size before `iconScale` (40px × 1.15). */
+const SIDE_ACTION_ICON_BASE_PX = 46;
+/** Fixed pill size so seed & harvest badges match (content no longer drives width). */
+const RECHARGE_PILL_WIDTH_PX = 52;
+const RECHARGE_PILL_MIN_HEIGHT_PX = 24;
+const RECHARGE_PILL_FONT_SIZE_PX = 13;
+const RECHARGE_PILL_BOTTOM_OFFSET_PX = -4;
+
 export const SideAction: React.FC<SideActionProps> = ({ 
   label, 
   icon,
@@ -189,6 +199,11 @@ export const SideAction: React.FC<SideActionProps> = ({
     backgroundImage: `linear-gradient(to bottom, ${chrome.pillGradientTop}, ${chrome.pillGradientBottom})`,
     borderColor: chrome.pillOutlineColor,
     borderRadius: '999px',
+    boxSizing: 'border-box',
+    width: RECHARGE_PILL_WIDTH_PX,
+    minHeight: RECHARGE_PILL_MIN_HEIGHT_PX,
+    paddingLeft: 8,
+    paddingRight: 8,
   };
   const rechargePillTextStyle: React.CSSProperties = {
     color: chrome.pillTextColor,
@@ -230,7 +245,11 @@ export const SideAction: React.FC<SideActionProps> = ({
       `}</style>
       {/* Tap Ripple Rings - positioned outside bounce container so they're not affected by bounce animation */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-visible" style={{ zIndex: 0 }}>
-        <svg className="w-24 h-24 overflow-visible" viewBox="0 0 100 100" style={{ overflow: 'visible' }}>
+        <svg
+          className="overflow-visible"
+          viewBox="0 0 100 100"
+          style={{ width: SIDE_ACTION_SIZE_PX, height: SIDE_ACTION_SIZE_PX, overflow: 'visible' }}
+        >
           {tapRipples.map((ripple) => (
             <circle
               key={ripple.id}
@@ -251,10 +270,13 @@ export const SideAction: React.FC<SideActionProps> = ({
         className={`flex flex-col items-center select-none group ${bounceTrigger > 0 ? 'side-action-bounce' : ''}`}
         onClick={handleClick}
       >
-        <div className={`relative w-24 h-24 flex items-center justify-center cursor-pointer active:scale-95 transition-all duration-200 ${isFlashing && shouldAnimate ? 'scale-110' : ''}`}>
+        <div
+          className="relative flex items-center justify-center cursor-pointer active:scale-95 transition-all duration-200"
+          style={{ width: SIDE_ACTION_SIZE_PX, height: SIDE_ACTION_SIZE_PX }}
+        >
         
         {/* SVG Circular Progress & Decoration */}
-        <svg className="absolute inset-0 w-full h-full drop-shadow-[0_1px_6px_rgba(0,0,0,0.8)]" viewBox="0 0 100 100">
+        <svg className="absolute inset-0 z-0 w-full h-full drop-shadow-[0_1px_6px_rgba(0,0,0,0.8)]" viewBox="0 0 100 100">
           <defs>
             {/* Same vertical gradient as floating-button / recharge pill */}
             <linearGradient id={`pill-grad-${label}`} x1="0%" y1="0%" x2="0%" y2="100%">
@@ -378,9 +400,9 @@ export const SideAction: React.FC<SideActionProps> = ({
           />
         </svg>
 
-        {/* Content Icon - no rotate when seed storage badge or noRotateOnFlash is set */}
+        {/* Content Icon — above ring/body chrome so tall plants aren't covered by circles */}
         <div 
-          className={`relative z-10 w-16 h-16 rounded-full flex items-center justify-center overflow-hidden transition-all duration-300 ${
+          className={`relative z-30 w-16 h-16 rounded-full flex items-center justify-center overflow-visible transition-all duration-300 ${
             isFlashing && shouldAnimate
               ? (storageCount !== undefined || noRotateOnFlash)
                 ? 'scale-110'
@@ -394,8 +416,8 @@ export const SideAction: React.FC<SideActionProps> = ({
             <div
               className="flex items-center justify-center drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)]"
               style={{
-                width: 40 * iconScale,
-                height: 40 * iconScale,
+                width: SIDE_ACTION_ICON_BASE_PX * iconScale,
+                height: SIDE_ACTION_ICON_BASE_PX * iconScale,
                 transform: iconOffsetY ? `translateY(${iconOffsetY}px)` : undefined,
               }}
             >
@@ -406,7 +428,7 @@ export const SideAction: React.FC<SideActionProps> = ({
               src={icon} 
               alt={label} 
               className="object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)]" 
-              style={{ width: 40 * iconScale, height: 40 * iconScale, transform: iconOffsetY ? `translateY(${iconOffsetY}px)` : undefined }}
+              style={{ width: SIDE_ACTION_ICON_BASE_PX * iconScale, height: SIDE_ACTION_ICON_BASE_PX * iconScale, transform: iconOffsetY ? `translateY(${iconOffsetY}px)` : undefined }}
             />
           ) : (
             <span className="text-4xl drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] select-none">
@@ -417,49 +439,39 @@ export const SideAction: React.FC<SideActionProps> = ({
           <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent pointer-events-none"></div>
         </div>
 
-        {/* Storage badge: FREE (free mode), X/Y (fits content width), or FULL when board full and ready */}
+        {/* Storage badge: FREE / X/Y / FULL — fixed size so seed & harvest match */}
         {freeMode && (storageCount !== undefined || storageMax !== undefined) ? (
           <div 
-            className="absolute bottom-[-6px] py-[3px] shadow-md border-2 z-20 flex items-center justify-center transition-all duration-200"
-            style={{ 
-              ...rechargePillStyle,
-              paddingLeft: '8px',
-              paddingRight: '8px',
-              minWidth: '2ch'
-            }}
+            className="absolute left-1/2 z-40 flex -translate-x-1/2 items-center justify-center border-2 py-[4px] shadow-md transition-all duration-200"
+            style={{ ...rechargePillStyle, bottom: RECHARGE_PILL_BOTTOM_OFFSET_PX }}
           >
             <span 
-              className="text-[11.25px] font-black uppercase tracking-widest leading-none whitespace-nowrap"
-              style={rechargePillTextStyle}
+              className="font-black uppercase tracking-widest leading-none whitespace-nowrap"
+              style={{ ...rechargePillTextStyle, fontSize: RECHARGE_PILL_FONT_SIZE_PX }}
             >
               FREE
             </span>
           </div>
         ) : storageCount !== undefined && storageMax !== undefined ? (
           <div 
-            className="absolute bottom-[-6px] py-[3px] shadow-md border-2 z-20 flex items-center justify-center transition-all duration-200"
-            style={{ 
-              ...rechargePillStyle,
-              paddingLeft: '8px',
-              paddingRight: '8px',
-              minWidth: '2ch'
-            }}
+            className="absolute left-1/2 z-40 flex -translate-x-1/2 items-center justify-center border-2 py-[4px] shadow-md transition-all duration-200"
+            style={{ ...rechargePillStyle, bottom: RECHARGE_PILL_BOTTOM_OFFSET_PX }}
           >
             <span 
-              className="text-[11.25px] font-black tabular-nums leading-none whitespace-nowrap"
-              style={rechargePillTextStyle}
+              className="font-black tabular-nums leading-none whitespace-nowrap"
+              style={{ ...rechargePillTextStyle, fontSize: RECHARGE_PILL_FONT_SIZE_PX }}
             >
               {storageCount}/{storageMax}
             </span>
           </div>
         ) : isFlashing && isBoardFull ? (
           <div 
-            className="absolute bottom-[-6px] px-[12px] py-[3px] shadow-md border-2 z-20 flex items-center justify-center animate-in fade-in slide-in-from-bottom-2 duration-300"
-            style={rechargePillStyle}
+            className="absolute left-1/2 z-40 flex -translate-x-1/2 items-center justify-center border-2 py-[4px] shadow-md animate-in fade-in slide-in-from-bottom-2 duration-300"
+            style={{ ...rechargePillStyle, bottom: RECHARGE_PILL_BOTTOM_OFFSET_PX }}
           >
             <span 
-              className="text-[11.25px] font-black uppercase tracking-widest leading-none"
-              style={rechargePillTextStyle}
+              className="font-black uppercase tracking-widest leading-none"
+              style={{ ...rechargePillTextStyle, fontSize: RECHARGE_PILL_FONT_SIZE_PX }}
             >
               FULL
             </span>

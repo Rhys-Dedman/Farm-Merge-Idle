@@ -75,7 +75,9 @@ function sortTasksForDisplay(tasks: DailyTaskInstanceState[]): DailyTaskInstance
 }
 
 function hasExtraDailyTaskSlot(ctx: DailyTaskRollContext): boolean {
-  return hasGoldenPotExtraTasks(ctx.globalGoldenPotCount ?? 0);
+  return hasGoldenPotExtraTasks(
+    ctx.globalGoldenPotUnlockedTiers ?? ctx.globalGoldenPotCount ?? 0,
+  );
 }
 
 /** @deprecated Use per-garden keys via `getDailyTasksDayStateStorageKey`. */
@@ -431,8 +433,10 @@ export interface DailyTaskRollContext extends UpgradeGateContext {
   maxPlantTier: number;
   playerLevelProgress: number;
   plantMasteryUnlockPendingCount: number;
-  /** Account-wide golden pot count (max across gardens); drives Daily Rewards 2×. */
+  /** Account-wide golden pot count (max across gardens); legacy / display. */
   globalGoldenPotCount?: number;
+  /** Pot thresholds unlocked by completing the matching collection shelf. */
+  globalGoldenPotUnlockedTiers?: ReadonlySet<number>;
   /** Garden 1 player level — collection unlock is global once this reaches unlock level. */
   garden1PlayerLevel?: number;
 }
@@ -989,6 +993,7 @@ function instanceToRow(
   progressCurrent = Math.min(progressCurrent, task.target);
   const state = rowState({ ...task, progress: Math.max(task.progress, progressCurrent) });
   const globalGoldenPotCount = ctx.globalGoldenPotCount ?? ctx.goldenPotCount;
+  const unlockedTiers = ctx.globalGoldenPotUnlockedTiers ?? globalGoldenPotCount;
   return {
     id: task.instanceId,
     state,
@@ -1000,7 +1005,7 @@ function instanceToRow(
     rewardCoins: getDailyTaskRewardCoins(
       getDailyTaskSlotTier(task.slot),
       ctx.playerLevel,
-      globalGoldenPotCount,
+      unlockedTiers,
     ),
     iconSrc: getTaskIconForInstance(task),
   };

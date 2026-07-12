@@ -192,10 +192,10 @@ export const AdBreakIntroOverlay: React.FC<AdBreakIntroOverlayProps> = ({
             className="relative object-contain select-none"
             style={{
               zIndex: 1,
-              width: '300px',
-              height: '300px',
-              maxWidth: '300px',
-              maxHeight: '300px',
+              width: '250px',
+              height: '250px',
+              maxWidth: '250px',
+              maxHeight: '250px',
               filter: 'drop-shadow(0 4px 16px rgba(0,0,0,0.35))',
               opacity: phase === 'black-fade' ? 1 : 0,
               transform: phase === 'black-fade' ? 'scale(1)' : 'scale(0.75)',

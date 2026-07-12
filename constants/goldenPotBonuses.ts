@@ -42,15 +42,36 @@ export function getGoldenPotBonusTierForPotCount(potCount: number): GoldenPotBon
   return GOLDEN_POT_BONUS_TIERS.find((tier) => tier.potCount === potCount);
 }
 
-/** Bonuses popup: unlocked tiers first (pot order), then locked tiers (pot order). */
-export function getGoldenPotBonusTiersForDisplay(goldenPotCount: number): GoldenPotBonusTier[] {
+/** Unlocked bonus tiers by pot threshold (e.g. 4, 24). Prefer this over raw pot count for gameplay. */
+export type GoldenPotUnlockedTiers = ReadonlySet<number>;
+
+/** `number` = legacy pot-count threshold; `Set` = per-shelf unlocks. */
+export type GoldenPotUnlockInput = number | GoldenPotUnlockedTiers;
+
+function isGoldenPotTierUnlocked(input: GoldenPotUnlockInput, threshold: number): boolean {
+  if (typeof input === 'number') return input >= threshold;
+  return input.has(threshold);
+}
+
+/**
+ * Bonuses popup order: unlocked → in-progress → locked.
+ * Within each group, keep table order (pot threshold ascending).
+ */
+export function getGoldenPotBonusTiersForDisplay(
+  unlocked: GoldenPotUnlockInput,
+  inProgress: ReadonlySet<number> | readonly number[] = [],
+): GoldenPotBonusTier[] {
+  const inProgressSet =
+    inProgress instanceof Set ? inProgress : new Set(inProgress);
   const completed: GoldenPotBonusTier[] = [];
+  const progressing: GoldenPotBonusTier[] = [];
   const locked: GoldenPotBonusTier[] = [];
   for (const tier of GOLDEN_POT_BONUS_TIERS) {
-    if (goldenPotCount >= tier.potCount) completed.push(tier);
+    if (isGoldenPotTierUnlocked(unlocked, tier.potCount)) completed.push(tier);
+    else if (inProgressSet.has(tier.potCount)) progressing.push(tier);
     else locked.push(tier);
   }
-  return [...completed, ...locked];
+  return [...completed, ...progressing, ...locked];
 }
 
 /** Bonus tier pot threshold for a collection shelf (shelf 0 → 4 pots, shelf 1 → 8, shelf 2 → 12, …). */
@@ -88,21 +109,21 @@ export function getGoldenPotBonusTierJustUnlocked(prevCount: number, newCount: n
   return null;
 }
 
-export function hasGoldenPotFourthOrderSlot(count: number): boolean {
-  return count >= GOLDEN_POT_BONUS_FOURTH_ORDER_SLOT_AT;
+export function hasGoldenPotFourthOrderSlot(unlocked: GoldenPotUnlockInput): boolean {
+  return isGoldenPotTierUnlocked(unlocked, GOLDEN_POT_BONUS_FOURTH_ORDER_SLOT_AT);
 }
 
 /** Plant goal slots (indices 0–3): 3 until enough golden pots; 4 after tier unlock. Coin goal stays separate (5th UI slot). */
-export function getMaxPlantGoalSlots(goldenPotCount: number): number {
-  return hasGoldenPotFourthOrderSlot(goldenPotCount) ? 4 : 3;
+export function getMaxPlantGoalSlots(unlocked: GoldenPotUnlockInput): number {
+  return hasGoldenPotFourthOrderSlot(unlocked) ? 4 : 3;
 }
 
-export function hasGoldenPotDailyAllowance(count: number): boolean {
-  return count >= GOLDEN_POT_BONUS_DAILY_ALLOWANCE_AT;
+export function hasGoldenPotDailyAllowance(unlocked: GoldenPotUnlockInput): boolean {
+  return isGoldenPotTierUnlocked(unlocked, GOLDEN_POT_BONUS_DAILY_ALLOWANCE_AT);
 }
 
-export function hasGoldenPotMergeCoins25(count: number): boolean {
-  return count >= GOLDEN_POT_BONUS_MERGE_COINS_25_AT;
+export function hasGoldenPotMergeCoins25(unlocked: GoldenPotUnlockInput): boolean {
+  return isGoldenPotTierUnlocked(unlocked, GOLDEN_POT_BONUS_MERGE_COINS_25_AT);
 }
 
 /** +25% merge coin payout; rounded to nearest 5, at least +5 over base. */
@@ -113,10 +134,10 @@ export const GOLDEN_POT_MERGE_COINS_MIN_EXTRA = 5;
 /** Non-goal merge coin value after Merge Bonus tier (+25%, nearest 5, min +5). */
 export function applyGoldenPotMergeCoinBonus(
   baseCoins: number,
-  globalGoldenPotCount: number,
+  unlocked: GoldenPotUnlockInput,
 ): number {
   if (baseCoins <= 0) return baseCoins;
-  if (!hasGoldenPotMergeCoins25(globalGoldenPotCount)) return baseCoins;
+  if (!hasGoldenPotMergeCoins25(unlocked)) return baseCoins;
   const boosted = baseCoins * GOLDEN_POT_MERGE_COINS_BONUS_MULTIPLIER;
   const rounded =
     Math.round(boosted / GOLDEN_POT_MERGE_COINS_ROUND_STEP) * GOLDEN_POT_MERGE_COINS_ROUND_STEP;
@@ -160,63 +181,63 @@ export function isGardenSelectable(gardenId: GardenId, alreadyStarted: boolean):
   return alreadyStarted;
 }
 
-export function hasGoldenPotDailyTasks2x(count: number): boolean {
-  return count >= GOLDEN_POT_BONUS_DAILY_TASKS_2X_AT;
+export function hasGoldenPotDailyTasks2x(unlocked: GoldenPotUnlockInput): boolean {
+  return isGoldenPotTierUnlocked(unlocked, GOLDEN_POT_BONUS_DAILY_TASKS_2X_AT);
 }
 
-export function hasGoldenPotExtraSeedRecharge(count: number): boolean {
-  return count >= GOLDEN_POT_BONUS_SEED_RECHARGE_AT;
+export function hasGoldenPotExtraSeedRecharge(unlocked: GoldenPotUnlockInput): boolean {
+  return isGoldenPotTierUnlocked(unlocked, GOLDEN_POT_BONUS_SEED_RECHARGE_AT);
 }
 
-export function hasGoldenPotOfflineEarnings25(count: number): boolean {
-  return count >= GOLDEN_POT_BONUS_OFFLINE_25_AT;
+export function hasGoldenPotOfflineEarnings25(unlocked: GoldenPotUnlockInput): boolean {
+  return isGoldenPotTierUnlocked(unlocked, GOLDEN_POT_BONUS_OFFLINE_25_AT);
 }
 
 /** @deprecated Use `hasGoldenPotOfflineEarnings25` — offline is +25% at 24 pots, not 2× at 8. */
-export function hasGoldenPotOfflineEarningsDouble(count: number): boolean {
-  return hasGoldenPotOfflineEarnings25(count);
+export function hasGoldenPotOfflineEarningsDouble(unlocked: GoldenPotUnlockInput): boolean {
+  return hasGoldenPotOfflineEarnings25(unlocked);
 }
 
-export function hasGoldenPotExtraHarvestRecharge(count: number): boolean {
-  return count >= GOLDEN_POT_BONUS_HARVEST_RECHARGE_AT;
+export function hasGoldenPotExtraHarvestRecharge(unlocked: GoldenPotUnlockInput): boolean {
+  return isGoldenPotTierUnlocked(unlocked, GOLDEN_POT_BONUS_HARVEST_RECHARGE_AT);
 }
 
 /** Base harvest charge cap before golden pot Harvest Storage bonus. */
 export const HARVEST_CHARGES_BASE_MAX = 3;
 
-export function getGoldenPotSeedStorageMaxBonus(globalGoldenPotCount: number): number {
-  return hasGoldenPotExtraSeedRecharge(globalGoldenPotCount) ? 1 : 0;
+export function getGoldenPotSeedStorageMaxBonus(unlocked: GoldenPotUnlockInput): number {
+  return hasGoldenPotExtraSeedRecharge(unlocked) ? 1 : 0;
 }
 
-export function getGoldenPotHarvestStorageMaxBonus(globalGoldenPotCount: number): number {
-  return hasGoldenPotExtraHarvestRecharge(globalGoldenPotCount) ? 1 : 0;
+export function getGoldenPotHarvestStorageMaxBonus(unlocked: GoldenPotUnlockInput): number {
+  return hasGoldenPotExtraHarvestRecharge(unlocked) ? 1 : 0;
 }
 
 /** Max harvest recharges (account-wide; every garden uses this cap). */
-export function getHarvestChargesMax(globalGoldenPotCount: number): number {
-  return HARVEST_CHARGES_BASE_MAX + getGoldenPotHarvestStorageMaxBonus(globalGoldenPotCount);
+export function getHarvestChargesMax(unlocked: GoldenPotUnlockInput): number {
+  return HARVEST_CHARGES_BASE_MAX + getGoldenPotHarvestStorageMaxBonus(unlocked);
 }
 
-export function hasGoldenPotExtraTasks(count: number): boolean {
-  return count >= GOLDEN_POT_BONUS_EXTRA_TASKS_AT;
+export function hasGoldenPotExtraTasks(unlocked: GoldenPotUnlockInput): boolean {
+  return isGoldenPotTierUnlocked(unlocked, GOLDEN_POT_BONUS_EXTRA_TASKS_AT);
 }
 
-export function hasGoldenPotSeedSpeed25(count: number): boolean {
-  return count >= GOLDEN_POT_BONUS_SEED_SPEED_25_AT;
+export function hasGoldenPotSeedSpeed25(unlocked: GoldenPotUnlockInput): boolean {
+  return isGoldenPotTierUnlocked(unlocked, GOLDEN_POT_BONUS_SEED_SPEED_25_AT);
 }
 
-export function hasGoldenPotHarvestSpeed25(count: number): boolean {
-  return count >= GOLDEN_POT_BONUS_HARVEST_SPEED_25_AT;
+export function hasGoldenPotHarvestSpeed25(unlocked: GoldenPotUnlockInput): boolean {
+  return isGoldenPotTierUnlocked(unlocked, GOLDEN_POT_BONUS_HARVEST_SPEED_25_AT);
 }
 
 /** @deprecated Use `hasGoldenPotSeedSpeed25` — +25% seed recharge at 36 pots. */
-export function hasGoldenPotProduction150(count: number): boolean {
-  return hasGoldenPotSeedSpeed25(count);
+export function hasGoldenPotProduction150(unlocked: GoldenPotUnlockInput): boolean {
+  return hasGoldenPotSeedSpeed25(unlocked);
 }
 
 /** @deprecated Use `hasGoldenPotHarvestSpeed25` — +25% harvest recharge at 40 pots. */
-export function hasGoldenPotHarvest150(count: number): boolean {
-  return hasGoldenPotHarvestSpeed25(count);
+export function hasGoldenPotHarvest150(unlocked: GoldenPotUnlockInput): boolean {
+  return hasGoldenPotHarvestSpeed25(unlocked);
 }
 
 /** Lower golden-pot threshold for the segment containing `goldenPotCount` (0 before first tier). */
@@ -289,30 +310,36 @@ const RECHARGE_PCT_BASELINE_MAX = 100;
 const RECHARGE_PER_MIN_AT_MIN_PCT = 3;
 const RECHARGE_PER_MIN_AT_BASELINE_MAX = 10;
 
-export function getSeedProductionDisplayPercent(seedProductionLevel: number, goldenPotCount: number): number {
+export function getSeedProductionDisplayPercent(
+  seedProductionLevel: number,
+  unlocked: GoldenPotUnlockInput,
+): number {
   const L = Math.min(9, Math.max(0, seedProductionLevel));
   const base = Math.min(100, 10 + L * 10);
-  return hasGoldenPotSeedSpeed25(goldenPotCount) ? base + GOLDEN_POT_SEED_SPEED_BONUS_PCT : base;
+  return hasGoldenPotSeedSpeed25(unlocked) ? base + GOLDEN_POT_SEED_SPEED_BONUS_PCT : base;
 }
 
-export function getHarvestSpeedDisplayPercent(harvestSpeedLevel: number, goldenPotCount: number): number {
+export function getHarvestSpeedDisplayPercent(
+  harvestSpeedLevel: number,
+  unlocked: GoldenPotUnlockInput,
+): number {
   const L = Math.min(9, Math.max(0, harvestSpeedLevel));
   const base = Math.min(100, 10 + L * 10);
-  return hasGoldenPotHarvestSpeed25(goldenPotCount) ? base + GOLDEN_POT_HARVEST_SPEED_BONUS_PCT : base;
+  return hasGoldenPotHarvestSpeed25(unlocked) ? base + GOLDEN_POT_HARVEST_SPEED_BONUS_PCT : base;
 }
 
 /** Offline coin multiplier from golden pot milestones (1 = none). */
-export function getGoldenPotOfflineEarningsMultiplier(goldenPotCount: number): number {
-  return hasGoldenPotOfflineEarnings25(goldenPotCount) ? GOLDEN_POT_OFFLINE_EARNINGS_MULTIPLIER : 1;
+export function getGoldenPotOfflineEarningsMultiplier(unlocked: GoldenPotUnlockInput): number {
+  return hasGoldenPotOfflineEarnings25(unlocked) ? GOLDEN_POT_OFFLINE_EARNINGS_MULTIPLIER : 1;
 }
 
 /** Apply Offline Boost (+25%) to a raw offline earnings total for popup display / collect. */
 export function applyGoldenPotOfflineEarningsBonus(
   rawTotal: number,
-  globalGoldenPotCount: number,
+  unlocked: GoldenPotUnlockInput,
 ): number {
   if (rawTotal <= 0) return 0;
-  const mult = getGoldenPotOfflineEarningsMultiplier(globalGoldenPotCount);
+  const mult = getGoldenPotOfflineEarningsMultiplier(unlocked);
   if (mult <= 1) return rawTotal;
   const boosted = rawTotal * mult;
   return Math.round(boosted / 5) * 5;
@@ -321,10 +348,10 @@ export function applyGoldenPotOfflineEarningsBonus(
 /** Persist unboosted bank so reload applies Offline Boost exactly once. */
 export function getRawOfflineEarningsForSave(
   displayTotal: number,
-  globalGoldenPotCount: number,
+  unlocked: GoldenPotUnlockInput,
 ): number {
   if (displayTotal <= 0) return 0;
-  const mult = getGoldenPotOfflineEarningsMultiplier(globalGoldenPotCount);
+  const mult = getGoldenPotOfflineEarningsMultiplier(unlocked);
   if (mult <= 1) return displayTotal;
   return Math.round(displayTotal / mult);
 }
@@ -341,20 +368,20 @@ export function getRechargePerMinuteForDisplayPercent(displayPercent: number): n
 
 export function getSeedRechargePerMinute(
   seedProductionLevel: number,
-  goldenPotCount: number,
+  unlocked: GoldenPotUnlockInput,
   hasRapidSeedsBoost: boolean
 ): number {
   if (hasRapidSeedsBoost) return RECHARGE_RAPID_PER_MIN;
-  const pct = getSeedProductionDisplayPercent(seedProductionLevel, goldenPotCount);
+  const pct = getSeedProductionDisplayPercent(seedProductionLevel, unlocked);
   return getRechargePerMinuteForDisplayPercent(pct);
 }
 
 export function getHarvestRechargePerMinute(
   harvestSpeedLevel: number,
-  goldenPotCount: number,
+  unlocked: GoldenPotUnlockInput,
   hasRapidHarvestBoost: boolean
 ): number {
   if (hasRapidHarvestBoost) return RECHARGE_RAPID_PER_MIN;
-  const pct = getHarvestSpeedDisplayPercent(harvestSpeedLevel, goldenPotCount);
+  const pct = getHarvestSpeedDisplayPercent(harvestSpeedLevel, unlocked);
   return getRechargePerMinuteForDisplayPercent(pct);
 }

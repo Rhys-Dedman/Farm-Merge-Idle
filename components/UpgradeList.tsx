@@ -86,9 +86,12 @@ export const isDoubleSeedsMaxed = (seedsState: SeedsState): boolean => {
 export const SEED_STORAGE_BASE = 5;
 export const SEED_STORAGE_MAX_CAP = 15;
 
-export const getSeedStorageMax = (seedsState: SeedsState, globalGoldenPotCount = 0): number => {
+export const getSeedStorageMax = (
+  seedsState: SeedsState,
+  unlocked: import('../constants/goldenPotBonuses').GoldenPotUnlockInput = 0,
+): number => {
   const level = seedsState?.seed_storage?.level ?? 0;
-  const bonus = getGoldenPotSeedStorageMaxBonus(globalGoldenPotCount);
+  const bonus = getGoldenPotSeedStorageMaxBonus(unlocked);
   return Math.min(SEED_STORAGE_MAX_CAP + bonus, SEED_STORAGE_BASE + level + bonus);
 };
 
@@ -236,8 +239,8 @@ interface UpgradeListProps {
   ftue10DisableSeedProductionPurchase?: boolean;
   /** Called after an upgrade is purchased (for FTUE 10 completion) */
   onUpgradePurchase?: (upgradeId: string, tab: TabType) => void;
-  /** Golden pots unlocked — some tiers supersede upgrade visuals and caps. */
-  goldenPotCount?: number;
+  /** Unlocked golden-pot bonus tiers (Set) or legacy pot count — drives seed/harvest speed % display. */
+  goldenPotCount?: import('../constants/goldenPotBonuses').GoldenPotUnlockInput;
 }
 
 interface UpgradeDef {
@@ -1157,12 +1160,12 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
           {/* Text Content */}
           <div className="flex-grow px-3">
             <div className="flex items-baseline space-x-1.5">
-              <h3 className="text-[13px] font-black tracking-tight uppercase leading-none text-[#583c1f]">
+              <h3 className="text-[14px] font-black tracking-tight uppercase leading-none text-[#583c1f]">
                 {offer.name}
               </h3>
             </div>
             <div 
-              className="text-[11px] font-semibold mt-0.5 tracking-tight"
+              className="text-[13px] font-semibold mt-0.5 tracking-tight leading-[1.1]"
               style={{ color: '#f69d42' }}
             >
               {offer.description}
@@ -1331,9 +1334,9 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
               {/* Text Content */}
               <div className="flex-grow px-3">
                 <div className="flex items-baseline space-x-1.5">
-                  {/* Updated title font size to 13px (from 14px) as requested */}
+                  {/* Updated title font size to 14px */}
                   <h3
-                    className="text-[13px] font-black tracking-tight uppercase leading-none"
+                    className="text-[14px] font-black tracking-tight uppercase leading-none"
                     style={{ color: isUnlockFlashing ? '#507493' : isFlashing ? '#386641' : '#583c1f' }}
                   >
                     {upgrade.name}
@@ -1351,7 +1354,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
                 </div>
                 {/* Description */}
                 <div
-                  className={`text-[11px] font-semibold mt-0.5 tracking-tight ${upgrade.description ? '' : 'uppercase'} ${isFlashing && !isUnlockFlashing ? 'text-[#386641]/50' : ''}`}
+                  className={`text-[13px] font-semibold mt-0.5 tracking-tight leading-[1.1] ${upgrade.description ? '' : 'uppercase'} ${isFlashing && !isUnlockFlashing ? 'text-[#386641]/50' : ''}`}
                   style={{ color: isUnlockFlashing ? '#7497b0' : isFlashing ? undefined : descTextColor }}
                 >
                   {upgrade.description ?? `YIELD: +${(state.level * 30).toFixed(0)}%`}

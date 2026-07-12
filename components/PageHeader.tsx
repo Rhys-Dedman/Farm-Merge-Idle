@@ -18,18 +18,28 @@ const BOOST_GAP_PX = 2;
 const BOOST_SLOT_WIDTH = ACTIVE_BOOST_INDICATOR_SIZE_PX + BOOST_GAP_PX;
 
 /** Max boost icons in the strip; extras stay active off-screen until a slot frees. */
-export const MAX_VISIBLE_BOOST_SLOTS = 5;
+export const MAX_VISIBLE_BOOST_SLOTS = 4;
+
+/**
+ * Top bar content row height (matches `min-h` on the bar).
+ * Ref 44px was the original locked size; cluster scale was 0.88 at that height.
+ */
+const TOP_BAR_ROW_HEIGHT_PX = 60;
+const TOP_BAR_ROW_HEIGHT_REF_PX = 44;
+/** Wallet / level / boosts cluster scale (ref was 0.88 on 44px bar; 1.1 reads better on 60px). */
+const HEADER_CLUSTER_SCALE = 1.1;
+const HEADER_UI_SIZE_SCALE = TOP_BAR_ROW_HEIGHT_PX / TOP_BAR_ROW_HEIGHT_REF_PX;
 
 /** Player level pill width (must match level bar + spacer below). */
-const PLAYER_LEVEL_SLOT_WIDTH_PX = 155;
+const PLAYER_LEVEL_SLOT_WIDTH_PX = 120;
 /** Coin wallet button width. */
-const WALLET_WIDTH_PX = 85;
-/** Golden pot wallet (right dock) — auto width; reserve ≈ max label after scale(0.88). */
+const WALLET_WIDTH_PX = 74;
+/** Golden pot wallet (right dock) — auto width; reserve ≈ max label after cluster scale. */
 const GOLDEN_POT_WALLET_RESERVE_PX = 78;
 const GOLDEN_POT_WALLET_GAP_PX = 10;
 const GOLDEN_POT_WALLET_ICON_PX = 36;
 /** Match coin cluster scale in `headerLeftWrapperRef`. */
-const GOLDEN_POT_WALLET_SCALE = 0.88;
+const GOLDEN_POT_WALLET_SCALE = HEADER_CLUSTER_SCALE;
 /** Gap between wallet, level, and boost strip inside the scaled cluster (`gap: 18`). */
 const HEADER_CLUSTER_GAP_PX = 18;
 /** Boost strip pulls left 10px under the level bar (`marginLeft: -10`). */
@@ -37,17 +47,17 @@ const BOOST_STRIP_MARGIN_LEFT_PX = -10;
 /** Store: gap between centered title right edge and first boost icon. */
 const AFTER_CENTER_TITLE_BOOST_PAD_PX = 10;
 /** Reserve space at the right of the bar for FPS + settings (absolute dock); tuned so gear never clips. */
-const RIGHT_DOCK_RESERVE_PX_WITH_FPS = 84;
-const RIGHT_DOCK_RESERVE_PX_NO_FPS = 44;
-/** Settings gear size + gap so FPS can sit to its left (`right-3` is 12px). */
-export const SETTINGS_GEAR_PX = 22;
-/** Gear icon inside the settings button (`w-3.5` / `h-3.5`). */
-export const SETTINGS_GEAR_ICON_PX = 14;
+const RIGHT_DOCK_RESERVE_PX_WITH_FPS = Math.round(84 * HEADER_UI_SIZE_SCALE);
+const RIGHT_DOCK_RESERVE_PX_NO_FPS = Math.round(44 * HEADER_UI_SIZE_SCALE);
+/** Settings gear size + gap so FPS can sit to its left. */
+export const SETTINGS_GEAR_PX = 26;
+/** Gear icon inside the settings button. */
+export const SETTINGS_GEAR_ICON_PX = 20;
 const DOCK_GAP_PX = 8;
-const FPS_RIGHT_OFFSET_PX = 12 + SETTINGS_GEAR_PX + DOCK_GAP_PX; // 42
-/** Settings dock inset from the right edge (`right-3` = 12px per UI reference). */
-const SETTINGS_DOCK_RIGHT_PX = 12;
-const SETTINGS_DOCK_RIGHT_WITH_GOLDEN_POT_PX = 4;
+/** Settings dock inset from the right edge. */
+const SETTINGS_DOCK_RIGHT_PX = 15;
+const SETTINGS_DOCK_RIGHT_WITH_GOLDEN_POT_PX = 6;
+const FPS_RIGHT_OFFSET_PX = SETTINGS_DOCK_RIGHT_PX + SETTINGS_GEAR_PX + DOCK_GAP_PX;
 
 interface PageHeaderProps {
   /** Coin balance; null/undefined coerced to 0 for display (bad saves / edge cases). */
@@ -85,7 +95,7 @@ interface PageHeaderProps {
   playerLevelFlashTrigger?: number;
   /** If true, hide the top bar background (e.g. for shed screen - keeps plant wallet + settings only) */
   hideTopBarBg?: boolean;
-  /** If true, hide the small FPS button (e.g. Store). Ignored for layout when 5+ active boosts fill the bar. */
+  /** If true, hide the small FPS button (e.g. Store). Ignored for layout when 4+ active boosts fill the bar. */
   hideFps?: boolean;
   /** If true, hide/collapse the player level block so it doesn't reserve width. */
   collapsePlayerLevel?: boolean;
@@ -96,7 +106,7 @@ interface PageHeaderProps {
   omitPlayerLevelBlock?: boolean;
   /** Override outer `<header>` left padding (px); omit to keep `px-2` (8px). */
   headerOuterPadLeftPx?: number;
-  /** Override inner content row left padding (px); omit to keep 12px (`pl-3`). */
+  /** Override inner content row left padding (px); omit to keep 14px. */
   headerRowPadLeftPx?: number;
   /** Override left cluster `marginLeft` (default 10). */
   headerClusterMarginLeftPx?: number;
@@ -118,7 +128,7 @@ interface PageHeaderProps {
   onBoostComplete?: (id: string, rect?: DOMRect) => void;
   /** When user taps a boost: open the matching limited offer popup in "active" view (countdown, brown button) */
   onBoostClick?: (boost: ActiveBoostData) => void;
-  /** Ref for the left section wrapper (scale 0.88); used so boost particle can render inside it and hit the correct slot */
+  /** Ref for the left section wrapper (scaled cluster); used so boost particle can render inside it and hit the correct slot */
   headerLeftWrapperRef?: React.RefObject<HTMLDivElement | null>;
   /** Add this to boost area marginLeft (e.g. 20 on Store to push boosts right) */
   boostAreaMarginLeftOffset?: number;
@@ -163,7 +173,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   playerLevelFlashTrigger = 0,
   playerLevelGoalsRequired = 2,
   hideTopBarBg = false,
-  hideFps = false,
+  hideFps = true,
   collapsePlayerLevel = false,
   omitPlayerLevelBlock = false,
   headerOuterPadLeftPx,
@@ -286,7 +296,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   /** Store / shed can force-hide; also hide when the bar is full of boosts (5 visible + busy). */
   const hideFpsReader = hideFps || activeBoosts.length >= MAX_VISIBLE_BOOST_SLOTS;
 
-  /** Up to 5 visible slots; 6+ stay in hidden timers until a slot frees (see hiddenBoostSlice). */
+  /** Up to 4 visible slots; 5+ stay in hidden timers until a slot frees (see hiddenBoostSlice). */
   const displayBoostCount = Math.min(activeBoosts.length, MAX_VISIBLE_BOOST_SLOTS);
   const visibleBoostSlice = activeBoosts.slice(0, displayBoostCount);
   const hiddenBoostSlice = activeBoosts.slice(displayBoostCount);
@@ -303,8 +313,8 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   const RIGHT_CAP_START_PX = 416;
   const MIDDLE_PX = RIGHT_CAP_START_PX - LEFT_CAP_PX; // 232
 
-  // Left/right cap width when scaled to fit height 44px (184 * 44/180 ≈ 45px)
-  const capWidthPx = Math.round((LEFT_CAP_PX * 44) / SPRITE_H);
+  // Left/right cap width when scaled to fit bar height (184 * height / 180)
+  const capWidthPx = Math.round((LEFT_CAP_PX * TOP_BAR_ROW_HEIGHT_PX) / SPRITE_H);
   /** Golden pot right dock is collection-only; farm/store keep the locked fec7f0a dock layout. */
   const showGoldenPotWallet = goldenPotWallet != null;
   const goldenPotWalletReservePx = showGoldenPotWallet
@@ -374,7 +384,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
       style={headerOuterPadLeftPx !== undefined ? { paddingLeft: headerOuterPadLeftPx } : undefined}
     >
       {/* Top UI background - 3-slice: left cap (fixed), center (stretch), right cap (fixed) */}
-      <div className="relative flex min-h-[44px]">
+      <div className="relative flex min-h-[60px]">
         {/* 3-slice background layer - hidden when hideTopBarBg (e.g. shed screen) */}
         {!hideTopBarBg && (
         <div className="absolute inset-0 flex w-full pointer-events-none">
@@ -416,11 +426,11 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
         )}
         {/* Content on top — left cluster flexes; FPS + settings are absolutely docked so boosts never push them off-screen */}
         <div
-          className={`relative z-10 flex w-full min-w-0 min-h-[44px] items-center py-2 ${headerRowPadLeftPx === undefined ? 'pl-3 pr-3' : 'pr-3'}`}
+          className={`relative z-10 flex w-full min-w-0 min-h-[60px] items-center py-2 pr-3`}
           style={{
             /* Reserve space for absolute FPS + settings dock — do not shrink the cluster with max-width/clip (that hid boosts 3–5 and clipped the coin icon). */
             paddingRight: rightDockReservePx,
-            ...(headerRowPadLeftPx !== undefined ? { paddingLeft: headerRowPadLeftPx } : {}),
+            paddingLeft: headerRowPadLeftPx ?? 14,
           }}
         >
           {centerTitle && (
@@ -447,7 +457,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
         style={{
           marginLeft: headerClusterMarginLeftPx ?? 10,
           gap: HEADER_CLUSTER_GAP_PX,
-          transform: 'scale(0.88)',
+          transform: `scale(${HEADER_CLUSTER_SCALE})`,
           transformOrigin: 'left center',
         }}
       >
@@ -458,9 +468,9 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
               onClick={onWalletClick}
               className="relative inline-flex items-center justify-center rounded-full border outline-none shadow-2xl hover:opacity-90 active:scale-95 transition-all overflow-visible flex-shrink-0"
               style={{
-                width: 85,
-                minWidth: 85,
-                maxWidth: 85,
+                width: WALLET_WIDTH_PX,
+                minWidth: WALLET_WIDTH_PX,
+                maxWidth: WALLET_WIDTH_PX,
                 height: 22,
                 backgroundColor: '#775041',
                 borderWidth: 1,
@@ -478,12 +488,13 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
               {/* Icon: fixed left, does not affect width */}
               <span
                 ref={walletIconRef}
-                className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center justify-center leading-none -ml-3 pointer-events-none"
+                className="absolute left-0 top-1/2 flex items-center justify-center leading-none -ml-3 pointer-events-none"
+                style={{ transform: 'translateY(calc(-50% - 0.5px))' }}
                 aria-hidden
               >
                 <img key={bounceKey} src={getGardenCoinIconPath()} alt="" className={`w-[30px] h-[30px] object-contain object-left outline-none border-0 ${bounceKey > 0 ? 'coin-bounce' : ''}`} style={{ outline: 'none', border: 'none' }} />
               </span>
-              {/* Text centered in fixed 85px width */}
+              {/* Text centered in fixed wallet width */}
               <span
                 key={bounceKey}
                 className={`relative font-black text-xs tracking-tight text-[#fcf0c7] whitespace-nowrap truncate pl-[12px] pr-2 py-1 max-w-full ${bounceKey > 0 ? 'coin-text-bounce' : ''}`}
@@ -522,7 +533,10 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                     ...(hidePlayerLevel && { pointerEvents: 'none' as const }),
                   }}
                 >
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center justify-center leading-none -ml-3 pointer-events-none z-10 w-[30px] h-[30px]">
+                  <span
+                    className="absolute left-0 top-1/2 flex items-center justify-center leading-none -ml-3 pointer-events-none z-10 w-[30px] h-[30px]"
+                    style={{ transform: 'translateY(calc(-50% - 0.5px))' }}
+                  >
                     <img src={getGardenLevelIconPath()} alt="" className="w-[30px] h-[30px] object-contain object-left" />
                     <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center font-black leading-none" style={{ color: '#c8e9eb', fontSize: 12, WebkitTextStroke: '1px rgba(0,0,0,0.5)', paintOrder: 'stroke fill' }}>{playerLevel}</span>
                   </span>
@@ -573,7 +587,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                   </div>
                 </div>
               ))}
-            {/* Active boosts: wallet/level sit outside this box so coin -ml-3 is never clipped; up to 5 icons (6+ use hidden timers). */}
+            {/* Active boosts: wallet/level sit outside this box so coin -ml-3 is never clipped; up to 4 icons (5+ use hidden timers). */}
             {showBoostStrip && (
             <div
               ref={activeBoostAreaRef}
@@ -646,7 +660,8 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
               aria-hidden
             />
             <span
-              className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center justify-center leading-none -ml-3 pointer-events-none"
+              className="absolute left-0 top-1/2 flex items-center justify-center leading-none -ml-3 pointer-events-none"
+              style={{ transform: 'translateY(calc(-50% - 0.5px))' }}
               aria-hidden
             >
               <img key={bounceKey} src={getGardenCoinIconPath()} alt="" className={`w-[30px] h-[30px] object-contain object-left outline-none border-0 ${bounceKey > 0 ? 'coin-bounce' : ''}`} style={{ outline: 'none', border: 'none' }} />
@@ -708,12 +723,11 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
         </div>
       )}
       <div
-        className={`absolute top-1/2 z-40 flex -translate-y-1/2 items-center${showGoldenPotWallet ? '' : ' right-3'}`}
-        style={
-          showGoldenPotWallet
-            ? { right: settingsDockRightPx, gap: GOLDEN_POT_WALLET_GAP_PX }
-            : undefined
-        }
+        className="absolute top-1/2 z-40 flex -translate-y-1/2 items-center"
+        style={{
+          right: settingsDockRightPx,
+          ...(showGoldenPotWallet ? { gap: GOLDEN_POT_WALLET_GAP_PX } : {}),
+        }}
       >
         {showGoldenPotWallet && (
           <button
@@ -781,13 +795,21 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
             backgroundColor: '#775041',
             borderWidth: 1,
             borderColor: '#e9dcaf',
+            marginTop: 0.5,
             ...(settingsButtonVisuallyHidden && {
               opacity: 0,
               pointerEvents: 'none' as const,
             }),
           }}
         >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="#fcf0c7" className="w-3.5 h-3.5">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={2.0}
+            stroke="#fcf0c7"
+            style={{ width: SETTINGS_GEAR_ICON_PX, height: SETTINGS_GEAR_ICON_PX }}
+          >
             <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>

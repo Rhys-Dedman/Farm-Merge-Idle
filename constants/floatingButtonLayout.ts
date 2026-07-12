@@ -1,5 +1,5 @@
-/** Page header block: pt-4 + pb-2 + inner row min-h 44 + py-2. */
-export const FLOATING_BUTTON_TOP_UI_HEIGHT_PX = 84;
+/** Page header block: pt-4 + pb-2 + inner row min-h 60 + py-2. */
+export const FLOATING_BUTTON_TOP_UI_HEIGHT_PX = 100;
 /** Goals row height in the farm column. */
 export const FLOATING_BUTTON_GOALS_HEIGHT_PX = 85;
 /** Gap between goals and the first floating button. */
