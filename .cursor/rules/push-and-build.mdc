@@ -1,0 +1,16 @@
+---
+description: When user says "push and build", commit/push and Capacitor Android sync
+alwaysApply: true
+---
+
+# Push and build
+
+When the user says **push and build** (or clearly the same intent):
+
+1. **Git** — Follow the normal commit + push flow (status/diff/log, stage relevant files, commit with their message if given, push to origin). Do not commit secrets. Only commit when they asked to push/commit.
+2. **Android sync** — From the project root, run the Capacitor web build and sync so Android Studio has the latest assets/code:
+   - `npm run build:capacitor`
+   - `npx cap sync android`
+   (Or equivalently `npm run cap:sync` if that script matches.)
+
+Do both in the same turn when they use that phrase. Explain briefly that sync updates the `android/` copy for APK builds; sync output often does not need a separate git commit.
