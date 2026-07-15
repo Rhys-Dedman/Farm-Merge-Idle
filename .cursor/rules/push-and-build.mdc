@@ -1,5 +1,5 @@
 ---
-description: When user says "push and build", bump version, commit/push, Capacitor Android sync
+description: When user says "push and build", bump version, Capacitor Android sync, then commit/push
 alwaysApply: true
 ---
 
@@ -7,9 +7,19 @@ alwaysApply: true
 
 When the user says **push and build** (or clearly the same intent):
 
+## Order (critical)
+
+Do steps in this order so **nothing is left local** after push:
+
+1. **Version bump** (section 0)
+2. **Android sync** (section 1) — Capacitor build + `cap sync` may modify `android/` files
+3. **Git commit + push** (section 2) — stage **everything** including sync-generated gradle files
+
+Never push then sync. Sync first, then commit so `capacitor.build.gradle` / `capacitor.settings.gradle` and any other sync output are included in the same commit.
+
 ## 0. Version bump (required every time)
 
-Before commit/sync, bump the app version. This is **critical** — players must be able to report which build they are on.
+Before sync/commit, bump the app version. This is **critical** — players must be able to report which build they are on.
 
 ### Source of truth
 
@@ -32,21 +42,23 @@ Read the current `APP_VERSION` and the commits / diff being shipped, then:
 
 Always increment **`APP_VERSION_CODE` by +1** on every push-and-build (Play Store requires a new integer each upload), regardless of patch vs minor.
 
-If unclear whether the change is patch or minor, ask in one short question; if they already said “small” / “bugfix” / “QoL”, use patch; if they said “feature” / “new system” / described a large change, use minor.
+If unclear whether the change is patch or minor, ask in one short question; if they already said “small” / “bug fix” / “QoL”, use patch; if they said “feature” / “new system” / described a large change, use minor.
 
 Do **not** skip the version bump even if the user forgot to mention it.
 
-## 1. Git
+## 1. Android sync (before git)
 
-Follow the normal commit + push flow (status/diff/log, stage relevant files, commit with their message if given, push to origin). Do not commit secrets. Only commit when they asked to push/commit. Include the version bump files in the same commit when possible.
-
-## 2. Android sync
-
-From the project root, run the Capacitor web build and sync so Android Studio has the latest assets/code:
+From the project root, run the Capacitor web build and sync so Android Studio has the latest assets/code **and** so generated android gradle/plugin files exist before commit:
 
 - `npm run build:capacitor`
 - `npx cap sync android`
 
 (Or equivalently `npm run cap:sync` if that script matches.)
 
-Do git + sync in the same turn when they use that phrase. Briefly remind them of the new version string (e.g. `v0.1.1`) and that sync updates the `android/` copy for APK builds; sync output often does not need a separate git commit.
+After sync, re-check `git status` — include any modified `android/` files (especially `android/app/capacitor.build.gradle` and `android/capacitor.settings.gradle`) in the upcoming commit.
+
+## 2. Git
+
+Follow the normal commit + push flow (status/diff/log, stage relevant files **including sync artifacts**, commit with their message if given, push to origin). Do not commit secrets. Only commit when they asked to push/commit. Include the version bump files and Capacitor sync output in the **same** commit when possible.
+
+After push, confirm `git status` is clean (or only unrelated untracked junk). Briefly remind them of the new version string (e.g. `v0.1.1`).
