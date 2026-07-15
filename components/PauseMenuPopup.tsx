@@ -1,15 +1,21 @@
 /**
- * Settings (Pause) Popup - Debugger menu. Title/divider/description match discovery popup style.
+ * Dev Tools popup — scrollable cheat / debug actions.
  */
 import React, { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react';
 import { assetPath } from '../utils/assetPath';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
+import {
+  POPUP_CLOSE_HIT_TARGET,
+  POPUP_CREAM_HIT_TARGET,
+  POPUP_LAYOUT_PASS_THROUGH,
+} from '../constants/popupPointerEvents';
 
 interface PauseMenuPopupProps {
   isVisible: boolean;
   onClose: () => void;
   /** Fired on tap when dismissing via X or backdrop (immediate), not when the close animation ends. */
   onUserDismiss?: () => void;
+  onAnyButtonClick?: () => void;
   /** Rewarded Ad: same as gift – opens limited offer. */
   onRewardedAdClick?: () => void;
   /** Level Up: same as + next to player level – 1 goal XP per tap. */
@@ -37,12 +43,26 @@ interface PauseMenuPopupProps {
   /** Dev: preview Dynamic Island + top safe-area inset on farm/store/collection. */
   fakeNotchPreviewEnabled?: boolean;
   onFakeNotchToggle?: () => void;
+  /** Shown during FTUE settings — same end state as Clear Progress. */
+  onSkipTutorial?: () => void;
+  activeGardenLabel?: string;
+  onCycleGardenClick?: () => void;
+  onClearBoosts?: () => void;
+  onResetProgress?: () => void;
+  /** Dev: preview CorruptSavePopup UI without corrupting a save. */
+  onPreviewCorruptSavePopup?: () => void;
+  /** Dev: clear local Rate Us dismiss / rated flags so the prompt can show again. */
+  onClearRating?: () => void;
+  /** Hide Dev Tools entry in Settings and close this menu. */
+  onDisableDevTools?: () => void;
   closeOnBackdropClick?: boolean;
   appScale?: number;
 }
 
 const POPUP_CLOSE_MS = 200;
-const SETTINGS_BUTTON_HEIGHT_PX = 28; // 30% shorter than previous 40px
+const SETTINGS_BUTTON_HEIGHT_PX = 28;
+/** Visible height for ~6 buttons + gaps — rest scroll. */
+const DEV_TOOLS_SCROLL_MAX_HEIGHT_PX = 220;
 
 const SETTINGS_PALETTES = {
   green: {
@@ -75,10 +95,9 @@ const SETTINGS_PALETTES = {
   },
 } as const;
 
-function settingsCheatButtonStyle(
-  p: (typeof SETTINGS_PALETTES)['green'],
-  pressed: boolean
-): CSSProperties {
+type Palette = (typeof SETTINGS_PALETTES)[keyof typeof SETTINGS_PALETTES];
+
+function settingsCheatButtonStyle(p: Palette, pressed: boolean): CSSProperties {
   return {
     height: `${SETTINGS_BUTTON_HEIGHT_PX}px`,
     backgroundColor: pressed ? p.pressedBg : p.bg,
@@ -88,10 +107,11 @@ function settingsCheatButtonStyle(
       ? 'inset 0 2px 4px rgba(0,0,0,0.15)'
       : `0 4px 0 ${p.border}, 0 6px 12px rgba(0,0,0,0.15)`,
     transform: pressed ? 'translateY(2px)' : 'translateY(0)',
+    flexShrink: 0,
   };
 }
 
-function settingsCheatLabelStyle(p: (typeof SETTINGS_PALETTES)['green']): CSSProperties {
+function settingsCheatLabelStyle(p: Palette): CSSProperties {
   return {
     color: p.text,
     fontFamily: 'Inter, sans-serif',
@@ -104,6 +124,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   isVisible,
   onClose,
   onUserDismiss,
+  onAnyButtonClick,
   onRewardedAdClick,
   onLevelUpClick,
   onUnlockPlantClick,
@@ -118,6 +139,14 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   canUnlockPlant = true,
   fakeNotchPreviewEnabled = false,
   onFakeNotchToggle,
+  onSkipTutorial,
+  activeGardenLabel,
+  onCycleGardenClick,
+  onClearBoosts,
+  onResetProgress,
+  onPreviewCorruptSavePopup,
+  onClearRating,
+  onDisableDevTools,
   closeOnBackdropClick = true,
   appScale = 1,
 }) => {
@@ -134,6 +163,12 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   const [completeTaskPressed, setCompleteTaskPressed] = useState(false);
   const [clearShedPressed, setClearShedPressed] = useState(false);
   const [fakeNotchPressed, setFakeNotchPressed] = useState(false);
+  const [skipTutorialPressed, setSkipTutorialPressed] = useState(false);
+  const [clearBoostsPressed, setClearBoostsPressed] = useState(false);
+  const [resetPressed, setResetPressed] = useState(false);
+  const [corruptSavePreviewPressed, setCorruptSavePreviewPressed] = useState(false);
+  const [clearRatingPressed, setClearRatingPressed] = useState(false);
+  const [disableDevToolsPressed, setDisableDevToolsPressed] = useState(false);
   const popupCardLayoutRef = useRef<HTMLDivElement>(null);
 
   const beginEnterAfterPreflight = useCallback(() => {
@@ -168,6 +203,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
   const handleRewardedAdClick = () => {
     if (animState === 'leaving' || animState === 'preflight') return;
     if (!onRewardedAdClick) return;
+    onAnyButtonClick?.();
     onRewardedAdClick();
     setAnimState('leaving');
     setTimeout(() => {
@@ -204,6 +240,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
         style={{
           transform: `scale(${appScale})`,
           transformOrigin: 'center center',
+          ...POPUP_LAYOUT_PASS_THROUGH,
         }}
       >
         <div
@@ -212,6 +249,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
           style={{
             width: '260px',
             zIndex: 102,
+            ...POPUP_CREAM_HIT_TARGET,
             ...popupCardSurfaceStyle(
               animState,
               isEntering,
@@ -231,6 +269,26 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
               0% { transform: scale(1); opacity: 1; }
               100% { transform: scale(0.9); opacity: 0; }
             }
+            .dev-tools-scroll {
+              max-height: ${DEV_TOOLS_SCROLL_MAX_HEIGHT_PX}px;
+              overflow-y: auto;
+              overflow-x: hidden;
+              -webkit-overflow-scrolling: touch;
+              overscroll-behavior: contain;
+              padding-right: 4px;
+              scrollbar-width: thin;
+              scrollbar-color: #c2b280 transparent;
+            }
+            .dev-tools-scroll::-webkit-scrollbar {
+              width: 6px;
+            }
+            .dev-tools-scroll::-webkit-scrollbar-thumb {
+              background: #c2b280;
+              border-radius: 4px;
+            }
+            .dev-tools-scroll::-webkit-scrollbar-track {
+              background: transparent;
+            }
           `}</style>
           <div
             style={{
@@ -240,11 +298,10 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
               backgroundColor: '#fcf0c6',
               boxShadow: '0 1px 14px rgba(0,0,0,0.96), inset 0 0 0 1.5px #e9dcaf',
               border: '2px solid rgba(180, 165, 130, 0.4)',
-              padding: '36px 20px 32px',
+              padding: '36px 20px 20px',
             }}
           >
             <div className="flex flex-col items-center">
-              {/* Title - same styling as Discovery "Wild Fern" subtitle: dark brown, extra bold */}
               <h2
                 className="font-black tracking-tight text-center"
                 style={{
@@ -256,7 +313,6 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                 Dev Tools
               </h2>
 
-              {/* Green divider - same as discovery popup */}
               <div className="w-full flex items-center justify-center" style={{ marginTop: '8px', marginBottom: '12px' }}>
                 <img
                   src={assetPath('/assets/ui/popup_divider.png')}
@@ -266,7 +322,6 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                 />
               </div>
 
-              {/* Description - same size/color/italics as discovery popup description */}
               <p
                 className="font-medium text-center leading-relaxed italic w-full"
                 style={{
@@ -275,214 +330,383 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
                   fontSize: '0.875rem',
                   paddingLeft: '12px',
                   paddingRight: '12px',
-                  marginBottom: '16px',
+                  marginBottom: '12px',
                 }}
               >
                 This is a debugger menu for Rhys only! Don&apos;t even think about using these cheats...
               </p>
 
-              <div className="flex flex-col items-center gap-3 w-full" style={{ maxWidth: '200px' }}>
-                {onRewardedAdClick ? (
-                  <button
-                    type="button"
-                    onMouseDown={() => setRewardedPressed(true)}
-                    onMouseUp={() => setRewardedPressed(false)}
-                    onMouseLeave={() => setRewardedPressed(false)}
-                    onClick={handleRewardedAdClick}
-                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.yellow, rewardedPressed)}
-                  >
-                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.yellow)}>
-                      Rewarded Ad
-                    </span>
-                  </button>
-                ) : null}
-                {/* 2. +1Mil Coins — blue */}
-                {onAddMoney ? (
-                  <button
-                    type="button"
-                    onMouseDown={() => setAddCoinsPressed(true)}
-                    onMouseUp={() => setAddCoinsPressed(false)}
-                    onMouseLeave={() => setAddCoinsPressed(false)}
-                    onClick={() => onAddMoney(1000000)}
-                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.blue, addCoinsPressed)}
-                  >
-                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.blue)}>
-                      +1Mil Coins
-                    </span>
-                  </button>
-                ) : null}
-                {onClearCoins ? (
-                  <button
-                    type="button"
-                    onMouseDown={() => setClearCoinsPressed(true)}
-                    onMouseUp={() => setClearCoinsPressed(false)}
-                    onMouseLeave={() => setClearCoinsPressed(false)}
-                    onClick={() => onClearCoins()}
-                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.red, clearCoinsPressed)}
-                  >
-                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.red)}>
-                      Clear Coins
-                    </span>
-                  </button>
-                ) : null}
-                {/* 3. Unlock plant — blue */}
-                {onUnlockPlantClick ? (
-                  <button
-                    type="button"
-                    disabled={!canUnlockPlant}
-                    onMouseDown={() => canUnlockPlant && setUnlockPlantPressed(true)}
-                    onMouseUp={() => setUnlockPlantPressed(false)}
-                    onMouseLeave={() => setUnlockPlantPressed(false)}
-                    onClick={() => {
-                      if (!canUnlockPlant || !onUnlockPlantClick) return;
-                      onUnlockPlantClick();
-                    }}
-                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                    style={{
-                      ...settingsCheatButtonStyle(SETTINGS_PALETTES.blue, unlockPlantPressed && canUnlockPlant),
-                      opacity: canUnlockPlant ? 1 : 0.45,
-                      cursor: canUnlockPlant ? 'pointer' : 'not-allowed',
-                    }}
-                  >
-                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.blue)}>
-                      Unlock plant
-                    </span>
-                  </button>
-                ) : null}
-                {/* 4. Golden Pot — blue */}
-                {onGoldenPotClick ? (
-                  <button
-                    type="button"
-                    onMouseDown={() => setGoldenPotPressed(true)}
-                    onMouseUp={() => setGoldenPotPressed(false)}
-                    onMouseLeave={() => setGoldenPotPressed(false)}
-                    onClick={() => onGoldenPotClick()}
-                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.blue, goldenPotPressed)}
-                  >
-                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.blue)}>
-                      Golden Pot
-                    </span>
-                  </button>
-                ) : null}
-                {onTestAdBreakClick ? (
-                  <button
-                    type="button"
-                    onMouseDown={() => setAdBreakPressed(true)}
-                    onMouseUp={() => setAdBreakPressed(false)}
-                    onMouseLeave={() => setAdBreakPressed(false)}
-                    onClick={() => onTestAdBreakClick()}
-                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.yellow, adBreakPressed)}
-                  >
-                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.yellow)}>
-                      Test Ad Break
-                    </span>
-                  </button>
-                ) : null}
-                {onFakeNotchToggle ? (
-                  <button
-                    type="button"
-                    onMouseDown={() => setFakeNotchPressed(true)}
-                    onMouseUp={() => setFakeNotchPressed(false)}
-                    onMouseLeave={() => setFakeNotchPressed(false)}
-                    onClick={() => onFakeNotchToggle()}
-                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                    style={settingsCheatButtonStyle(
-                      fakeNotchPreviewEnabled ? SETTINGS_PALETTES.green : SETTINGS_PALETTES.blue,
-                      fakeNotchPressed,
-                    )}
-                  >
-                    <span
-                      className="font-bold tracking-tight"
-                      style={settingsCheatLabelStyle(
+              <div className="dev-tools-scroll w-full" style={{ maxWidth: '200px' }}>
+                <div className="flex flex-col items-center gap-3 w-full">
+                  {onDisableDevTools ? (
+                    <button
+                      type="button"
+                      onMouseDown={() => setDisableDevToolsPressed(true)}
+                      onMouseUp={() => setDisableDevToolsPressed(false)}
+                      onMouseLeave={() => setDisableDevToolsPressed(false)}
+                      onClick={() => {
+                        onAnyButtonClick?.();
+                        onDisableDevTools();
+                      }}
+                      className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                      style={settingsCheatButtonStyle(SETTINGS_PALETTES.red, disableDevToolsPressed)}
+                    >
+                      <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.red)}>
+                        Disable Dev Tools
+                      </span>
+                    </button>
+                  ) : null}
+
+                  {onSkipTutorial ? (
+                    <button
+                      type="button"
+                      onMouseDown={() => setSkipTutorialPressed(true)}
+                      onMouseUp={() => setSkipTutorialPressed(false)}
+                      onMouseLeave={() => setSkipTutorialPressed(false)}
+                      onClick={() => {
+                        onAnyButtonClick?.();
+                        onSkipTutorial();
+                      }}
+                      className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                      style={settingsCheatButtonStyle(SETTINGS_PALETTES.red, skipTutorialPressed)}
+                    >
+                      <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.red)}>
+                        Skip Tutorial
+                      </span>
+                    </button>
+                  ) : null}
+
+                  {onCycleGardenClick && activeGardenLabel ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onAnyButtonClick?.();
+                        onCycleGardenClick();
+                      }}
+                      className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                      style={settingsCheatButtonStyle(SETTINGS_PALETTES.blue, false)}
+                    >
+                      <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.blue)}>
+                        {activeGardenLabel}
+                      </span>
+                    </button>
+                  ) : null}
+
+                  {onPreviewCorruptSavePopup ? (
+                    <button
+                      type="button"
+                      onMouseDown={() => setCorruptSavePreviewPressed(true)}
+                      onMouseUp={() => setCorruptSavePreviewPressed(false)}
+                      onMouseLeave={() => setCorruptSavePreviewPressed(false)}
+                      onClick={() => {
+                        onAnyButtonClick?.();
+                        onPreviewCorruptSavePopup();
+                      }}
+                      className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                      style={settingsCheatButtonStyle(SETTINGS_PALETTES.yellow, corruptSavePreviewPressed)}
+                    >
+                      <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.yellow)}>
+                        Corrupt Save Popup
+                      </span>
+                    </button>
+                  ) : null}
+
+                  {onClearRating ? (
+                    <button
+                      type="button"
+                      onMouseDown={() => setClearRatingPressed(true)}
+                      onMouseUp={() => setClearRatingPressed(false)}
+                      onMouseLeave={() => setClearRatingPressed(false)}
+                      onClick={() => {
+                        onAnyButtonClick?.();
+                        onClearRating();
+                      }}
+                      className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                      style={settingsCheatButtonStyle(SETTINGS_PALETTES.yellow, clearRatingPressed)}
+                    >
+                      <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.yellow)}>
+                        Clear Rating
+                      </span>
+                    </button>
+                  ) : null}
+
+                  {onRewardedAdClick ? (
+                    <button
+                      type="button"
+                      onMouseDown={() => setRewardedPressed(true)}
+                      onMouseUp={() => setRewardedPressed(false)}
+                      onMouseLeave={() => setRewardedPressed(false)}
+                      onClick={handleRewardedAdClick}
+                      className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                      style={settingsCheatButtonStyle(SETTINGS_PALETTES.yellow, rewardedPressed)}
+                    >
+                      <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.yellow)}>
+                        Rewarded Ad
+                      </span>
+                    </button>
+                  ) : null}
+
+                  {onAddMoney ? (
+                    <button
+                      type="button"
+                      onMouseDown={() => setAddCoinsPressed(true)}
+                      onMouseUp={() => setAddCoinsPressed(false)}
+                      onMouseLeave={() => setAddCoinsPressed(false)}
+                      onClick={() => {
+                        onAnyButtonClick?.();
+                        onAddMoney(1000000);
+                      }}
+                      className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                      style={settingsCheatButtonStyle(SETTINGS_PALETTES.blue, addCoinsPressed)}
+                    >
+                      <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.blue)}>
+                        +1Mil Coins
+                      </span>
+                    </button>
+                  ) : null}
+
+                  {onClearCoins ? (
+                    <button
+                      type="button"
+                      onMouseDown={() => setClearCoinsPressed(true)}
+                      onMouseUp={() => setClearCoinsPressed(false)}
+                      onMouseLeave={() => setClearCoinsPressed(false)}
+                      onClick={() => {
+                        onAnyButtonClick?.();
+                        onClearCoins();
+                      }}
+                      className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                      style={settingsCheatButtonStyle(SETTINGS_PALETTES.red, clearCoinsPressed)}
+                    >
+                      <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.red)}>
+                        Clear Coins
+                      </span>
+                    </button>
+                  ) : null}
+
+                  {onUnlockPlantClick ? (
+                    <button
+                      type="button"
+                      disabled={!canUnlockPlant}
+                      onMouseDown={() => canUnlockPlant && setUnlockPlantPressed(true)}
+                      onMouseUp={() => setUnlockPlantPressed(false)}
+                      onMouseLeave={() => setUnlockPlantPressed(false)}
+                      onClick={() => {
+                        if (!canUnlockPlant || !onUnlockPlantClick) return;
+                        onAnyButtonClick?.();
+                        onUnlockPlantClick();
+                      }}
+                      className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                      style={{
+                        ...settingsCheatButtonStyle(SETTINGS_PALETTES.blue, unlockPlantPressed && canUnlockPlant),
+                        opacity: canUnlockPlant ? 1 : 0.45,
+                        cursor: canUnlockPlant ? 'pointer' : 'not-allowed',
+                      }}
+                    >
+                      <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.blue)}>
+                        Unlock plant
+                      </span>
+                    </button>
+                  ) : null}
+
+                  {onGoldenPotClick ? (
+                    <button
+                      type="button"
+                      onMouseDown={() => setGoldenPotPressed(true)}
+                      onMouseUp={() => setGoldenPotPressed(false)}
+                      onMouseLeave={() => setGoldenPotPressed(false)}
+                      onClick={() => {
+                        onAnyButtonClick?.();
+                        onGoldenPotClick();
+                      }}
+                      className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                      style={settingsCheatButtonStyle(SETTINGS_PALETTES.blue, goldenPotPressed)}
+                    >
+                      <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.blue)}>
+                        Golden Pot
+                      </span>
+                    </button>
+                  ) : null}
+
+                  {onTestAdBreakClick ? (
+                    <button
+                      type="button"
+                      onMouseDown={() => setAdBreakPressed(true)}
+                      onMouseUp={() => setAdBreakPressed(false)}
+                      onMouseLeave={() => setAdBreakPressed(false)}
+                      onClick={() => {
+                        onAnyButtonClick?.();
+                        onTestAdBreakClick();
+                      }}
+                      className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                      style={settingsCheatButtonStyle(SETTINGS_PALETTES.yellow, adBreakPressed)}
+                    >
+                      <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.yellow)}>
+                        Test Ad Break
+                      </span>
+                    </button>
+                  ) : null}
+
+                  {onFakeNotchToggle ? (
+                    <button
+                      type="button"
+                      onMouseDown={() => setFakeNotchPressed(true)}
+                      onMouseUp={() => setFakeNotchPressed(false)}
+                      onMouseLeave={() => setFakeNotchPressed(false)}
+                      onClick={() => {
+                        onAnyButtonClick?.();
+                        onFakeNotchToggle();
+                      }}
+                      className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                      style={settingsCheatButtonStyle(
                         fakeNotchPreviewEnabled ? SETTINGS_PALETTES.green : SETTINGS_PALETTES.blue,
+                        fakeNotchPressed,
                       )}
                     >
-                      Fake notch: {fakeNotchPreviewEnabled ? 'ON' : 'OFF'}
-                    </span>
-                  </button>
-                ) : null}
-                {onLevelUpClick ? (
-                  <button
-                    type="button"
-                    onMouseDown={() => setLevelUpPressed(true)}
-                    onMouseUp={() => setLevelUpPressed(false)}
-                    onMouseLeave={() => setLevelUpPressed(false)}
-                    onClick={onLevelUpClick}
-                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.blue, levelUpPressed)}
-                  >
-                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.blue)}>
-                      Level Up
-                    </span>
-                  </button>
-                ) : null}
-                {/* 6. Rewarded Ad — yellow */}
-                {/* 7. Clear Shed — red */}
-                {onClearShed ? (
-                  <button
-                    type="button"
-                    onMouseDown={() => setClearShedPressed(true)}
-                    onMouseUp={() => setClearShedPressed(false)}
-                    onMouseLeave={() => setClearShedPressed(false)}
-                    onClick={() => onClearShed()}
-                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.red, clearShedPressed)}
-                  >
-                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.red)}>
-                      Clear Shed
-                    </span>
-                  </button>
-                ) : null}
-                {onCompleteTaskClick ? (
-                  <button
-                    type="button"
-                    onMouseDown={() => setCompleteTaskPressed(true)}
-                    onMouseUp={() => setCompleteTaskPressed(false)}
-                    onMouseLeave={() => setCompleteTaskPressed(false)}
-                    onClick={() => onCompleteTaskClick()}
-                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.blue, completeTaskPressed)}
-                  >
-                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.blue)}>
-                      Complete task
-                    </span>
-                  </button>
-                ) : null}
-                {onResetTasksClick ? (
-                  <button
-                    type="button"
-                    onMouseDown={() => setResetTasksPressed(true)}
-                    onMouseUp={() => setResetTasksPressed(false)}
-                    onMouseLeave={() => setResetTasksPressed(false)}
-                    onClick={() => onResetTasksClick()}
-                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.blue, resetTasksPressed)}
-                  >
-                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.blue)}>
-                      Reset tasks
-                    </span>
-                  </button>
-                ) : null}
-                {onClearProgress ? (
-                  <button
-                    type="button"
-                    onMouseDown={() => setClearProgressPressed(true)}
-                    onMouseUp={() => setClearProgressPressed(false)}
-                    onMouseLeave={() => setClearProgressPressed(false)}
-                    onClick={() => onClearProgress()}
-                    className="relative flex items-center justify-center rounded-lg transition-all w-full"
-                    style={settingsCheatButtonStyle(SETTINGS_PALETTES.red, clearProgressPressed)}
-                  >
-                    <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.red)}>
-                      Clear Progress
-                    </span>
-                  </button>
-                ) : null}
+                      <span
+                        className="font-bold tracking-tight"
+                        style={settingsCheatLabelStyle(
+                          fakeNotchPreviewEnabled ? SETTINGS_PALETTES.green : SETTINGS_PALETTES.blue,
+                        )}
+                      >
+                        Fake notch: {fakeNotchPreviewEnabled ? 'ON' : 'OFF'}
+                      </span>
+                    </button>
+                  ) : null}
+
+                  {onLevelUpClick ? (
+                    <button
+                      type="button"
+                      onMouseDown={() => setLevelUpPressed(true)}
+                      onMouseUp={() => setLevelUpPressed(false)}
+                      onMouseLeave={() => setLevelUpPressed(false)}
+                      onClick={() => {
+                        onAnyButtonClick?.();
+                        onLevelUpClick();
+                      }}
+                      className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                      style={settingsCheatButtonStyle(SETTINGS_PALETTES.blue, levelUpPressed)}
+                    >
+                      <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.blue)}>
+                        Level Up
+                      </span>
+                    </button>
+                  ) : null}
+
+                  {onClearShed ? (
+                    <button
+                      type="button"
+                      onMouseDown={() => setClearShedPressed(true)}
+                      onMouseUp={() => setClearShedPressed(false)}
+                      onMouseLeave={() => setClearShedPressed(false)}
+                      onClick={() => {
+                        onAnyButtonClick?.();
+                        onClearShed();
+                      }}
+                      className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                      style={settingsCheatButtonStyle(SETTINGS_PALETTES.red, clearShedPressed)}
+                    >
+                      <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.red)}>
+                        Clear Shed
+                      </span>
+                    </button>
+                  ) : null}
+
+                  {onCompleteTaskClick ? (
+                    <button
+                      type="button"
+                      onMouseDown={() => setCompleteTaskPressed(true)}
+                      onMouseUp={() => setCompleteTaskPressed(false)}
+                      onMouseLeave={() => setCompleteTaskPressed(false)}
+                      onClick={() => {
+                        onAnyButtonClick?.();
+                        onCompleteTaskClick();
+                      }}
+                      className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                      style={settingsCheatButtonStyle(SETTINGS_PALETTES.blue, completeTaskPressed)}
+                    >
+                      <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.blue)}>
+                        Complete task
+                      </span>
+                    </button>
+                  ) : null}
+
+                  {onResetTasksClick ? (
+                    <button
+                      type="button"
+                      onMouseDown={() => setResetTasksPressed(true)}
+                      onMouseUp={() => setResetTasksPressed(false)}
+                      onMouseLeave={() => setResetTasksPressed(false)}
+                      onClick={() => {
+                        onAnyButtonClick?.();
+                        onResetTasksClick();
+                      }}
+                      className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                      style={settingsCheatButtonStyle(SETTINGS_PALETTES.blue, resetTasksPressed)}
+                    >
+                      <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.blue)}>
+                        Reset tasks
+                      </span>
+                    </button>
+                  ) : null}
+
+                  {onClearBoosts ? (
+                    <button
+                      type="button"
+                      onMouseDown={() => setClearBoostsPressed(true)}
+                      onMouseUp={() => setClearBoostsPressed(false)}
+                      onMouseLeave={() => setClearBoostsPressed(false)}
+                      onClick={() => {
+                        onAnyButtonClick?.();
+                        onClearBoosts();
+                      }}
+                      className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                      style={settingsCheatButtonStyle(SETTINGS_PALETTES.red, clearBoostsPressed)}
+                    >
+                      <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.red)}>
+                        Clear Boosts
+                      </span>
+                    </button>
+                  ) : null}
+
+                  {onClearProgress ? (
+                    <button
+                      type="button"
+                      onMouseDown={() => setClearProgressPressed(true)}
+                      onMouseUp={() => setClearProgressPressed(false)}
+                      onMouseLeave={() => setClearProgressPressed(false)}
+                      onClick={() => {
+                        onAnyButtonClick?.();
+                        onClearProgress();
+                      }}
+                      className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                      style={settingsCheatButtonStyle(SETTINGS_PALETTES.red, clearProgressPressed)}
+                    >
+                      <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.red)}>
+                        Clear Progress
+                      </span>
+                    </button>
+                  ) : null}
+
+                  {onResetProgress ? (
+                    <button
+                      type="button"
+                      onMouseDown={() => setResetPressed(true)}
+                      onMouseUp={() => setResetPressed(false)}
+                      onMouseLeave={() => setResetPressed(false)}
+                      onClick={() => {
+                        onAnyButtonClick?.();
+                        onResetProgress();
+                      }}
+                      className="relative flex items-center justify-center rounded-lg transition-all w-full"
+                      style={settingsCheatButtonStyle(SETTINGS_PALETTES.red, resetPressed)}
+                    >
+                      <span className="font-bold tracking-tight" style={settingsCheatLabelStyle(SETTINGS_PALETTES.red)}>
+                        Reset Game
+                      </span>
+                    </button>
+                  ) : null}
+                </div>
               </div>
             </div>
           </div>
@@ -495,6 +719,7 @@ export const PauseMenuPopup: React.FC<PauseMenuPopupProps> = ({
               border: 'none',
               color: '#c2b280',
               zIndex: 105,
+              ...POPUP_CLOSE_HIT_TARGET,
             }}
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">

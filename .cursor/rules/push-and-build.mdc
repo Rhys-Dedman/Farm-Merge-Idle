@@ -1,5 +1,5 @@
 ---
-description: When user says "push and build", commit/push and Capacitor Android sync
+description: When user says "push and build", bump version, commit/push, Capacitor Android sync
 alwaysApply: true
 ---
 
@@ -7,10 +7,46 @@ alwaysApply: true
 
 When the user says **push and build** (or clearly the same intent):
 
-1. **Git** — Follow the normal commit + push flow (status/diff/log, stage relevant files, commit with their message if given, push to origin). Do not commit secrets. Only commit when they asked to push/commit.
-2. **Android sync** — From the project root, run the Capacitor web build and sync so Android Studio has the latest assets/code:
-   - `npm run build:capacitor`
-   - `npx cap sync android`
-   (Or equivalently `npm run cap:sync` if that script matches.)
+## 0. Version bump (required every time)
 
-Do both in the same turn when they use that phrase. Explain briefly that sync updates the `android/` copy for APK builds; sync output often does not need a separate git commit.
+Before commit/sync, bump the app version. This is **critical** — players must be able to report which build they are on.
+
+### Source of truth
+
+- `constants/appVersion.ts` — `APP_VERSION` (`major.minor.patch`, currently starting from `0.1.0`) and `APP_VERSION_CODE` (integer)
+
+Also keep these in sync with `APP_VERSION` / `APP_VERSION_CODE`:
+
+- `components/SettingsPopup.tsx` — must display `v${APP_VERSION}` (import from `appVersion.ts`; do not hardcode)
+- `android/app/build.gradle` — `versionName` = `APP_VERSION`, `versionCode` = `APP_VERSION_CODE`
+- `package.json` — `"version"` field = `APP_VERSION`
+- `index.html` — `<meta name="version" content="...">` = `APP_VERSION`
+
+### What to bump
+
+Read the current `APP_VERSION` and the commits / diff being shipped, then:
+
+1. **Patch** (`0.1.x` → `0.1.x+1`) — default for small changes: bug fixes, tweaks, QoL, polish, copy, balancing, SFX, layout.
+2. **Minor** (`0.x.0` → `0.(x+1).0`) — larger updates: new features, significant systems, major UX flows, anything players would call “a new update.” Reset patch to `0`.
+3. **Major** (`x.0.0`) — only if the user explicitly asks for a major bump (breaking / relaunch-scale).
+
+Always increment **`APP_VERSION_CODE` by +1** on every push-and-build (Play Store requires a new integer each upload), regardless of patch vs minor.
+
+If unclear whether the change is patch or minor, ask in one short question; if they already said “small” / “bugfix” / “QoL”, use patch; if they said “feature” / “new system” / described a large change, use minor.
+
+Do **not** skip the version bump even if the user forgot to mention it.
+
+## 1. Git
+
+Follow the normal commit + push flow (status/diff/log, stage relevant files, commit with their message if given, push to origin). Do not commit secrets. Only commit when they asked to push/commit. Include the version bump files in the same commit when possible.
+
+## 2. Android sync
+
+From the project root, run the Capacitor web build and sync so Android Studio has the latest assets/code:
+
+- `npm run build:capacitor`
+- `npx cap sync android`
+
+(Or equivalently `npm run cap:sync` if that script matches.)
+
+Do git + sync in the same turn when they use that phrase. Briefly remind them of the new version string (e.g. `v0.1.1`) and that sync updates the `android/` copy for APK builds; sync output often does not need a separate git commit.

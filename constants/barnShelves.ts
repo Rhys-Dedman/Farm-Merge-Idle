@@ -77,8 +77,8 @@ export const COLLECTION_UNDISCOVERED_GARDEN_LABEL = 'Undiscovered';
 /** Teaser label below the last shipped garden shelves (no shelves yet). */
 export const COLLECTION_COMING_SOON_LABEL = 'Coming Soon';
 
-/** Scroll past the last label so it clears the viewport, with room below. */
-export const COLLECTION_SCROLL_BOTTOM_PAD_PX = 110;
+/** Extra scroll past the last shelf (0 = stop flush with shelf bottom). */
+export const COLLECTION_SCROLL_BOTTOM_PAD_PX = 0;
 
 /** Phone collection layout tweaks (viewport < 500px; design column is already 448px). */
 export const COLLECTION_PHONE_ROOF_SCALE = 1.045;

@@ -4,8 +4,21 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { assetPath } from '../utils/assetPath';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
+import {
+  POPUP_CLOSE_HIT_TARGET,
+  POPUP_CLOSE_TOP_PX,
+  POPUP_CREAM_DROP_SHADOW_FILTER,
+  POPUP_CREAM_HIT_TARGET,
+  POPUP_CREAM_STACK_MARGIN_TOP_PX,
+  POPUP_HEADER_PASS_THROUGH,
+  POPUP_HEADER_TOP_PX,
+  POPUP_LAYOUT_PASS_THROUGH,
+  popupAppScaleStyle,
+  popupOverlayStyle,
+} from '../constants/popupPointerEvents';
 import { LeafBurst, LEAF_BURST_SMALL_COUNT } from './LeafBurst';
 import { PopupVectorBackground } from './PopupVectorBackground';
+import { PopupPrescaleFrame } from './PopupPrescaleFrame';
 
 const LEAF_SPRITES = [
   assetPath('/assets/vfx/particle_leaf_yellow_1.png'),
@@ -85,8 +98,6 @@ const HEADER_ICON_PX = 70;
 const STAR_ICON_PX = 90;
 const STAR_COUNT = 5;
 const TITLE_TEXT = 'Rate Us';
-/** Outer shell (320px card) — stable height for preflight so layout does not snap after enter. */
-const RATE_US_POPUP_SHELL_MIN_HEIGHT_PX = 400;
 /** Divider row in 0.5× prescale panel (matches loaded yellow divider art). */
 const RATE_US_DIVIDER_ROW_MIN_HEIGHT_PX = 40;
 
@@ -376,7 +387,7 @@ export const RateUsPopup: React.FC<RateUsPopupProps> = ({
   return (
     <div
       className="fixed inset-0 flex items-center justify-center"
-      style={{ zIndex: 100, overflow: 'hidden', paddingTop: 'clamp(28px, 5vh, 52px)', pointerEvents: isPreflight ? 'none' : 'auto' }}
+      style={popupOverlayStyle({ pointerEvents: isPreflight ? 'none' : 'auto' })}
     >
       <div
         className="absolute transition-opacity duration-200"
@@ -393,10 +404,7 @@ export const RateUsPopup: React.FC<RateUsPopupProps> = ({
 
       <div
         className="relative flex items-center justify-center"
-        style={{
-          transform: `scale(${appScale})`,
-          transformOrigin: 'center center',
-        }}
+        style={popupAppScaleStyle(appScale)}
       >
         {(isEntering || animState === 'visible') && leaves.length > 0 && (
           <div
@@ -450,8 +458,8 @@ export const RateUsPopup: React.FC<RateUsPopupProps> = ({
           className="relative flex flex-col items-center"
           style={{
             width: '320px',
-            minHeight: RATE_US_POPUP_SHELL_MIN_HEIGHT_PX,
             zIndex: 102,
+            ...POPUP_LAYOUT_PASS_THROUGH,
             ...popupCardSurfaceStyle(
               animState,
               isEntering,
@@ -485,8 +493,9 @@ export const RateUsPopup: React.FC<RateUsPopupProps> = ({
             style={{
               width: '120px',
               height: '120px',
-              top: '-20px',
+              top: `${POPUP_HEADER_TOP_PX}px`,
               zIndex: 104,
+              ...POPUP_HEADER_PASS_THROUGH,
             }}
           >
             <img
@@ -510,24 +519,19 @@ export const RateUsPopup: React.FC<RateUsPopupProps> = ({
             />
           </div>
 
-          <div
-            style={{
-              position: 'relative',
-              marginTop: '36px',
-              width: '640px',
-              transform: 'scale(0.5)',
-              transformOrigin: 'top center',
-              marginBottom: '-290px',
-            }}
+          <PopupPrescaleFrame
+            creamHitTarget={false}
+            prescaleWidthPx={640}
+            style={{ marginTop: POPUP_CREAM_STACK_MARGIN_TOP_PX }}
           >
             <div
               style={{
                 position: 'relative',
-                filter: 'drop-shadow(0 16px 48px rgba(0,0,0,0.3))',
                 padding: '150px 40px 60px 40px',
+                ...POPUP_CREAM_HIT_TARGET,
               }}
             >
-              <PopupVectorBackground />
+              <PopupVectorBackground style={{ filter: POPUP_CREAM_DROP_SHADOW_FILTER }} />
               <div className="relative z-[2] flex flex-col items-center">
                 <h2
                   className="font-black tracking-tight text-center"
@@ -666,17 +670,19 @@ export const RateUsPopup: React.FC<RateUsPopupProps> = ({
                 </button>
               </div>
             </div>
-          </div>
+          </PopupPrescaleFrame>
 
           <button
             type="button"
             onClick={dismissWithoutAction}
-            className="absolute top-[56px] right-6 w-8 h-8 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
+            className="absolute right-6 w-8 h-8 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
             style={{
+              top: POPUP_CLOSE_TOP_PX,
               backgroundColor: 'transparent',
               border: 'none',
               color: '#c2b280',
               zIndex: 105,
+              ...POPUP_CLOSE_HIT_TARGET,
             }}
             aria-label="Close"
           >

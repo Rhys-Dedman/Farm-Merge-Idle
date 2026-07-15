@@ -6,7 +6,20 @@ import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
 import type { GardenId } from '../constants/gardens';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
+import {
+  POPUP_CLOSE_HIT_TARGET,
+  POPUP_CLOSE_TOP_PX,
+  POPUP_CREAM_DROP_SHADOW_FILTER,
+  POPUP_CREAM_HIT_TARGET,
+  POPUP_CREAM_STACK_MARGIN_TOP_PX,
+  POPUP_HEADER_PASS_THROUGH,
+  POPUP_HEADER_TOP_PX,
+  POPUP_LAYOUT_PASS_THROUGH,
+  popupAppScaleStyle,
+  popupOverlayStyle,
+} from '../constants/popupPointerEvents';
 import { PopupVectorBackground } from './PopupVectorBackground';
+import { PopupPrescaleFrame } from './PopupPrescaleFrame';
 import { PlantWithPot } from './PlantWithPot';
 
 const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_green_1.png'), assetPath('/assets/vfx/particle_leaf_green_2.png')];
@@ -234,7 +247,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
   return (
     <div 
       className="fixed inset-0 flex items-center justify-center"
-      style={{ zIndex: 100, overflow: 'hidden', paddingTop: 'clamp(28px, 5vh, 52px)', pointerEvents: isPreflight ? 'none' : 'auto' }}
+      style={popupOverlayStyle({ pointerEvents: isPreflight ? 'none' : 'auto' })}
       onClick={handleClose}
     >
 {/* Backdrop - not scaled, covers full screen */}
@@ -255,10 +268,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
       {/* Scaled content wrapper */}
       <div
         className="relative flex items-center justify-center"
-        style={{
-          transform: `scale(${appScale})`,
-          transformOrigin: 'center center',
-        }}
+        style={popupAppScaleStyle(appScale)}
       >
       {/* Leaf Burst VFX */}
       {(isEntering || animState === 'visible') && leaves.length > 0 && (
@@ -315,6 +325,7 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
         style={{ 
           width: '320px',
           zIndex: 102,
+          ...POPUP_LAYOUT_PASS_THROUGH,
           ...popupCardSurfaceStyle(
             animState,
             isEntering,
@@ -323,7 +334,6 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
             `plantInfoLeave ${POPUP_CLOSE_MS}ms ease-in forwards`
           ),
         }}
-        onClick={(e) => e.stopPropagation()}
       >
         <style>{`
           @keyframes plantInfoEnter {
@@ -358,8 +368,9 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
           style={{ 
             width: '120px',
             height: '120px',
-            top: '-20px',
+            top: `${POPUP_HEADER_TOP_PX}px`,
             zIndex: 104,
+            ...POPUP_HEADER_PASS_THROUGH,
           }}
         >
           {/* Header background sprite */}
@@ -388,25 +399,20 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
           </div>
         </div>
 
-        {/* Background container */}
-        <div 
-          style={{ 
-            position: 'relative',
-            marginTop: '36px',
-            width: '640px',
-            transform: 'scale(0.5)',
-            transformOrigin: 'top center',
-            marginBottom: '-220px',
-          }}
+        <PopupPrescaleFrame
+          creamHitTarget={false}
+          prescaleWidthPx={640}
+          style={{ marginTop: POPUP_CREAM_STACK_MARGIN_TOP_PX }}
         >
           <div
             style={{
               position: 'relative',
-              filter: 'drop-shadow(0 16px 48px rgba(0,0,0,0.3))',
               padding: '150px 40px 60px 40px',
+              ...POPUP_CREAM_HIT_TARGET,
             }}
+            onClick={(e) => e.stopPropagation()}
           >
-            <PopupVectorBackground />
+            <PopupVectorBackground style={{ filter: POPUP_CREAM_DROP_SHADOW_FILTER }} />
             {/* Content */}
             <div className="relative z-[2] flex flex-col items-center">
               {/* Subtitle - Plant Name */}
@@ -453,17 +459,19 @@ export const PlantInfoPopup: React.FC<PlantInfoPopupProps> = ({
               <div className="min-h-[24px]" />
             </div>
           </div>
-        </div>
+        </PopupPrescaleFrame>
 
         {/* Close Button - X */}
         <button
           onClick={handleClose}
-          className="absolute top-[56px] right-6 w-8 h-8 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
-          style={{ 
+          className="absolute right-6 w-8 h-8 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
+          style={{
+            top: POPUP_CLOSE_TOP_PX,
             backgroundColor: 'transparent',
             border: 'none',
             color: '#c2b280',
             zIndex: 105,
+            ...POPUP_CLOSE_HIT_TARGET,
           }}
         >
           <svg width="16" height="16" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">

@@ -5,6 +5,19 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { assetPath } from '../utils/assetPath';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
 import { PopupVectorBackground } from './PopupVectorBackground';
+import { PopupPrescaleFrame } from './PopupPrescaleFrame';
+import {
+  POPUP_CLOSE_HIT_TARGET,
+  POPUP_CLOSE_TOP_PX,
+  POPUP_CREAM_DROP_SHADOW_FILTER,
+  POPUP_CREAM_HIT_TARGET,
+  POPUP_CREAM_STACK_MARGIN_TOP_PX,
+  POPUP_HEADER_PASS_THROUGH,
+  POPUP_HEADER_TOP_PX,
+  POPUP_LAYOUT_PASS_THROUGH,
+  popupAppScaleStyle,
+  popupOverlayStyle,
+} from '../constants/popupPointerEvents';
 import { PopupRectLeafBurst } from './PopupRectLeafBurst';
 import { DailyTaskRow, type DailyTaskClaimFx, type DailyTaskDefinition } from './DailyTaskRow';
 import { DailyTasksTimerPanel } from './DailyTasksTimerPanel';
@@ -17,10 +30,8 @@ const POPUP_HEIGHT = 360;
 
 /** Outer shell width (standard popups use 320px). */
 const DAILY_TASKS_SHELL_WIDTH_PX = 400;
-const DAILY_TASKS_SHELL_MIN_HEIGHT_PX = 520;
 /** Prescale panel width (standard discovery uses 640px). */
 const DAILY_TASKS_PRESCALE_WIDTH_PX = 720;
-const DAILY_TASKS_PRESCALE_MARGIN_BOTTOM_PX = -386;
 
 /** Visible card width after 0.5× prescale (used to align close X with card corner). */
 const DAILY_TASKS_VISUAL_CARD_WIDTH_PX = DAILY_TASKS_PRESCALE_WIDTH_PX * 0.5;
@@ -28,11 +39,9 @@ const DAILY_TASKS_VISUAL_CARD_WIDTH_PX = DAILY_TASKS_PRESCALE_WIDTH_PX * 0.5;
  * Same as Rate Us / Thank You (`top 56px`, `right 24px` on a 320px shell).
  * Wider shell: offset right by half the extra gutter so X stays on the card edge.
  */
-const DAILY_TASKS_CLOSE_TOP_PX = 56;
+const DAILY_TASKS_CLOSE_TOP_PX = POPUP_CLOSE_TOP_PX;
 const DAILY_TASKS_CLOSE_RIGHT_PX =
   (DAILY_TASKS_SHELL_WIDTH_PX - DAILY_TASKS_VISUAL_CARD_WIDTH_PX) / 2 + 24;
-/** Nudge popup toward true viewport center (header art sits above shell box). */
-const DAILY_TASKS_POPUP_OFFSET_Y = 'clamp(48px, 7vh, 80px)';
 
 const HEADER_ICON = assetPath('/assets/icons/floating_buttons/icon_tasks.png');
 const HEADER_ICON_PX = Math.round(70 * 1.15);
@@ -125,7 +134,7 @@ export const DailyTasksPopup: React.FC<DailyTasksPopupProps> = ({
   return (
     <div
       className="fixed inset-0 flex items-center justify-center"
-      style={{ zIndex: 100, overflow: 'hidden', pointerEvents: isPreflight ? 'none' : 'auto' }}
+      style={popupOverlayStyle({ pointerEvents: isPreflight ? 'none' : 'auto' })}
     >
       <div
         className="absolute transition-opacity duration-200"
@@ -142,10 +151,7 @@ export const DailyTasksPopup: React.FC<DailyTasksPopupProps> = ({
 
       <div
         className="relative flex items-center justify-center"
-        style={{
-          transform: `scale(${appScale}) translateY(${DAILY_TASKS_POPUP_OFFSET_Y})`,
-          transformOrigin: 'center center',
-        }}
+        style={popupAppScaleStyle(appScale)}
       >
         {(isEntering || animState === 'visible') && showLeafBurst && (
           <PopupRectLeafBurst
@@ -162,8 +168,8 @@ export const DailyTasksPopup: React.FC<DailyTasksPopupProps> = ({
           className="relative flex flex-col items-center"
           style={{
             width: `${DAILY_TASKS_SHELL_WIDTH_PX}px`,
-            minHeight: DAILY_TASKS_SHELL_MIN_HEIGHT_PX,
             zIndex: 102,
+            ...POPUP_LAYOUT_PASS_THROUGH,
             ...popupCardSurfaceStyle(
               animState,
               isEntering,
@@ -190,8 +196,9 @@ export const DailyTasksPopup: React.FC<DailyTasksPopupProps> = ({
             style={{
               width: '120px',
               height: '120px',
-              top: '-20px',
+              top: `${POPUP_HEADER_TOP_PX}px`,
               zIndex: 104,
+              ...POPUP_HEADER_PASS_THROUGH,
             }}
           >
             <img
@@ -215,24 +222,19 @@ export const DailyTasksPopup: React.FC<DailyTasksPopupProps> = ({
             />
           </div>
 
-          <div
-            style={{
-              position: 'relative',
-              marginTop: '36px',
-              width: `${DAILY_TASKS_PRESCALE_WIDTH_PX}px`,
-              transform: 'scale(0.5)',
-              transformOrigin: 'top center',
-              marginBottom: `${DAILY_TASKS_PRESCALE_MARGIN_BOTTOM_PX}px`,
-            }}
+          <PopupPrescaleFrame
+            creamHitTarget={false}
+            prescaleWidthPx={DAILY_TASKS_PRESCALE_WIDTH_PX}
+            style={{ marginTop: POPUP_CREAM_STACK_MARGIN_TOP_PX }}
           >
             <div
               style={{
                 position: 'relative',
-                filter: 'drop-shadow(0 16px 48px rgba(0,0,0,0.3))',
                 padding: '150px 40px 60px 40px',
+                ...POPUP_CREAM_HIT_TARGET,
               }}
             >
-              <PopupVectorBackground />
+              <PopupVectorBackground style={{ filter: POPUP_CREAM_DROP_SHADOW_FILTER }} />
               <div className="relative z-[2] flex flex-col items-center w-full">
                 <h2
                   className="font-black tracking-tight text-center"
@@ -291,7 +293,7 @@ export const DailyTasksPopup: React.FC<DailyTasksPopupProps> = ({
                 </div>
               </div>
             </div>
-          </div>
+          </PopupPrescaleFrame>
 
           <button
             type="button"
@@ -304,6 +306,7 @@ export const DailyTasksPopup: React.FC<DailyTasksPopupProps> = ({
               border: 'none',
               color: '#c2b280',
               zIndex: 105,
+              ...POPUP_CLOSE_HIT_TARGET,
             }}
             aria-label="Close"
           >

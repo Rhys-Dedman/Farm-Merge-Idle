@@ -46,6 +46,7 @@ import {
   parseGardensStarted,
   type GameSaveV2,
 } from './gardenSave';
+import { clearLevelUpBackupSaves, tryLoadLevelUpBackupSaves } from './saveBackup';
 
 function normalizePlantMasteryUnlockPending(raw: unknown): number[] {
   if (!Array.isArray(raw)) return [];
@@ -384,47 +385,65 @@ export function normalizeGameSaveV1(data: GameSaveV1): GameSaveV1 {
     return data;
 }
 
-export function loadGameSaveV2(): GameSaveV2 | null {
+function loadGameSaveV2FromMainOnly(): GameSaveV2 | null {
   const raw = readGameSaveRaw();
   if (!raw || typeof raw !== 'object') return null;
   const record = raw as { v?: number };
   if (record.v === GAME_SAVE_V2_VERSION) {
-    const v2 = coerceGameSaveV2(raw);
-    if (!v2) return null;
-    return v2;
+    return coerceGameSaveV2(raw);
   }
   if (record.v === GAME_SAVE_VERSION) {
-    const v1 = normalizeGameSaveV1(raw as GameSaveV1);
-    if (!Array.isArray(v1.grid)) return null;
-    const v2 = migrateV1ToV2(v1);
-    writeGameSaveV2(v2);
-    return v2;
+    try {
+      const v1 = normalizeGameSaveV1(raw as GameSaveV1);
+      if (!Array.isArray(v1.grid)) return null;
+      const v2 = migrateV1ToV2(v1);
+      writeGameSaveV2(v2);
+      return v2;
+    } catch {
+      return null;
+    }
   }
   return null;
 }
 
+/** Set when load falls back to a level-up checkpoint; cleared by `consumeRestoredFromBackupFlag`. */
+let restoredFromLevelUpBackupPending = false;
+
+/** True once after a successful backup restore (then clears). Use to show CorruptSavePopup. */
+export function consumeRestoredFromBackupFlag(): boolean {
+  const next = restoredFromLevelUpBackupPending;
+  restoredFromLevelUpBackupPending = false;
+  return next;
+}
+
+/** Restore newest valid level-up checkpoint into the main save slot. */
+function restoreFromLevelUpBackup(): GameSaveV2 | null {
+  const backup = tryLoadLevelUpBackupSaves();
+  if (!backup) return null;
+  writeGameSaveV2(backup);
+  restoredFromLevelUpBackupPending = true;
+  return backup;
+}
+
+export function loadGameSaveV2(): GameSaveV2 | null {
+  const main = loadGameSaveV2FromMainOnly();
+  if (main) return main;
+  return restoreFromLevelUpBackup();
+}
+
 export function loadGameSave(): GameSaveV1 | null {
   try {
-    const raw = readGameSaveRaw();
-    if (!raw || typeof raw !== 'object') return null;
-    const record = raw as { v?: number };
-
-    if (record.v === GAME_SAVE_V2_VERSION) {
-      const v2 = coerceGameSaveV2(raw);
-      if (!v2) return null;
-      const flat = flattenV2ToV1(v2);
-      return normalizeGameSaveV1(flat);
-    }
-
-    if (record.v === GAME_SAVE_VERSION && Array.isArray((raw as GameSaveV1).grid)) {
-      const v1 = normalizeGameSaveV1(raw as GameSaveV1);
-      writeGameSaveV2(migrateV1ToV2(v1));
-      return v1;
-    }
-
-    return null;
+    const v2 = loadGameSaveV2();
+    if (!v2) return null;
+    return normalizeGameSaveV1(flattenV2ToV1(v2));
   } catch {
-    return null;
+    const backup = restoreFromLevelUpBackup();
+    if (!backup) return null;
+    try {
+      return normalizeGameSaveV1(flattenV2ToV1(backup));
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -452,6 +471,7 @@ export function clearGameSave(): void {
   } catch {
     /* ignore */
   }
+  clearLevelUpBackupSaves();
   try {
     localStorage.removeItem(STORE_STARTER_PACK_COUNTDOWN_END_MS_KEY);
   } catch {

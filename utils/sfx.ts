@@ -61,9 +61,32 @@ const audioBufferById = new Map<SfxId, AudioBuffer>();
 let musicAudio: HTMLAudioElement | null = null;
 let musicEnabled = true;
 let sfxEnabled = true;
+/** True while the app/tab is backgrounded, locked, or otherwise not focused. */
+let visibilityAudioSuspended = false;
+/** True while a fake/real ad presentation is active. */
+let adAudioSuspended = false;
 let preloadPromise: Promise<void> | null = null;
 let audioCtx: AudioContext | null = null;
 let unlockHandlersAttached = false;
+let appAudioLifecycleInstalled = false;
+
+function isAppAudioSuspended(): boolean {
+  return visibilityAudioSuspended || adAudioSuspended;
+}
+
+function applyAppAudioSuspendState(): void {
+  if (isAppAudioSuspended()) {
+    if (musicAudio && !musicAudio.paused) {
+      musicAudio.pause();
+    }
+    if (audioCtx && audioCtx.state === 'running') {
+      void audioCtx.suspend().catch(() => {});
+    }
+    return;
+  }
+  tryResumeAudioContext();
+  tryPlayMusic();
+}
 
 function createTemplate(id: SfxId): HTMLAudioElement {
   const audio = new Audio(assetPath(SFX_PATHS[id]));
@@ -114,12 +137,60 @@ function getMusicAudio(): HTMLAudioElement {
 }
 
 function tryPlayMusic(): void {
-  if (!musicEnabled) return;
+  if (!musicEnabled || isAppAudioSuspended()) return;
   const music = getMusicAudio();
   music.volume = MASTER_AUDIO_VOLUME;
   if (music.paused) {
     void music.play().catch(() => {});
   }
+}
+
+/** Pause music + Web Audio while backgrounded (home, lock, alt-tab, app switcher). */
+export function suspendAppAudio(): void {
+  if (visibilityAudioSuspended) return;
+  visibilityAudioSuspended = true;
+  applyAppAudioSuspendState();
+}
+
+/** Restore audio after returning to the foreground (respects music/SFX prefs + ad mute). */
+export function resumeAppAudio(): void {
+  if (!visibilityAudioSuspended) return;
+  visibilityAudioSuspended = false;
+  applyAppAudioSuspendState();
+}
+
+/** Pause music + SFX for the duration of an ad (intro / slot / fade plate). */
+export function setAdAudioSuspended(suspended: boolean): void {
+  if (adAudioSuspended === suspended) return;
+  adAudioSuspended = suspended;
+  applyAppAudioSuspendState();
+}
+
+/**
+ * Mute/unmute with document visibility + page lifecycle so Cap WebView / browser
+ * stops audio when the app isn't in focus.
+ */
+export function installAppAudioLifecycle(): void {
+  if (appAudioLifecycleInstalled || typeof document === 'undefined') return;
+  appAudioLifecycleInstalled = true;
+
+  const syncFromVisibility = () => {
+    if (document.visibilityState === 'hidden') suspendAppAudio();
+    else resumeAppAudio();
+  };
+
+  document.addEventListener('visibilitychange', syncFromVisibility);
+  window.addEventListener('pagehide', () => suspendAppAudio());
+  window.addEventListener('pageshow', () => {
+    if (document.visibilityState === 'visible') resumeAppAudio();
+  });
+  // Chromium Page Lifecycle (Android WebView / Chrome) — freeze while suspended.
+  document.addEventListener('freeze', () => suspendAppAudio());
+  document.addEventListener('resume', () => {
+    if (document.visibilityState === 'visible') resumeAppAudio();
+  });
+
+  syncFromVisibility();
 }
 
 const sfxIds = Object.values(SFX_IDS) as SfxId[];
@@ -128,6 +199,7 @@ export const SFX_PRELOAD_STEP_COUNT = sfxIds.length;
 
 export function preloadSfxAssets(onStepDone?: () => void): Promise<void> {
   if (preloadPromise) return preloadPromise;
+  installAppAudioLifecycle();
   attachAudioUnlockHandlers();
   preloadPromise = Promise.all(
     sfxIds.map((id) => {
@@ -165,6 +237,7 @@ export function preloadSfxAssets(onStepDone?: () => void): Promise<void> {
 }
 
 export function playSfx(id: SfxId, volume = 1): void {
+  if (isAppAudioSuspended()) return;
   if (id !== SFX_IDS.music && !sfxEnabled) return;
   tryResumeAudioContext();
   const ctx = getAudioContext();
@@ -210,6 +283,7 @@ export function setAudioSettings(next: { musicEnabled?: boolean; sfxEnabled?: bo
 }
 
 export function playMusicLoop(): void {
+  installAppAudioLifecycle();
   attachAudioUnlockHandlers();
   tryResumeAudioContext();
   tryPlayMusic();
@@ -221,6 +295,7 @@ export function playMusicLoop(): void {
  * the splash screen.  Also returns the values so React state can initialise from them.
  */
 export function applySavedAudioSettingsEarly(): { musicEnabled: boolean; sfxEnabled: boolean } {
+  installAppAudioLifecycle();
   const prefs = loadUserPrefs();
   musicEnabled = prefs.musicEnabled;
   sfxEnabled = prefs.sfxEnabled;

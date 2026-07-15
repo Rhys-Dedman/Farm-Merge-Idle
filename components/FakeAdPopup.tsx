@@ -4,7 +4,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import { assetPath } from '../utils/assetPath';
-import { playSfx, SFX_IDS } from '../utils/sfx';
+import { playSfx, setAdAudioSuspended, SFX_IDS } from '../utils/sfx';
 import {
   AD_BREAK_LOADING_PROGRESS_MS,
   AD_BREAK_LOADING_UI_FADE_MS,
@@ -112,6 +112,8 @@ export const FakeAdPopup: React.FC<FakeAdPopupProps> = ({
 
   const handleCompleteClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     setButtonPressed(false);
+    // Unmute before confirm so the tap SFX can play; App re-syncs mute for fade-out plates.
+    setAdAudioSuspended(false);
     playSfx(SFX_IDS.uiConfirmNormal);
     const rect = e.currentTarget.getBoundingClientRect();
     onActivateRewardClick?.(rect);

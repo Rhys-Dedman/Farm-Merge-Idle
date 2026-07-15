@@ -120,3 +120,15 @@ export function persistUserPrefs(patch: Partial<UserPrefs>): void {
     /* quota / private mode */
   }
 }
+
+/**
+ * Soft “Reset Game”: restore player toggles to defaults (music/SFX/notifications ON).
+ * Does not touch Rate Us dismiss keys (those live in rateUsDismiss storage).
+ */
+export function resetUserPrefsTogglesToDefaults(): void {
+  persistUserPrefs({
+    musicEnabled: DEFAULT_USER_PREFS.musicEnabled,
+    sfxEnabled: DEFAULT_USER_PREFS.sfxEnabled,
+    returnRemindersEnabled: DEFAULT_USER_PREFS.returnRemindersEnabled,
+  });
+}

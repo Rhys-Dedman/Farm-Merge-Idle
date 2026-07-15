@@ -5,7 +5,18 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
+import {
+  POPUP_CREAM_DROP_SHADOW_FILTER,
+  POPUP_CREAM_HIT_TARGET,
+  POPUP_CREAM_STACK_MARGIN_TOP_PX,
+  POPUP_HEADER_PASS_THROUGH,
+  POPUP_HEADER_TOP_PX,
+  POPUP_LAYOUT_PASS_THROUGH,
+  popupAppScaleStyle,
+  popupOverlayStyle,
+} from '../constants/popupPointerEvents';
 import { PopupVectorBackground } from './PopupVectorBackground';
+import { PopupPrescaleFrame } from './PopupPrescaleFrame';
 
 const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_green_1.png'), assetPath('/assets/vfx/particle_leaf_green_2.png')];
 
@@ -250,7 +261,7 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
   return (
     <div
       className={`absolute inset-0 flex ${alignClass} justify-center`}
-      style={{ zIndex: 100, overflow: 'hidden', pointerEvents: isPreflight ? 'none' : 'auto' }}
+      style={popupOverlayStyle({ pointerEvents: isPreflight ? 'none' : 'auto' })}
     >
       <div
         className="absolute transition-opacity duration-200"
@@ -267,11 +278,10 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
 
       <div
         className="relative flex items-center justify-center"
-        style={{
-          transform: `scale(${appScale})`,
-          transformOrigin: 'center center',
-          ...(position === 'top' ? { marginTop: `${topOffsetPx}px` } : {}),
-        }}
+        style={popupAppScaleStyle(
+          appScale,
+          position === 'top' ? { marginTop: `${topOffsetPx}px` } : undefined,
+        )}
       >
         {/* Leaf burst - sized to popup */}
         {(isEntering || animState === 'visible') && leaves.length > 0 && (
@@ -315,6 +325,7 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
           style={{
             width: '320px',
             zIndex: 102,
+            ...POPUP_LAYOUT_PASS_THROUGH,
             ...popupCardSurfaceStyle(
               animState,
               isEntering,
@@ -340,7 +351,7 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
           {header && (
             <div
               className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center"
-              style={{ width: '120px', height: '120px', top: '-20px', zIndex: 104 }}
+              style={{ width: '120px', height: '120px', top: `${POPUP_HEADER_TOP_PX}px`, zIndex: 104, ...POPUP_HEADER_PASS_THROUGH }}
             >
               <img
                 src={assetPath('/assets/ui/popup_header.png')}
@@ -362,25 +373,19 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
             </div>
           )}
 
-          {/* Background container – same layout as DiscoveryPopup: 640px scale 0.5, padding 150/40/60 */}
-          <div
-            style={{
-              position: 'relative',
-              marginTop: '36px',
-              width: '640px',
-              transform: 'scale(0.5)',
-              transformOrigin: 'top center',
-              marginBottom: '-290px',
-            }}
+          <PopupPrescaleFrame
+            creamHitTarget={false}
+            prescaleWidthPx={640}
+            style={{ marginTop: POPUP_CREAM_STACK_MARGIN_TOP_PX }}
           >
             <div
               style={{
                 position: 'relative',
-                filter: 'drop-shadow(0 16px 48px rgba(0,0,0,0.3))',
                 padding: header ? '150px 40px 60px 40px' : '80px 40px 60px 40px',
+                ...POPUP_CREAM_HIT_TARGET,
               }}
             >
-              <PopupVectorBackground />
+              <PopupVectorBackground style={{ filter: POPUP_CREAM_DROP_SHADOW_FILTER }} />
               <div className="relative z-[2] flex flex-col items-center">
                 {/* No "New Discovery" line – main title only, in plant-name style (dark brown, large, bold) */}
                 {title && (
@@ -464,7 +469,7 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
                 )}
               </div>
             </div>
-          </div>
+          </PopupPrescaleFrame>
         </div>
       </div>
     </div>

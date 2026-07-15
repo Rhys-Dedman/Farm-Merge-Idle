@@ -72,7 +72,6 @@ import {
   type InterstitialAdCloseResult,
   type RewardedAdCloseResult,
 } from './utils/adBreak';
-import { FakeReviewPopup } from './components/FakeReviewPopup';
 import { PauseMenuPopup } from './components/PauseMenuPopup';
 import { SettingsPopup } from './components/SettingsPopup';
 import { GardenPickerPopup } from './components/GardenPickerPopup';
@@ -133,6 +132,7 @@ import { ButtonLeafBurst } from './components/ButtonLeafBurst';
 import { BarnParticle, BarnParticleData } from './components/BarnParticle';
 import { LoadingScreen } from './components/LoadingScreen';
 import { FtuePopup } from './components/FtuePopup';
+import { CorruptSavePopup } from './components/CorruptSavePopup';
 import { Ftue2Overlay } from './components/Ftue2Overlay';
 import { Ftue3Overlay } from './components/Ftue3Overlay';
 import { Ftue4Overlay } from './components/Ftue4Overlay';
@@ -148,10 +148,11 @@ import { TabType, ScreenType, BoardCell, Item, DragState } from './types';
 import type { FtueStageId } from './ftue/ftueConfig';
 import { assetPath } from './utils/assetPath';
 import { getTickCount60, TARGET_FRAME_MS, scheduleNextFrame } from './utils/raf60';
-import { getPerformanceMode } from './utils/performanceMode';
+import { getPerformanceMode, setPerformanceMode } from './utils/performanceMode';
 import { getAutoMergeMode, setAutoMergeMode } from './utils/autoMergeMode';
-import { playMusicLoop, playSfx, setAudioSettings, SFX_IDS, applySavedAudioSettingsEarly } from './utils/sfx';
-import { loadUserPrefs, persistUserPrefs } from './utils/userPrefs';
+import { playMusicLoop, playSfx, setAudioSettings, setAdAudioSuspended, SFX_IDS, applySavedAudioSettingsEarly } from './utils/sfx';
+import { loadUserPrefs, persistUserPrefs, resetUserPrefsTogglesToDefaults } from './utils/userPrefs';
+import { openRateUsStore } from './constants/rateUsStore';
 import {
   cancelReturnReminders,
   ensureReturnReminderDeliveryListener,
@@ -207,11 +208,13 @@ import {
   persistGameSaveV2,
   normalizeGameSaveV1,
   clearGameSave,
+  consumeRestoredFromBackupFlag,
   type GameSaveV1,
   GAME_SAVE_VERSION,
   getDiscoveryGoalBuffer,
   deriveGoalDiscoveryLightGreenActive,
 } from './utils/gameSave';
+import { writeLevelUpBackupSave } from './utils/saveBackup';
 import {
   DEFAULT_GARDEN_ID,
   GARDEN_IDS,
@@ -291,12 +294,14 @@ import {
 } from './utils/rewardedOfferPanel';
 import {
   canAutoShowRateUsPrompt,
-  canOpenRateUsFromSettings,
+  canEverShowRateUs,
+  clearRateUsPromptStorage,
   markRateUsPermanentlyDismissed,
   markRateUsSoftDismissed,
 } from './utils/rateUsDismiss';
 import { isOfflineCoinEarningsBlockedByFtue, simulateOfflineSeedHarvest, simulateWildGrowthOffline } from './utils/offlineSimulate';
 import { applyIdleEarningsToInactiveGardens, loadGameSaveWithIdleAbsenceApplied, markGardenBecameInactive } from './utils/gardenIdleEarnings';
+import { healNewGardenFtueSave } from './utils/healNewGardenFtue';
 import { clampOfflineEarningsBank } from './utils/offlineEarningsCap';
 import {
   getWildGrowthIntervalMsForLevel,
@@ -1628,8 +1633,10 @@ export default function App() {
   // Pause menu (opened from settings/gear button)
   const [pauseMenuOpen, setPauseMenuOpen] = useState(false);
   const [rateUsPopupOpen, setRateUsPopupOpen] = useState(false);
-  const [showFakeReview, setShowFakeReview] = useState(false);
   const [rateUsThankYouOpen, setRateUsThankYouOpen] = useState(false);
+  const [corruptSavePopupOpen, setCorruptSavePopupOpen] = useState(false);
+  /** Set on load if main save was recovered from a level-up checkpoint; shown after offline earnings. */
+  const pendingCorruptSavePopupRef = useRef(false);
   const [dailyTasksPopupOpen, setDailyTasksPopupOpen] = useState(false);
   const [lockedDailyTasksPopupOpen, setLockedDailyTasksPopupOpen] = useState(false);
   const dailyTasksPopupOpenRef = useRef(dailyTasksPopupOpen);
@@ -1675,6 +1682,8 @@ export default function App() {
     coinMultiplier: number;
   } | null>(null);
   const [devToolsOpen, setDevToolsOpen] = useState(false);
+  /** Session-only: secret version taps unlock the Settings Dev Tools button (default off). */
+  const [devToolsUnlocked, setDevToolsUnlocked] = useState(false);
   const [activeGardenId, setActiveGardenId] = useState<GardenId>(DEFAULT_GARDEN_ID);
   const activeGardenIdRef = useRef<GardenId>(DEFAULT_GARDEN_ID);
   const [garden1PlayerLevel, setGarden1PlayerLevel] = useState(1);
@@ -1707,6 +1716,11 @@ export default function App() {
     showDoubleButton: boolean;
     rewardBounceKey: number;
   } | null>(null);
+  /**
+   * While offline earnings is pending/open, hold new-garden FTUE UI (picker / welcome / gardens finger)
+   * so it doesn't stack on top of the collect popup.
+   */
+  const [deferNewGardenFtueUiForOffline, setDeferNewGardenFtueUiForOffline] = useState(false);
   /** After offline earnings closes, block limited/rewarded offer popups for 10s (auto + manual). */
   const lastOfflineEarningsClosedAtRef = useRef<number>(0);
   const prevOfflineEarningsOpenRef = useRef(false);
@@ -1720,6 +1734,8 @@ export default function App() {
   const suppressGameSaveRef = useRef(false);
   /** Only allow writing progress to localStorage after FTUE 11 is fully closed. */
   const ftue11PersistenceEnabledRef = useRef(false);
+  /** After level commits in React state, flush main save then write a level-up checkpoint backup. */
+  const pendingLevelUpBackupRef = useRef<{ gardenId: GardenId; level: number } | null>(null);
   /** Farm floating buttons (left + right) — fade in when level-up popup hits level 2 (after FTUE). */
   const [farmFloatingButtonsVisible, setFarmFloatingButtonsVisible] = useState(false);
   const [farmFloatingButtonsFadedIn, setFarmFloatingButtonsFadedIn] = useState(false);
@@ -1736,6 +1752,14 @@ export default function App() {
     iapOffer: false,
     rateUs: false,
     dailyTasks: false,
+    gardenPicker: false,
+    lockedDailyTasks: false,
+    lockedGardenPicker: false,
+    rateUsThankYou: false,
+    corruptSave: false,
+    pauseMenu: false,
+    outOfSpaceFtue: false,
+    newGardenWelcome: false,
   });
   useEffect(() => {
     setActiveGardenAssetContext(activeGardenId);
@@ -1817,6 +1841,19 @@ export default function App() {
     adBreakIntroActive ||
     interstitialAdSlotActive ||
     rewardedAdSlotActive;
+
+  useEffect(() => {
+    setAdAudioSuspended(showFakeAdRef.current);
+  }, [
+    showFakeAd,
+    rewardedAdFadeInActive,
+    rewardedAdBlackHoldActive,
+    rewardedAdFadeOutActive,
+    adBreakIntroActive,
+    interstitialAdSlotActive,
+    rewardedAdSlotActive,
+  ]);
+
   const [pendingAdComplete, setPendingAdComplete] = useState<(() => void) | null>(null);
   // Ref for upgrade tabs to get tab element positions
   const upgradeTabsRef = useRef<UpgradeTabsRef>(null);
@@ -2318,6 +2355,7 @@ export default function App() {
   const playTasksFtueUnlockReveal = useCallback(() => {
     if (tasksFtueRevealPlayedRef.current) return;
     tasksFtueRevealPlayedRef.current = true;
+    playSfx(SFX_IDS.uiUnlockUpgrade);
     setTasksFtueUnlockRevealed(true);
     triggerTasksFloatingButtonReadyFx();
   }, [triggerTasksFloatingButtonReadyFx]);
@@ -2325,6 +2363,7 @@ export default function App() {
   const playGardensFtueUnlockReveal = useCallback(() => {
     if (gardensFtueRevealPlayedRef.current) return;
     gardensFtueRevealPlayedRef.current = true;
+    playSfx(SFX_IDS.uiUnlockUpgrade);
     setGardensFtueUnlockRevealed(true);
     triggerGardensFloatingButtonReadyFx();
   }, [triggerGardensFloatingButtonReadyFx]);
@@ -2861,6 +2900,10 @@ export default function App() {
 
     const presentOrQueueLevel = (level: number) => {
       setPlayerLevel(level);
+      pendingLevelUpBackupRef.current = {
+        gardenId: activeGardenIdRef.current,
+        level,
+      };
       recordDailyTaskPlayerLeveledUp();
       setPlayerLevelProgress(0);
       setPlayerLevelFlashTrigger((t) => t + 1);
@@ -3243,18 +3286,38 @@ export default function App() {
     const isIapOfferOpen = !!iapOfferUi;
     const isRateUsOpen = rateUsPopupOpen;
     const isDailyTasksOpen = dailyTasksPopupOpen;
+    const isGardenPickerOpen = gardenPickerOpen;
+    const isLockedDailyTasksOpen = lockedDailyTasksPopupOpen;
+    const isLockedGardenPickerOpen = lockedGardenPickerPopupOpen;
+    const isRateUsThankYouOpen = rateUsThankYouOpen;
+    const isCorruptSaveOpen = corruptSavePopupOpen;
+    const isPauseMenuOpen = pauseMenuOpen;
 
     if (!was.levelUp && isLevelUpOpen) playSfx(SFX_IDS.popupLevelUp);
     if (!was.discovery && isDiscoveryOpen) playSfx(SFX_IDS.popupPlantDiscovery);
     if (!was.limitedOffer && isLimitedOfferOpen) playSfx(SFX_IDS.popupNormal);
     if (!was.plantInfo && isPlantInfoOpen) playSfx(SFX_IDS.popupNormal);
-    if (!was.goldenPot && isGoldenPotOpen) playSfx(SFX_IDS.popupNormal);
+    if (!was.goldenPot && isGoldenPotOpen) {
+      // Shelf-complete auto-open stages a reveal tier; manual / FTUE opens stay popupNormal.
+      playSfx(
+        goldenPotBonusRevealTier != null
+          ? SFX_IDS.popupPlantDiscovery
+          : SFX_IDS.popupNormal,
+      );
+    }
     if (!was.purchaseSuccess && isPurchaseSuccessOpen) playSfx(SFX_IDS.popupNormal);
     if (!was.iapOffer && isIapOfferOpen) playSfx(SFX_IDS.popupNormal);
     if (!was.rateUs && isRateUsOpen) playSfx(SFX_IDS.popupNormal);
     if (!was.dailyTasks && isDailyTasksOpen) playSfx(SFX_IDS.popupNormal);
+    if (!was.gardenPicker && isGardenPickerOpen) playSfx(SFX_IDS.popupNormal);
+    if (!was.lockedDailyTasks && isLockedDailyTasksOpen) playSfx(SFX_IDS.popupNormal);
+    if (!was.lockedGardenPicker && isLockedGardenPickerOpen) playSfx(SFX_IDS.popupNormal);
+    if (!was.rateUsThankYou && isRateUsThankYouOpen) playSfx(SFX_IDS.popupNormal);
+    if (!was.corruptSave && isCorruptSaveOpen) playSfx(SFX_IDS.popupNormal);
+    if (!was.pauseMenu && isPauseMenuOpen) playSfx(SFX_IDS.popupNormal);
 
     prevPopupOpenRef.current = {
+      ...prevPopupOpenRef.current,
       levelUp: isLevelUpOpen,
       discovery: isDiscoveryOpen,
       limitedOffer: isLimitedOfferOpen,
@@ -3264,8 +3327,31 @@ export default function App() {
       iapOffer: isIapOfferOpen,
       rateUs: isRateUsOpen,
       dailyTasks: isDailyTasksOpen,
+      gardenPicker: isGardenPickerOpen,
+      lockedDailyTasks: isLockedDailyTasksOpen,
+      lockedGardenPicker: isLockedGardenPickerOpen,
+      rateUsThankYou: isRateUsThankYouOpen,
+      corruptSave: isCorruptSaveOpen,
+      pauseMenu: isPauseMenuOpen,
     };
-  }, [levelUpPopup, discoveryPopup, limitedOfferPopup, plantInfoPopup, goldenPotBonusesPopupOpen, purchaseSuccessfulUi, iapOfferUi, rateUsPopupOpen, dailyTasksPopupOpen]);
+  }, [
+    levelUpPopup,
+    discoveryPopup,
+    limitedOfferPopup,
+    plantInfoPopup,
+    goldenPotBonusesPopupOpen,
+    goldenPotBonusRevealTier,
+    purchaseSuccessfulUi,
+    iapOfferUi,
+    rateUsPopupOpen,
+    dailyTasksPopupOpen,
+    gardenPickerOpen,
+    lockedDailyTasksPopupOpen,
+    lockedGardenPickerPopupOpen,
+    rateUsThankYouOpen,
+    corruptSavePopupOpen,
+    pauseMenuOpen,
+  ]);
   /** FTUE: current stage (e.g. 'welcome' after splash); null when not in FTUE */
   const [activeFtueStage, setActiveFtueStage] = useState<FtueStageId | null>(null);
 
@@ -3376,6 +3462,11 @@ export default function App() {
   }, [activeFtueStage, activeScreen]);
   /** Warning FTUE: shown when unlocked grid is full and all plants are unique. */
   const [outOfSpaceFtueVisible, setOutOfSpaceFtueVisible] = useState(false);
+  useEffect(() => {
+    const was = prevPopupOpenRef.current.outOfSpaceFtue;
+    if (!was && outOfSpaceFtueVisible) playSfx(SFX_IDS.popupNormal);
+    prevPopupOpenRef.current.outOfSpaceFtue = outOfSpaceFtueVisible;
+  }, [outOfSpaceFtueVisible]);
   /** Gate so dismissing doesn't instantly re-open until condition clears then re-enters. */
   const outOfSpaceArmedRef = useRef(true);
   /** FTUE_2: number of seeds fired (must be exactly 2 to complete); block 3rd tap */
@@ -3490,8 +3581,8 @@ export default function App() {
         purchaseSuccessfulUi != null ||
         iapOfferUi != null ||
         rateUsPopupOpen ||
-        showFakeReview ||
         rateUsThankYouOpen ||
+        corruptSavePopupOpen ||
         dailyTasksPopupOpen ||
         lockedDailyTasksPopupOpen ||
         lockedGardenPickerPopupOpen ||
@@ -3531,8 +3622,8 @@ export default function App() {
       purchaseSuccessfulUi,
       iapOfferUi,
       rateUsPopupOpen,
-      showFakeReview,
       rateUsThankYouOpen,
+      corruptSavePopupOpen,
       dailyTasksPopupOpen,
       lockedDailyTasksPopupOpen,
       lockedGardenPickerPopupOpen,
@@ -3806,6 +3897,7 @@ export default function App() {
     setPlayerLevel((l) => {
       if (l < level) {
         recordDailyTaskPlayerLeveledUp();
+        pendingLevelUpBackupRef.current = { gardenId, level: l + 1 };
         return l + 1;
       }
       return l;
@@ -3841,6 +3933,19 @@ export default function App() {
     ftueUpgradePanelVisible,
     applyLevelUpCoinReward,
   ]);
+
+  /** After React commits the new level, flush main save then store a level-up checkpoint (any garden). */
+  useEffect(() => {
+    const pending = pendingLevelUpBackupRef.current;
+    if (!pending) return;
+    if (playerLevel !== pending.level) return;
+    pendingLevelUpBackupRef.current = null;
+    if (!ftue11PersistenceEnabledRef.current) return;
+    persistGameSnapshotRef.current();
+    const v2 = loadGameSaveV2();
+    if (!v2) return;
+    writeLevelUpBackupSave(v2, `${pending.gardenId}@${pending.level}`);
+  }, [playerLevel]);
 
   /** FTUE: hide seeds button during loading and welcome; reveal when FTUE_2 (seed_tap) shows. Hidden from first frame so no fade-in flash. */
   const ftueHideSeedsButton = isLoading || activeFtueStage === 'welcome';
@@ -4512,7 +4617,7 @@ export default function App() {
   /** Auto Rate Us (post Daily Tasks FTUE, soft-dismiss retries). Never overlaps other popups. */
   const tryOpenRateUsAuto = useCallback((options?: { forceFirstShow?: boolean }) => {
     if (options?.forceFirstShow) {
-      if (!canOpenRateUsFromSettings()) return false;
+      if (!canEverShowRateUs()) return false;
     } else if (!canAutoShowRateUsPrompt()) {
       return false;
     } else if (blockingPopupOpenForLimitedOfferRef.current) {
@@ -4541,14 +4646,13 @@ export default function App() {
       return false;
     }
     if (!options?.forceFirstShow && dailyTasksPopupOpenRef.current) return false;
-    if (rateUsPopupOpen || showFakeReview || rateUsThankYouOpen) return false;
+    if (rateUsPopupOpen || rateUsThankYouOpen) return false;
     if (activeScreen !== 'FARM') return false;
     if (activeFtueStage != null) return false;
     setRateUsPopupOpen(true);
     return true;
   }, [
     rateUsPopupOpen,
-    showFakeReview,
     rateUsThankYouOpen,
     activeScreen,
     activeFtueStage,
@@ -4587,8 +4691,8 @@ export default function App() {
       !!iapOfferUi ||
       !!plantInfoPopup?.isVisible ||
       rateUsPopupOpen ||
-      showFakeReview ||
       rateUsThankYouOpen ||
+      corruptSavePopupOpen ||
       dailyTasksPopupOpen ||
       lockedDailyTasksPopupOpen ||
       lockedGardenPickerPopupOpen ||
@@ -4612,8 +4716,8 @@ export default function App() {
     iapOfferUi,
     plantInfoPopup?.isVisible,
     rateUsPopupOpen,
-    showFakeReview,
     rateUsThankYouOpen,
+    corruptSavePopupOpen,
     dailyTasksPopupOpen,
     lockedDailyTasksPopupOpen,
     lockedGardenPickerPopupOpen,
@@ -5071,7 +5175,9 @@ export default function App() {
     activeGardenId === 'garden_2' &&
     activeScreen === 'FARM' &&
     !gardenSwitchOverlayActive &&
-    !isLoading;
+    !isLoading &&
+    !deferNewGardenFtueUiForOffline &&
+    !offlineEarningsUi?.open;
 
   const newGardenWelcomeFtueActive =
     newGardenFtuePhase === 'welcome' &&
@@ -5079,7 +5185,15 @@ export default function App() {
     activeGardenId === 'garden_2' &&
     activeScreen === 'FARM' &&
     !gardenSwitchOverlayActive &&
-    !isLoading;
+    !isLoading &&
+    !deferNewGardenFtueUiForOffline &&
+    !offlineEarningsUi?.open;
+
+  useEffect(() => {
+    const was = prevPopupOpenRef.current.newGardenWelcome;
+    if (!was && newGardenWelcomeFtueActive) playSfx(SFX_IDS.popupNormal);
+    prevPopupOpenRef.current.newGardenWelcome = newGardenWelcomeFtueActive;
+  }, [newGardenWelcomeFtueActive]);
 
   const newGardenPickerFtueActive =
     newGardenFtuePhase === 'picker_view' && !newGardenFtueCompleted && gardenPickerOpen;
@@ -7413,13 +7527,12 @@ export default function App() {
     if (isLoading) return;
     if (activeFtueStage !== null || ftue11StartQueued) return;
     // Never merge while Settings is open (user should see the board when merges run).
-    if (pauseMenuOpen || rateUsPopupOpen || showFakeReview || rateUsThankYouOpen || dailyTasksPopupOpen) return;
+    if (pauseMenuOpen || rateUsPopupOpen || rateUsThankYouOpen || dailyTasksPopupOpen) return;
     // Intentionally allow auto-merge while discovery / level-up are open so merge chains do not stall
     // (e.g. L2+L2→L3 opens discovery while two L1 pairs are still on the board).
     if (offlineEarningsUi?.open) return;
     if (
       showFakeAd ||
-      showFakeReview ||
       rewardedAdFadeInActive ||
       rewardedAdBlackHoldActive ||
       rewardedAdFadeOutActive ||
@@ -7474,7 +7587,6 @@ export default function App() {
     rateUsPopupOpen,
     rateUsThankYouOpen,
     dailyTasksPopupOpen,
-    showFakeReview,
     offlineEarningsUi?.open,
     showFakeAd,
     rewardedAdFadeInActive,
@@ -7509,9 +7621,9 @@ export default function App() {
     if (prevAutoMergeCapRef.current === cap) return;
     prevAutoMergeCapRef.current = cap;
     if (!autoMergeSetting || !getAutoMergeMode()) return;
-    if (pauseMenuOpen || rateUsPopupOpen || showFakeReview || rateUsThankYouOpen || dailyTasksPopupOpen || isLoading) return;
+    if (pauseMenuOpen || rateUsPopupOpen || rateUsThankYouOpen || dailyTasksPopupOpen || isLoading) return;
     scheduleAutoMergeRecheck(0);
-  }, [goalPlantTypes, goalSlots, goalCounts, autoMergeSetting, pauseMenuOpen, rateUsPopupOpen, showFakeReview, rateUsThankYouOpen, dailyTasksPopupOpen, isLoading, scheduleAutoMergeRecheck]);
+  }, [goalPlantTypes, goalSlots, goalCounts, autoMergeSetting, pauseMenuOpen, rateUsPopupOpen, rateUsThankYouOpen, dailyTasksPopupOpen, isLoading, scheduleAutoMergeRecheck]);
 
   useEffect(() => {
     if (!autoMergeSetting) return;
@@ -7530,13 +7642,13 @@ export default function App() {
   /** Cancel delayed rechecks while Settings is open; when it closes (or load finishes), try once so merges can start. */
   useEffect(() => {
     if (isLoading) return;
-    if (pauseMenuOpen || rateUsPopupOpen || showFakeReview || rateUsThankYouOpen || dailyTasksPopupOpen) {
+    if (pauseMenuOpen || rateUsPopupOpen || rateUsThankYouOpen || dailyTasksPopupOpen) {
       clearAutoMergeRecheckTimeout();
       return;
     }
     if (!autoMergeSetting || !getAutoMergeMode()) return;
     scheduleAutoMergeRecheck(0);
-  }, [pauseMenuOpen, rateUsPopupOpen, showFakeReview, rateUsThankYouOpen, dailyTasksPopupOpen, autoMergeSetting, isLoading, clearAutoMergeRecheckTimeout, scheduleAutoMergeRecheck]);
+  }, [pauseMenuOpen, rateUsPopupOpen, rateUsThankYouOpen, dailyTasksPopupOpen, autoMergeSetting, isLoading, clearAutoMergeRecheckTimeout, scheduleAutoMergeRecheck]);
 
   useEffect(() => () => clearAutoMergeRecheckTimeout(), [clearAutoMergeRecheckTimeout]);
 
@@ -7598,9 +7710,12 @@ export default function App() {
   const showIdleEarningsPopup = useCallback((displayAmount: number, delayMs: number) => {
     if (displayAmount <= 0) {
       setOfflineEarningsUi(null);
+      setDeferNewGardenFtueUiForOffline(false);
       return;
     }
     setOfflineEarningsUi(null);
+    // Hold new-garden forced UI from schedule through collect (covers the delay window).
+    setDeferNewGardenFtueUiForOffline(true);
     setTimeout(() => {
       setOfflineEarningsUi({
         open: true,
@@ -7609,6 +7724,16 @@ export default function App() {
         rewardBounceKey: 0,
       });
     }, delayMs);
+  }, []);
+
+  /** Heal new-garden FTUE crash states, then load save with idle absence sim. */
+  const loadSaveForGameplayHydrate = useCallback(() => {
+    const v2 = loadGameSaveV2();
+    if (v2) {
+      const { next, changed } = healNewGardenFtueSave(v2);
+      if (changed) persistGameSaveV2(next);
+    }
+    return loadGameSaveWithIdleAbsenceApplied();
   }, []);
 
   /** Apply saved game + offline sim; returns display offline coin payout pending (not wallet). */
@@ -8133,7 +8258,7 @@ export default function App() {
   }, [activeGardenId, playerLevel]);
 
   const handleQuickResumeHydrate = useCallback(() => {
-    const save = loadGameSaveWithIdleAbsenceApplied();
+    const save = loadSaveForGameplayHydrate();
     if (!save || save.v !== GAME_SAVE_VERSION) return;
     syncActiveGardenFromSave();
     pendingQuickLoadFinishRef.current = true;
@@ -8152,6 +8277,9 @@ export default function App() {
       ftue11PersistenceEnabledRef.current = false;
       pendingOfflineEarningsRef.current = 0;
       setOfflineEarningsUi(null);
+      setDeferNewGardenFtueUiForOffline(false);
+      pendingCorruptSavePopupRef.current = false;
+      consumeRestoredFromBackupFlag();
       setActiveFtueStage('welcome');
       setIsExpanded(false);
       setActiveScreen('FARM');
@@ -8160,6 +8288,9 @@ export default function App() {
 
     ftue11PersistenceEnabledRef.current = true;
     const totalOffline = hydrateFromSave(save, { skipOfflineSim: true });
+    if (consumeRestoredFromBackupFlag()) {
+      pendingCorruptSavePopupRef.current = true;
+    }
     const v2AfterLoad = loadGameSaveV2();
     const gardenId = v2AfterLoad?.activeGardenId ?? DEFAULT_GARDEN_ID;
     if (shouldShowFarmFloatingButtons(gardenId, save.playerLevel)) {
@@ -8168,7 +8299,7 @@ export default function App() {
     setIsExpanded(false);
     setActiveScreen('FARM');
     showIdleEarningsPopup(totalOffline, 610);
-  }, [hydrateFromSave, showIdleEarningsPopup, syncActiveGardenFromSave]);
+  }, [hydrateFromSave, loadSaveForGameplayHydrate, showIdleEarningsPopup, syncActiveGardenFromSave]);
 
   // Splash complete OR quick resume black fade complete — fade in gameplay
   const handleLoadComplete = useCallback(() => {
@@ -8188,7 +8319,7 @@ export default function App() {
       return;
     }
 
-    const save = loadGameSaveWithIdleAbsenceApplied();
+    const save = loadSaveForGameplayHydrate();
     if (save && save.v === GAME_SAVE_VERSION) {
       syncActiveGardenFromSave();
       const ftue11Completed =
@@ -8205,11 +8336,17 @@ export default function App() {
         setActiveFtueStage('welcome');
         pendingOfflineEarningsRef.current = 0;
         setOfflineEarningsUi(null);
+        setDeferNewGardenFtueUiForOffline(false);
+        pendingCorruptSavePopupRef.current = false;
+        consumeRestoredFromBackupFlag();
         setIsExpanded(false);
         setActiveScreen('FARM');
       } else {
         ftue11PersistenceEnabledRef.current = true;
         const totalOffline = hydrateFromSave(save, { skipOfflineSim: true });
+        if (consumeRestoredFromBackupFlag()) {
+          pendingCorruptSavePopupRef.current = true;
+        }
         const v2AfterLoad = loadGameSaveV2();
         const gardenId = v2AfterLoad?.activeGardenId ?? DEFAULT_GARDEN_ID;
         if (shouldShowFarmFloatingButtons(gardenId, save.playerLevel)) {
@@ -8224,6 +8361,7 @@ export default function App() {
       setActiveFtueStage('welcome');
       pendingOfflineEarningsRef.current = 0;
       setOfflineEarningsUi(null);
+      setDeferNewGardenFtueUiForOffline(false);
     }
 
     setIsLoading(false);
@@ -8240,12 +8378,12 @@ export default function App() {
       }
     };
     requestAnimationFrame(animate);
-  }, [hydrateFromSave, showIdleEarningsPopup, syncActiveGardenFromSave]);
+  }, [hydrateFromSave, loadSaveForGameplayHydrate, showIdleEarningsPopup, syncActiveGardenFromSave]);
 
   const resumeIdleEarningsFromBackgroundRef = useRef<() => void>(() => {});
   resumeIdleEarningsFromBackgroundRef.current = () => {
     if (!ftue11PersistenceEnabledRef.current) return;
-    const save = loadGameSaveWithIdleAbsenceApplied();
+    const save = loadSaveForGameplayHydrate();
     if (!save || save.v !== GAME_SAVE_VERSION) return;
     syncActiveGardenFromSave();
     const totalOffline = hydrateFromSave(save, { skipOfflineSim: true });
@@ -8384,6 +8522,7 @@ export default function App() {
       offlinePopupAmountRef.current = 0;
       offlineEarningsAutoCollectedRef.current = true;
       setOfflineEarningsUi(null);
+      setDeferNewGardenFtueUiForOffline(false);
       lastOfflineEarningsClosedAtRef.current = Date.now();
       return;
     }
@@ -8400,6 +8539,7 @@ export default function App() {
 
     // Prevent "welcome back" popup on next launch.
     setOfflineEarningsUi(null);
+    setDeferNewGardenFtueUiForOffline(false);
     lastOfflineEarningsClosedAtRef.current = Date.now();
   };
 
@@ -8427,11 +8567,36 @@ export default function App() {
 
   useEffect(() => {
     if (isLoading) return;
+    if (deferNewGardenFtueUiForOffline) return;
+    if (offlineEarningsUi?.open) return;
     if (newGardenFtueCompleted) return;
     if (newGardenFtuePhase !== 'picker_view') return;
     if (gardenPickerOpen) return;
     setGardenPickerOpen(true);
-  }, [isLoading, newGardenFtueCompleted, newGardenFtuePhase, gardenPickerOpen]);
+  }, [
+    isLoading,
+    deferNewGardenFtueUiForOffline,
+    offlineEarningsUi?.open,
+    newGardenFtueCompleted,
+    newGardenFtuePhase,
+    gardenPickerOpen,
+  ]);
+
+  /** Corrupt-save notice after idle coins (same gate as forced new-garden picker). */
+  useEffect(() => {
+    if (isLoading) return;
+    if (!pendingCorruptSavePopupRef.current) return;
+    if (deferNewGardenFtueUiForOffline) return;
+    if (offlineEarningsUi?.open) return;
+    if (corruptSavePopupOpen) return;
+    pendingCorruptSavePopupRef.current = false;
+    setCorruptSavePopupOpen(true);
+  }, [
+    isLoading,
+    deferNewGardenFtueUiForOffline,
+    offlineEarningsUi?.open,
+    corruptSavePopupOpen,
+  ]);
 
   const appHiddenAtRef = useRef<number | null>(null);
 
@@ -8804,7 +8969,10 @@ export default function App() {
                     walletIconRef={walletIconRef}
                     walletFlashActive={walletFlashActive}
                     walletBurstCount={walletBounceTrigger}
-                    onWalletClick={() => setActiveScreen('STORE')}
+                    onWalletClick={() => {
+                      playSfx(SFX_IDS.uiConfirmNormal);
+                      setActiveScreen('STORE');
+                    }}
                     hidePlayerLevel={!ftuePlayerLevelVisible}
                     playerLevel={playerLevel}
                     playerLevelProgress={playerLevelProgress}
@@ -9132,7 +9300,6 @@ export default function App() {
                     onClick={() => {
                       if (
                         showFakeAd ||
-                        showFakeReview ||
                         rewardedAdFadeInActive ||
                         rewardedAdBlackHoldActive ||
                         rewardedAdFadeOutActive ||
@@ -9276,7 +9443,7 @@ export default function App() {
                             setTasksFtueCompleted(true);
                             if (
                               activeGardenId === DEFAULT_GARDEN_ID &&
-                              canOpenRateUsFromSettings()
+                              canEverShowRateUs()
                             ) {
                               pendingRateUsAfterDailyTasksCloseRef.current = true;
                             }
@@ -10052,6 +10219,7 @@ export default function App() {
                                 onMouseLeave={() => setCollectionFtueCtaPressed(false)}
                                 onClick={() => {
                                   if (collectionFtueCtaDisabled) return;
+                                  playSfx(SFX_IDS.uiConfirmNormal);
                                   setCollectionFtuePhase('point_unlock');
                                 }}
                                 className={`relative mx-auto flex items-center justify-center whitespace-nowrap transition-all border outline outline-1 rounded-[8px] shadow-[inset_0_1px_1px_rgba(255,255,255,0.4)] ${
@@ -10204,7 +10372,10 @@ export default function App() {
                       walletFlashActive={walletFlashActive}
                       walletBurstCount={walletBounceTrigger}
                       goldenPotWallet={goldenPotWalletHeaderProps}
-                      onWalletClick={() => setActiveScreen('STORE')}
+                      onWalletClick={() => {
+                      playSfx(SFX_IDS.uiConfirmNormal);
+                      setActiveScreen('STORE');
+                    }}
                       omitPlayerLevelBlock
                       headerOuterPadLeftPx={0}
                       headerRowPadLeftPx={0}
@@ -10847,10 +11018,24 @@ export default function App() {
                       applyLevelUpPopupUnlock(levelUpPopup.level, startPoint);
                       finishLevelUpPopupAfterAdBreak();
                     });
-                    if (showed) suppressLevelUpDeclineSfxRef.current = true;
+                    if (showed) {
+                      playSfx(
+                        unlockInfo.rewardCoins != null && unlockInfo.rewardCoins > 0
+                          ? SFX_IDS.uiConfirmReward
+                          : SFX_IDS.uiConfirmNormal,
+                      );
+                      suppressLevelUpDeclineSfxRef.current = true;
+                    }
                     return showed;
                   }}
-                  onUnlockNow={(startPoint) => applyLevelUpPopupUnlock(levelUpPopup.level, startPoint)}
+                  onUnlockNow={(startPoint) => {
+                    playSfx(
+                      unlockInfo.rewardCoins != null && unlockInfo.rewardCoins > 0
+                        ? SFX_IDS.uiConfirmReward
+                        : SFX_IDS.uiConfirmNormal,
+                    );
+                    applyLevelUpPopupUnlock(levelUpPopup.level, startPoint);
+                  }}
                   appScale={appScale}
                 />
               );
@@ -11000,7 +11185,6 @@ export default function App() {
                   premiumIapTopAccentFill={isRemoveAdsPopup ? '#eb5761' : undefined}
                   premiumIapTopAccentStrokeNarrow={isRemoveAdsPopup ? '#eb5761' : undefined}
                   premiumIapTopAccentStrokeWide={isRemoveAdsPopup ? '#d33d57' : undefined}
-                  iapPopupShellOffsetYPx={isRemoveAdsPopup ? -80 : undefined}
                   leafBurstVariant={
                     isStarterStyleBundlePopup ? 'starter' : isRemoveAdsPopup ? 'removeAds' : undefined
                   }
@@ -11014,6 +11198,7 @@ export default function App() {
                       ? (config as StoreBundleOfferConfig).limitedOfferCountdownDurationMs
                       : undefined
                   }
+                  onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
                   onClose={() => {
                     lastOtherPopupClosedAtRef.current = Date.now();
                     setIapOfferUi(null);
@@ -11021,6 +11206,10 @@ export default function App() {
                     if (pendingLevel != null) {
                       pendingLevelUpAfterStarterPackRef.current = null;
                       setPlayerLevel(pendingLevel);
+                      pendingLevelUpBackupRef.current = {
+                        gardenId: activeGardenIdRef.current,
+                        level: pendingLevel,
+                      };
                       recordDailyTaskPlayerLeveledUp();
                       setPlayerLevelProgress(0);
                       setPlayerLevelFlashTrigger((t) => t + 1);
@@ -11319,18 +11508,6 @@ export default function App() {
               onClosed={handleRewardedAdClosed}
             />
 
-            <FakeReviewPopup
-              isVisible={showFakeReview}
-              appScale={appScale}
-              gameDesignWidth={designWidth}
-              gameDesignHeight={designHeight}
-              onComplete={() => {
-                setShowFakeReview(false);
-                setRateUsThankYouOpen(true);
-                // TODO: replace FakeReviewPopup with real store review URL navigation.
-              }}
-            />
-
             <DailyTasksPopup
               isVisible={dailyTasksPopupOpen}
               onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
@@ -11393,6 +11570,16 @@ export default function App() {
               appScale={appScale}
             />
 
+            <CorruptSavePopup
+              isVisible={corruptSavePopupOpen}
+              onClose={() => {
+                playSfx(SFX_IDS.uiConfirmNormal);
+                setCorruptSavePopupOpen(false);
+                lastOtherPopupClosedAtRef.current = Date.now();
+              }}
+              appScale={appScale}
+            />
+
             <RateUsPopup
               isVisible={rateUsPopupOpen}
               onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
@@ -11402,7 +11589,8 @@ export default function App() {
               onFifthStarChosen={() => {
                 playSfx(SFX_IDS.uiConfirmNormal);
                 setRateUsPopupOpen(false);
-                setShowFakeReview(true);
+                openRateUsStore();
+                setRateUsThankYouOpen(true);
               }}
               onLowRatingRateNow={() => {
                 playSfx(SFX_IDS.uiConfirmNormal);
@@ -11444,6 +11632,10 @@ export default function App() {
               activeGardenId={activeGardenId}
               gardensStarted={gardensStartedList}
               playerMoney={money}
+              hasReachedSecondGarden={
+                activeGardenId !== DEFAULT_GARDEN_ID ||
+                (gardensStartedList.includes('garden_2') && newGardenFtueCompleted)
+              }
               newGardenFtueViewGardenId={newGardenPickerFtueActive ? 'garden_2' : null}
               onSelectGarden={(gardenId) => {
                 playSfx(SFX_IDS.uiConfirmNormal);
@@ -11462,36 +11654,13 @@ export default function App() {
             <SettingsPopup
               isVisible={pauseMenuOpen}
               onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
-              activeGardenLabel={getGardenDisplayLabel(activeGardenId)}
-              onCycleGardenClick={cycleActiveGarden}
-              onRateUs={
-                canOpenRateUsFromSettings()
-                  ? () => {
-                      playSfx(SFX_IDS.uiConfirmNormal);
-                      setRateUsPopupOpen(true);
-                      setPauseMenuOpen(false);
-                      setSettingsOpenedFromFtue(false);
-                    }
-                  : undefined
-              }
-              showAutoMergeSetting={goldenPotCount >= MAX_PLANT_TIER}
-              onAutoMergeChange={setAutoMergeSetting}
-              showDevToolsButton={!settingsOpenedFromFtue}
-              onSkipTutorial={
-                settingsOpenedFromFtue
-                  ? () =>
-                      handlePostFtueCleanRestart(
-                        'Skip the tutorial and start from level 1 with a fresh farm?'
-                      )
-                  : undefined
-              }
               onAnyButtonClick={() => playSfx(SFX_IDS.uiConfirmNormal)}
               musicEnabled={musicEnabled}
               sfxEnabled={sfxEnabled}
               onMusicEnabledChange={setMusicEnabled}
               onSfxEnabledChange={setSfxEnabled}
-              returnRemindersEnabled={returnRemindersEnabled}
-              onReturnRemindersEnabledChange={(enabled) => {
+              notificationsEnabled={returnRemindersEnabled}
+              onNotificationsEnabledChange={(enabled) => {
                 setReturnRemindersEnabled(enabled);
                 persistUserPrefs({ returnRemindersEnabled: enabled });
                 if (!enabled) {
@@ -11507,6 +11676,23 @@ export default function App() {
                   }
                 })();
               }}
+              onRateUs={() => {
+                setRateUsPopupOpen(true);
+                setPauseMenuOpen(false);
+                setSettingsOpenedFromFtue(false);
+              }}
+              onResetGame={() => {
+                suppressGameSaveRef.current = true;
+                clearGameSave();
+                resetUserPrefsTogglesToDefaults();
+                setPerformanceMode(false);
+                try {
+                  sessionStorage.setItem('pocket-garden-reset-v1', '1');
+                } catch {
+                  /* ignore */
+                }
+                window.location.reload();
+              }}
               onClose={() => {
                 setPauseMenuOpen(false);
                 setSettingsOpenedFromFtue(false);
@@ -11514,6 +11700,41 @@ export default function App() {
                 flushDeferredCheatPopups();
               }}
               onOpenDevTools={() => setDevToolsOpen(true)}
+              showDevToolsButton={devToolsUnlocked}
+              onUnlockDevTools={() => setDevToolsUnlocked(true)}
+              closeOnBackdropClick
+              appScale={appScale}
+            />
+
+            <PauseMenuPopup
+              isVisible={devToolsOpen}
+              onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
+              onAnyButtonClick={() => playSfx(SFX_IDS.uiConfirmNormal)}
+              onClose={() => {
+                setDevToolsOpen(false);
+              }}
+              onDisableDevTools={() => {
+                setDevToolsUnlocked(false);
+                setDevToolsOpen(false);
+              }}
+              activeGardenLabel={getGardenDisplayLabel(activeGardenId)}
+              onCycleGardenClick={cycleActiveGarden}
+              onSkipTutorial={
+                settingsOpenedFromFtue
+                  ? () =>
+                      handlePostFtueCleanRestart(
+                        'Skip the tutorial and start from level 1 with a fresh farm?'
+                      )
+                  : undefined
+              }
+              onPreviewCorruptSavePopup={() => {
+                setDevToolsOpen(false);
+                setPauseMenuOpen(false);
+                setCorruptSavePopupOpen(true);
+              }}
+              onClearRating={() => {
+                clearRateUsPromptStorage();
+              }}
               onClearBoosts={() => {
                 setBoostParticles([]);
                 setActiveBoosts([]);
@@ -11558,6 +11779,8 @@ export default function App() {
                 }
                 suppressGameSaveRef.current = true;
                 clearGameSave();
+                resetUserPrefsTogglesToDefaults();
+                setPerformanceMode(false);
                 try {
                   sessionStorage.setItem('pocket-garden-reset-v1', '1');
                 } catch {
@@ -11565,18 +11788,7 @@ export default function App() {
                 }
                 window.location.reload();
               }}
-              closeOnBackdropClick
-              appScale={appScale}
-            />
-
-            <PauseMenuPopup
-              isVisible={devToolsOpen}
-              onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
-              onClose={() => {
-                setDevToolsOpen(false);
-              }}
               onRewardedAdClick={() => {
-                playSfx(SFX_IDS.uiConfirmNormal);
                 if (!canOpenLimitedOfferRewardPopup()) return;
                 if (LIMITED_OFFERS_AD_POOL.length === 0) return;
                 const offer = LIMITED_OFFERS_AD_POOL[nextRewardedAdOfferIndexRef.current % LIMITED_OFFERS_AD_POOL.length];
@@ -11594,24 +11806,20 @@ export default function App() {
               onUnlockPlantClick={handleDevUnlockPlantClick}
               onGoldenPotClick={handleDevGoldenPotClick}
               onTestAdBreakClick={() => {
-                playSfx(SFX_IDS.uiConfirmNormal);
                 setDevToolsOpen(false);
                 queueMicrotask(() => tryShowAdBreak('fallback_idle'));
               }}
               fakeNotchPreviewEnabled={fakeNotchPreviewEnabled}
               onFakeNotchToggle={() => {
-                playSfx(SFX_IDS.uiConfirmNormal);
                 setFakeNotchPreviewEnabled((on) => !on);
               }}
               onCompleteTaskClick={() => {
-                playSfx(SFX_IDS.uiConfirmNormal);
                 if (playerLevel >= TASKS_FLOATING_BUTTON_UNLOCK_LEVEL) {
                   markDailyTasksUnlocked();
                 }
                 applyDailyTaskRowsUpdate(completeNextDailyTaskForDev(getDailyTasksCtx()));
               }}
               onResetTasksClick={() => {
-                playSfx(SFX_IDS.uiConfirmNormal);
                 if (playerLevel >= TASKS_FLOATING_BUTTON_UNLOCK_LEVEL) {
                   markDailyTasksUnlocked();
                 }
@@ -11664,6 +11872,7 @@ export default function App() {
                   const payout = amt;
                   pendingOfflineEarningsRef.current = 0;
                   setOfflineEarningsUi(null);
+                  setDeferNewGardenFtueUiForOffline(false);
                   lastOfflineEarningsClosedAtRef.current = Date.now();
                   if (pendingSwitchGardenAdBreakRef.current) {
                     pendingSwitchGardenAdBreakRef.current = false;

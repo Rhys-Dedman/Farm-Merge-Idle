@@ -5,7 +5,14 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
+import {
+  POPUP_CREAM_STACK_MARGIN_TOP_PX,
+  POPUP_HEADER_TOP_PX,
+  popupAppScaleStyle,
+  popupOverlayStyle,
+} from '../constants/popupPointerEvents';
 import { Reward, REWARD_INLINE_LAYOUT_HEIGHT_PX, REWARD_INLINE_WIDTH_PX, REWARD_PILL_HEIGHT_PX } from './Reward';
+import { PopupPrescaleFrame } from './PopupPrescaleFrame';
 import {
   PopupVectorBackground,
 } from './PopupVectorBackground';
@@ -271,7 +278,7 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
   return (
     <div 
       className="fixed inset-0 flex items-center justify-center"
-      style={{ zIndex: 115, overflow: 'hidden', paddingTop: 'clamp(28px, 5vh, 52px)', pointerEvents: isPreflight ? 'none' : 'auto' }}
+      style={popupOverlayStyle({ zIndex: 115, pointerEvents: isPreflight ? 'none' : 'auto' })}
     >
 {/* Backdrop - not scaled, covers full screen */}
       <div
@@ -290,10 +297,7 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
       {/* Scaled content wrapper */}
       <div
         className="relative flex items-center justify-center"
-        style={{
-          transform: `scale(${appScale})`,
-          transformOrigin: 'center center',
-        }}
+        style={popupAppScaleStyle(appScale)}
       >
 
       {/* Leaf Burst VFX */}
@@ -392,7 +396,7 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
           style={{ 
             width: '120px',
             height: '120px',
-            top: '-20px',
+            top: `${POPUP_HEADER_TOP_PX}px`,
             zIndex: 104,
           }}
         >
@@ -417,16 +421,9 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
           />
         </div>
 
-        {/* Background container - uses transform scale trick for sharper rendering */}
-        <div 
-          style={{ 
-            position: 'relative',
-            marginTop: '36px',
-            width: '640px',
-            transform: 'scale(0.5)',
-            transformOrigin: 'top center',
-            marginBottom: '-290px',
-          }}
+        <PopupPrescaleFrame
+          prescaleWidthPx={640}
+          style={{ marginTop: POPUP_CREAM_STACK_MARGIN_TOP_PX }}
         >
           <div
             style={{
@@ -562,7 +559,7 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
           </button>
             </div>
           </div>
-        </div>
+        </PopupPrescaleFrame>
       </div>
       </div>
     </div>

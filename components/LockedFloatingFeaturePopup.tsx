@@ -5,18 +5,28 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { assetPath } from '../utils/assetPath';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
+import {
+  POPUP_CLOSE_HIT_TARGET,
+  POPUP_CLOSE_TOP_PX,
+  POPUP_CREAM_DROP_SHADOW_FILTER,
+  POPUP_CREAM_HIT_TARGET,
+  POPUP_CREAM_STACK_MARGIN_TOP_PX,
+  POPUP_HEADER_PASS_THROUGH,
+  POPUP_HEADER_TOP_PX,
+  POPUP_LAYOUT_PASS_THROUGH,
+  popupAppScaleStyle,
+  popupOverlayStyle,
+} from '../constants/popupPointerEvents';
 import { PopupVectorBackground } from './PopupVectorBackground';
+import { PopupPrescaleFrame } from './PopupPrescaleFrame';
 
 const POPUP_CLOSE_MS = 200;
 
 const SHELL_WIDTH_PX = 400;
-const SHELL_MIN_HEIGHT_PX = 400;
 const PRESCALE_WIDTH_PX = 720;
-const PRESCALE_MARGIN_BOTTOM_PX = -140;
 const VISUAL_CARD_WIDTH_PX = PRESCALE_WIDTH_PX * 0.5;
-const CLOSE_TOP_PX = 56;
+const CLOSE_TOP_PX = POPUP_CLOSE_TOP_PX;
 const CLOSE_RIGHT_PX = (SHELL_WIDTH_PX - VISUAL_CARD_WIDTH_PX) / 2 + 24;
-const POPUP_OFFSET_Y = 'clamp(48px, 7vh, 80px)';
 
 const SETTINGS_TITLE_COLOR = '#5c4a32';
 const DIVIDER_ROW_MIN_HEIGHT_PX = 40;
@@ -49,7 +59,7 @@ export const LOCKED_DAILY_TASKS_POPUP_DESCRIPTION =
   'Complete task to earn coins! Tasks are refreshed daily.';
 
 export const LOCKED_GARDENS_POPUP_DESCRIPTION =
-  'Unlock new gardens and discover new plants!';
+  'Unlock new gardens and discover new plants & rewards';
 
 export const LockedFloatingFeaturePopup: React.FC<LockedFloatingFeaturePopupProps> = ({
   isVisible,
@@ -105,7 +115,7 @@ export const LockedFloatingFeaturePopup: React.FC<LockedFloatingFeaturePopupProp
   return (
     <div
       className="fixed inset-0 flex items-center justify-center"
-      style={{ zIndex: 100, overflow: 'hidden', pointerEvents: isPreflight ? 'none' : 'auto' }}
+      style={popupOverlayStyle({ pointerEvents: isPreflight ? 'none' : 'auto' })}
     >
       <div
         className="absolute transition-opacity duration-200"
@@ -122,19 +132,16 @@ export const LockedFloatingFeaturePopup: React.FC<LockedFloatingFeaturePopupProp
 
       <div
         className="relative flex items-center justify-center"
-        style={{
-          transform: `scale(${appScale}) translateY(${POPUP_OFFSET_Y})`,
-          transformOrigin: 'center center',
-        }}
+        style={popupAppScaleStyle(appScale)}
       >
         <div
           ref={popupCardLayoutRef}
           className="relative flex flex-col items-center overflow-visible"
           style={{
             width: `${SHELL_WIDTH_PX}px`,
-            minHeight: SHELL_MIN_HEIGHT_PX,
             zIndex: 102,
             overflow: 'visible',
+            ...POPUP_LAYOUT_PASS_THROUGH,
             ...popupCardSurfaceStyle(
               animState,
               isEntering,
@@ -158,7 +165,13 @@ export const LockedFloatingFeaturePopup: React.FC<LockedFloatingFeaturePopupProp
 
           <div
             className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center"
-            style={{ width: '120px', height: '120px', top: '-20px', zIndex: 104 }}
+            style={{
+              width: '120px',
+              height: '120px',
+              top: `${POPUP_HEADER_TOP_PX}px`,
+              zIndex: 104,
+              ...POPUP_HEADER_PASS_THROUGH,
+            }}
           >
             <img
               src={assetPath('/assets/ui/popup_header.png')}
@@ -179,24 +192,19 @@ export const LockedFloatingFeaturePopup: React.FC<LockedFloatingFeaturePopupProp
             />
           </div>
 
-          <div
-            style={{
-              position: 'relative',
-              marginTop: '36px',
-              width: `${PRESCALE_WIDTH_PX}px`,
-              transform: 'scale(0.5)',
-              transformOrigin: 'top center',
-              marginBottom: `${PRESCALE_MARGIN_BOTTOM_PX}px`,
-            }}
+          <PopupPrescaleFrame
+            creamHitTarget={false}
+            prescaleWidthPx={PRESCALE_WIDTH_PX}
+            style={{ marginTop: POPUP_CREAM_STACK_MARGIN_TOP_PX }}
           >
             <div
               style={{
                 position: 'relative',
-                filter: 'drop-shadow(0 16px 48px rgba(0,0,0,0.3))',
                 padding: '150px 40px 72px 40px',
+                ...POPUP_CREAM_HIT_TARGET,
               }}
             >
-              <PopupVectorBackground />
+              <PopupVectorBackground style={{ filter: POPUP_CREAM_DROP_SHADOW_FILTER }} />
               <div className="relative z-[2] flex flex-col items-center w-full">
                 <h2
                   className="font-black tracking-tight text-center"
@@ -293,7 +301,7 @@ export const LockedFloatingFeaturePopup: React.FC<LockedFloatingFeaturePopupProp
                 </button>
               </div>
             </div>
-          </div>
+          </PopupPrescaleFrame>
 
           <button
             type="button"
@@ -306,6 +314,7 @@ export const LockedFloatingFeaturePopup: React.FC<LockedFloatingFeaturePopupProp
               border: 'none',
               color: '#c2b280',
               zIndex: 105,
+              ...POPUP_CLOSE_HIT_TARGET,
             }}
             aria-label="Close"
           >

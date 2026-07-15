@@ -8,7 +8,14 @@ import { formatCompactNumber } from '../utils/formatCompactNumber';
 import { getGardenCoinIconPath } from '../utils/gardenAssets';
 import { DEFAULT_GARDEN_ID, type GardenId } from '../constants/gardens';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
+import {
+  POPUP_CREAM_STACK_MARGIN_TOP_PX,
+  POPUP_HEADER_TOP_PX,
+  popupAppScaleStyle,
+  popupOverlayStyle,
+} from '../constants/popupPointerEvents';
 import { PopupVectorBackground } from './PopupVectorBackground';
+import { PopupPrescaleFrame } from './PopupPrescaleFrame';
 import {
   REWARD_OFFER_LINE_TEXT_COLOR,
   REWARD_PILL_FILL_COLOR,
@@ -284,7 +291,7 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
   return (
     <div
       className="fixed inset-0 flex items-center justify-center"
-      style={{ zIndex: 100, overflow: 'hidden', pointerEvents: isPreflight ? 'none' : 'auto' }}
+      style={popupOverlayStyle({ pointerEvents: isPreflight ? 'none' : 'auto' })}
     >
       {/* Backdrop - tapping outside does NOT close */}
       <div
@@ -302,10 +309,7 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
 
       <div
         className="relative flex items-center justify-center"
-        style={{
-          transform: `scale(${appScale})`,
-          transformOrigin: 'center center',
-        }}
+        style={popupAppScaleStyle(appScale)}
       >
         {/* Leaf Burst VFX - particle_leaf_5 & 6 */}
         {(isEntering || animState === 'visible') && leaves.length > 0 && (
@@ -389,7 +393,7 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
             style={{
               width: '120px',
               height: '120px',
-              top: '-20px',
+              top: `${POPUP_HEADER_TOP_PX}px`,
               zIndex: 104,
             }}
           >
@@ -425,16 +429,9 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
             )}
           </div>
 
-          {/* Background container */}
-          <div
-            style={{
-              position: 'relative',
-              marginTop: '36px',
-              width: '640px',
-              transform: 'scale(0.5)',
-              transformOrigin: 'top center',
-              marginBottom: '-290px',
-            }}
+          <PopupPrescaleFrame
+            prescaleWidthPx={640}
+            style={{ marginTop: POPUP_CREAM_STACK_MARGIN_TOP_PX }}
           >
             <div
               style={{
@@ -637,7 +634,7 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
                 </button>
               </div>
             </div>
-          </div>
+          </PopupPrescaleFrame>
         </div>
       </div>
     </div>

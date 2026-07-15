@@ -7,7 +7,20 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
+import {
+  POPUP_CLOSE_HIT_TARGET,
+  POPUP_CLOSE_TOP_PX,
+  POPUP_CREAM_DROP_SHADOW_FILTER,
+  POPUP_CREAM_HIT_TARGET,
+  POPUP_CREAM_STACK_MARGIN_TOP_PX,
+  POPUP_HEADER_PASS_THROUGH,
+  POPUP_HEADER_TOP_PX,
+  POPUP_LAYOUT_PASS_THROUGH,
+  popupAppScaleStyle,
+  popupOverlayStyle,
+} from '../constants/popupPointerEvents';
 import { PopupVectorBackground } from './PopupVectorBackground';
+import { PopupPrescaleFrame } from './PopupPrescaleFrame';
 import { PlantWithPot } from './PlantWithPot';
 import {
   REWARD_PILL_FILL_COLOR,
@@ -355,7 +368,7 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
   return (
     <div 
       className="fixed inset-0 flex items-center justify-center"
-      style={{ zIndex: 100, overflow: 'hidden', paddingTop: 'clamp(28px, 5vh, 52px)', pointerEvents: isPreflight ? 'none' : 'auto' }}
+      style={popupOverlayStyle({ pointerEvents: isPreflight ? 'none' : 'auto' })}
     >
 {/* Backdrop - not scaled, covers full screen */}
       <div
@@ -380,10 +393,7 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
       {/* Scaled content wrapper */}
       <div
         className="relative flex items-center justify-center"
-        style={{
-          transform: `scale(${appScale})`,
-          transformOrigin: 'center center',
-        }}
+        style={popupAppScaleStyle(appScale)}
       >
 
       {/* Leaf Burst VFX */}
@@ -438,9 +448,10 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
       <div 
         ref={popupCardLayoutRef}
         className="relative flex flex-col items-center"
-        style={{ 
+        style={{
           width: '320px',
           zIndex: 102,
+          ...POPUP_LAYOUT_PASS_THROUGH,
           ...popupCardSurfaceStyle(
             animState,
             isEntering,
@@ -476,14 +487,15 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
             }
           }
         `}</style>
-{/* Header Circle - positioned to overlap top of popup */}
-        <div
+        {/* Header Circle - positioned to overlap top of popup */}
+        <div 
           className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center"
-          style={{
+          style={{ 
             width: '120px',
             height: '120px',
-            top: '-20px',
+            top: `${POPUP_HEADER_TOP_PX}px`,
             zIndex: 104,
+            ...POPUP_HEADER_PASS_THROUGH,
           }}
         >
           {/* Header background sprite */}
@@ -521,25 +533,19 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
           )}
         </div>
 
-        {/* Background container - uses transform scale trick for sharper rendering */}
-        <div 
-          style={{ 
-            position: 'relative',
-            marginTop: '36px',
-            width: '640px',
-            transform: 'scale(0.5)',
-            transformOrigin: 'top center',
-            marginBottom: '-290px',
-          }}
+        <PopupPrescaleFrame
+          creamHitTarget={false}
+          prescaleWidthPx={640}
+          style={{ marginTop: POPUP_CREAM_STACK_MARGIN_TOP_PX }}
         >
           <div
             style={{
               position: 'relative',
-              filter: 'drop-shadow(0 16px 48px rgba(0,0,0,0.3))',
               padding: '150px 40px 60px 40px',
+              ...POPUP_CREAM_HIT_TARGET,
             }}
           >
-            <PopupVectorBackground />
+            <PopupVectorBackground style={{ filter: POPUP_CREAM_DROP_SHADOW_FILTER }} />
             {/* Content - doubled sizes since container is scaled 0.5x */}
             <div
               className="relative z-[2] flex flex-col items-center"
@@ -694,7 +700,7 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
           </button>
             </div>
           </div>
-        </div>
+        </PopupPrescaleFrame>
 
 {/* Close Button */}
         {showCloseButton && (
@@ -706,12 +712,14 @@ export const LimitedOfferPopup: React.FC<LimitedOfferPopupProps> = ({
                 }
               });
             }}
-            className="absolute top-[56px] right-6 w-8 h-8 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
+            className="absolute right-6 w-8 h-8 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
             style={{
+              top: POPUP_CLOSE_TOP_PX,
               backgroundColor: 'transparent',
               border: 'none',
               color: '#c2b280',
               zIndex: 105,
+              ...POPUP_CLOSE_HIT_TARGET,
             }}
           >
             <svg width="16" height="16" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">

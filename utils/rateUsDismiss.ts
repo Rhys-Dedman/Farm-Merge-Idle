@@ -2,8 +2,8 @@
  * Rate Us prompt eligibility.
  *
  * - Permanent dismiss after the player rates (thank-you path).
- * - Soft dismiss (X / backdrop) → auto-prompt again after a few days (max retries).
- * - Settings can still open Rate Us unless permanently dismissed.
+ * - Soft dismiss (X / backdrop) → auto-prompt again after ~1 day (max retries).
+ * - Settings Rate Us is always shown; if already rated, Settings shows an "Already Rated" toast.
  */
 
 export const RATE_US_PERMANENTLY_DISMISSED_KEY = 'rate_us_permanently_dismissed_v1';
@@ -81,7 +81,15 @@ export function canAutoShowRateUsPrompt(atTimeMs = Date.now()): boolean {
   return true;
 }
 
-/** Settings / forced first show after Daily Tasks — blocked only after a real rating. */
+/** True until the player completes a rating (thank-you path). */
+export function canEverShowRateUs(): boolean {
+  return !readRateUsPermanentlyDismissed();
+}
+
+/**
+ * Settings Rate Us — always available in Settings.
+ * (Rated state shows an "Already Rated" toast in Settings instead of hiding the button.)
+ */
 export function canOpenRateUsFromSettings(): boolean {
   return !readRateUsPermanentlyDismissed();
 }

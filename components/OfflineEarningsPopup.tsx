@@ -5,7 +5,17 @@ import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
 import { getGardenCoinIconPath } from '../utils/gardenAssets';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
+import {
+  POPUP_CREAM_DROP_SHADOW_FILTER,
+  POPUP_CREAM_HIT_TARGET,
+  POPUP_CREAM_STACK_MARGIN_TOP_PX,
+  POPUP_HEADER_PASS_THROUGH,
+  POPUP_HEADER_TOP_PX,
+  popupAppScaleStyle,
+  popupOverlayStyle,
+} from '../constants/popupPointerEvents';
 import { PopupVectorBackground } from './PopupVectorBackground';
+import { PopupPrescaleFrame } from './PopupPrescaleFrame';
 import { formatCompactNumber } from '../utils/formatCompactNumber';
 import {
   REWARD_OFFER_LINE_TEXT_COLOR,
@@ -255,7 +265,7 @@ export const OfflineEarningsPopup: React.FC<OfflineEarningsPopupProps> = ({
   return (
     <div
       className="fixed inset-0 flex items-center justify-center"
-      style={{ zIndex: 100, overflow: 'hidden', paddingTop: 'clamp(36px, 7vh, 80px)', pointerEvents: isPreflight ? 'none' : 'auto' }}
+      style={popupOverlayStyle({ pointerEvents: isPreflight ? 'none' : 'auto' })}
     >
       <div
         className="absolute transition-opacity duration-200"
@@ -271,7 +281,7 @@ export const OfflineEarningsPopup: React.FC<OfflineEarningsPopupProps> = ({
 
       <div
         className="relative flex items-center justify-center"
-        style={{ transform: `scale(${appScale})`, transformOrigin: 'center center' }}
+        style={popupAppScaleStyle(appScale)}
       >
         {(isEntering || animState === 'visible') && leaves.length > 0 && (
           <div
@@ -352,7 +362,13 @@ export const OfflineEarningsPopup: React.FC<OfflineEarningsPopupProps> = ({
 
           <div
             className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center"
-            style={{ width: '120px', height: '120px', top: '-20px', zIndex: 104 }}
+            style={{
+              width: '120px',
+              height: '120px',
+              top: `${POPUP_HEADER_TOP_PX}px`,
+              zIndex: 104,
+              ...POPUP_HEADER_PASS_THROUGH,
+            }}
           >
             <img
               src={assetPath('/assets/ui/popup_header.png')}
@@ -373,24 +389,19 @@ export const OfflineEarningsPopup: React.FC<OfflineEarningsPopupProps> = ({
             />
           </div>
 
-          <div
-            style={{
-              position: 'relative',
-              marginTop: '36px',
-              width: '640px',
-              transform: 'scale(0.5)',
-              transformOrigin: 'top center',
-              marginBottom: '-290px',
-            }}
+          <PopupPrescaleFrame
+            creamHitTarget={false}
+            prescaleWidthPx={640}
+            style={{ marginTop: POPUP_CREAM_STACK_MARGIN_TOP_PX }}
           >
             <div
               style={{
                 position: 'relative',
-                filter: 'drop-shadow(0 16px 48px rgba(0,0,0,0.3))',
                 padding: '150px 40px 60px 40px',
+                ...POPUP_CREAM_HIT_TARGET,
               }}
             >
-              <PopupVectorBackground />
+              <PopupVectorBackground style={{ filter: POPUP_CREAM_DROP_SHADOW_FILTER }} />
               <div className="relative z-[2] flex flex-col items-center">
                 <h2
                   className="font-normal text-center"
@@ -553,7 +564,7 @@ export const OfflineEarningsPopup: React.FC<OfflineEarningsPopupProps> = ({
                 </button>
               </div>
             </div>
-          </div>
+          </PopupPrescaleFrame>
         </div>
       </div>
     </div>

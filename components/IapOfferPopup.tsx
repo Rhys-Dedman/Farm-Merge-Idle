@@ -8,9 +8,22 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
+import {
+  POPUP_CLOSE_HIT_TARGET,
+  POPUP_CLOSE_TOP_PX,
+  POPUP_CREAM_DROP_SHADOW_FILTER,
+  POPUP_CREAM_HIT_TARGET,
+  POPUP_CREAM_STACK_MARGIN_TOP_PX,
+  POPUP_HEADER_PASS_THROUGH,
+  POPUP_HEADER_TOP_PX,
+  POPUP_LAYOUT_PASS_THROUGH,
+  popupAppScaleStyle,
+  popupOverlayStyle,
+} from '../constants/popupPointerEvents';
 import { useLimitedOfferCountdown } from '../hooks/useLimitedOfferCountdown';
 import { formatBundleLimitedCountdown } from '../utils/limitedOfferCountdown';
 import { Reward, REWARD_INLINE_LAYOUT_HEIGHT_PX, REWARD_INLINE_WIDTH_PX, REWARD_PILL_HEIGHT_PX } from './Reward';
+import { PopupPrescaleFrame } from './PopupPrescaleFrame';
 import {
   PopupVectorBackground,
   PREMIUM_IAP_POPUP_TOP_ACCENT_BLUE,
@@ -66,6 +79,8 @@ export type IapOfferRewardRow = PurchaseSuccessfulRewardRow;
 export interface IapOfferPopupProps {
   isVisible: boolean;
   onClose: () => void;
+  /** Fired when the player dismisses via X or backdrop (not purchase). */
+  onUserDismiss?: () => void;
   title: string;
   /** Main product icon in header (see `PURCHASE_SUCCESS_HEADER_ICON_PX`). */
   headerImageSrc: string;
@@ -97,8 +112,6 @@ export interface IapOfferPopupProps {
   premiumIapTopAccentStrokeWide?: string;
   /** Leaf burst alternates two `particle_leaf_*` textures (`starter` → 11–12, `removeAds` → 9–10). */
   leafBurstVariant?: 'starter' | 'removeAds';
-  /** Nudge entire popup vertically (negative moves up), screen px before `appScale`. */
-  iapPopupShellOffsetYPx?: number;
 }
 
 const POPUP_LEAF_COUNT = 40;
@@ -161,6 +174,7 @@ function createPopupLeaves(sprites: readonly string[]): LeafParticle[] {
 export const IapOfferPopup: React.FC<IapOfferPopupProps> = ({
   isVisible,
   onClose,
+  onUserDismiss,
   title,
   headerImageSrc,
   rewards,
@@ -179,7 +193,6 @@ export const IapOfferPopup: React.FC<IapOfferPopupProps> = ({
   premiumIapTopAccentStrokeNarrow,
   premiumIapTopAccentStrokeWide,
   leafBurstVariant,
-  iapPopupShellOffsetYPx,
 }) => {
   const leafBurstSprites = useMemo(() => {
     if (leafBurstVariant === 'starter') return STARTER_PACK_IAP_LEAF_BURST_SPRITES;
@@ -314,6 +327,7 @@ export const IapOfferPopup: React.FC<IapOfferPopupProps> = ({
 
   const dismissPopup = () => {
     if (isClosing || animState === 'preflight') return;
+    onUserDismiss?.();
     setIsClosing(true);
     setAnimState('leaving');
     setTimeout(() => {
@@ -349,7 +363,7 @@ export const IapOfferPopup: React.FC<IapOfferPopupProps> = ({
   return (
     <div 
       className="fixed inset-0 flex items-center justify-center"
-      style={{ zIndex: 100, overflow: 'hidden', paddingTop: 'clamp(28px, 5vh, 52px)', pointerEvents: isPreflight ? 'none' : 'auto' }}
+      style={popupOverlayStyle({ pointerEvents: isPreflight ? 'none' : 'auto' })}
     >
 {/* Backdrop - not scaled, covers full screen */}
       <div
@@ -369,10 +383,7 @@ export const IapOfferPopup: React.FC<IapOfferPopupProps> = ({
       {/* Scaled content wrapper */}
       <div
         className="relative flex items-center justify-center"
-        style={{
-          transform: `scale(${appScale})`,
-          transformOrigin: 'center center',
-        }}
+        style={popupAppScaleStyle(appScale)}
       >
 
       {/* Leaf Burst VFX */}
@@ -430,7 +441,7 @@ export const IapOfferPopup: React.FC<IapOfferPopupProps> = ({
         style={{ 
           width: '320px',
           zIndex: 102,
-          ...(iapPopupShellOffsetYPx !== undefined ? { marginTop: iapPopupShellOffsetYPx } : {}),
+          ...POPUP_LAYOUT_PASS_THROUGH,
           ...popupCardSurfaceStyle(
             animState,
             isEntering,
@@ -472,8 +483,9 @@ export const IapOfferPopup: React.FC<IapOfferPopupProps> = ({
           style={{ 
             width: '120px',
             height: '120px',
-            top: '-20px',
+            top: `${POPUP_HEADER_TOP_PX}px`,
             zIndex: 104,
+            ...POPUP_HEADER_PASS_THROUGH,
           }}
         >
           {/* Header background sprite */}
@@ -497,25 +509,20 @@ export const IapOfferPopup: React.FC<IapOfferPopupProps> = ({
           />
         </div>
 
-        {/* Background container - uses transform scale trick for sharper rendering */}
-        <div 
-          style={{ 
-            position: 'relative',
-            marginTop: '36px',
-            width: '640px',
-            transform: 'scale(0.5)',
-            transformOrigin: 'top center',
-            marginBottom: '-290px',
-          }}
+        <PopupPrescaleFrame
+          creamHitTarget={false}
+          prescaleWidthPx={640}
+          style={{ marginTop: POPUP_CREAM_STACK_MARGIN_TOP_PX }}
         >
           <div
             style={{
               position: 'relative',
-              filter: 'drop-shadow(0 16px 48px rgba(0,0,0,0.3))',
               padding: '150px 40px 56px 40px',
+              ...POPUP_CREAM_HIT_TARGET,
             }}
           >
             <PopupVectorBackground
+              style={{ filter: POPUP_CREAM_DROP_SHADOW_FILTER }}
               premiumTopAccent={{
                 heightPx: PREMIUM_IAP_POPUP_TOP_ACCENT_HEIGHT_PRESCALE_PX,
                 backgroundColor: premiumIapTopAccentFill ?? PREMIUM_IAP_POPUP_TOP_ACCENT_BLUE,
@@ -677,18 +684,20 @@ export const IapOfferPopup: React.FC<IapOfferPopupProps> = ({
           </button>
             </div>
           </div>
-        </div>
+        </PopupPrescaleFrame>
 
         <button
           type="button"
           onClick={dismissPopup}
           aria-label="Close"
-          className="absolute top-[56px] right-6 w-8 h-8 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
+          className="absolute right-6 w-8 h-8 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
           style={{
+            top: POPUP_CLOSE_TOP_PX,
             backgroundColor: 'transparent',
             border: 'none',
             color: closeIconColor,
             zIndex: 105,
+            ...POPUP_CLOSE_HIT_TARGET,
           }}
         >
           <svg width="16" height="16" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">

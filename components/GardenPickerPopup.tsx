@@ -18,7 +18,20 @@ import {
   GARDEN_PICKER_PURCHASE_COIN_PRICE,
 } from '../constants/gardenPicker';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
+import {
+  POPUP_CLOSE_HIT_TARGET,
+  POPUP_CLOSE_TOP_PX,
+  POPUP_CREAM_DROP_SHADOW_FILTER,
+  POPUP_CREAM_HIT_TARGET,
+  POPUP_CREAM_STACK_MARGIN_TOP_PX,
+  POPUP_HEADER_PASS_THROUGH,
+  POPUP_HEADER_TOP_PX,
+  POPUP_LAYOUT_PASS_THROUGH,
+  popupAppScaleStyle,
+  popupOverlayStyle,
+} from '../constants/popupPointerEvents';
 import { PopupVectorBackground } from './PopupVectorBackground';
+import { PopupPrescaleFrame } from './PopupPrescaleFrame';
 import { PopupRectLeafBurst } from './PopupRectLeafBurst';
 import {
   GardenPickerRow,
@@ -44,31 +57,32 @@ interface GardenPickerPopupProps {
   appScale?: number;
   /** New Garden FTUE 1: finger on View for this garden; blocks close and other rows. */
   newGardenFtueViewGardenId?: GardenId | null;
+  /** True after the player has swapped onto garden 2 (post-fade); switches description copy. */
+  hasReachedSecondGarden?: boolean;
 }
 
 const POPUP_CLOSE_MS = 200;
 const HEADER_ICON = assetPath('/assets/icons/floating_buttons/icon_fb_gardens.png');
 /** Ring art is fixed; scale icon only so it is not capped by the inner aperture. */
 const HEADER_RING_PX = 120;
-const HEADER_RING_TOP_PX = -20;
 const HEADER_ICON_BASE_PX = 80;
 const HEADER_ICON_SCALE = 1.15;
 const HEADER_ICON_PX = Math.round(HEADER_ICON_BASE_PX * HEADER_ICON_SCALE);
 
 /** Match Daily Tasks popup shell / prescale layout. */
 const GARDEN_PICKER_SHELL_WIDTH_PX = 400;
-const GARDEN_PICKER_SHELL_MIN_HEIGHT_PX = 520;
-const GARDEN_PICKER_PRESCALE_MARGIN_BOTTOM_PX = -300;
 const GARDEN_PICKER_VISUAL_CARD_WIDTH_PX = GARDEN_PICKER_PRESCALE_WIDTH_PX * 0.5;
-const GARDEN_PICKER_CLOSE_TOP_PX = 56;
+const GARDEN_PICKER_CLOSE_TOP_PX = POPUP_CLOSE_TOP_PX;
 const GARDEN_PICKER_CLOSE_RIGHT_PX =
   (GARDEN_PICKER_SHELL_WIDTH_PX - GARDEN_PICKER_VISUAL_CARD_WIDTH_PX) / 2 + 24;
-const GARDEN_PICKER_POPUP_OFFSET_Y = 'clamp(48px, 7vh, 80px)';
 
 const SETTINGS_TITLE_COLOR = '#5c4a32';
 const DIVIDER_ROW_MIN_HEIGHT_PX = 40;
 const POPUP_TITLE_TEXT = 'Your Gardens';
-const POPUP_DESCRIPTION_TEXT = 'Unlock new gardens and discover new plants!';
+const POPUP_DESCRIPTION_BEFORE_SECOND_GARDEN =
+  'Unlock new gardens and discover new plants & rewards';
+const POPUP_DESCRIPTION_AFTER_SECOND_GARDEN =
+  'Switch between your unlocked gardens at any time';
 /** Prescale rem — reads as 2rem on screen after 0.5× (matches Discovery / Golden Pot popups). */
 const POPUP_DESCRIPTION_FONT_SIZE_REM = '2rem';
 
@@ -132,8 +146,12 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
   closeOnBackdropClick = true,
   appScale = 1,
   newGardenFtueViewGardenId = null,
+  hasReachedSecondGarden = false,
 }) => {
   const newGardenFtueActive = newGardenFtueViewGardenId != null;
+  const descriptionText = hasReachedSecondGarden
+    ? POPUP_DESCRIPTION_AFTER_SECOND_GARDEN
+    : POPUP_DESCRIPTION_BEFORE_SECOND_GARDEN;
   const pickerCloseOnBackdrop = closeOnBackdropClick && !newGardenFtueActive;
   const [animState, setAnimState] = useState<PopupAnimWithPreflight>('hidden');
   const [bounceRowKeys, setBounceRowKeys] = useState<string[]>([]);
@@ -216,7 +234,7 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
   return (
     <div
       className="fixed inset-0 flex items-center justify-center"
-      style={{ zIndex: 100, overflow: 'hidden', pointerEvents: isPreflight ? 'none' : 'auto' }}
+      style={popupOverlayStyle({ pointerEvents: isPreflight ? 'none' : 'auto' })}
     >
       {leafBursts.map((burst) => (
         <PopupRectLeafBurst
@@ -247,19 +265,16 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
 
       <div
         className="relative flex items-center justify-center"
-        style={{
-          transform: `scale(${appScale}) translateY(${GARDEN_PICKER_POPUP_OFFSET_Y})`,
-          transformOrigin: 'center center',
-        }}
+        style={popupAppScaleStyle(appScale)}
       >
         <div
           ref={popupCardLayoutRef}
           className="relative flex flex-col items-center overflow-visible"
           style={{
             width: `${GARDEN_PICKER_SHELL_WIDTH_PX}px`,
-            minHeight: GARDEN_PICKER_SHELL_MIN_HEIGHT_PX,
             zIndex: 102,
             overflow: 'visible',
+            ...POPUP_LAYOUT_PASS_THROUGH,
             ...popupCardSurfaceStyle(
               animState,
               isEntering,
@@ -286,8 +301,9 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
             style={{
               width: `${HEADER_RING_PX}px`,
               height: `${HEADER_RING_PX}px`,
-              top: `${HEADER_RING_TOP_PX}px`,
+              top: `${POPUP_HEADER_TOP_PX}px`,
               zIndex: 104,
+              ...POPUP_HEADER_PASS_THROUGH,
             }}
           >
             <img
@@ -319,24 +335,19 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
             </div>
           </div>
 
-          <div
-            style={{
-              position: 'relative',
-              marginTop: '36px',
-              width: `${GARDEN_PICKER_PRESCALE_WIDTH_PX}px`,
-              transform: 'scale(0.5)',
-              transformOrigin: 'top center',
-              marginBottom: `${GARDEN_PICKER_PRESCALE_MARGIN_BOTTOM_PX}px`,
-            }}
+          <PopupPrescaleFrame
+            creamHitTarget={false}
+            prescaleWidthPx={GARDEN_PICKER_PRESCALE_WIDTH_PX}
+            style={{ marginTop: POPUP_CREAM_STACK_MARGIN_TOP_PX }}
           >
             <div
               style={{
                 position: 'relative',
-                filter: 'drop-shadow(0 16px 48px rgba(0,0,0,0.3))',
                 padding: `150px ${GARDEN_PICKER_CARD_HORIZONTAL_PAD_PX}px 60px ${GARDEN_PICKER_CARD_HORIZONTAL_PAD_PX}px`,
+                ...POPUP_CREAM_HIT_TARGET,
               }}
             >
-              <PopupVectorBackground />
+              <PopupVectorBackground style={{ filter: POPUP_CREAM_DROP_SHADOW_FILTER }} />
               <div className="relative z-[2] flex flex-col items-center w-full">
                 <h2
                   className="font-black tracking-tight text-center"
@@ -377,7 +388,7 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
                     marginBottom: '28px',
                   }}
                 >
-                  {POPUP_DESCRIPTION_TEXT}
+                  {descriptionText}
                 </p>
 
                 <div
@@ -416,7 +427,7 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
                 </div>
               </div>
             </div>
-          </div>
+          </PopupPrescaleFrame>
 
           <button
             type="button"
@@ -430,6 +441,7 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
               color: '#c2b280',
               zIndex: 105,
               opacity: newGardenFtueActive ? 0.35 : 1,
+              ...POPUP_CLOSE_HIT_TARGET,
               pointerEvents: newGardenFtueActive ? 'none' : 'auto',
             }}
             aria-label="Close"
