@@ -3,6 +3,8 @@
  * Used for popup, upgrade panel, and auto-trigger rules.
  */
 import type { TabType } from './types';
+import { getRemoteConfig, isStoreIapEnabled } from './utils/remoteConfig';
+export { isStoreIapEnabled } from './utils/remoteConfig';
 
 export type LimitedOfferTriggerType =
   | 'garden_fill_max_50'   // Show when ≤50% of unlocked cells are filled
@@ -168,7 +170,22 @@ export const LIMITED_OFFERS: LimitedOfferConfig[] = [
 ];
 
 export function getOfferById(id: string): LimitedOfferConfig | undefined {
-  return LIMITED_OFFERS.find((o) => o.id === id);
+  const base = LIMITED_OFFERS.find((o) => o.id === id);
+  if (!base) return undefined;
+  const secs = getRemoteConfig().boosts.specialOfferDurationSeconds[id];
+  if (typeof secs !== 'number') return base;
+  return { ...base, durationSeconds: secs, durationMinutes: null };
+}
+
+/** Display price from remote config (falls back to offer's baked-in label). */
+export function resolveStorePriceLabel(offerId: string, fallback: string): string {
+  return getRemoteConfig().monetization.prices[offerId] ?? fallback;
+}
+
+/** IAP / pack duration from remote config (ms). */
+export function resolveIapDurationMs(key: string, fallback: number): number {
+  const v = getRemoteConfig().boosts.iapDurationMs[key];
+  return typeof v === 'number' ? v : fallback;
 }
 
 /**
@@ -443,6 +460,42 @@ export interface StoreBundleOfferConfig extends StoreCoinOfferConfig {
 /** Collect → boost particles: one entry per grant (bundle uses `iapBoostGrants`, else single coin-row boost). */
 export function getStorePurchaseBoostGrants(config: StoreCoinOfferConfig): { offerId: string; durationMs: number; icon: string }[] {
   const bundle = config as StoreBundleOfferConfig;
+  const cfg = getRemoteConfig().boosts.iapDurationMs;
+
+  if (bundle.id === STORE_IAP_OFFER_STARTER_PACK_ID && bundle.iapBoostGrants?.length) {
+    return [
+      { offerId: REMOVE_ADS_OFFER_ID, durationMs: cfg.starter_pack_remove_ads ?? bundle.iapBoostGrants[0].durationMs, icon: REMOVE_ADS_HEADER_ICON },
+      { offerId: DOUBLE_COINS_OFFER_ID, durationMs: cfg.starter_pack_double_coins ?? bundle.iapBoostGrants[1].durationMs, icon: DOUBLE_COINS_REWARD_ICON },
+      {
+        offerId: 'rapid_harvest',
+        durationMs: cfg.starter_pack_rapid_harvest ?? bundle.iapBoostGrants[2].durationMs,
+        icon: '/assets/icons/upgrades/icon_harvestspeed.png',
+      },
+    ];
+  }
+  if (bundle.id === STORE_IAP_OFFER_FIELD_PACK_ID && bundle.iapBoostGrants?.length) {
+    return [
+      { offerId: REMOVE_ADS_OFFER_ID, durationMs: cfg.field_pack_remove_ads ?? bundle.iapBoostGrants[0].durationMs, icon: REMOVE_ADS_HEADER_ICON },
+      { offerId: DOUBLE_COINS_OFFER_ID, durationMs: cfg.field_pack_double_coins ?? bundle.iapBoostGrants[1].durationMs, icon: DOUBLE_COINS_REWARD_ICON },
+      {
+        offerId: 'rapid_harvest',
+        durationMs: cfg.field_pack_rapid_harvest ?? bundle.iapBoostGrants[2].durationMs,
+        icon: '/assets/icons/upgrades/icon_harvestspeed.png',
+      },
+    ];
+  }
+  if (bundle.id === 'store_bundle_harvesters_pack' && bundle.iapBoostGrants?.length) {
+    return [
+      { offerId: REMOVE_ADS_OFFER_ID, durationMs: cfg.farmers_pack_remove_ads ?? bundle.iapBoostGrants[0].durationMs, icon: REMOVE_ADS_HEADER_ICON },
+      { offerId: DOUBLE_COINS_OFFER_ID, durationMs: cfg.farmers_pack_double_coins ?? bundle.iapBoostGrants[1].durationMs, icon: DOUBLE_COINS_REWARD_ICON },
+      {
+        offerId: 'rapid_seeds',
+        durationMs: cfg.farmers_pack_rapid_seeds ?? bundle.iapBoostGrants[2].durationMs,
+        icon: '/assets/icons/upgrades/icon_seedproduction.png',
+      },
+    ];
+  }
+
   if (bundle.iapBoostGrants?.length) {
     return bundle.iapBoostGrants.map((g) => ({
       offerId: g.offerId,
@@ -450,7 +503,9 @@ export function getStorePurchaseBoostGrants(config: StoreCoinOfferConfig): { off
       icon: g.icon,
     }));
   }
-  return [{ offerId: config.boostOfferId, durationMs: config.durationMs, icon: config.headerIcon }];
+
+  const durationMs = resolveIapDurationMs(config.id, config.durationMs);
+  return [{ offerId: config.boostOfferId, durationMs, icon: config.headerIcon }];
 }
 
 /** localStorage end timestamp for starter-pack 24h UI; removed in `clearGameSave` so reset / fresh FTUE restarts the timer */
@@ -620,7 +675,10 @@ export function markStarterPackUnlocked(): void {
 }
 
 export function startStarterPackCountdown(atTimeMs = Date.now()): number {
-  const durationMs = STARTER_PACK_BUNDLE?.limitedOfferCountdownDurationMs ?? 24 * 60 * 60 * 1000;
+  const durationMs = resolveIapDurationMs(
+    'starter_pack_countdown',
+    STARTER_PACK_BUNDLE?.limitedOfferCountdownDurationMs ?? 24 * 60 * 60 * 1000,
+  );
   const key = STARTER_PACK_BUNDLE?.limitedOfferCountdownStorageKey ?? STORE_STARTER_PACK_COUNTDOWN_END_MS_KEY;
   const endMs = atTimeMs + durationMs;
   try {
@@ -661,6 +719,7 @@ export function isStarterPackStoreRowVisible(atTimeMs = Date.now()): boolean {
 
 /** Farm floating button: unlocked, not purchased, countdown still running. */
 export function isStarterPackFloatingButtonVisible(atTimeMs = Date.now()): boolean {
+  if (!isStoreIapEnabled(STORE_IAP_OFFER_STARTER_PACK_ID)) return false;
   if (readStarterPackPurchased()) return false;
   if (!readStarterPackUnlocked()) return false;
   return getStarterPackCountdownRemainingMs(atTimeMs) > 0;
@@ -721,7 +780,10 @@ export function markFieldPackUnlocked(): void {
 }
 
 export function startFieldPackCountdown(atTimeMs = Date.now()): number {
-  const durationMs = FIELD_PACK_BUNDLE?.limitedOfferCountdownDurationMs ?? 24 * 60 * 60 * 1000;
+  const durationMs = resolveIapDurationMs(
+    'field_pack_countdown',
+    FIELD_PACK_BUNDLE?.limitedOfferCountdownDurationMs ?? 24 * 60 * 60 * 1000,
+  );
   const key = FIELD_PACK_BUNDLE?.limitedOfferCountdownStorageKey ?? STORE_FIELD_PACK_COUNTDOWN_END_MS_KEY;
   const endMs = atTimeMs + durationMs;
   try {
@@ -757,6 +819,7 @@ export function isFieldPackStoreRowVisible(atTimeMs = Date.now()): boolean {
 
 /** Farm floating button: unlocked, not purchased, Field Pack countdown still running. */
 export function isFieldPackFloatingButtonVisible(atTimeMs = Date.now()): boolean {
+  if (!isStoreIapEnabled(STORE_IAP_OFFER_FIELD_PACK_ID)) return false;
   if (readFieldPackPurchased()) return false;
   if (!readFieldPackUnlocked()) return false;
   return getFieldPackCountdownRemainingMs(atTimeMs) > 0;
@@ -769,8 +832,14 @@ export function isLimitedStarterStyleBundleOfferId(offerId: string): boolean {
 
 export function getVisibleStoreBundleOffers(): StoreBundleOfferConfig[] {
   return STORE_BUNDLE_OFFERS.filter((o) => {
+    if (!isStoreIapEnabled(o.id)) return false;
     if (o.id === STORE_IAP_OFFER_STARTER_PACK_ID) return isStarterPackStoreRowVisible();
     if (o.id === STORE_IAP_OFFER_FIELD_PACK_ID) return isFieldPackStoreRowVisible();
     return true;
   });
+}
+
+/** Store coin / Remove Ads rows that pass the IAP kill switch. */
+export function getVisibleStoreCoinOffers(): StoreCoinOfferConfig[] {
+  return STORE_COIN_OFFERS.filter((o) => isStoreIapEnabled(o.id));
 }

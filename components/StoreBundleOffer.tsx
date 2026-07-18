@@ -4,6 +4,7 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { assetPath } from '../utils/assetPath';
 import type { StoreBundleOfferConfig } from '../offers';
+import { resolveStorePriceLabel } from '../offers';
 import { Reward, REWARD_DURATION_TEXT_COLOR } from './Reward';
 import { useLimitedOfferCountdown } from '../hooks/useLimitedOfferCountdown';
 import { formatBundleLimitedCountdown } from '../utils/limitedOfferCountdown';
@@ -127,14 +128,18 @@ export const StoreBundleOffer: React.FC<StoreBundleOfferProps> = ({
     headerIconStack,
     offerLineText,
     durationText,
-    priceLabel,
-    originalPriceLabel,
+    priceLabel: priceLabelFallback,
+    originalPriceLabel: originalPriceLabelFallback,
     valueCalloutText,
     limitedOfferCountdownStorageKey,
     limitedOfferCountdownDurationMs,
     extraRewardRows = [],
     rewardStripIconPath,
   } = config;
+  const priceLabel = resolveStorePriceLabel(id, priceLabelFallback);
+  const originalPriceLabel = originalPriceLabelFallback
+    ? resolveStorePriceLabel(`${id}_original`, originalPriceLabelFallback)
+    : undefined;
 
   const bundleCountdownRemainingMs = useLimitedOfferCountdown(
     limitedOfferCountdownStorageKey,

@@ -171,6 +171,7 @@ import {
   STORE_IAP_OFFER_REMOVE_ADS_ID,
   STORE_IAP_OFFER_STARTER_PACK_ID,
   getOfferById,
+  resolveStorePriceLabel,
   isLimitedStarterStyleBundleOfferId,
   isStorePremiumOnlyOfferId,
   applyDoubleCoinsVisualAmount,
@@ -310,7 +311,8 @@ import {
 } from './utils/wildGrowth';
 import { OfflineEarningsPopup } from './components/OfflineEarningsPopup';
 import { BARN_SHELF_COUNT, BARN_SHELVES_PER_GARDEN, COLLECTION_PANEL_GARDEN_ICON_PX, COLLECTION_PANEL_GARDEN_ICON_UNLOCKED_SCALE, COLLECTION_PHONE_PLANT_PANEL_SCALE, COLLECTION_PHONE_PLANT_PANEL_TOP_PX, COLLECTION_PHONE_ROOF_LAYOUT_SCALE, COLLECTION_PHONE_ROOF_SCALE, COLLECTION_PHONE_SHELF_WIDTH_SCALE, COLLECTION_PHONE_SHELVES_EXTRA_MARGIN_TOP_UNLOCKED_PX, COLLECTION_PHONE_SHELVES_MARGIN_TOP_PX, COLLECTION_PLANT_COUNT, COLLECTION_PLANT_PANEL_TOP_PX, COLLECTION_SCROLL_BOTTOM_PAD_PX, COLLECTION_SHELF_STACK_MARGIN_TOP_PX, COLLECTION_SHELF_UPGRADE_BUTTON_BORDER_PX, COLLECTION_SHELF_UPGRADE_BUTTON_COIN_PX, COLLECTION_SHELF_UPGRADE_BUTTON_DARK_COLOR, COLLECTION_SHELF_UPGRADE_BUTTON_FONT_PX, COLLECTION_SHELF_UPGRADE_BUTTON_HEIGHT_PX, COLLECTION_SHELF_UPGRADE_BUTTON_RING_COLOR, COLLECTION_SHELF_UPGRADE_BUTTON_TOP_PX, COLLECTION_SHELF_UPGRADE_BUTTON_WIDTH_PX, COLLECTION_SHELF_UPGRADE_SPRITE_SCALE, COLLECTION_SHELF_UPGRADE_SPRITE_TOP_PX, COLLECTION_SHELVES_EXTRA_MARGIN_TOP_UNLOCKED_PX, COLLECTION_SHELVES_MARGIN_TOP_PX, getCollectionShelfMeta, normalizeBarnShelvesUnlocked } from './constants/barnShelves';
-import { GARDEN_PICKER_PURCHASE_COIN_PRICE } from './constants/gardenPicker';
+import { getGardenPickerPurchaseCoinPrice } from './constants/gardenPicker';
+import { areAdsEnabled, getRemoteConfig, isStoreIapEnabled } from './utils/remoteConfig';
 import { canAffordNextGardenPurchase, isGardensFloatingButtonUnlocked } from './utils/gardenPickerFloatingButton';
 import { MAX_PLANT_TIER } from './constants/plants';
 import {
@@ -2181,7 +2183,7 @@ export default function App() {
       setDailyAllowanceUiHoldUntilMs(Date.now() + DAILY_ALLOWANCE_UI_HOLD_AFTER_CLAIM_MS);
       setStoreSlotCooldownEnds((ends) => {
         const next: [number, number] = [...ends] as [number, number];
-        next[0] = Date.now() + 15 * 60 * 1000;
+        next[0] = Date.now() + getRemoteConfig().ads.specialOffer.storeFreeOfferCooldownMs;
         return next;
       });
     },
@@ -2674,6 +2676,7 @@ export default function App() {
   }, [isLoading, dailyTasksUnlocked, triggerTasksFloatingButtonReadyFx]);
 
   const openRewardedFakeAd = useCallback(() => {
+    if (!areAdsEnabled()) return;
     setFakeAdVariant('rewarded');
     setRewardedAdFadeOutActive(false);
     setRewardedAdBlackHoldActive(false);
@@ -2707,6 +2710,10 @@ export default function App() {
   }, [rewardedAdFadeOutActive]);
 
   const openAdBreakFakeAd = useCallback((onComplete?: () => void) => {
+    if (!areAdsEnabled()) {
+      onComplete?.();
+      return;
+    }
     setFakeAdVariant('adBreak');
     pendingAdSourceRef.current = 'adBreak';
     setPendingAdComplete(null);
@@ -2933,19 +2940,28 @@ export default function App() {
 
     const nextLevel = playerLevel + 1;
     if (nextLevel === STARTER_PACK_FORCE_POPUP_LEVEL) {
-      setLevelUpPopup(null);
-      if (activeGardenIdRef.current === DEFAULT_GARDEN_ID) {
-        markStarterPackUnlocked();
-        setStarterPackUnlocked(true);
-        pendingLevelUpAfterStarterPackRef.current = nextLevel;
-        setIapOfferUi({ offerId: STORE_IAP_OFFER_STARTER_PACK_ID });
-      } else {
-        markFieldPackUnlocked();
-        setFieldPackUnlocked(true);
-        pendingLevelUpAfterStarterPackRef.current = nextLevel;
-        setIapOfferUi({ offerId: STORE_IAP_OFFER_FIELD_PACK_ID });
+      const useStarter =
+        activeGardenIdRef.current === DEFAULT_GARDEN_ID &&
+        isStoreIapEnabled(STORE_IAP_OFFER_STARTER_PACK_ID);
+      const useField =
+        activeGardenIdRef.current !== DEFAULT_GARDEN_ID &&
+        isStoreIapEnabled(STORE_IAP_OFFER_FIELD_PACK_ID);
+      if (useStarter || useField) {
+        setLevelUpPopup(null);
+        if (useStarter) {
+          markStarterPackUnlocked();
+          setStarterPackUnlocked(true);
+          pendingLevelUpAfterStarterPackRef.current = nextLevel;
+          setIapOfferUi({ offerId: STORE_IAP_OFFER_STARTER_PACK_ID });
+        } else {
+          markFieldPackUnlocked();
+          setFieldPackUnlocked(true);
+          pendingLevelUpAfterStarterPackRef.current = nextLevel;
+          setIapOfferUi({ offerId: STORE_IAP_OFFER_FIELD_PACK_ID });
+        }
+        return;
       }
-      return;
+      // IAP killed — fall through to normal level-up.
     }
     presentOrQueueLevel(nextLevel);
   }, [playerLevel, recordDailyTaskPlayerLeveledUp, collectionFtueCompleted]);
@@ -4549,6 +4565,7 @@ export default function App() {
   }, [offlineEarningsUi?.open]);
 
   const completePremiumStorePurchase = useCallback((offerId: string) => {
+    if (!isStoreIapEnabled(offerId)) return;
     playSfx(SFX_IDS.uiConfirmReward);
     const config =
       STORE_COIN_OFFERS.find((c) => c.id === offerId) ??
@@ -4591,18 +4608,26 @@ export default function App() {
 
   const showLevelUpForNextLevel = useCallback((nextLevel: number) => {
     if (nextLevel === STARTER_PACK_FORCE_POPUP_LEVEL) {
-      if (activeGardenIdRef.current === DEFAULT_GARDEN_ID) {
-        markStarterPackUnlocked();
-        setStarterPackUnlocked(true);
-        pendingLevelUpAfterStarterPackRef.current = nextLevel;
-        setIapOfferUi({ offerId: STORE_IAP_OFFER_STARTER_PACK_ID });
-      } else {
-        markFieldPackUnlocked();
-        setFieldPackUnlocked(true);
-        pendingLevelUpAfterStarterPackRef.current = nextLevel;
-        setIapOfferUi({ offerId: STORE_IAP_OFFER_FIELD_PACK_ID });
+      const useStarter =
+        activeGardenIdRef.current === DEFAULT_GARDEN_ID &&
+        isStoreIapEnabled(STORE_IAP_OFFER_STARTER_PACK_ID);
+      const useField =
+        activeGardenIdRef.current !== DEFAULT_GARDEN_ID &&
+        isStoreIapEnabled(STORE_IAP_OFFER_FIELD_PACK_ID);
+      if (useStarter || useField) {
+        if (useStarter) {
+          markStarterPackUnlocked();
+          setStarterPackUnlocked(true);
+          pendingLevelUpAfterStarterPackRef.current = nextLevel;
+          setIapOfferUi({ offerId: STORE_IAP_OFFER_STARTER_PACK_ID });
+        } else {
+          markFieldPackUnlocked();
+          setFieldPackUnlocked(true);
+          pendingLevelUpAfterStarterPackRef.current = nextLevel;
+          setIapOfferUi({ offerId: STORE_IAP_OFFER_FIELD_PACK_ID });
+        }
+        return;
       }
-      return;
     }
     presentLevelUpPopupRef.current(nextLevel);
   }, [recordDailyTaskPlayerLeveledUp]);
@@ -4750,13 +4775,14 @@ export default function App() {
       if (blockingPopupOpenForLimitedOfferRef.current) return;
       if (showFakeAdRef.current) return;
       if (activeScreen !== 'FARM') return;
-      if (lastOfflineEarningsClosedAtRef.current > 0 && Date.now() - lastOfflineEarningsClosedAtRef.current < 10000) return;
+      if (lastOfflineEarningsClosedAtRef.current > 0 && Date.now() - lastOfflineEarningsClosedAtRef.current < getRemoteConfig().ads.specialOffer.quietAfterCloseMs) return;
       const now = Date.now();
-      if (lastLimitedOfferClosedAtRef.current && now - lastLimitedOfferClosedAtRef.current < 10000) return;
-      if (lastFakeAdClosedAtRef.current && now - lastFakeAdClosedAtRef.current < 10000) return;
-      if (lastOtherPopupClosedAtRef.current && now - lastOtherPopupClosedAtRef.current < 10000) return;
+      const quietMs = getRemoteConfig().ads.specialOffer.quietAfterCloseMs;
+      if (lastLimitedOfferClosedAtRef.current && now - lastLimitedOfferClosedAtRef.current < quietMs) return;
+      if (lastFakeAdClosedAtRef.current && now - lastFakeAdClosedAtRef.current < quietMs) return;
+      if (lastOtherPopupClosedAtRef.current && now - lastOtherPopupClosedAtRef.current < quietMs) return;
       const elapsed = now - lastLimitedOfferShownAtRef.current;
-      if (elapsed < 90000) return;
+      if (elapsed < getRemoteConfig().ads.specialOffer.minGapMs) return;
       const unlockedCount = grid.filter((c) => !c.locked).length;
       const filledCount = grid.filter((c) => !c.locked && c.item != null).length;
       const gardenFillPercent = unlockedCount > 0 ? filledCount / unlockedCount : 0;
@@ -4791,7 +4817,7 @@ export default function App() {
         );
         if (eligible.length > 0) {
           offerToShow = pickFrom(eligible);
-        } else if (elapsed >= 120000) {
+        } else if (elapsed >= getRemoteConfig().ads.specialOffer.anytimeFallbackMs) {
           const other = autoPopupPool.filter(
             (o) => matchesTrigger(o) && o.id !== lastId,
           );
@@ -8111,7 +8137,7 @@ export default function App() {
       if (!v2) return;
       if ((v2.gardensStarted ?? []).includes(gardenId)) return;
 
-      const price = GARDEN_PICKER_PURCHASE_COIN_PRICE;
+      const price = getGardenPickerPurchaseCoinPrice();
       if (moneyRef.current < price) return;
 
       setMoney((m) => m - price);
@@ -8767,7 +8793,7 @@ export default function App() {
                     setShowFakeAd(false);
                     setStoreSlotCooldownEnds((ends) => {
                       const next: [number, number] = [...ends] as [number, number];
-                      next[slotIndex] = Date.now() + 15 * 60 * 1000;
+                      next[slotIndex] = Date.now() + getRemoteConfig().ads.specialOffer.storeFreeOfferCooldownMs;
                       return next;
                     });
                   });
@@ -9391,6 +9417,7 @@ export default function App() {
                     starterPackUnlocked={starterPackUnlocked}
                     starterPackCountdownRefreshKey={starterPackCountdownRefreshKey}
                     onStarterPackClick={() => {
+                      if (!isStoreIapEnabled(STORE_IAP_OFFER_STARTER_PACK_ID)) return;
                       playSfx(SFX_IDS.uiConfirmNormal);
                       setIapOfferUi({ offerId: STORE_IAP_OFFER_STARTER_PACK_ID });
                     }}
@@ -9398,10 +9425,12 @@ export default function App() {
                     fieldPackUnlocked={fieldPackUnlocked}
                     fieldPackCountdownRefreshKey={fieldPackCountdownRefreshKey}
                     onFieldPackClick={() => {
+                      if (!isStoreIapEnabled(STORE_IAP_OFFER_FIELD_PACK_ID)) return;
                       playSfx(SFX_IDS.uiConfirmNormal);
                       setIapOfferUi({ offerId: STORE_IAP_OFFER_FIELD_PACK_ID });
                     }}
                     onNoAdsClick={() => {
+                      if (!isStoreIapEnabled(STORE_IAP_OFFER_REMOVE_ADS_ID)) return;
                       playSfx(SFX_IDS.uiConfirmNormal);
                       setIapOfferUi({ offerId: STORE_IAP_OFFER_REMOVE_ADS_ID });
                     }}
@@ -11126,6 +11155,7 @@ export default function App() {
             )}
 
             {iapOfferUi && (() => {
+              if (!isStoreIapEnabled(iapOfferUi.offerId)) return null;
               const config =
                 STORE_BUNDLE_OFFERS.find((c) => c.id === iapOfferUi.offerId) ??
                 STORE_COIN_OFFERS.find((c) => c.id === iapOfferUi.offerId);
@@ -11146,9 +11176,11 @@ export default function App() {
                   title={config.title}
                   headerImageSrc={assetPath(config.headerIcon)}
                   rewards={buildPurchaseSuccessRewards(config)}
-                  priceLabel={config.priceLabel}
+                  priceLabel={resolveStorePriceLabel(config.id, config.priceLabel)}
                   originalPriceLabel={
-                    'originalPriceLabel' in config ? config.originalPriceLabel : undefined
+                    'originalPriceLabel' in config && typeof config.originalPriceLabel === 'string'
+                      ? resolveStorePriceLabel(`${config.id}_original`, config.originalPriceLabel)
+                      : undefined
                   }
                   appScale={appScale}
                   description={

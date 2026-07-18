@@ -1,4 +1,6 @@
 /** Garden picker list — matches Daily Tasks popup list spacing (prescale coordinates). */
+import { getNewGardenUnlockCost } from '../utils/remoteConfig';
+
 export const GARDEN_PICKER_LIST_GAP_PX = 18;
 export const GARDEN_PICKER_LIST_HORIZONTAL_PAD_PX = 8;
 
@@ -19,7 +21,12 @@ export const GARDEN_PICKER_LIST_INNER_WIDTH_PX =
 /** Text block horizontal inset from design left (prescale). */
 export const GARDEN_PICKER_TEXT_LEFT_PX = 168;
 
-/** Coin price to purchase the next garden (prototype). */
+/** Coin price to purchase the next garden — from remote config. */
+export function getGardenPickerPurchaseCoinPrice(): number {
+  return getNewGardenUnlockCost();
+}
+
+/** @deprecated Prefer `getGardenPickerPurchaseCoinPrice()` — kept for call-site compatibility. */
 export const GARDEN_PICKER_PURCHASE_COIN_PRICE = 250_000;
 
 /** Pots progress pill overlay (710×175 design px). */

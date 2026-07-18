@@ -4,6 +4,7 @@
 import React, { useState } from 'react';
 import { assetPath } from '../utils/assetPath';
 import type { StoreCoinOfferConfig } from '../offers';
+import { resolveStorePriceLabel } from '../offers';
 import { Reward } from './Reward';
 import {
   STORE_COIN_OFFER_ROW_SCALE,
@@ -39,10 +40,11 @@ export const StoreCoinOffer: React.FC<StoreCoinOfferProps> = ({ config, onPurcha
     headerIcon,
     offerLineText,
     durationText,
-    priceLabel,
+    priceLabel: priceLabelFallback,
     rowBackgroundAsset = STORE_COIN_ROW_BACKGROUND_DEFAULT,
     rewardStripIconPath,
   } = config;
+  const priceLabel = resolveStorePriceLabel(id, priceLabelFallback);
 
   return (
     <div

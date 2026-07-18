@@ -5,7 +5,7 @@
  * Display: `v${APP_VERSION}` in Settings
  * Android: `versionName` = APP_VERSION, `versionCode` = APP_VERSION_CODE
  */
-export const APP_VERSION = '0.2.1';
+export const APP_VERSION = '0.3.0';
 
 /** Play Store / APK integer. Increment by 1 on every push-and-build. */
-export const APP_VERSION_CODE = 3;
+export const APP_VERSION_CODE = 4;

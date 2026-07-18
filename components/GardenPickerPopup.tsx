@@ -16,6 +16,7 @@ import {
   GARDEN_PICKER_LIST_HORIZONTAL_PAD_PX,
   GARDEN_PICKER_PRESCALE_WIDTH_PX,
   GARDEN_PICKER_PURCHASE_COIN_PRICE,
+  getGardenPickerPurchaseCoinPrice,
 } from '../constants/gardenPicker';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
 import {
@@ -215,7 +216,7 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
 
   const handlePurchase = useCallback(
     (rowKey: string, gardenId: GardenId, fx: GardenPickerPurchaseFx) => {
-      if (playerMoney < GARDEN_PICKER_PURCHASE_COIN_PRICE) return;
+      if (playerMoney < getGardenPickerPurchaseCoinPrice()) return;
       onPurchaseSound?.();
       triggerPurchasePresentation(rowKey, fx);
       window.setTimeout(() => {
@@ -410,7 +411,7 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
                         gardenId={gardenId}
                         state={state}
                         gardenDisplayName={getCollectionGardenDisplayName(gardenId)}
-                        purchaseCoinPrice={GARDEN_PICKER_PURCHASE_COIN_PRICE}
+                        purchaseCoinPrice={getGardenPickerPurchaseCoinPrice()}
                         playerMoney={playerMoney}
                         claimBounceActive={bounceRowKeys.includes(gardenId)}
                         viewButtonDomId={

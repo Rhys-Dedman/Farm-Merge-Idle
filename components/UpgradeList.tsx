@@ -25,6 +25,7 @@ import {
   isWildGrowthMaxLevel,
 } from '../utils/wildGrowth';
 import { PlantWithPot } from './PlantWithPot';
+import { getRemoteConfig } from '../utils/remoteConfig';
 import {
   getHarvestSpeedDisplayPercent,
   getSeedProductionDisplayPercent,
@@ -328,11 +329,13 @@ export const UPGRADE_COST_TIER_BY_ID: Record<string, UpgradeCostTier> = {
 };
 
 /**
- * Initial cost formula:
- * - first = 150 × max(1, unlockLevel × 0.7)
+ * Initial cost formula (remote config `currency.upgradeCosts`):
+ * - first = initialCostBase × max(minUnlockFactor, unlockLevel × unlockLevelMultiplier)
  *
  * Scaling formula:
- * - next = previous × tierScale (normal/medium/high)
+ * - next = previous × scaleByUpgradeId[upgrade]
+ *
+ * Garden Expansion (`plot_expansion`) uses plotExpansionInitialCost / plotExpansionScale.
  *
  * Final rounding:
  * - < 100 -> nearest 10
@@ -343,11 +346,6 @@ export const UPGRADE_COST_TIER_BY_ID: Record<string, UpgradeCostTier> = {
  *
  * Every purchasable upgrade uses `calculateUpgradeCost` → `roundUpgradeCost` (panel + `handleUpgrade` only).
  */
-const INITIAL_COST_BASE = 150;
-const PLOT_EXPANSION_INITIAL_COST_BASE = 1000;
-const PLOT_EXPANSION_SCALE = 1.3;
-const INITIAL_COST_UNLOCK_MULTIPLIER = 0.7;
-const INITIAL_COST_MIN_UNLOCK_FACTOR = 1;
 
 /** Single rounding path for all upgrade prices (export for tests / tooling). */
 export function roundUpgradeCost(value: number): number {
@@ -373,6 +371,8 @@ export const getUpgradeUnlockLevel = (
 };
 
 const getUpgradeCostStrength = (upgradeId: string): number => {
+  const scales = getRemoteConfig().currency.upgradeCosts.scaleByUpgradeId;
+  if (typeof scales[upgradeId] === 'number') return scales[upgradeId];
   const tier = UPGRADE_COST_TIER_BY_ID[upgradeId] ?? 'normal';
   return UPGRADE_COST_STRENGTH[tier];
 };
@@ -385,20 +385,21 @@ export function calculateUpgradeCost(
 ): number {
   if (currentLevel < 0) return 0;
 
-  // Garden Expansion uses a fixed special-case curve:
-  // initial = 1000, then previous x 1.3 (same rounding buckets).
+  const uc = getRemoteConfig().currency.upgradeCosts;
+
+  // Garden Expansion uses a dedicated curve from remote config.
   if (upgradeId === 'plot_expansion') {
-    let cost = roundUpgradeCost(PLOT_EXPANSION_INITIAL_COST_BASE);
+    let cost = roundUpgradeCost(uc.plotExpansionInitialCost);
     for (let i = 0; i < currentLevel; i++) {
-      cost = roundUpgradeCost(cost * PLOT_EXPANSION_SCALE);
+      cost = roundUpgradeCost(cost * uc.plotExpansionScale);
     }
     return cost;
   }
 
   const tierScale = getUpgradeCostStrength(upgradeId);
   const unlockLevel = getUpgradeUnlockLevel(upgradeId, gardenId);
-  const unlockFactor = Math.max(INITIAL_COST_MIN_UNLOCK_FACTOR, unlockLevel * INITIAL_COST_UNLOCK_MULTIPLIER);
-  let cost = roundUpgradeCost(INITIAL_COST_BASE * unlockFactor);
+  const unlockFactor = Math.max(uc.minUnlockFactor, unlockLevel * uc.unlockLevelMultiplier);
+  let cost = roundUpgradeCost(uc.initialCostBase * unlockFactor);
 
   for (let i = 0; i < currentLevel; i++) {
     cost = roundUpgradeCost(cost * tierScale);

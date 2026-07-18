@@ -4,7 +4,7 @@
  */
 import type { SeedsState } from '../components/UpgradeList';
 import { getSeedSurplusValue } from '../components/UpgradeList';
-import { MAX_OFFLINE_ACCUMULATION_MS } from './offlineSimulate';
+import { getMaxOfflineAccumulationMs } from './remoteConfig';
 
 /** Generous surplus events per recharge bar per 3h (rapid boost ≈ 27; headroom for double-seed overflow). */
 const OFFLINE_MAX_SURPLUS_EVENTS_PER_BAR_PER_3H = 40;
@@ -65,7 +65,7 @@ export function capOfflineSimSurplusCoins(
   const bankCap = getMaxOfflineEarningsBank(ctx);
   if (bankCap <= 0) return 0;
 
-  const timeFrac = Math.min(1, Math.max(0, simulatedMs) / MAX_OFFLINE_ACCUMULATION_MS);
+  const timeFrac = Math.min(1, Math.max(0, simulatedMs) / getMaxOfflineAccumulationMs());
   const sessionCap = Math.max(1, Math.round(bankCap * 0.5 * timeFrac));
   return Math.min(simCoins, sessionCap);
 }

@@ -1,4 +1,4 @@
-import { GARDEN_PICKER_PURCHASE_COIN_PRICE } from '../constants/gardenPicker';
+import { getGardenPickerPurchaseCoinPrice } from '../constants/gardenPicker';
 import {
   DEFAULT_GARDEN_ID,
   GARDEN_IDS,
@@ -58,7 +58,7 @@ export function canAffordNextGardenPurchase(
   if (nextGardenId == null) return false;
   const payerGardenId = getGardenPurchasePayerGardenId(nextGardenId);
   const payerMoney = getPayerMoney(payerGardenId, activeGardenId, activeMoney, gardens);
-  return payerMoney >= GARDEN_PICKER_PURCHASE_COIN_PRICE;
+  return payerMoney >= getGardenPickerPurchaseCoinPrice();
 }
 
 export function getGardensFloatingButtonIconSrc(visual: GardensFloatingButtonVisual): string {

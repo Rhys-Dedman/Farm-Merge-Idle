@@ -15,7 +15,11 @@ import type { ActiveBoostData } from './ActiveBoostIndicator';
 import {
   hasActiveDoubleCoinsBoost,
   hasActiveRemoveAdsBoost,
+  STORE_IAP_OFFER_FIELD_PACK_ID,
+  STORE_IAP_OFFER_REMOVE_ADS_ID,
+  STORE_IAP_OFFER_STARTER_PACK_ID,
 } from '../offers';
+import { isAnyStoreCoinBoostIapEnabled, isStoreIapEnabled } from '../utils/remoteConfig';
 
 export interface FarmLeftFloatingButtonStackProps {
   activeBoosts: ActiveBoostData[];
@@ -61,16 +65,22 @@ export const FarmLeftFloatingButtonStack: React.FC<FarmLeftFloatingButtonStackPr
   );
 
   const showStarterPackFb =
-    !starterPackPurchased && starterPackUnlocked && starterPackRemainingMs > 0;
+    isStoreIapEnabled(STORE_IAP_OFFER_STARTER_PACK_ID) &&
+    !starterPackPurchased &&
+    starterPackUnlocked &&
+    starterPackRemainingMs > 0;
   const showFieldPackFb =
     !showStarterPackFb &&
+    isStoreIapEnabled(STORE_IAP_OFFER_FIELD_PACK_ID) &&
     !fieldPackPurchased &&
     fieldPackUnlocked &&
     fieldPackRemainingMs > 0;
   const showLimitedBundleFb = showStarterPackFb || showFieldPackFb;
-  const showNoAdsFb = !hasActiveRemoveAdsBoost(activeBoosts);
+  const showNoAdsFb =
+    isStoreIapEnabled(STORE_IAP_OFFER_REMOVE_ADS_ID) && !hasActiveRemoveAdsBoost(activeBoosts);
   /** Coin Boost fills an empty offer slot (never stacks with an active double-coins boost). */
-  const coinBoostFillerEligible = !hasActiveDoubleCoinsBoost(activeBoosts);
+  const coinBoostFillerEligible =
+    isAnyStoreCoinBoostIapEnabled() && !hasActiveDoubleCoinsBoost(activeBoosts);
 
   const buttons = useMemo(() => {
     const items: React.ReactNode[] = [];

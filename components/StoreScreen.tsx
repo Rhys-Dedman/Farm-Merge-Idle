@@ -5,12 +5,12 @@ import type { ActiveBoostData } from './ActiveBoostIndicator';
 import { ACTIVE_BOOST_INDICATOR_SIZE_PX } from './ActiveBoostIndicator';
 import {
   getOfferById,
-  STORE_BUNDLE_OFFERS,
-  STORE_COIN_OFFERS,
   STORE_DAILY_ALLOWANCE_OFFER_ID,
   STORE_FREE_OFFER_HEADER_ICON_PX,
   STORE_IAP_OFFER_FIELD_PACK_ID,
   STORE_IAP_OFFER_STARTER_PACK_ID,
+  getVisibleStoreBundleOffers,
+  getVisibleStoreCoinOffers,
 } from '../offers';
 import { useFieldPackCountdown, useStarterPackCountdown } from '../hooks/useStarterPackCountdown';
 import { StoreBundleOffer } from './StoreBundleOffer';
@@ -527,7 +527,8 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
   );
   const visibleBundleOffers = React.useMemo(
     () =>
-      STORE_BUNDLE_OFFERS.filter((o) => {
+      getVisibleStoreBundleOffers().filter((o) => {
+        // Extra purchase/countdown gates (kill switch already applied in getVisibleStoreBundleOffers).
         if (o.id === STORE_IAP_OFFER_STARTER_PACK_ID) {
           if (starterPackPurchased) return false;
           return starterPackUnlocked && starterPackRemainingMs > 0;
@@ -547,6 +548,7 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
       fieldPackRemainingMs,
     ],
   );
+  const visibleCoinOffers = React.useMemo(() => getVisibleStoreCoinOffers(), []);
   // Store scroll: reuse Shed/Barn-style momentum drag, but move the store top-ui list with transforms.
   // This avoids relying on native scroll (which isn't responding correctly on mobile in this screen).
   const storeScrollRef = useRef<HTMLDivElement | null>(null);
@@ -899,9 +901,9 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
               className="w-[300px] max-w-none h-auto mt-1 mb-1"
             />
 
-            {/* Coin IAP rows — order = `STORE_COIN_OFFERS` in offers.ts (shuffle freely). */}
+            {/* Coin IAP rows — filtered by remote-config IAP kill switches. */}
             <div ref={storeCoinSectionRef} className="flex flex-col items-center gap-0 w-full mt-0">
-              {STORE_COIN_OFFERS.map((config) => (
+              {visibleCoinOffers.map((config) => (
                 <StoreCoinOffer key={config.id} config={config} onPurchase={onStoreCoinPurchase} />
               ))}
             </div>

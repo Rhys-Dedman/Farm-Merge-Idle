@@ -23,6 +23,7 @@ import {
   getSeedRechargePerMinute,
   getHarvestChargesMax,
 } from '../constants/goldenPotBonuses';
+import { getMaxOfflineAccumulationMs } from './remoteConfig';
 
 /**
  * Offline surplus coins are disabled until FTUE 11 (recharge intro) is dismissed.
@@ -37,7 +38,11 @@ export function isOfflineCoinEarningsBlockedByFtue(
     s.ftue11StartQueued === true
   );
 }
-/** Wall-time cap for offline simulation: earnings beyond this are discarded. */
+
+/** Wall-time cap for offline simulation — from remote config (`maxOfflineEarningsHours`). */
+export { getMaxOfflineAccumulationMs };
+
+/** @deprecated Prefer `getMaxOfflineAccumulationMs()` — static snapshot of default 3h. */
 export const MAX_OFFLINE_ACCUMULATION_MS = 3 * 60 * 60 * 1000;
 
 export interface OfflineSimInput {
@@ -100,7 +105,7 @@ export function simulateOfflineSeedHarvest(input: OfflineSimInput): OfflineSimRe
   let offlineSurplusCoins = 0;
   const earnCoins = input.earnOfflineCoins !== false;
 
-  let remaining = Math.min(Math.max(0, input.deltaMs), MAX_OFFLINE_ACCUMULATION_MS);
+  let remaining = Math.min(Math.max(0, input.deltaMs), getMaxOfflineAccumulationMs());
   const seedFrozen = seedBarFrozen(input.activeFtueStage);
   const harvestFrozen = harvestBarFrozen(input.activeFtueStage, input.ftue7Scheduled);
 
@@ -236,7 +241,7 @@ export function simulateWildGrowthOffline(input: WildGrowthOfflineInput): WildGr
 
   let accum = Math.max(0, input.wildGrowthAccumMs);
   let wall = 0;
-  const delta = Math.min(Math.max(0, input.deltaMs), MAX_OFFLINE_ACCUMULATION_MS);
+  const delta = Math.min(Math.max(0, input.deltaMs), getMaxOfflineAccumulationMs());
   const noReserved = new Set<number>();
 
   while (wall < delta) {

@@ -1,6 +1,7 @@
 import type { FtueStageId } from '../../ftue/ftueConfig';
 import { AD_BREAK_SETTINGS } from '../../constants/adBreakSettings';
 import type { AdBreakTriggerId } from '../../constants/adBreakSettings';
+import { areAdsEnabled, getRemoteConfig } from '../remoteConfig';
 
 export interface AdBreakRuntimeState {
   lastAdBreakAt: number;
@@ -41,7 +42,7 @@ export interface AdBreakBlockerContext {
 
 /** Failsafe interval used for overdue fallback + new-session detection. */
 export function getAdBreakMaxIntervalMs(): number {
-  return AD_BREAK_SETTINGS.cooldownMs * AD_BREAK_SETTINGS.maxIntervalCooldownMultiplier;
+  return getRemoteConfig().ads.interstitialMaxIntervalMs;
 }
 
 /** Start / extend the post-return grace window (short same-session breaks only). */
@@ -96,6 +97,7 @@ export function getAdBreakBlockers(
   trigger?: AdBreakTriggerId,
 ): string[] {
   const blockers: string[] = [];
+  if (!areAdsEnabled()) blockers.push('ads_disabled');
   if (ctx.hasNoAds) blockers.push('no_ads_active');
   if (!isAdBreakUnlockGateOpen(ctx)) blockers.push('unlock_gate');
   if (ctx.isLoading) blockers.push('loading');
