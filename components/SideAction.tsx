@@ -435,8 +435,6 @@ export const SideAction: React.FC<SideActionProps> = ({
               {icon}
             </span>
           )}
-          {/* Subtle Shine Overlay */}
-          <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent pointer-events-none"></div>
         </div>
 
         {/* Storage badge: FREE / X/Y / FULL — fixed size so seed & harvest match */}

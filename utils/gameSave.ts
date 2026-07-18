@@ -199,6 +199,13 @@ export interface GameSaveV1 {
   ftue10PostClosePending: boolean;
   ftue10ButtonsNormalEarly: boolean;
   ftue11StartQueued: boolean;
+  /**
+   * Soft harvest nudge after FTUE 11 ("Lets Get Gardening").
+   * - undefined/missing: legacy save or never armed → never show
+   * - false: armed (5s wait or finger visible) until first harvest tap
+   * - true: completed forever
+   */
+  postFtueHarvestNudgeDone?: boolean;
   ftueUpgradePanelVisible: boolean;
   ftuePlayerLevelVisible: boolean;
   activeBoosts: ActiveBoostData[];

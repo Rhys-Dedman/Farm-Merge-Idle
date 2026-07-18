@@ -1,10 +1,12 @@
 /**
  * Sanity cap for offline surplus bank — prevents runaway totals from bugs or stacked saves.
  * Tuned generously above realistic 3h rapid-boost surplus sim at the same progression.
+ *
+ * The offline sim already only runs for the real absence window, so short sessions stay accurate.
+ * Caps here are anti-runaway ceilings only — they must not shrink legitimate short-absence payouts.
  */
 import type { SeedsState } from '../components/UpgradeList';
 import { getSeedSurplusValue } from '../components/UpgradeList';
-import { getMaxOfflineAccumulationMs } from './remoteConfig';
 
 /** Generous surplus events per recharge bar per 3h (rapid boost ≈ 27; headroom for double-seed overflow). */
 const OFFLINE_MAX_SURPLUS_EVENTS_PER_BAR_PER_3H = 40;
@@ -55,18 +57,22 @@ export function getMaxOfflineEarningsBank(ctx: OfflineEarningsCapContext): numbe
   return Math.max(0, Math.round(perThreeHours * OFFLINE_BANK_SESSIONS_MAX));
 }
 
-/** Cap a single offline sim slice for the elapsed window (≤ 3h). */
+/**
+ * Cap a single offline sim slice (≤ one 3h window).
+ * `simulatedMs` is kept for call-site compatibility; the sim already limited itself to that window,
+ * so we do not scale the ceiling by time fraction (that used to floor short absences to 1 coin).
+ */
 export function capOfflineSimSurplusCoins(
   simCoins: number,
   ctx: OfflineEarningsCapContext,
-  simulatedMs: number,
+  _simulatedMs: number,
 ): number {
   if (simCoins <= 0) return 0;
   const bankCap = getMaxOfflineEarningsBank(ctx);
   if (bankCap <= 0) return 0;
 
-  const timeFrac = Math.min(1, Math.max(0, simulatedMs) / getMaxOfflineAccumulationMs());
-  const sessionCap = Math.max(1, Math.round(bankCap * 0.5 * timeFrac));
+  // Half bank = one 3h session (bank holds up to 2). Anti-runaway only.
+  const sessionCap = Math.max(1, Math.round(bankCap * 0.5));
   return Math.min(simCoins, sessionCap);
 }
 

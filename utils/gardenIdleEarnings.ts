@@ -106,9 +106,8 @@ export function simulateGardenIdleAbsence(
     ftueSeedSurplusActivated: globals.ftueSeedSurplusActivated,
     ftueHarvestSurplusActivated: globals.ftueHarvestSurplusActivated,
   };
-  // In-session ('money') credits mirror live active-garden play, so they are NOT subject to the
-  // offline "welcome back" cap (which is scaled against a single 3h absence window). Applying that
-  // cap per ~5s tick would throttle earnings to ~1 coin. Only the offline bank ('pending') is capped.
+  // In-session ('money') credits go straight to wallet. Offline bank ('pending') still gets the
+  // anti-runaway session ceiling (full 3h max) — not a time-fraction shrink, so short absences stay accurate.
   const simCoins = ftueBlocksOffline
     ? 0
     : surplusTarget === 'money'

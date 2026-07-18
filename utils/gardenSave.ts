@@ -75,6 +75,8 @@ export interface GameSaveGlobals {
   ftue10PostClosePending: boolean;
   ftue10ButtonsNormalEarly: boolean;
   ftue11StartQueued: boolean;
+  /** Soft harvest nudge after FTUE 11; see GameSaveV1.postFtueHarvestNudgeDone. */
+  postFtueHarvestNudgeDone?: boolean;
   ftueUpgradePanelVisible: boolean;
   ftuePlayerLevelVisible: boolean;
   activeBoosts: ActiveBoostData[];
@@ -190,6 +192,7 @@ export function extractGlobalsFromV1(save: GameSaveV1): GameSaveGlobals {
     ftue10PostClosePending: save.ftue10PostClosePending,
     ftue10ButtonsNormalEarly: save.ftue10ButtonsNormalEarly,
     ftue11StartQueued: save.ftue11StartQueued,
+    postFtueHarvestNudgeDone: save.postFtueHarvestNudgeDone,
     ftueUpgradePanelVisible: save.ftueUpgradePanelVisible,
     ftuePlayerLevelVisible: save.ftuePlayerLevelVisible,
     activeBoosts: [...save.activeBoosts],
@@ -293,6 +296,7 @@ export function flattenV2ToV1(v2: GameSaveV2): GameSaveV1 {
     ftue10PostClosePending: g.ftue10PostClosePending,
     ftue10ButtonsNormalEarly: g.ftue10ButtonsNormalEarly,
     ftue11StartQueued: g.ftue11StartQueued,
+    postFtueHarvestNudgeDone: g.postFtueHarvestNudgeDone,
     ftueUpgradePanelVisible: g.ftueUpgradePanelVisible,
     ftuePlayerLevelVisible: g.ftuePlayerLevelVisible,
     activeBoosts: [...g.activeBoosts],

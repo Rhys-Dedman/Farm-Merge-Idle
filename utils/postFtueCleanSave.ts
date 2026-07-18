@@ -127,6 +127,7 @@ export function createPostFtueCleanSave(): GameSaveV1 {
     ftue10PostClosePending: false,
     ftue10ButtonsNormalEarly: false,
     ftue11StartQueued: false,
+    postFtueHarvestNudgeDone: true,
     ftueUpgradePanelVisible: true,
     ftuePlayerLevelVisible: true,
     activeBoosts: [],

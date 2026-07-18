@@ -746,6 +746,23 @@ export const createInitialHarvestState = (): Record<string, UpgradeState> => ({
   happy_customer: { level: 0, progress: 0 },
 });
 
+/**
+ * Affordability blink (early-game upgrade nudge).
+ * The three "engine" upgrades slowly pulse green (1s fade in / 1s fade out on loop)
+ * whenever the player can afford them, to teach the upgrade rhythm early.
+ * - Only active while the current garden's level is <= AFFORD_BLINK_MAX_GARDEN_LEVEL.
+ * - Buying one of these puts THAT upgrade on an individual cooldown (blink snaps off instantly).
+ * - Losing affordability also snaps the blink off instantly (no fade-out).
+ */
+const AFFORD_BLINK_UPGRADE_IDS = new Set<string>(['seed_production', 'harvest_speed', 'customer_speed']);
+const AFFORD_BLINK_MAX_GARDEN_LEVEL = 5;
+const AFFORD_BLINK_COOLDOWN_MS = 15000;
+const AFFORD_BLINK_STROKE = '#9eb643';
+const AFFORD_BLINK_BG = '#f2ecb3';
+const AFFORD_BLINK_DESC = '#9eb643';
+const AFFORD_BLINK_TITLE = '#62863b';
+const AFFORD_BLINK_LINE = '#9eb643';
+
 export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange, money, setMoney, seedsState: propsSeedsState, setSeedsState: propsSetSeedsState, harvestState: propsHarvestState, setHarvestState: propsSetHarvestState, cropsState: propsCropsState, setCropsState: propsSetCropsState, lockedCellCount = 0, onUnlockCell, fertilizableCellCount = 0, onFertilizeCell, highestPlantEver = 1, masteredPlantLevels = [], rewardedOffers = [], onRewardedOfferPanelClick, onRewardedOfferClick, playerLevel = 1, gardenId = DEFAULT_GARDEN_ID, pendingUnlockUpgradeId = null, pendingOfferHighlightId = null, isExpanded = false, protectedOfferId = null, ftue10GreenFlashUpgradeId = null, ftue10PurchaseButtonRef, ftue10LockScroll = false, ftue10DisableSeedProductionPurchase = false, onUpgradePurchase, goldenPotCount = 0 }) => {
   const [internalSeedsState, setInternalSeedsState] = useState<Record<string, UpgradeState>>(createInitialSeedsState);
   const seedsState = propsSeedsState ?? internalSeedsState;
@@ -765,6 +782,11 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
   /** Temporary yellow flash for offer card when scroll lands (then returns to light yellow) */
   const [offerFlashIds, setOfferFlashIds] = useState<Set<string>>(new Set());
 
+  /** Affordability blink: toggled each second so eligible cards fade green in (1s) then out (1s) on loop. */
+  const [affordBlinkPhase, setAffordBlinkPhase] = useState(false);
+  /** Per-upgrade cooldown expiry (ms epoch) after a purchase — blink stays off until then. */
+  const [affordBlinkCooldownUntil, setAffordBlinkCooldownUntil] = useState<Record<string, number>>({});
+
   const scrollRefs = {
     SEEDS: useRef<HTMLDivElement>(null),
     CROPS: useRef<HTMLDivElement>(null),
@@ -783,6 +805,18 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
     const el = (scrollRefs as any)[activeTab].current;
     if (el) el.scrollTo({ top: 0, behavior: 'auto' });
   }, [activeTab]);
+
+  // Affordability blink loop: only runs in early game (<= max garden level). Toggling every 1s,
+  // combined with a 1s CSS color transition, yields a 1s fade-in / 1s fade-out pulse. The tick also
+  // re-renders so cooldown expiry (15s) resumes blinking on its own.
+  useEffect(() => {
+    if (playerLevel > AFFORD_BLINK_MAX_GARDEN_LEVEL) {
+      setAffordBlinkPhase(false);
+      return;
+    }
+    const id = setInterval(() => setAffordBlinkPhase(p => !p), 1000);
+    return () => clearInterval(id);
+  }, [playerLevel]);
 
   useEffect(() => {
     if (pendingUnlockUpgradeId) {
@@ -1084,6 +1118,11 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
     if (money < cost) return;
     setMoney(prev => prev - cost);
 
+    // Buying an affordability-blink upgrade snaps its blink off and starts an individual cooldown.
+    if (AFFORD_BLINK_UPGRADE_IDS.has(id)) {
+      setAffordBlinkCooldownUntil(prev => ({ ...prev, [id]: Date.now() + AFFORD_BLINK_COOLDOWN_MS }));
+    }
+
     // Special handling for plot_expansion: trigger cell unlock
     if (id === 'plot_expansion') {
       onUnlockCell?.();
@@ -1309,6 +1348,19 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
         }
         
         const UNLOCK_FLASH_BLUE = '#89c8e1';
+
+        // Affordability blink: pulse green while this engine upgrade is affordable (early game only).
+        const isAffordBlinkUpgrade = AFFORD_BLINK_UPGRADE_IDS.has(upgrade.id);
+        const affordBlinkActive =
+          isAffordBlinkUpgrade &&
+          playerLevel <= AFFORD_BLINK_MAX_GARDEN_LEVEL &&
+          !isLocked && !isMaxed && effectiveCanAfford &&
+          !isUnlockFlashing && !isFlashing &&
+          Date.now() >= (affordBlinkCooldownUntil[upgrade.id] ?? 0);
+        const affordBlinkOn = affordBlinkActive && affordBlinkPhase;
+        // 1s eased fade while pulsing; instant (0s) snap to normal when the blink turns off.
+        const affordBlinkColorTransition = affordBlinkActive ? '1s ease-in-out' : '0s';
+
         return (
           <div 
             key={upgrade.id}
@@ -1320,7 +1372,15 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
                   ? 'bg-[#a7c957] scale-[1.01] shadow-lg z-10 border-[#c2b180] rounded-[11px]' 
                   : 'bg-[#fcf0c6] shadow-[0_2px_10px_rgba(0,0,0,0.03)] border-[#ebdbaf] rounded-[11px]'
             }`}
-            style={isUnlockFlashing ? { backgroundColor: UNLOCK_FLASH_BLUE } : undefined}
+            style={{
+              ...(isUnlockFlashing ? { backgroundColor: UNLOCK_FLASH_BLUE } : {}),
+              ...(isAffordBlinkUpgrade && !isUnlockFlashing && !isFlashing
+                ? {
+                    transition: `background-color ${affordBlinkColorTransition}, border-color ${affordBlinkColorTransition}`,
+                    ...(affordBlinkOn ? { backgroundColor: AFFORD_BLINK_BG, borderColor: AFFORD_BLINK_STROKE } : {}),
+                  }
+                : {}),
+            }}
           >
             <div className="flex items-center p-1.5 px-3">
               {/* Square Icon Box */}
@@ -1338,7 +1398,10 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
                   {/* Updated title font size to 14px */}
                   <h3
                     className="text-[14px] font-black tracking-tight uppercase leading-none"
-                    style={{ color: isUnlockFlashing ? '#507493' : isFlashing ? '#386641' : '#583c1f' }}
+                    style={{
+                      color: isUnlockFlashing ? '#507493' : isFlashing ? '#386641' : (affordBlinkOn ? AFFORD_BLINK_TITLE : '#583c1f'),
+                      ...(isAffordBlinkUpgrade ? { transition: `color ${affordBlinkColorTransition}` } : {}),
+                    }}
                   >
                     {upgrade.name}
                   </h3>
@@ -1356,7 +1419,10 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
                 {/* Description */}
                 <div
                   className={`text-[13px] font-semibold mt-0.5 tracking-tight leading-[1.1] ${upgrade.description ? '' : 'uppercase'} ${isFlashing && !isUnlockFlashing ? 'text-[#386641]/50' : ''}`}
-                  style={{ color: isUnlockFlashing ? '#7497b0' : isFlashing ? undefined : descTextColor }}
+                  style={{
+                    color: isUnlockFlashing ? '#7497b0' : isFlashing ? undefined : (affordBlinkOn ? AFFORD_BLINK_DESC : descTextColor),
+                    ...(isAffordBlinkUpgrade ? { transition: `color ${affordBlinkColorTransition}` } : {}),
+                  }}
                 >
                   {upgrade.description ?? `YIELD: +${(state.level * 30).toFixed(0)}%`}
                 </div>
@@ -1442,7 +1508,14 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
 
             {/* Thicker Progress Bar - Increased to 6px height (20% more than 5px) */}
             <div className="flex w-full h-[10px] px-3 pb-2">
-              <div className="w-full h-[6px] bg-[#9d8a57]/20 rounded-full overflow-hidden relative" style={{ minHeight: '6px' }}>
+              <div
+                className="w-full h-[6px] bg-[#9d8a57]/20 rounded-full overflow-hidden relative"
+                style={{
+                  minHeight: '6px',
+                  ...(isAffordBlinkUpgrade ? { transition: `background-color ${affordBlinkColorTransition}` } : {}),
+                  ...(affordBlinkOn ? { backgroundColor: AFFORD_BLINK_LINE } : {}),
+                }}
+              >
                 <div 
                   className="absolute left-0 top-0 h-full"
                   style={{

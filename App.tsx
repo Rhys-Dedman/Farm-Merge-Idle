@@ -144,6 +144,7 @@ import { Ftue9Overlay } from './components/Ftue9Overlay';
 import { Ftue10Overlay } from './components/Ftue10Overlay';
 import { Ftue11Overlay } from './components/Ftue11Overlay';
 import { Ftue95Overlay } from './components/Ftue95Overlay';
+import { SoftHarvestNudgeOverlay } from './components/SoftHarvestNudgeOverlay';
 import { TabType, ScreenType, BoardCell, Item, DragState } from './types';
 import type { FtueStageId } from './ftue/ftueConfig';
 import { assetPath } from './utils/assetPath';
@@ -3527,6 +3528,15 @@ export default function App() {
   const [ftueHarvestSurplusActivated, setFtueHarvestSurplusActivated] = useState(false);
   const [ftue10PostClosePending, setFtue10PostClosePending] = useState(false);
   const [ftue11StartQueued, setFtue11StartQueued] = useState(false);
+  /**
+   * Soft harvest nudge after FTUE 11.
+   * null = never armed (legacy / pre-release); false = armed; true = done forever.
+   */
+  const [postFtueHarvestNudgeDone, setPostFtueHarvestNudgeDone] = useState<boolean | null>(null);
+  const [softHarvestNudgeVisible, setSoftHarvestNudgeVisible] = useState(false);
+  const softHarvestNudgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const postFtueHarvestNudgeDoneRef = useRef<boolean | null>(null);
+  postFtueHarvestNudgeDoneRef.current = postFtueHarvestNudgeDone;
   const [ftue10BigBounceActive, setFtue10BigBounceActive] = useState(false);
   const [ftue10ButtonsNormalEarly, setFtue10ButtonsNormalEarly] = useState(false);
   const [ftue95ShowTextbox, setFtue95ShowTextbox] = useState(false);
@@ -3564,6 +3574,50 @@ export default function App() {
     setFtue11StartQueued(false);
     ftue11InFlightRef.current = false;
   }, [ftue11StartQueued, panelHeight, ftue10PostClosePending]);
+
+  const clearSoftHarvestNudgeTimer = useCallback(() => {
+    if (softHarvestNudgeTimerRef.current) {
+      clearTimeout(softHarvestNudgeTimerRef.current);
+      softHarvestNudgeTimerRef.current = null;
+    }
+  }, []);
+
+  /** Arm soft harvest nudge: 5s grace, then fade in finger if harvest still untouched. */
+  const armSoftHarvestNudge = useCallback(() => {
+    if (postFtueHarvestNudgeDoneRef.current === true) return;
+    setPostFtueHarvestNudgeDone(false);
+    postFtueHarvestNudgeDoneRef.current = false;
+    setSoftHarvestNudgeVisible(false);
+    clearSoftHarvestNudgeTimer();
+    softHarvestNudgeTimerRef.current = setTimeout(() => {
+      softHarvestNudgeTimerRef.current = null;
+      if (postFtueHarvestNudgeDoneRef.current === false) {
+        setSoftHarvestNudgeVisible(true);
+      }
+    }, 5000);
+  }, [clearSoftHarvestNudgeTimer]);
+
+  /** First harvest tap after FTUE 11 forever dismisses the soft nudge (even during the 5s wait). */
+  const completeSoftHarvestNudge = useCallback(() => {
+    if (postFtueHarvestNudgeDoneRef.current !== false) return;
+    clearSoftHarvestNudgeTimer();
+    setSoftHarvestNudgeVisible(false);
+    setPostFtueHarvestNudgeDone(true);
+    postFtueHarvestNudgeDoneRef.current = true;
+    persistGameSnapshotRef.current();
+  }, [clearSoftHarvestNudgeTimer]);
+
+  // When armed (false), start the 5s grace timer once — after FTUE 11 confirm or on reload mid-nudge.
+  useEffect(() => {
+    if (isLoading) return;
+    if (postFtueHarvestNudgeDone !== false) return;
+    if (softHarvestNudgeTimerRef.current != null || softHarvestNudgeVisible) return;
+    armSoftHarvestNudge();
+  }, [isLoading, postFtueHarvestNudgeDone, softHarvestNudgeVisible, armSoftHarvestNudge]);
+
+  useEffect(() => {
+    return () => clearSoftHarvestNudgeTimer();
+  }, [clearSoftHarvestNudgeTimer]);
 
   const buildAdBreakBlockerContext = useCallback(
     (now: number): AdBreakBlockerContext => ({
@@ -3695,7 +3749,9 @@ export default function App() {
           },
         ]);
       }
-      if (containerRef.current) {
+      // FTUE plant-2 "Excellent!": skip collection-nav particle so attention stays on the farm/goals.
+      const skipCollectionParticle = level === 2 && ftue4Pending;
+      if (!skipCollectionParticle && containerRef.current) {
         const cr = containerRef.current.getBoundingClientRect();
         const scale = appScaleRef.current;
         setActiveBarnParticles((prev) => [
@@ -4348,7 +4404,9 @@ export default function App() {
       activeFtueStage !== 'first_goal_collect' &&
       activeFtueStage !== 'first_more_orders' &&
       activeFtueStage !== 'first_harvest_multi' &&
-      activeFtueStage !== 'first_upgrade'
+      activeFtueStage !== 'first_upgrade' &&
+      activeFtueStage !== 'recharge_pre_upgrade' &&
+      activeFtueStage !== 'recharge_intro'
     ) {
       return;
     }
@@ -6855,6 +6913,7 @@ export default function App() {
 
   const handleHarvestClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    completeSoftHarvestNudge();
     if (harvestTapZoomRef.current) return;
 
     if (
@@ -7939,6 +7998,24 @@ export default function App() {
     setFtue10PostClosePending(save.ftue10PostClosePending);
     setFtue10ButtonsNormalEarly(save.ftue10ButtonsNormalEarly);
     setFtue11StartQueued(save.ftue11StartQueued);
+    {
+      const nudgeDone = save.postFtueHarvestNudgeDone;
+      if (nudgeDone === true) {
+        setPostFtueHarvestNudgeDone(true);
+        postFtueHarvestNudgeDoneRef.current = true;
+      } else if (nudgeDone === false) {
+        setPostFtueHarvestNudgeDone(false);
+        postFtueHarvestNudgeDoneRef.current = false;
+      } else {
+        setPostFtueHarvestNudgeDone(null);
+        postFtueHarvestNudgeDoneRef.current = null;
+      }
+      setSoftHarvestNudgeVisible(false);
+      if (softHarvestNudgeTimerRef.current) {
+        clearTimeout(softHarvestNudgeTimerRef.current);
+        softHarvestNudgeTimerRef.current = null;
+      }
+    }
     setFtueUpgradePanelVisible(save.ftueUpgradePanelVisible);
     setFtuePlayerLevelVisible(save.ftuePlayerLevelVisible);
     const now = Date.now();
@@ -8502,6 +8579,7 @@ export default function App() {
       ftue10PostClosePending,
       ftue10ButtonsNormalEarly,
       ftue11StartQueued,
+      postFtueHarvestNudgeDone: postFtueHarvestNudgeDone === null ? undefined : postFtueHarvestNudgeDone,
       ftueUpgradePanelVisible,
       ftuePlayerLevelVisible,
       activeBoosts,
@@ -9555,7 +9633,7 @@ export default function App() {
                      className="pointer-events-auto relative flex items-center justify-center"
                      ref={plantButtonRef}
                      style={{
-                       transformOrigin: 'left bottom',
+                       transformOrigin: 'center center',
                        ...(ftue10BigBounceActive
                          ? { animation: 'ftue11ButtonBigBounce 500ms ease-in-out 1' }
                          : (activeFtueStage === 'recharge_pre_upgrade' && ftue95ShowTextbox && !ftue95FadingOut)
@@ -9607,7 +9685,7 @@ export default function App() {
                      className="pointer-events-auto relative flex items-center justify-center"
                      ref={harvestButtonRef}
                      style={{
-                       transformOrigin: 'right bottom',
+                       transformOrigin: 'center center',
                        ...(ftue10BigBounceActive
                          ? { animation: 'ftue11ButtonBigBounce 500ms ease-in-out 1' }
                          : (activeFtueStage === 'recharge_pre_upgrade' && ftue95ShowTextbox && !ftue95FadingOut)
@@ -9653,6 +9731,9 @@ export default function App() {
                         iconOffsetY={-2}
                         onClick={handleHarvestClick}
                       />
+                    <SoftHarvestNudgeOverlay
+                      visible={softHarvestNudgeVisible && postFtueHarvestNudgeDone === false}
+                    />
                    </div>
                 </div>
 
@@ -10788,6 +10869,9 @@ export default function App() {
                   playSfx(SFX_IDS.uiConfirmNormal);
                   // FTUE 11 is fully closed: from now on we save progress + allow offline earnings.
                   ftue11PersistenceEnabledRef.current = true;
+                  // Soft helper: arm 5s harvest nudge (finger only if harvest unused).
+                  setPostFtueHarvestNudgeDone(false);
+                  postFtueHarvestNudgeDoneRef.current = false;
                   persistGameSnapshotRef.current();
                   setActiveFtueStage(null);
                   setFtue11ThreePlantGoalWindowActive(true);
