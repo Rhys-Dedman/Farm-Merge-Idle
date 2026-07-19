@@ -76,8 +76,10 @@ export const PlantWithPot: React.FC<PlantWithPotProps> = ({
 
   // Without explicit w/h (e.g. shed, plant info), a plant <img> used to give the box intrinsic size.
   // Level 0 uses an empty in-flow div + absolute pot — percentages collapse to 0 unless we fill the parent.
+  // Keep default fill size when className is only FX (e.g. white-flash); don't drop size or empty pots vanish.
+  const hasExplicitSizeClass = /\b(?:[hw]|min-[hw]|max-[hw])-/.test(className);
   const rootClass =
-    `${className.trim() ? className.trim() : 'h-full w-full'} relative flex items-center justify-center`.trim();
+    `${hasExplicitSizeClass ? '' : 'h-full w-full'} ${className} relative flex items-center justify-center`.trim();
   const potSrc = mastered ? getPlantPotGoldPath() : getPlantPotNormalPath();
   const plantSpriteSrc =
     gardenId != null ? getGardenPlantSpritePath(level, gardenId) : getPlantSpritePath(level);

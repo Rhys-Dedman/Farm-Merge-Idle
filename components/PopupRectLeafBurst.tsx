@@ -35,9 +35,12 @@ export function createRectPerimeterPopupLeaves(
   width: number,
   height: number,
   leafCount = POPUP_RECT_LEAF_COUNT,
+  /** Pull top-edge spawns down so leaves erupt from lower on the top side. */
+  topEdgeInsetPx = 0,
 ): LeafParticle[] {
   const halfW = width / 2;
   const halfH = height / 2;
+  const topY = -halfH + Math.max(0, topEdgeInsetPx);
   const perimeter = 2 * (width + height);
   return Array.from({ length: leafCount }, (_, i) => {
     const pos = (i / leafCount) * perimeter + Math.random() * 40;
@@ -48,7 +51,7 @@ export function createRectPerimeterPopupLeaves(
 
     if (pos < width) {
       spawnX = pos - halfW;
-      spawnY = -halfH;
+      spawnY = topY;
       outwardAngle = -Math.PI / 2 + (Math.random() - 0.5) * 0.8;
     } else if (pos < width + height) {
       spawnX = halfW;
@@ -88,6 +91,8 @@ export interface PopupRectLeafBurstProps {
   /** When set, burst is fixed at viewport center (e.g. task claim). Otherwise centered in parent. */
   centerX?: number;
   centerY?: number;
+  /** Inset top-edge spawn line downward (px). Left/right/bottom unchanged. */
+  topEdgeInsetPx?: number;
   zIndex?: number;
   onComplete?: () => void;
 }
@@ -97,11 +102,12 @@ export const PopupRectLeafBurst: React.FC<PopupRectLeafBurstProps> = ({
   rectHeight,
   centerX,
   centerY,
+  topEdgeInsetPx = 0,
   zIndex = 101,
   onComplete,
 }) => {
   const [leaves, setLeaves] = useState<LeafParticle[]>(() =>
-    createRectPerimeterPopupLeaves(rectWidth, rectHeight),
+    createRectPerimeterPopupLeaves(rectWidth, rectHeight, POPUP_RECT_LEAF_COUNT, topEdgeInsetPx),
   );
   const [leafPositions, setLeafPositions] = useState<
     { x: number; y: number; opacity: number; rotation: number; scale: number }[]

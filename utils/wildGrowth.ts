@@ -88,6 +88,35 @@ export function pickWildGrowthSpawn(
   return { targetIdx, plantLevel: minLevel };
 }
 
+/**
+ * Plant cell for Wild Growth upgrade preview VFX — the plant that would duplicate
+ * (lowest level on board), not the empty spawn cell.
+ * Prefers a source plant adjacent to the likely spawn target when one exists.
+ */
+export function pickWildGrowthPreviewPlant(
+  grid: BoardCell[],
+  reserved: Set<number>
+): number | null {
+  const plantCells = grid
+    .map((c, i) => (!c.locked && c.item != null ? { i, level: c.item.level } : null))
+    .filter((x): x is { i: number; level: number } => x != null);
+  if (plantCells.length === 0) return null;
+
+  const minLevel = Math.min(...plantCells.map((p) => p.level));
+  const sourceIndices = plantCells.filter((p) => p.level === minLevel).map((p) => p.i);
+
+  const spawn = pickWildGrowthSpawn(grid, reserved);
+  if (spawn) {
+    const adjacentToSpawn = getAdjacentCellIndices(spawn.targetIdx, grid).filter((i) =>
+      sourceIndices.includes(i)
+    );
+    const pool = adjacentToSpawn.length > 0 ? adjacentToSpawn : sourceIndices;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  return sourceIndices[Math.floor(Math.random() * sourceIndices.length)];
+}
+
 export function spawnWildGrowthPlantOnGrid(grid: BoardCell[], pick: { targetIdx: number; plantLevel: number }): BoardCell[] {
   return grid.map((c, i) => {
     if (i !== pick.targetIdx) return c;

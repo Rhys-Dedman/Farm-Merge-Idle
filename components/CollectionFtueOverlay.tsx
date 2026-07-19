@@ -9,8 +9,8 @@ import { FTUE_VISUAL_SCALE } from '../ftue/ftueTextboxStyles';
 
 export type CollectionFtueFingerStyle = 'seed' | 'point_down' | 'point_right' | 'point_at';
 
-const FADE_IN_MS = 400;
-const FADE_OUT_MS = 280;
+const FADE_IN_MS = 200;
+const FADE_OUT_MS = 200;
 const FINGER_SIZE = 270 * FTUE_VISUAL_SCALE;
 /** FTUE 7 seed-style */
 const FINGER_TAP_RIGHT = 21 * FTUE_VISUAL_SCALE;

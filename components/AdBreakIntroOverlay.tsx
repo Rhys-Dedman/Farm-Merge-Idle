@@ -3,11 +3,14 @@ import { assetPath } from '../utils/assetPath';
 import {
   AD_BREAK_ICON_LEAF_BURST_COUNT,
   AD_BREAK_ICON_LEAF_BURST_RADIUS_MULTIPLIER,
+  AD_BREAK_ICON_LEAF_PARTICLE_SIZE_SCALE_TABLET,
+  AD_BREAK_ICON_PHONE_BREAKPOINT_PX,
   AD_BREAK_INTRO_BACKDROP_FADE_MS,
   AD_BREAK_INTRO_BLACK_FADE_MS,
   AD_BREAK_INTRO_ICON_BOUNCE_MS,
   AD_BREAK_INTRO_TOTAL_MS,
   AD_BREAK_OUTRO_FADE_MS,
+  getAdBreakIconSizePx,
   POPUP_BACKDROP_RGBA,
 } from '../constants/adPresentation';
 import { LeafBurst, LEAF_BURST_CIRCLE_RADIUS_PX } from './LeafBurst';
@@ -28,6 +31,11 @@ interface AdBreakLeafBurst {
 }
 
 const STYLE_ID = 'ad-break-intro-keyframes';
+
+function readViewportWidth(): number {
+  if (typeof window === 'undefined') return 448;
+  return window.visualViewport?.width ?? window.innerWidth;
+}
 
 function ensureKeyframes() {
   if (typeof document === 'undefined') return;
@@ -69,10 +77,30 @@ export const AdBreakIntroOverlay: React.FC<AdBreakIntroOverlayProps> = ({
 }) => {
   const [phase, setPhase] = useState<IntroPhase>('idle');
   const [leafBurst, setLeafBurst] = useState<AdBreakLeafBurst | null>(null);
+  const [iconSizePx, setIconSizePx] = useState(() => getAdBreakIconSizePx(readViewportWidth()));
+  const [isTabletViewport, setIsTabletViewport] = useState(
+    () => readViewportWidth() >= AD_BREAK_ICON_PHONE_BREAKPOINT_PX,
+  );
   const iconRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
     ensureKeyframes();
+  }, []);
+
+  useEffect(() => {
+    const sync = () => {
+      const w = readViewportWidth();
+      setIconSizePx(getAdBreakIconSizePx(w));
+      setIsTabletViewport(w >= AD_BREAK_ICON_PHONE_BREAKPOINT_PX);
+    };
+    sync();
+    window.addEventListener('resize', sync);
+    const vv = window.visualViewport;
+    if (vv) vv.addEventListener('resize', sync);
+    return () => {
+      window.removeEventListener('resize', sync);
+      if (vv) vv.removeEventListener('resize', sync);
+    };
   }, []);
 
   useEffect(() => {
@@ -121,7 +149,7 @@ export const AdBreakIntroOverlay: React.FC<AdBreakIntroOverlayProps> = ({
       cancelAnimationFrame(r1);
       cancelAnimationFrame(r2);
     };
-  }, [phase]);
+  }, [phase, iconSizePx]);
 
   useEffect(() => {
     if (!fadeOut || phase !== 'black-hold') return;
@@ -179,6 +207,9 @@ export const AdBreakIntroOverlay: React.FC<AdBreakIntroOverlayProps> = ({
                 useCircle
                 spawnOffsetUpPx={0}
                 burstScale={leafBurst.burstScale}
+                particleSizeScale={
+                  isTabletViewport ? AD_BREAK_ICON_LEAF_PARTICLE_SIZE_SCALE_TABLET : 1
+                }
                 anchorPosition="absolute"
                 zIndex={0}
                 onComplete={() => setLeafBurst(null)}
@@ -192,10 +223,10 @@ export const AdBreakIntroOverlay: React.FC<AdBreakIntroOverlayProps> = ({
             className="relative object-contain select-none"
             style={{
               zIndex: 1,
-              width: '250px',
-              height: '250px',
-              maxWidth: '250px',
-              maxHeight: '250px',
+              width: iconSizePx,
+              height: iconSizePx,
+              maxWidth: iconSizePx,
+              maxHeight: iconSizePx,
               filter: 'drop-shadow(0 4px 16px rgba(0,0,0,0.35))',
               opacity: phase === 'black-fade' ? 1 : 0,
               transform: phase === 'black-fade' ? 'scale(1)' : 'scale(0.75)',

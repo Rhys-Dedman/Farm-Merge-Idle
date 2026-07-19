@@ -9,11 +9,15 @@ export const COLLECTION_FTUE_BONUSES_MESSAGE =
   'Upgrading the whole row will unlock a powerful bonus.';
 
 export const COLLECTION_FTUE_PANEL_COPY_ID = 'collection-ftue-panel-copy';
-export const COLLECTION_FTUE_BONUSES_CTA_ID = 'collection-ftue-bonuses-cta';
+/** View Bonuses on the flower-collection panel (collection FTUE point_bonuses hole). */
+export const COLLECTION_FTUE_VIEW_BONUSES_ID = 'collection-ftue-view-bonuses';
+/** @deprecated Prefer COLLECTION_FTUE_VIEW_BONUSES_ID — kept for older overlay refs. */
+export const COLLECTION_FTUE_BONUSES_CTA_ID = COLLECTION_FTUE_VIEW_BONUSES_ID;
 export const COLLECTION_FTUE_SHELF0_REWARD_ICON_ID = 'collection-ftue-shelf0-reward-icon';
 
 export type CollectionFtuePhase =
   | 'intro_cta'
+  | 'shelf_plant_bounce'
   | 'point_unlock'
   | 'popup_free'
   | 'wait_reveal'
@@ -22,6 +26,7 @@ export type CollectionFtuePhase =
 
 const PHASES: CollectionFtuePhase[] = [
   'intro_cta',
+  'shelf_plant_bounce',
   'point_unlock',
   'popup_free',
   'wait_reveal',

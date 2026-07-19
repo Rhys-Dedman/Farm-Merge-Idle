@@ -54,13 +54,21 @@ export const COLLECTION_PLANT_COUNT = MAX_PLANT_TIER * COLLECTION_GARDEN_IDS.len
 
 /** Offset for shelves block below the collection panel. Screen-only. */
 export const COLLECTION_SHELVES_MARGIN_TOP_PX = 228;
-/** Extra gap before the first shelf when the unlocked collection panel is taller. */
+/** Extra gap before the first shelf (locked + unlocked share the same panel height). */
 export const COLLECTION_SHELVES_EXTRA_MARGIN_TOP_UNLOCKED_PX = 52;
 export const COLLECTION_PHONE_SHELVES_EXTRA_MARGIN_TOP_UNLOCKED_PX = 52;
 
 /** Collection panel crest above title (locked + unlocked base size). */
 export const COLLECTION_PANEL_GARDEN_ICON_PX = 72;
 export const COLLECTION_PANEL_GARDEN_ICON_UNLOCKED_SCALE = 1.3 * 1.15 * 0.8;
+/** Locked crest: same layout for every garden; art still uses that garden’s lock sprite. */
+export const COLLECTION_PANEL_LOCKED_CREST_TOP_PX = 24;
+export const COLLECTION_PANEL_UNLOCKED_CREST_TOP_PX = 23;
+/** Locked crest size vs unlocked crest (1 = same as unlocked). */
+export const COLLECTION_PANEL_LOCKED_CREST_SCALE = 0.85;
+/** Locked “Level N” button — shared across gardens (height matches unlocked CTAs). */
+export const COLLECTION_PANEL_LOCKED_LEVEL_BUTTON_HEIGHT_PX = 34;
+export const COLLECTION_PANEL_LOCKED_LEVEL_BUTTON_PADDING_X_PX = 20;
 
 /**
  * Space above labels that follow shelves (Fruit Garden, Coming Soon).

@@ -63,6 +63,8 @@ interface LeafBurstProps {
   spriteVariant?: 'default' | 'gold';
   /** Scale multiplier for burst size (default: 1) */
   burstScale?: number;
+  /** Multiplier for individual leaf sprite size only (default: 1). Does not affect burst radius. */
+  particleSizeScale?: number;
   /** Stacking order for burst root (default: 70) */
   zIndex?: number;
   /** Positioning mode for burst root (default: fixed viewport coords). */
@@ -95,6 +97,7 @@ export const LeafBurst: React.FC<LeafBurstProps> = ({
   appScale = 1,
   spriteVariant = 'default',
   burstScale = 1,
+  particleSizeScale = 1,
   zIndex = 70,
   anchorPosition = 'fixed',
   spawnOffsetUpPx = SPAWN_OFFSET_UP_PX,
@@ -226,8 +229,8 @@ export const LeafBurst: React.FC<LeafBurstProps> = ({
           style={{
             left: positions[i].x,
             top: positions[i].y,
-            width: leaf.size,
-            height: leaf.size,
+            width: leaf.size * particleSizeScale,
+            height: leaf.size * particleSizeScale,
             transform: `translate(-50%, -50%) scale(${positions[i].scale}) rotate(${positions[i].rotation}rad)`,
             opacity: positions[i].opacity,
           }}

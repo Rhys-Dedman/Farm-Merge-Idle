@@ -293,7 +293,7 @@ img {
     opacity: 0;
   }
   50% {
-    opacity: 0.76;
+    opacity: 1;
   }
 }
 
@@ -327,16 +327,16 @@ img {
 
 @keyframes mastery-unlock-purchase-bounce {
   0% {
-    transform: scale(0.5);
+    transform: scale(0.75);
   }
   25% {
-    transform: scale(1.5);
+    transform: scale(1.3);
   }
   50% {
-    transform: scale(0.8);
+    transform: scale(0.9);
   }
   75% {
-    transform: scale(1.1);
+    transform: scale(1.05);
   }
   100% {
     transform: scale(1);
@@ -383,6 +383,57 @@ img {
 .collection-bar-pot-bounce {
   animation: collection-bar-pot-bounce 200ms ease-in-out forwards;
   transform-origin: 50% 50%;
+}
+
+/** Collection FTUE: flower panel pop after barn slide (1 → 1.1 → 1), scaled by --panel-s. */
+@keyframes collection-ftue-panel-bounce {
+  0% {
+    transform: scale(var(--panel-s, 1));
+  }
+  50% {
+    transform: scale(calc(var(--panel-s, 1) * 1.1));
+  }
+  100% {
+    transform: scale(var(--panel-s, 1));
+  }
+}
+
+.collection-ftue-panel-bounce {
+  animation: collection-ftue-panel-bounce 320ms ease-out forwards;
+  transform-origin: 50% 40%;
+}
+
+/** Collection FTUE: shelf FREE upgrade pill pop (1 → 1.2 → 1). */
+@keyframes collection-ftue-free-button-bounce {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.collection-ftue-free-button-bounce {
+  animation: collection-ftue-free-button-bounce 320ms ease-out forwards;
+  transform-origin: 50% 50%;
+}
+
+/** Flower collection copy: hold dark green 2s, then settle to cream over 4s. */
+@keyframes collection-ftue-copy-color-settle {
+  0%,
+  33.333% {
+    color: #587e26;
+  }
+  100% {
+    color: #c2b280;
+  }
+}
+
+.collection-ftue-copy-color-settle {
+  animation: collection-ftue-copy-color-settle 6s ease-out forwards;
 }
 
 @keyframes floating-button-ready-bounce {

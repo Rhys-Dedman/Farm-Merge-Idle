@@ -31,14 +31,19 @@ interface ButtonLeafBurstProps {
   startTime: number;
   onComplete: () => void;
   appScale?: number;
+  /** Scales spawn/burst radius (1 = seed/harvest default). */
+  radiusScale?: number;
+  /** Scales outward velocity. Defaults to `radiusScale` when omitted. */
+  speedScale?: number;
 }
 
-function createLeaves(count: number): LeafParticle[] {
+function createLeaves(count: number, speedScale: number): LeafParticle[] {
+  const speedMul = Math.max(0.35, speedScale);
   return Array.from({ length: count }, (_, i) => ({
     id: i,
     sprite: LEAF_SPRITES[i % LEAF_SPRITES.length],
     angle: (Math.PI * 2 * i) / count + Math.random() * 0.5,
-    initialSpeed: 25 + Math.random() * 225,
+    initialSpeed: (25 + Math.random() * 225) * speedMul,
     initialRotationRad: Math.random() * Math.PI * 2,
     phase1RotationDeg: 60 + Math.random() * 60,
     phase2RotationDeg: 20 + Math.random() * 15,
@@ -47,12 +52,23 @@ function createLeaves(count: number): LeafParticle[] {
   }));
 }
 
-export const ButtonLeafBurst: React.FC<ButtonLeafBurstProps> = ({ x, y, startTime, onComplete, appScale = 1 }) => {
-  const [leaves] = useState<LeafParticle[]>(() => createLeaves(PARTICLE_COUNT));
+export const ButtonLeafBurst: React.FC<ButtonLeafBurstProps> = ({
+  x,
+  y,
+  startTime,
+  onComplete,
+  appScale = 1,
+  radiusScale = 1,
+  speedScale,
+}) => {
+  const spawnRadius = SPAWN_RADIUS * radiusScale;
+  const burstRadius = BURST_RADIUS * radiusScale;
+  const resolvedSpeedScale = speedScale ?? radiusScale;
+  const [leaves] = useState<LeafParticle[]>(() => createLeaves(PARTICLE_COUNT, resolvedSpeedScale));
   const [positions, setPositions] = useState<{ x: number; y: number; opacity: number; rotation: number; scale: number }[]>(
     () => leaves.map((l) => ({ 
-      x: Math.cos(l.angle) * SPAWN_RADIUS, 
-      y: Math.sin(l.angle) * SPAWN_RADIUS, 
+      x: Math.cos(l.angle) * spawnRadius, 
+      y: Math.sin(l.angle) * spawnRadius, 
       opacity: 1, 
       rotation: 0, 
       scale: 1 
@@ -62,8 +78,8 @@ export const ButtonLeafBurst: React.FC<ButtonLeafBurstProps> = ({ x, y, startTim
   const posRef = useRef<
     { x: number; y: number; vx: number; vy: number; opacity: number; rotation: number; scale: number; falling: boolean; fallStartTime: number }[]
   >(leaves.map((l) => ({ 
-    x: Math.cos(l.angle) * SPAWN_RADIUS, 
-    y: Math.sin(l.angle) * SPAWN_RADIUS, 
+    x: Math.cos(l.angle) * spawnRadius, 
+    y: Math.sin(l.angle) * spawnRadius, 
     vx: 0, vy: 0, opacity: 1, rotation: 0, scale: 1, falling: false, fallStartTime: 0 
   })));
   const rafRef = useRef<number>(0);
@@ -77,9 +93,9 @@ export const ButtonLeafBurst: React.FC<ButtonLeafBurstProps> = ({ x, y, startTim
     const totalDurationMs = Math.max(...leaves.map((l) => l.lifetimeMs)) + 80;
     leaves.forEach((l, i) => {
       const p = posRef.current[i];
-      // Spawn on the ring at SPAWN_RADIUS, shoot outward
-      p.x = Math.cos(l.angle) * SPAWN_RADIUS;
-      p.y = Math.sin(l.angle) * SPAWN_RADIUS;
+      // Spawn on the ring at spawnRadius, shoot outward
+      p.x = Math.cos(l.angle) * spawnRadius;
+      p.y = Math.sin(l.angle) * spawnRadius;
       p.vx = Math.cos(l.angle) * l.initialSpeed;
       p.vy = Math.sin(l.angle) * l.initialSpeed;
       p.rotation = l.initialRotationRad;
@@ -118,7 +134,7 @@ export const ButtonLeafBurst: React.FC<ButtonLeafBurstProps> = ({ x, y, startTim
         } else {
           // Perfect circle constraint
           const dist = Math.sqrt(p.x * p.x + p.y * p.y);
-          if (dist >= BURST_RADIUS) {
+          if (dist >= burstRadius) {
             p.falling = true;
             p.fallStartTime = elapsed;
             p.vx *= 0.05;
@@ -159,7 +175,7 @@ export const ButtonLeafBurst: React.FC<ButtonLeafBurstProps> = ({ x, y, startTim
 
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [startTime, leaves]);
+  }, [startTime, leaves, spawnRadius, burstRadius]);
 
   return (
     <div

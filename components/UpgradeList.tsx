@@ -199,8 +199,6 @@ interface UpgradeListProps {
   setCropsState?: React.Dispatch<React.SetStateAction<Record<string, UpgradeState>>>;
   /** Number of locked cells remaining (for plot_expansion max check) */
   lockedCellCount?: number;
-  /** Called when plot_expansion is upgraded to unlock a cell */
-  onUnlockCell?: () => void;
   /** Number of unlocked non-fertile cells remaining (for fertile_soil max check) */
   fertilizableCellCount?: number;
   /** Called when fertile_soil is upgraded to make a cell fertile */
@@ -238,8 +236,8 @@ interface UpgradeListProps {
    * purchase as unaffordable so they don't tap it before switching tabs.
    */
   ftue10DisableSeedProductionPurchase?: boolean;
-  /** Called after an upgrade is purchased (for FTUE 10 completion) */
-  onUpgradePurchase?: (upgradeId: string, tab: TabType) => void;
+  /** Called after an upgrade is purchased (for FTUE 10 completion + upgrade feedback particles). */
+  onUpgradePurchase?: (upgradeId: string, tab: TabType, sourceButton?: HTMLElement | null) => void;
   /** Unlocked golden-pot bonus tiers (Set) or legacy pot count — drives seed/harvest speed % display. */
   goldenPotCount?: import('../constants/goldenPotBonuses').GoldenPotUnlockInput;
 }
@@ -466,9 +464,9 @@ export const getLevelUnlockInfo = (
       upgradeId: '',
       tab: 'CROPS',
       name: getCollectionPanelTitle(gardenId),
-      description: 'Discover and Upgrade plants to unlock powerful bonuses!',
+      description: 'Upgrade your discovered plants to unlock powerful bonuses!',
       icon: 'icon_plantmastery.png',
-      popupDescription: 'Discover and Upgrade plants to unlock powerful bonuses!',
+      popupDescription: 'Upgrade your discovered plants to unlock powerful bonuses!',
       plantCollectionHeader: true,
       navigateToBarnOnUnlock: true,
       buttonText: 'View Collection',
@@ -763,7 +761,7 @@ const AFFORD_BLINK_DESC = '#9eb643';
 const AFFORD_BLINK_TITLE = '#62863b';
 const AFFORD_BLINK_LINE = '#9eb643';
 
-export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange, money, setMoney, seedsState: propsSeedsState, setSeedsState: propsSetSeedsState, harvestState: propsHarvestState, setHarvestState: propsSetHarvestState, cropsState: propsCropsState, setCropsState: propsSetCropsState, lockedCellCount = 0, onUnlockCell, fertilizableCellCount = 0, onFertilizeCell, highestPlantEver = 1, masteredPlantLevels = [], rewardedOffers = [], onRewardedOfferPanelClick, onRewardedOfferClick, playerLevel = 1, gardenId = DEFAULT_GARDEN_ID, pendingUnlockUpgradeId = null, pendingOfferHighlightId = null, isExpanded = false, protectedOfferId = null, ftue10GreenFlashUpgradeId = null, ftue10PurchaseButtonRef, ftue10LockScroll = false, ftue10DisableSeedProductionPurchase = false, onUpgradePurchase, goldenPotCount = 0 }) => {
+export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange, money, setMoney, seedsState: propsSeedsState, setSeedsState: propsSetSeedsState, harvestState: propsHarvestState, setHarvestState: propsSetHarvestState, cropsState: propsCropsState, setCropsState: propsSetCropsState, lockedCellCount = 0, fertilizableCellCount = 0, onFertilizeCell, highestPlantEver = 1, masteredPlantLevels = [], rewardedOffers = [], onRewardedOfferPanelClick, onRewardedOfferClick, playerLevel = 1, gardenId = DEFAULT_GARDEN_ID, pendingUnlockUpgradeId = null, pendingOfferHighlightId = null, isExpanded = false, protectedOfferId = null, ftue10GreenFlashUpgradeId = null, ftue10PurchaseButtonRef, ftue10LockScroll = false, ftue10DisableSeedProductionPurchase = false, onUpgradePurchase, goldenPotCount = 0 }) => {
   const [internalSeedsState, setInternalSeedsState] = useState<Record<string, UpgradeState>>(createInitialSeedsState);
   const seedsState = propsSeedsState ?? internalSeedsState;
   const setSeedsState = propsSetSeedsState ?? setInternalSeedsState;
@@ -1113,7 +1111,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
     return () => cleanups.forEach(c => c());
   }, []);
 
-  const handleUpgrade = (id: string, category: TabType, currentLevel: number) => {
+  const handleUpgrade = (id: string, category: TabType, currentLevel: number, sourceButton?: HTMLElement | null) => {
     const cost = getUpgradeCostValue(id, currentLevel, gardenId);
     if (money < cost) return;
     setMoney(prev => prev - cost);
@@ -1123,10 +1121,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
       setAffordBlinkCooldownUntil(prev => ({ ...prev, [id]: Date.now() + AFFORD_BLINK_COOLDOWN_MS }));
     }
 
-    // Special handling for plot_expansion: trigger cell unlock
-    if (id === 'plot_expansion') {
-      onUnlockCell?.();
-    }
+    // plot_expansion unlock is deferred to upgrade-particle impact in App (not immediate).
 
     const setter =
       category === 'SEEDS'
@@ -1152,7 +1147,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
       
       return { ...prev, [id]: { level: newLevel, progress: 0 } };
     });
-    onUpgradePurchase?.(id, category);
+    onUpgradePurchase?.(id, category, sourceButton ?? null);
   };
 
   const renderRewardedOfferItem = (offer: RewardedOffer) => {
@@ -1435,7 +1430,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
                 onMouseDown={() => !isLocked && !isMaxed && effectiveCanAfford && setPressedId(upgrade.id)}
                 onMouseUp={() => setPressedId(null)}
                 onMouseLeave={() => setPressedId(null)}
-                onClick={() => !isLocked && !isMaxed && effectiveCanAfford && handleUpgrade(upgrade.id, category, state.level)}
+                onClick={(e) => !isLocked && !isMaxed && effectiveCanAfford && handleUpgrade(upgrade.id, category, state.level, e.currentTarget)}
                 className={`relative flex items-center justify-center gap-1 min-w-[70px] h-8 transition-all border outline outline-1 ${
                   !isLocked && !isMaxed && effectiveCanAfford
                     ? 'active:translate-y-[2px] active:border-b-0 active:mb-[4px]'

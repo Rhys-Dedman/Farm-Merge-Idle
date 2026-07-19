@@ -33,6 +33,27 @@ export const AD_BREAK_ICON_LEAF_BURST_COUNT = 10;
 
 /** Burst radius multiplier vs icon half-size (2 = twice the icon radius). */
 export const AD_BREAK_ICON_LEAF_BURST_RADIUS_MULTIPLIER = 2;
+/** Tablet ad-break leaf sprites are 30% smaller than phone (burst radius unchanged). */
+export const AD_BREAK_ICON_LEAF_PARTICLE_SIZE_SCALE_TABLET = 0.7;
+
+/** Ad-break intro icon size on phones (matches current look). */
+export const AD_BREAK_ICON_SIZE_PHONE_PX = 250;
+/** Tablet: floor / ceiling and fraction of viewport width. */
+export const AD_BREAK_ICON_SIZE_TABLET_MIN_PX = 360;
+export const AD_BREAK_ICON_SIZE_TABLET_MAX_PX = 480;
+export const AD_BREAK_ICON_TABLET_VIEWPORT_FRAC = 0.36;
+/** Match App.tsx `mobileBreakpoint` — below this, use phone icon size. */
+export const AD_BREAK_ICON_PHONE_BREAKPOINT_PX = 500;
+
+export function getAdBreakIconSizePx(viewportWidth: number): number {
+  if (viewportWidth < AD_BREAK_ICON_PHONE_BREAKPOINT_PX) {
+    return AD_BREAK_ICON_SIZE_PHONE_PX;
+  }
+  return Math.min(
+    Math.max(viewportWidth * AD_BREAK_ICON_TABLET_VIEWPORT_FRAC, AD_BREAK_ICON_SIZE_TABLET_MIN_PX),
+    AD_BREAK_ICON_SIZE_TABLET_MAX_PX,
+  );
+}
 
 /** Ad-break loading plate: circular progress duration before escape button. */
 export const AD_BREAK_LOADING_PROGRESS_MS = 10_000;
