@@ -29,7 +29,7 @@ import {
 } from './offlineEarningsCap';
 
 /** Ignore sub-second gaps so quick refresh / garden switch does not re-sim. */
-const MIN_IDLE_ABSENCE_MS = 1000;
+export const MIN_IDLE_ABSENCE_MS = 1000;
 
 /** Where simulated surplus coins land: pending bank (offline popup) vs wallet. */
 export type IdleSurplusTarget = 'pending' | 'money';
@@ -166,12 +166,20 @@ export function applyIdleEarningsToAllGardens(v2: GameSaveV2, now = Date.now()):
 /**
  * While the player is in-session on one garden, simulate recharge/surplus for every other
  * started garden and credit coins directly to each garden wallet (no welcome-back popup).
+ *
+ * `previousSavedAt` must be the v2.savedAt from *before* mergeV1IntoV2 bumped it to `now`,
+ * otherwise gardens missing `lastInactiveSimAt` get delta≈0 and never refill charges.
  */
-export function applyIdleEarningsToInactiveGardens(v2: GameSaveV2, now = Date.now()): GameSaveV2 {
+export function applyIdleEarningsToInactiveGardens(
+  v2: GameSaveV2,
+  now = Date.now(),
+  options?: { previousSavedAt?: number },
+): GameSaveV2 {
   const ftueBlocksOffline = ftueBlocksOfflineFromGlobals(v2.globals);
   const started = new Set(v2.gardensStarted ?? [DEFAULT_GARDEN_ID]);
   started.add(DEFAULT_GARDEN_ID);
   const activeId = v2.activeGardenId;
+  const fallbackAnchor = options?.previousSavedAt ?? v2.savedAt;
 
   const gardens = { ...v2.gardens };
   let anySimulated = false;
@@ -180,7 +188,7 @@ export function applyIdleEarningsToInactiveGardens(v2: GameSaveV2, now = Date.no
     const garden = gardens[id];
     if (!garden) continue;
 
-    const anchor = garden.lastInactiveSimAt ?? v2.savedAt;
+    const anchor = garden.lastInactiveSimAt ?? fallbackAnchor;
     const deltaMs = Math.max(0, now - anchor);
     if (deltaMs < MIN_IDLE_ABSENCE_MS) continue;
 
@@ -200,6 +208,43 @@ export function applyIdleEarningsToInactiveGardens(v2: GameSaveV2, now = Date.no
   }
 
   return { ...v2, gardens, savedAt: anySimulated ? now : v2.savedAt };
+}
+
+/**
+ * Catch up one garden (e.g. the one you're switching into) for seeds/harvest charges + surplus.
+ * No-ops if already simmed within MIN_IDLE_ABSENCE_MS (safe after inactive idle on persist).
+ */
+export function catchUpGardenAbsence(
+  v2: GameSaveV2,
+  gardenId: GardenId,
+  now = Date.now(),
+  surplusTarget: IdleSurplusTarget = 'pending',
+  options?: { previousSavedAt?: number },
+): GameSaveV2 {
+  const garden = v2.gardens[gardenId];
+  if (!garden) return v2;
+
+  const fallbackAnchor = options?.previousSavedAt ?? v2.savedAt;
+  const anchor = garden.lastInactiveSimAt ?? fallbackAnchor;
+  const deltaMs = Math.max(0, now - anchor);
+  if (deltaMs < MIN_IDLE_ABSENCE_MS) return v2;
+
+  const ftueBlocksOffline = ftueBlocksOfflineFromGlobals(v2.globals);
+  const gardens = { ...v2.gardens };
+  gardens[gardenId] = {
+    ...simulateGardenIdleAbsence(
+      garden,
+      gardenId,
+      gardens,
+      v2.globals,
+      deltaMs,
+      ftueBlocksOffline,
+      surplusTarget,
+    ),
+    // Clear stamp — garden is about to become active; next leave will re-stamp.
+    lastInactiveSimAt: undefined,
+  };
+  return { ...v2, gardens };
 }
 
 /** Stamp when a garden stops being active so in-session idle sim can measure elapsed time. */

@@ -310,7 +310,7 @@ import {
   markRateUsSoftDismissed,
 } from './utils/rateUsDismiss';
 import { isOfflineCoinEarningsBlockedByFtue, simulateOfflineSeedHarvest, simulateWildGrowthOffline } from './utils/offlineSimulate';
-import { applyIdleEarningsToInactiveGardens, loadGameSaveWithIdleAbsenceApplied, markGardenBecameInactive } from './utils/gardenIdleEarnings';
+import { applyIdleEarningsToInactiveGardens, catchUpGardenAbsence, loadGameSaveWithIdleAbsenceApplied, markGardenBecameInactive } from './utils/gardenIdleEarnings';
 import { healNewGardenFtueSave } from './utils/healNewGardenFtue';
 import { clampOfflineEarningsBank } from './utils/offlineEarningsCap';
 import {
@@ -1549,6 +1549,9 @@ export default function App() {
   const highestPlantEverStateRef = useRef(highestPlantEver);
   highestPlantEverStateRef.current = highestPlantEver;
   const [seedsInStorage, setSeedsInStorage] = useState(5); // Start 5/5; max grows with Storage Capacity (15)
+  /** Persist/hydrate must use this — React state can lag and overwrite idle-simmed seed counts with 0. */
+  const seedsInStorageRef = useRef(5);
+  seedsInStorageRef.current = seedsInStorage;
   
   // Discovery popup state
   const [discoveryPopup, setDiscoveryPopup] = useState<{ isVisible: boolean; level: number } | null>(null);
@@ -8542,6 +8545,7 @@ export default function App() {
     setHarvestState(save.harvestState);
     setCropsState(cropsNorm);
     setSeedsInStorage(save.seedsInStorage);
+    seedsInStorageRef.current = save.seedsInStorage;
     setHighestPlantEver(save.highestPlantEver);
     highestPlantEverRef.current = save.highestPlantEver;
     setPlayerLevel(save.playerLevel);
@@ -8805,6 +8809,7 @@ export default function App() {
     setHarvestProgress(sim.harvestProgress);
     harvestChargesRef.current = sim.harvestCharges;
     setHarvestCharges(sim.harvestCharges);
+    seedsInStorageRef.current = sim.seedsInStorage;
     setSeedsInStorage(sim.seedsInStorage);
 
     const wildOut = simulateWildGrowthOffline({
@@ -8966,6 +8971,7 @@ export default function App() {
       if (activeScreenRef.current === 'BARN') {
         barnScrollYByGardenRef.current[activeGardenIdRef.current] = barnScrollYRef.current;
       }
+      const savedAtBeforePersist = loadGameSaveV2()?.savedAt;
       persistGameSnapshotRef.current();
       let v2 = loadGameSaveV2();
       if (!v2) return 0;
@@ -8973,8 +8979,12 @@ export default function App() {
       const now = Date.now();
       if (leavingId !== targetId) {
         v2 = markGardenBecameInactive(v2, leavingId, now);
-        persistGameSaveV2(v2);
       }
+      // Ensure the garden we're entering gets seed/harvest catch-up (same sim as offline earnings).
+      // No-ops if persist already idle-simmed it within the last second.
+      v2 = catchUpGardenAbsence(v2, targetId, now, 'pending', {
+        previousSavedAt: savedAtBeforePersist,
+      });
       const nextV2 = activateGardenInSave(v2, targetId);
       persistGameSaveV2({ ...nextV2, savedAt: now });
       activeGardenIdRef.current = targetId;
@@ -9239,7 +9249,7 @@ export default function App() {
       seedsState,
       harvestState,
       cropsState,
-      seedsInStorage,
+      seedsInStorage: seedsInStorageRef.current,
       highestPlantEver,
       playerLevel,
       playerLevelProgress,
@@ -9329,12 +9339,13 @@ export default function App() {
       persistGameSave(payload, { activeGardenId: activeGardenIdRef.current });
       return;
     }
+    const previousSavedAt = existing.savedAt;
     let v2 = mergeV1IntoV2(existing, normalized);
     if (activeScreenRef.current === 'BARN') {
       barnScrollYByGardenRef.current[activeGardenIdRef.current] = barnScrollYRef.current;
     }
     v2.activeGardenId = activeGardenIdRef.current;
-    v2 = applyIdleEarningsToInactiveGardens(v2, payload.savedAt);
+    v2 = applyIdleEarningsToInactiveGardens(v2, payload.savedAt, { previousSavedAt });
     v2 = applyCollectionScrollYToV2(v2, barnScrollYByGardenRef.current);
     persistGameSaveV2(v2);
   };
