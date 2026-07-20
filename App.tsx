@@ -7977,7 +7977,7 @@ export default function App() {
     });
   }, []);
 
-  const handleMerge = (sourceIdx: number, targetIdx: number) => {
+  const handleMerge = useCallback((sourceIdx: number, targetIdx: number) => {
     // Check if this will be a merge before updating state
     const source = grid[sourceIdx];
     const target = grid[targetIdx];
@@ -8143,7 +8143,17 @@ export default function App() {
         }
       }
     }
-  };
+  }, [
+    grid,
+    goalPlantTypes,
+    goalSlots,
+    goalCounts,
+    activeFtueStage,
+    cropsState,
+    seedsState,
+    ftueSeedSurplusActivated,
+    spawnMaxPlantReachedToast,
+  ]);
 
   const clearAutoMergeRecheckTimeoutOnly = useCallback(() => {
     if (autoMergeRecheckTimeoutRef.current != null) {
@@ -8312,6 +8322,139 @@ export default function App() {
     window.setTimeout(() => tryStartAutoMergeRef.current(), AUTO_MERGE_POST_MERGE_FOLLOWUP_MS + 280);
     window.setTimeout(() => tryStartAutoMergeRef.current(), AUTO_MERGE_POST_MERGE_FOLLOWUP_MS + 600);
   }, [scheduleAutoMergeRecheck]);
+
+  /** Stable HexBoard callbacks so memo(HexBoard) skips re-renders when unrelated App state changes (e.g. Settings open). */
+  const handleHexReturnImpact = useCallback((idx: number | null) => {
+    if (idx != null) playSfx(SFX_IDS.gameplayMovePlant);
+    setReturnImpactCellIdx(idx);
+    if (idx != null) setTimeout(() => setReturnImpactCellIdx(null), 100);
+  }, []);
+
+  const handleHexLandOnNewCell = useCallback((targetIdx: number) => {
+    playSfx(SFX_IDS.gameplayMovePlant);
+    setNewCellImpactIdx(targetIdx);
+    setTimeout(() => setNewCellImpactIdx(null), 300);
+  }, []);
+
+  const handleHexReleaseFromCell = useCallback((cellIdx: number) => {
+    setSourceCellFadeOutIdx(cellIdx);
+    setTimeout(() => setSourceCellFadeOutIdx(null), 150);
+  }, []);
+
+  const handleHexMaxTierMergeAttempt = useCallback((staticCellIdx: number) => {
+    spawnMaxPlantReachedToast(staticCellIdx);
+  }, [spawnMaxPlantReachedToast]);
+
+  const handleHexMergeImpactStart = useCallback((cellIdx: number, px: number, py: number, mergeResultLevel?: number) => {
+    const container = containerRef.current;
+    if (!container) return;
+    const scale = appScaleRef.current;
+    const rect = container.getBoundingClientRect();
+    if (!getPerformanceMode()) {
+      spawnLeafBurst({
+        id: Math.random().toString(36).slice(2),
+        x: rect.left + px * scale,
+        y: rect.top + py * scale,
+        startTime: Date.now(),
+      });
+    }
+    if (mergeResultLevel != null) {
+      const slotIdx = mergeResultLevel >= 1 && mergeResultLevel <= MAX_PLANT_TIER
+        ? (() => {
+            let best = -1;
+            let minRemaining = Infinity;
+            goalPlantTypes.forEach((pt, i) => {
+              if (pt !== mergeResultLevel || goalSlots[i] !== 'green' || (goalCounts[i] ?? 0) <= 0 || goalsPendingCompletionRef.current.has(i)) return;
+              const inFlight = goalInFlightHarvestBySlotRef.current[i] ?? 0;
+              const remaining = (goalCounts[i] ?? 0) - inFlight;
+              if (remaining > 0 && remaining < minRemaining) {
+                minRemaining = remaining;
+                best = i;
+              }
+            });
+            return best;
+          })()
+        : -1;
+      const hasGoalForPlant = slotIdx >= 0;
+      /** Merge result cell: 1 crop to goal if any; else coin panel → wallet (base coin value for merged tier). */
+      const harvestAmount = 1;
+      const hexEl = document.getElementById(`hex-${cellIdx}`);
+      const panelHeightPx = 14;
+      const offsetUp = (panelHeightPx / 2 + 4) * 0.4;
+      const hoverX = px;
+      const hoverY = hexEl
+        ? ((hexEl.getBoundingClientRect().top - rect.top) / scale) - offsetUp
+        : py - offsetUp;
+      if (hasGoalForPlant) {
+        goalInFlightHarvestBySlotRef.current[slotIdx] = (goalInFlightHarvestBySlotRef.current[slotIdx] ?? 0) + harvestAmount;
+        if ((goalCounts[slotIdx] ?? 0) - (goalInFlightHarvestBySlotRef.current[slotIdx] ?? 0) <= 0) {
+          goalsPendingCompletionRef.current.add(slotIdx);
+        }
+        const plantLevel = goalPlantTypes[slotIdx] ?? slotIdx + 1;
+        setActivePlantPanels((prev) => [
+          ...prev,
+          {
+            id: `merge-plant-${cellIdx}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            goalSlotIdx: slotIdx,
+            iconSrc: getGoalIconForPlantLevel(plantLevel),
+            harvestAmount,
+            startX: px,
+            startY: py,
+            hoverX,
+            hoverY,
+            moveToTargetDelayMs: 0,
+            fromMergeHarvest: true,
+            ...(activeFtueStage === 'first_harvest' ? { visualScale: 2 } : {}),
+          },
+        ]);
+      } else {
+        const cell = gridRef.current[cellIdx];
+        let value = getCoinValueForLevel(mergeResultLevel);
+        if (cell?.fertile) value *= 2;
+        value = Math.floor(value);
+        /* Same coin panel + wallet path as surplus harvest; no Surplus Sales multiplier. */
+        value = applyGoldenPotMergeCoinBonus(value, unlockedBonusTierSetRef.current);
+        value = applyDoubleCoinsVisualAmount(value, activeBoostsRef.current);
+        setActiveCoinPanels((prev) => [
+          ...prev,
+          {
+            id: `merge-${cellIdx}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            value,
+            startX: px,
+            startY: py,
+            hoverX,
+            hoverY,
+            moveToWalletDelayMs: 0,
+            scale: MERGE_COIN_HARVEST_PANEL_SCALE,
+            dailyTaskCoinKind: 'merge',
+          },
+        ]);
+      }
+    }
+  }, [goalPlantTypes, goalSlots, goalCounts, activeFtueStage]);
+
+  const handleHexDeletePlant = useCallback((cellIdx: number, px: number, py: number) => {
+    const container = containerRef.current;
+    if (!container) return;
+    playSfx(SFX_IDS.gameplayDeletePlant);
+    const scale = appScaleRef.current;
+    const rect = container.getBoundingClientRect();
+    if (!getPerformanceMode()) {
+      spawnLeafBurstSmall({
+        id: `delete-${cellIdx}-${Date.now()}`,
+        x: rect.left + px * scale,
+        y: rect.top + py * scale,
+        startTime: Date.now(),
+        particleCount: 30,
+        useCircle: true,
+      });
+    }
+    setGrid((prev) => {
+      const newGrid = [...prev];
+      newGrid[cellIdx] = { ...newGrid[cellIdx], item: null };
+      return newGrid;
+    });
+  }, []);
 
   // Swap plants when dropping on a non-mergeable plant
   const handleSwap = useCallback((sourceIdx: number, targetIdx: number) => {
@@ -10354,20 +10497,9 @@ export default function App() {
                     onSwap={handleSwap}
                     impactCellIdx={impactCellIdx}
                     returnImpactCellIdx={returnImpactCellIdx}
-                    onReturnImpact={(idx) => {
-                      if (idx != null) playSfx(SFX_IDS.gameplayMovePlant);
-                      setReturnImpactCellIdx(idx);
-                      if (idx != null) setTimeout(() => setReturnImpactCellIdx(null), 100);
-                    }}
-                    onLandOnNewCell={(targetIdx) => {
-                      playSfx(SFX_IDS.gameplayMovePlant);
-                      setNewCellImpactIdx(targetIdx);
-                      setTimeout(() => setNewCellImpactIdx(null), 300);
-                    }}
-                    onReleaseFromCell={(cellIdx) => {
-                      setSourceCellFadeOutIdx(cellIdx);
-                      setTimeout(() => setSourceCellFadeOutIdx(null), 150);
-                    }}
+                    onReturnImpact={handleHexReturnImpact}
+                    onLandOnNewCell={handleHexLandOnNewCell}
+                    onReleaseFromCell={handleHexReleaseFromCell}
                     sourceCellFadeOutIdx={sourceCellFadeOutIdx}
                     newCellImpactIdx={newCellImpactIdx}
                     containerRef={containerRef}
@@ -10381,121 +10513,11 @@ export default function App() {
                     appScale={appScale}
                     ftue3OnlyMerge4To13={activeFtueStage === 'merge_drag'}
                     masteredPlantLevels={plantMastery.unlockedLevels}
-                    onMaxTierMergeAttempt={(staticCellIdx) => {
-                      spawnMaxPlantReachedToast(staticCellIdx);
-                    }}
+                    onMaxTierMergeAttempt={handleHexMaxTierMergeAttempt}
                     onProgrammaticMergeSettled={onProgrammaticMergeSettled}
                     gardenId={activeGardenId}
-                    onMergeImpactStart={(cellIdx, px, py, mergeResultLevel) => {
-                      const container = containerRef.current;
-                      if (!container) return;
-                      const scale = appScaleRef.current;
-                      const rect = container.getBoundingClientRect();
-                      if (!getPerformanceMode()) {
-                        spawnLeafBurst({
-                            id: Math.random().toString(36).slice(2),
-                            x: rect.left + px * scale,
-                            y: rect.top + py * scale,
-                            startTime: Date.now(),
-                          });
-                      }
-                      if (mergeResultLevel != null) {
-                        const slotIdx = mergeResultLevel >= 1 && mergeResultLevel <= MAX_PLANT_TIER
-                          ? (() => {
-                              let best = -1;
-                              let minRemaining = Infinity;
-                              goalPlantTypes.forEach((pt, i) => {
-                                if (pt !== mergeResultLevel || goalSlots[i] !== 'green' || (goalCounts[i] ?? 0) <= 0 || goalsPendingCompletionRef.current.has(i)) return;
-                                const inFlight = goalInFlightHarvestBySlotRef.current[i] ?? 0;
-                                const remaining = (goalCounts[i] ?? 0) - inFlight;
-                                if (remaining > 0 && remaining < minRemaining) {
-                                  minRemaining = remaining;
-                                  best = i;
-                                }
-                              });
-                              return best;
-                            })()
-                          : -1;
-                        const hasGoalForPlant = slotIdx >= 0;
-                        /** Merge result cell: 1 crop to goal if any; else coin panel → wallet (base coin value for merged tier). */
-                        const harvestAmount = 1;
-                        const hexEl = document.getElementById(`hex-${cellIdx}`);
-                        const panelHeightPx = 14;
-                        const offsetUp = (panelHeightPx / 2 + 4) * 0.4;
-                        const hoverX = px;
-                        const hoverY = hexEl
-                          ? ((hexEl.getBoundingClientRect().top - rect.top) / scale) - offsetUp
-                          : py - offsetUp;
-                        if (hasGoalForPlant) {
-                          goalInFlightHarvestBySlotRef.current[slotIdx] = (goalInFlightHarvestBySlotRef.current[slotIdx] ?? 0) + harvestAmount;
-                          if ((goalCounts[slotIdx] ?? 0) - (goalInFlightHarvestBySlotRef.current[slotIdx] ?? 0) <= 0) {
-                            goalsPendingCompletionRef.current.add(slotIdx);
-                          }
-                          const plantLevel = goalPlantTypes[slotIdx] ?? slotIdx + 1;
-                          setActivePlantPanels((prev) => [
-                            ...prev,
-                            {
-                              id: `merge-plant-${cellIdx}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-                              goalSlotIdx: slotIdx,
-                              iconSrc: getGoalIconForPlantLevel(plantLevel),
-                              harvestAmount,
-                              startX: px,
-                              startY: py,
-                              hoverX,
-                              hoverY,
-                              moveToTargetDelayMs: 0,
-                              fromMergeHarvest: true,
-                              ...(activeFtueStage === 'first_harvest' ? { visualScale: 2 } : {}),
-                            },
-                          ]);
-                        } else {
-                          const cell = grid[cellIdx];
-                          let value = getCoinValueForLevel(mergeResultLevel);
-                          if (cell?.fertile) value *= 2;
-                          value = Math.floor(value);
-                          /* Same coin panel + wallet path as surplus harvest; no Surplus Sales multiplier. */
-                          value = applyGoldenPotMergeCoinBonus(value, unlockedBonusTierSetRef.current);
-                          value = applyDoubleCoinsVisualAmount(value, activeBoostsRef.current);
-                          setActiveCoinPanels((prev) => [
-                            ...prev,
-                            {
-                              id: `merge-${cellIdx}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-                              value,
-                              startX: px,
-                              startY: py,
-                              hoverX,
-                              hoverY,
-                              moveToWalletDelayMs: 0,
-                              scale: MERGE_COIN_HARVEST_PANEL_SCALE,
-                              dailyTaskCoinKind: 'merge',
-                            },
-                          ]);
-                        }
-                      }
-                    }}
-                    onDeletePlant={(cellIdx, px, py) => {
-                      const container = containerRef.current;
-                      if (!container) return;
-                      playSfx(SFX_IDS.gameplayDeletePlant);
-                      const scale = appScaleRef.current;
-                      const rect = container.getBoundingClientRect();
-                      if (!getPerformanceMode()) {
-                        spawnLeafBurstSmall({
-                            id: `delete-${cellIdx}-${Date.now()}`,
-                            x: rect.left + px * scale,
-                            y: rect.top + py * scale,
-                            startTime: Date.now(),
-                            particleCount: 30,
-                            useCircle: true,
-                          });
-                      }
-                      // Remove the plant from the grid
-                      setGrid((prev) => {
-                        const newGrid = [...prev];
-                        newGrid[cellIdx] = { ...newGrid[cellIdx], item: null };
-                        return newGrid;
-                      });
-                    }}
+                    onMergeImpactStart={handleHexMergeImpactStart}
+                    onDeletePlant={handleHexDeletePlant}
                   />
                   </div>
                 </div>

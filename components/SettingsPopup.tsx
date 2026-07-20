@@ -18,15 +18,10 @@ import {
 } from '../constants/popupPointerEvents';
 import { PopupVectorBackground } from './PopupVectorBackground';
 import { PopupPrescaleFrame } from './PopupPrescaleFrame';
-import { PopupRectLeafBurst } from './PopupRectLeafBurst';
-import { getPerformanceMode, setPerformanceMode, shouldPlayPopupLeafBurst } from '../utils/performanceMode';
+import { getPerformanceMode, setPerformanceMode } from '../utils/performanceMode';
 import { APP_VERSION } from '../constants/appVersion';
 import { openSupportContact } from '../constants/supportContact';
 import { readRateUsPermanentlyDismissed } from '../utils/rateUsDismiss';
-
-/** Leaf spawn perimeter — Settings cream card is taller than standard discovery. */
-const POPUP_WIDTH = 300;
-const POPUP_HEIGHT = 400;
 
 interface SettingsPopupProps {
   isVisible: boolean;
@@ -136,8 +131,6 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
   const [clearProgressPressed, setClearProgressPressed] = useState(false);
   const [noResetPressed, setNoResetPressed] = useState(false);
   const [devToolsPressed, setDevToolsPressed] = useState(false);
-  const [leafBurstKey, setLeafBurstKey] = useState(0);
-  const [showLeafBurst, setShowLeafBurst] = useState(false);
   const popupCardLayoutRef = useRef<HTMLDivElement>(null);
   const alreadyRatedToastTimeoutRef = useRef<number | null>(null);
   const versionTapCountRef = useRef(0);
@@ -177,11 +170,7 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
   );
 
   const beginEnterAfterPreflight = useCallback(() => {
-    // Skip leaf burst in performance mode — Settings open already stresses Android WebView layers.
-    if (shouldPlayPopupLeafBurst()) {
-      setLeafBurstKey((k) => k + 1);
-      setShowLeafBurst(true);
-    }
+    // No leaf burst on Settings — open already stresses Android WebView layers (popup flicker).
     setAnimState('entering');
     setTimeout(() => setAnimState('visible'), 250);
   }, []);
@@ -326,16 +315,6 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
       />
 
       <div className="relative flex items-center justify-center" style={popupAppScaleStyle(appScale)}>
-        {(isEntering || animState === 'visible') && showLeafBurst && (
-          <PopupRectLeafBurst
-            key={leafBurstKey}
-            rectWidth={POPUP_WIDTH}
-            rectHeight={POPUP_HEIGHT}
-            zIndex={101}
-            onComplete={() => setShowLeafBurst(false)}
-          />
-        )}
-
         <div
           ref={popupCardLayoutRef}
           className="relative flex flex-col items-center"

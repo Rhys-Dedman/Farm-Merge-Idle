@@ -559,3 +559,97 @@ img {
 .max-plant-toast {
   animation: max-plant-toast 950ms ease-out forwards;
 }
+
+/* HexBoard plant / hex-cell animations (kept in CSS so HexBoard re-renders do not rewrite <style>) */
+@keyframes impactPulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+.impact-pulse {
+  animation: impactPulse 150ms ease-out;
+}
+@keyframes plantSpawnBounce {
+  0% { opacity: 0.85; transform: translateY(-5.5px) scale(0.375); }
+  25% { opacity: 1; transform: translateY(-5.5px) scale(2.25); }
+  50% { transform: translateY(-5.5px) scale(1.2); }
+  75% { transform: translateY(-5.5px) scale(1.65); }
+  100% { opacity: 1; transform: translateY(-5.5px) scale(1.5); }
+}
+.plant-spawn-bounce {
+  animation: plantSpawnBounce 300ms ease-out forwards;
+}
+@keyframes hexcellWhiteFlash {
+  0% { opacity: 0; }
+  50% { opacity: 0.5; }
+  100% { opacity: 0; }
+}
+.hexcell-white-flash {
+  animation: hexcellWhiteFlash 200ms ease-out forwards;
+}
+@keyframes hexcellReturnFlash {
+  0% { opacity: 0; }
+  50% { opacity: 0.5; }
+  100% { opacity: 0; }
+}
+.hexcell-return-flash {
+  animation: hexcellReturnFlash 100ms ease-out forwards;
+}
+@keyframes hexcellSourceFadeOut {
+  0% { opacity: 0.5; }
+  100% { opacity: 0; }
+}
+.hexcell-source-fade-out {
+  animation: hexcellSourceFadeOut 150ms ease-out forwards;
+}
+@keyframes hexcellNewLandFlash {
+  0% { opacity: 0.5; }
+  50% { opacity: 0.75; }
+  100% { opacity: 0; }
+}
+.hexcell-new-land-flash {
+  animation: hexcellNewLandFlash 300ms ease-out forwards;
+}
+@keyframes plantImpactScale {
+  0% { transform: translateY(-5.5px) scale(1); }
+  25% { transform: translateY(-5.5px) scale(1.8); }
+  50% { transform: translateY(-5.5px) scale(1.3); }
+  75% { transform: translateY(-5.5px) scale(1.6); }
+  100% { transform: translateY(-5.5px) scale(1.5); }
+}
+.plant-impact-scale {
+  animation: plantImpactScale 400ms ease-out forwards;
+}
+@keyframes plantImpactScaleSoft {
+  0% { transform: translateY(-5.5px) scale(1.25); }
+  50% { transform: translateY(-5.5px) scale(1.65); }
+  100% { transform: translateY(-5.5px) scale(1.5); }
+}
+.plant-impact-scale-soft {
+  animation: plantImpactScaleSoft 250ms ease-out forwards;
+}
+@keyframes plantHarvestBounce {
+  0% { transform: translateY(-5.5px) scale(1.5); }
+  33% { transform: translateY(-5.5px) scale(1.8); }
+  66% { transform: translateY(-5.5px) scale(1.4); }
+  100% { transform: translateY(-5.5px) scale(1.5); }
+}
+.plant-harvest-bounce {
+  animation: plantHarvestBounce 200ms ease-out forwards;
+}
+@keyframes hexcellUnlockBounce {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+.hexcell-unlock-bounce {
+  animation: hexcellUnlockBounce 200ms ease-out forwards;
+}
+.hex-cell-img {
+  display: block;
+}
+.hex-cell-img[src=""],
+.hex-cell-img:not([src]) {
+  opacity: 0;
+  pointer-events: none;
+}

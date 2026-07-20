@@ -658,101 +658,6 @@ export const HexBoard = memo(forwardRef<HexBoardHandle, HexBoardProps>(function 
   const centerY = '48%'; 
 
   return (
-    <>
-      <style>{`
-        @keyframes impactPulse {
-          0% { transform: scale(1); }
-          50% { transform: scale(1.1); }
-          100% { transform: scale(1); }
-        }
-        .impact-pulse {
-          animation: impactPulse 150ms ease-out;
-        }
-        @keyframes plantSpawnBounce {
-          0% { opacity: 0; transform: translateY(-5.5px) scale(0.375); }
-          25% { opacity: 1; transform: translateY(-5.5px) scale(2.25); }
-          50% { transform: translateY(-5.5px) scale(1.2); }
-          75% { transform: translateY(-5.5px) scale(1.65); }
-          100% { opacity: 1; transform: translateY(-5.5px) scale(1.5); }
-        }
-        .plant-spawn-bounce {
-          animation: plantSpawnBounce 300ms ease-out forwards;
-        }
-        @keyframes hexcellWhiteFlash {
-          0% { opacity: 0; }
-          50% { opacity: 0.5; }
-          100% { opacity: 0; }
-        }
-        .hexcell-white-flash {
-          animation: hexcellWhiteFlash 200ms ease-out forwards;
-        }
-        @keyframes hexcellReturnFlash {
-          0% { opacity: 0; }
-          50% { opacity: 0.5; }
-          100% { opacity: 0; }
-        }
-        .hexcell-return-flash {
-          animation: hexcellReturnFlash 100ms ease-out forwards;
-        }
-        @keyframes hexcellSourceFadeOut {
-          0% { opacity: 0.5; }
-          100% { opacity: 0; }
-        }
-        .hexcell-source-fade-out {
-          animation: hexcellSourceFadeOut 150ms ease-out forwards;
-        }
-        @keyframes hexcellNewLandFlash {
-          0% { opacity: 0.5; }
-          50% { opacity: 0.75; }
-          100% { opacity: 0; }
-        }
-        .hexcell-new-land-flash {
-          animation: hexcellNewLandFlash 300ms ease-out forwards;
-        }
-        @keyframes plantImpactScale {
-          0% { transform: translateY(-5.5px) scale(1); }
-          25% { transform: translateY(-5.5px) scale(1.8); }
-          50% { transform: translateY(-5.5px) scale(1.3); }
-          75% { transform: translateY(-5.5px) scale(1.6); }
-          100% { transform: translateY(-5.5px) scale(1.5); }
-        }
-        .plant-impact-scale {
-          animation: plantImpactScale 400ms ease-out forwards;
-        }
-        @keyframes plantImpactScaleSoft {
-          0% { transform: translateY(-5.5px) scale(1.25); }
-          50% { transform: translateY(-5.5px) scale(1.65); }
-          100% { transform: translateY(-5.5px) scale(1.5); }
-        }
-        .plant-impact-scale-soft {
-          animation: plantImpactScaleSoft 250ms ease-out forwards;
-        }
-        @keyframes plantHarvestBounce {
-          0% { transform: translateY(-5.5px) scale(1.5); }
-          33% { transform: translateY(-5.5px) scale(1.8); }
-          66% { transform: translateY(-5.5px) scale(1.4); }
-          100% { transform: translateY(-5.5px) scale(1.5); }
-        }
-        .plant-harvest-bounce {
-          animation: plantHarvestBounce 200ms ease-out forwards;
-        }
-        @keyframes hexcellUnlockBounce {
-          0% { transform: scale(1); }
-          50% { transform: scale(1.3); }
-          100% { transform: scale(1); }
-        }
-        .hexcell-unlock-bounce {
-          animation: hexcellUnlockBounce 200ms ease-out forwards;
-        }
-        .hex-cell-img {
-          display: block;
-        }
-        .hex-cell-img[src=""],
-        .hex-cell-img:not([src]) {
-          opacity: 0;
-          pointer-events: none;
-        }
-      `}</style>
       <div 
         className="relative w-full h-full flex items-center justify-center pointer-events-none"
         style={{ touchAction: 'none' }}
@@ -914,7 +819,8 @@ export const HexBoard = memo(forwardRef<HexBoardHandle, HexBoardProps>(function 
           );
         })}
 
-        {/* PASS 4: PLANTS (hide source while dragging; hide target during impact when moved) */}
+        {/* PASS 4: PLANTS — always mount one slot per cell (stable keys) so first empty-cell
+            land does not insert new filtered DOM and thrash sibling plants on Android WebView. */}
         {(() => {
           // For swaps, don't treat the source cell as "dragged" during impact - Plant B is there now
           const isSwapImpact = dragState?.phase === 'impact' && dragState?.isSwap === true;
@@ -927,20 +833,18 @@ export const HexBoard = memo(forwardRef<HexBoardHandle, HexBoardProps>(function 
             const y = hexSize * Math.sqrt(3) * (cell.r + cell.q / 2) * verticalSpacing * gridSpacing;
             return { i, cell, x, y };
           });
-          let cellsWithPlants = baseCells
-            .filter(({ cell, i }) => cell.item != null && i !== hideTargetDuringImpact && i !== hideSwapReturnDest)
-            .sort((a, b) => a.y - b.y);
-          // Add synthetic plant during impact for merges (not swaps - both plants already in grid)
-          if (dragState?.phase === 'impact' && dragState.cellIdx != null && !isSwapImpact && !cellsWithPlants.some((c) => c.i === dragState.cellIdx)) {
-            const src = baseCells[dragState.cellIdx];
-            if (src) {
-              const syntheticItem = {
-                ...dragState.item,
-                level: dragState.mergeResultLevel ?? dragState.item.level,
-              };
-              cellsWithPlants = [...cellsWithPlants, { ...src, cell: { ...src.cell, item: syntheticItem } }].sort((a, b) => a.y - b.y);
-            }
-          }
+          // Synthetic plant during merge impact when source cell is already empty in grid
+          const syntheticMergeIdx =
+            dragState?.phase === 'impact' && dragState.cellIdx != null && !isSwapImpact
+              ? dragState.cellIdx
+              : -1;
+          const syntheticMergeItem =
+            syntheticMergeIdx >= 0 && dragState
+              ? {
+                  ...dragState.item,
+                  level: dragState.mergeResultLevel ?? dragState.item.level,
+                }
+              : null;
 
           const isHolding = dragState?.phase === 'holding';
           const isFlying = dragState?.phase === 'flyingBack';
@@ -960,23 +864,36 @@ export const HexBoard = memo(forwardRef<HexBoardHandle, HexBoardProps>(function 
 
           return (
             <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 50 }}>
-              {cellsWithPlants.map(({ i, cell, x, y }) => {
-                const isImpacted = impactCellIdx === i;
-                const item = cell.item!;
+              {baseCells.map(({ i, cell, x, y }) => {
                 const isDragged = i === draggedCellIdx;
+                const useSynthetic =
+                  i === syntheticMergeIdx &&
+                  syntheticMergeItem != null &&
+                  cell.item == null;
+                const item = useSynthetic ? syntheticMergeItem : cell.item;
+                const showPlant =
+                  item != null &&
+                  i !== hideTargetDuringImpact &&
+                  i !== hideSwapReturnDest;
+
+                const isImpacted = impactCellIdx === i;
                 const isMergeTargetDuringFly =
                   dragState?.phase === 'flyingBack' &&
                   dragState?.targetCellIdx === i &&
                   dragState?.isMerge === true;
                 const mergeScale = 1.5 - 0.5 * (dragState?.flyProgress ?? 0);
                 const scale = isDragged ? dragScale : isMergeTargetDuringFly ? mergeScale : 1.5;
-                const level = isDragged && dragState?.mergeResultLevel != null ? dragState.mergeResultLevel : item.level;
+                const level = item
+                  ? isDragged && dragState?.mergeResultLevel != null
+                    ? dragState.mergeResultLevel
+                    : item.level
+                  : 1;
                 const useDomFlyDrive = isDragged && isFlying && dragState?.isAutoMerge === true;
                 const useDomFlyTarget = isMergeTargetDuringFly && dragState?.isAutoMerge === true;
                 const transform = isDragged
                   ? `translate(calc(-50% + ${x}px), calc(-50% + ${y}px)) translate(${dragOffsetX}px, ${dragOffsetY}px)`
                   : `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
-                const isSpawnImpact = isImpacted && !isDragged;
+                const isSpawnImpact = isImpacted && !isDragged && showPlant;
                 const innerTransform = isDragged && isImpact
                   ? 'translateY(-5.5px)' // keyframes control scale
                   : isSpawnImpact
@@ -1023,30 +940,32 @@ export const HexBoard = memo(forwardRef<HexBoardHandle, HexBoardProps>(function 
                     className="absolute flex items-center justify-center"
                     style={outerStyle}
                   >
-                    <div className="flex flex-col items-center justify-center relative w-full h-full">
-                      <div
-                        ref={
-                          useDomFlyDrive
-                            ? autoMergeDragInnerRef
-                            : useDomFlyTarget
-                              ? autoMergeTargetInnerRef
-                              : undefined
-                        }
-                        style={innerStyle}
-                        className={`flex items-center justify-center w-full h-full ${innerClass}`}
-                      >
-                        {/* 70% on outer root — same as pre-pot `<img className="w-[70%] h-[70%]">` vs hex inner cell (w-full h-full) */}
-                        <PlantWithPot
-                          level={level}
-                          mastered={masteredPlantLevels.includes(level)}
-                          className="h-[70%] w-[70%] drop-shadow-[0_4px_8px_rgba(0,0,0,0.4)]"
-                          wrapperClassName="h-full w-full"
-                          alt={`Plant ${level}`}
-                          draggable={false}
-                          onContextMenu={(e) => e.preventDefault()}
-                        />
+                    {showPlant && (
+                      <div className="flex flex-col items-center justify-center relative w-full h-full">
+                        <div
+                          ref={
+                            useDomFlyDrive
+                              ? autoMergeDragInnerRef
+                              : useDomFlyTarget
+                                ? autoMergeTargetInnerRef
+                                : undefined
+                          }
+                          style={innerStyle}
+                          className={`flex items-center justify-center w-full h-full ${innerClass}`}
+                        >
+                          {/* No CSS filter drop-shadow — filters force WebView layer re-raster on sibling mounts */}
+                          <PlantWithPot
+                            level={level}
+                            mastered={masteredPlantLevels.includes(level)}
+                            className="h-[70%] w-[70%]"
+                            wrapperClassName="h-full w-full"
+                            alt={`Plant ${level}`}
+                            draggable={false}
+                            onContextMenu={(e) => e.preventDefault()}
+                          />
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 );
               })}
@@ -1094,7 +1013,7 @@ export const HexBoard = memo(forwardRef<HexBoardHandle, HexBoardProps>(function 
                         <PlantWithPot
                           level={item.level}
                           mastered={masteredPlantLevels.includes(item.level)}
-                          className="h-[70%] w-[70%] drop-shadow-[0_4px_8px_rgba(0,0,0,0.4)]"
+                          className="h-[70%] w-[70%]"
                           wrapperClassName="h-full w-full"
                           alt={`Plant ${item.level}`}
                           draggable={false}
@@ -1109,7 +1028,6 @@ export const HexBoard = memo(forwardRef<HexBoardHandle, HexBoardProps>(function 
         })()}
       </div>
     </div>
-    </>
   );
 }));
 
