@@ -113,7 +113,12 @@ export interface AmbientFallingLeavesProps {
   spawnIntervalMs: number;
   /** Multiplier for wind/sway + rotation wobble (1 = default). */
   noiseStrength?: number;
+  /** Fade-in when re-enabled (e.g. after upgrade panel open/close). Default 450ms. */
+  fadeInMs?: number;
 }
+
+/** Instant hide when disabled; ease back in when enabled again. */
+const DEFAULT_FADE_IN_MS = 2000;
 
 export const AmbientFallingLeaves: React.FC<AmbientFallingLeavesProps> = ({
   enabled,
@@ -121,6 +126,7 @@ export const AmbientFallingLeaves: React.FC<AmbientFallingLeavesProps> = ({
   zIndex,
   spawnIntervalMs,
   noiseStrength = 1,
+  fadeInMs = DEFAULT_FADE_IN_MS,
 }) => {
   const rootRef = useRef<HTMLDivElement>(null);
   const sizeRef = useRef({ w: 448, h: 796 });
@@ -138,6 +144,7 @@ export const AmbientFallingLeaves: React.FC<AmbientFallingLeavesProps> = ({
   const prewarmPendingRef = useRef(true);
   const [drawList, setDrawList] = useState<AmbientLeafDraw[]>([]);
   const [imgFailed, setImgFailed] = useState<Record<number, boolean>>({});
+  const [layerOpacity, setLayerOpacity] = useState(0);
 
   useEffect(() => {
     const el = rootRef.current;
@@ -152,12 +159,22 @@ export const AmbientFallingLeaves: React.FC<AmbientFallingLeavesProps> = ({
 
   useEffect(() => {
     if (!enabled) {
+      setLayerOpacity(0);
       leavesRef.current = [];
       setDrawList([]);
       nextSpawnAtRef.current = 0;
       prewarmPendingRef.current = true;
       return;
     }
+
+    // Re-enable: start invisible, then fade in after paint.
+    setLayerOpacity(0);
+    let cancelled = false;
+    const id = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!cancelled) setLayerOpacity(1);
+      });
+    });
 
     const tick = (now: number) => {
       if (!enabled) return;
@@ -211,6 +228,8 @@ export const AmbientFallingLeaves: React.FC<AmbientFallingLeavesProps> = ({
 
     rafRef.current = scheduleNextFrame(tick);
     return () => {
+      cancelled = true;
+      cancelAnimationFrame(id);
       cancelAnimationFrame(rafRef.current);
     };
   }, [enabled, spriteUrl, spawnIntervalMs, noiseStrength]);
@@ -221,7 +240,12 @@ export const AmbientFallingLeaves: React.FC<AmbientFallingLeavesProps> = ({
     <div
       ref={rootRef}
       className="absolute inset-0 overflow-hidden"
-      style={{ zIndex, pointerEvents: 'none' }}
+      style={{
+        zIndex,
+        pointerEvents: 'none',
+        opacity: layerOpacity,
+        transition: layerOpacity > 0 ? `opacity ${fadeInMs}ms ease-out` : undefined,
+      }}
       aria-hidden
     >
       {drawList.map((leaf) => (

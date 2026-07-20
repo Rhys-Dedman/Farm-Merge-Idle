@@ -892,8 +892,8 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 
 /**
  * Upgrade panel open height is a % of the design canvas (same idea as the old 42% / 45vh / 30vh
- * system). Closed peek is tabs-only. Open/close motion stays TRANSFORM-ONLY via --pp (no per-frame
- * height animation) — only the settled open height scales with designHeight on resize.
+ * system). Closed peek is tabs-only. Open/close is TRANSFORM-ONLY via WAAPI tweens (no per-frame
+ * JS style writes; browser interpolates panel / seed-harvest / hex poses).
  *
  * Git history: h-[42%] → calc(45vh - 55px) → calc(30vh - 55px) (hex/customer safe areas) → fixed 279.
  * Restored as 25% of designHeight (tuned from the historical 30vh / 42% lineage).
@@ -918,8 +918,8 @@ const GARDEN_SIDE_SPRITE_SCALE = 0.6;
 /** Pin garden backgrounds this many px below the upgrade panel tab underline. */
 const GARDEN_BG_TAB_LINE_OFFSET_PX = 20;
 /**
- * Extra downward shift for garden bg layers ONLY when the panel is closed (open pose unchanged).
- * Does not affect the panel, seed/harvest buttons, or hex grid.
+ * Extra downward shift for garden side/bottom/gradient layers when the panel is closed
+ * (open pose unchanged). Matches pre-simplify panel motion.
  */
 const GARDEN_BG_CLOSED_EXTRA_DOWN_PX = 10;
 /** Nudge collection column right to clear subpixel seam bleed on garden (design px). */
@@ -934,15 +934,13 @@ const COLLECTION_ROOF_WIDTH_PX = 800;
 const COLLECTION_ROOF_ASPECT_HEIGHT = 512 / 2048;
 
 /**
- * Panel open/close is TRANSFORM-ONLY. One rAF eases a single progress value `p` (0 = closed,
- * 1 = open) written as the CSS var `--pp` on the farm column. The panel (fixed height), the hex
- * grid, the seed/harvest row, and every garden bg layer all derive their position from `--pp` via
- * `transform` — never `height`/`top` — so they run on the compositor on one clock and stay perfectly
- * locked with no per-frame layout, no lag, and no duration hacks.
+ * Panel open/close: browser WAAPI tweens (same poses / travels / ease-out curve as before).
+ * Movers: panel + seed/harvest (full --ppd), hex + centers (half --pcd), grass (half),
+ * sides/bottom/gradient (full garden delta --pgd). No per-frame JS `--pp` writes.
  */
 const UPGRADE_PANEL_ANIM_DURATION_MS = 800;
-/** Strong ease-out (easeOutQuint): fast start, slow end. Shared by panel + garden bg. */
-const upgradePanelAnimEase = (t: number) => 1 - Math.pow(1 - t, 5);
+/** Matches prior easeOutQuint (1-(1-t)^5) closely for WAAPI. */
+const UPGRADE_PANEL_WAAPI_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
 
 // Preload popup assets on module load to prevent flash of unstyled content
 const POPUP_ASSETS_TO_PRELOAD = [
@@ -1494,7 +1492,7 @@ export default function App() {
   const [fieldPackCountdownRefreshKey, setFieldPackCountdownRefreshKey] = useState(0);
   const [dailyTasksCountdownRefreshKey, setDailyTasksCountdownRefreshKey] = useState(0);
   const [isExpanded, setIsExpanded] = useState(false);
-  /** Live open/close progress (0 = closed, 1 = open). Written to --pp on the farm column each frame. */
+  /** Live open/close progress (0 = closed, 1 = open). Settled by WAAPI; used to undo slides when measuring. */
   const panelProgressRef = useRef(0);
   /** Settled open panel height (design px); updated when designHeight changes. */
   const upgradePanelExpandedHeightRef = useRef(getUpgradePanelExpandedHeightPx(796));
@@ -1502,10 +1500,11 @@ export default function App() {
   isExpandedRef.current = isExpanded;
   /** True once the panel's close animation has fully settled (or it never opened). Gates FTUE 11. */
   const [panelClosed, setPanelClosed] = useState(!isExpanded);
-  /** Locked garden bg positions at settled open/closed. Open/close only ease between these. */
-  const gardenBgClosedRef = useRef<{ gl: number; cl: number; ct: number } | null>(null);
+  /** True only while open/close rAF is running — pauses ambient leaves for that window. */
+  const [panelMotionActive, setPanelMotionActive] = useState(false);
+  /** Open-pose garden bg anchors (panel height is fixed; full-bleed layers do not tween). */
   const gardenBgOpenRef = useRef<{ gl: number; cl: number; ct: number } | null>(null);
-  /** While true, ResizeObserver must not remeasure garden anchors (the rAF loop owns --pp). */
+  /** While true, ResizeObserver must not remeasure garden anchors (WAAPI owns transforms). */
   const panelBgAnimatingRef = useRef(false);
   const [money, setMoney] = useState(0);
   // Used for synchronous updates during pagehide/unload so persisted snapshots are correct.
@@ -4436,6 +4435,16 @@ export default function App() {
   const [gardenGradientHeightPx, setGardenGradientHeightPx] = useState<number | null>(null);
   const hexGridBgRef = useRef<HTMLDivElement>(null);
   const hexAreaRef = useRef<HTMLDivElement>(null);
+  const seedHarvestRowRef = useRef<HTMLDivElement>(null);
+  const gardenCenterBgRef = useRef<HTMLImageElement>(null);
+  const gardenCenterTopBgRef = useRef<HTMLImageElement>(null);
+  const gardenGrassBgRef = useRef<HTMLDivElement>(null);
+  const gardenBottomBgRef = useRef<HTMLImageElement>(null);
+  const gardenLeftBgRef = useRef<HTMLImageElement>(null);
+  const gardenRightBgRef = useRef<HTMLImageElement>(null);
+  const gardenGradientBgRef = useRef<HTMLDivElement>(null);
+  /** In-flight panel open/close WAAPI animations (cancelled on retarget). */
+  const panelAnimsRef = useRef<Animation[]>([]);
   const walletRef = useRef<HTMLButtonElement>(null);
   const walletIconRef = useRef<HTMLSpanElement>(null);
   const goldenPotWalletRef = useRef<HTMLButtonElement>(null);
@@ -5501,19 +5510,20 @@ export default function App() {
     (level) => !seenMasteryUnlockLevels.includes(level),
   );
 
+  const applyUpgradePanelPoseRef = useRef<(pp: number) => void>(() => {});
+
   const updateGardenBgLayout = useCallback(() => {
-    // During open/close the rAF owns --pp; base vars/deltas only change on real layout/resize.
+    // During open/close WAAPI owns transforms; base vars only change on real layout/resize.
     if (panelBgAnimatingRef.current) return;
     const col = farmColumnRef.current;
     if (!col) return;
     const scale = appScaleRef.current || 1;
 
-    // Panel height is FIXED (open/close is transform-only). Never flash height or --pp — that was
-    // painting one bad frame (header / goals / floating buttons) on Android WebView.
-    // Open-pose anchors are measured from the current DOM, undoing the live --pp slide.
+    // Panel height is FIXED. All garden/hex poses are WAAPI-tweened; measure open anchors here.
+    // Undo live panel/hex slides when reading so --pgl/--pct stay open-pose.
     const expandedH = upgradePanelExpandedHeightRef.current;
     const ppd = expandedH - UPGRADE_PANEL_CLOSED_VISIBLE_PX;
-    // Closed flex layout would grow the hex area by ppd; centered grid moves ~half that.
+    // Hex/grass move ~half the panel travel (same as historical centered flex reflow).
     const pcd = ppd / 2;
     const pgd = ppd + GARDEN_BG_CLOSED_EXTRA_DOWN_PX;
     const pp = panelProgressRef.current;
@@ -5537,19 +5547,77 @@ export default function App() {
       cl = (gridRect.left + gridRect.width / 2 - colRect.left) / scale;
       const ctMeasured =
         (gridRect.top + gridRect.height * HEX_GRID_CENTER_Y_RATIO - colRect.top) / scale;
+      // Hex follows open/close pose; undo so --pct stays the open-pose anchor for center sprites.
       ct = ctMeasured - hexSlideY / scale;
     }
 
     gardenBgOpenRef.current = { gl, cl, ct };
-    gardenBgClosedRef.current = { gl: Math.max(0, gl - ppd), cl, ct: ct + pcd };
 
     col.style.setProperty('--ppd', `${ppd}px`);
+    col.style.setProperty('--pcd', `${pcd}px`);
+    col.style.setProperty('--pgd', `${pgd}px`);
     col.style.setProperty('--pgl', `${gl}px`);
     col.style.setProperty('--pct', `${ct}px`);
     col.style.setProperty('--pcl', `${cl}px`);
-    col.style.setProperty('--pgd', `${pgd}px`);
-    col.style.setProperty('--pcd', `${pcd}px`);
+
+    // Keep center pins locked to updated anchors when settled (WAAPI owns transforms while moving).
+    applyUpgradePanelPoseRef.current?.(pp);
   }, []);
+
+  const cancelUpgradePanelAnims = useCallback(() => {
+    for (const anim of panelAnimsRef.current) {
+      try {
+        anim.cancel();
+      } catch {
+        /* ignore */
+      }
+    }
+    panelAnimsRef.current = [];
+  }, []);
+
+  const applyUpgradePanelPose = useCallback((pp: number) => {
+    const expandedH = upgradePanelExpandedHeightRef.current;
+    const ppd = expandedH - UPGRADE_PANEL_CLOSED_VISIBLE_PX;
+    const pcd = ppd / 2;
+    const pgd = ppd + GARDEN_BG_CLOSED_EXTRA_DOWN_PX;
+    const col = farmColumnRef.current;
+    const pcl = col?.style.getPropertyValue('--pcl')?.trim() || '0px';
+    const pct = parseFloat(col?.style.getPropertyValue('--pct') || '0') || 0;
+    const pgl = parseFloat(col?.style.getPropertyValue('--pgl') || '0') || 0;
+    const yFull = (1 - pp) * ppd;
+    const yHalf = (1 - pp) * pcd;
+    const yGarden = -pgl + (1 - pp) * pgd;
+    const yGrass = -pp * pcd;
+    const centerXf = `translate(${pcl}, ${pct + yHalf}px) translate(-50%, -50%) scale(0.75)`;
+    const sideScale = GARDEN_SIDE_SPRITE_SCALE;
+    const panel = upgradePanelRef.current;
+    const seedRow = seedHarvestRowRef.current;
+    const hex = hexGridBgRef.current;
+    const center = gardenCenterBgRef.current;
+    const centerTop = gardenCenterTopBgRef.current;
+    const grass = gardenGrassBgRef.current;
+    const bottom = gardenBottomBgRef.current;
+    const left = gardenLeftBgRef.current;
+    const right = gardenRightBgRef.current;
+    const gradient = gardenGradientBgRef.current;
+    if (panel) panel.style.transform = `translateY(${yFull}px)`;
+    if (seedRow) seedRow.style.transform = `translateY(${yFull}px)`;
+    if (hex) hex.style.transform = `translateY(${yHalf}px)`;
+    if (center) center.style.transform = centerXf;
+    if (centerTop) centerTop.style.transform = centerXf;
+    if (grass) {
+      grass.style.height = `calc(100% + ${pcd}px)`;
+      grass.style.transform = `translateY(${yGrass}px)`;
+    }
+    if (bottom) {
+      bottom.style.transform = `translate(-50%, ${yGarden}px) scale(${sideScale})`;
+    }
+    if (left) left.style.transform = `translateY(${yGarden}px) scale(${sideScale})`;
+    if (right) right.style.transform = `translateY(${yGarden}px) scale(${sideScale})`;
+    if (gradient) gradient.style.transform = `translateY(${yGarden}px)`;
+    panelProgressRef.current = pp;
+  }, []);
+  applyUpgradePanelPoseRef.current = applyUpgradePanelPose;
 
   useLayoutEffect(() => {
     updateGardenBgLayout();
@@ -5563,67 +5631,129 @@ export default function App() {
     return () => ro.disconnect();
   }, [updateGardenBgLayout, designWidth, designHeight, appScale, ftueUpgradePanelVisible]);
 
-  // Open/close: ONE rAF eases a single progress p (0 = closed, 1 = open) written to --pp. The panel,
-  // grid, buttons and every garden bg layer derive their position from --pp via transform only —
-  // no layout, one clock, perfectly locked.
-  const panelAnimRafRef = useRef<number | null>(null);
+  // Open/close: one WAAPI tween per mover (same duration + easing). Browser owns interpolation.
   const panelAnimFirstSyncRef = useRef(true);
   useLayoutEffect(() => {
-    const col = farmColumnRef.current;
     const target = isExpanded ? 1 : 0;
 
-    const writeProgress = (p: number) => {
-      if (col) col.style.setProperty('--pp', `${p}`);
-      panelProgressRef.current = p;
+    // FTUE / other openers may only set isExpanded — keep panelClosed in sync (no-op if already false).
+    if (isExpanded) setPanelClosed(false);
+
+    const endMotion = () => {
+      panelBgAnimatingRef.current = false;
+      setPanelMotionActive(false);
     };
 
-    if (isExpanded) setPanelClosed(false);
+    const sampleProgressFromPanel = (): number => {
+      const panel = upgradePanelRef.current;
+      const ppd = upgradePanelExpandedHeightRef.current - UPGRADE_PANEL_CLOSED_VISIBLE_PX;
+      if (!panel || ppd <= 0) return panelProgressRef.current;
+      try {
+        const t = getComputedStyle(panel).transform;
+        if (!t || t === 'none') return panelProgressRef.current;
+        const y = new DOMMatrixReadOnly(t).m42;
+        return Math.max(0, Math.min(1, 1 - y / ppd));
+      } catch {
+        return panelProgressRef.current;
+      }
+    };
 
     // Mount: snap to settled progress, no animation.
     if (panelAnimFirstSyncRef.current) {
       panelAnimFirstSyncRef.current = false;
-      writeProgress(target);
-      panelBgAnimatingRef.current = false;
+      cancelUpgradePanelAnims();
+      applyUpgradePanelPose(target);
+      endMotion();
       if (!isExpanded) setPanelClosed(true);
       return;
     }
 
     const from = panelProgressRef.current;
     if (Math.abs(from - target) < 0.001) {
-      writeProgress(target);
-      panelBgAnimatingRef.current = false;
+      cancelUpgradePanelAnims();
+      applyUpgradePanelPose(target);
+      endMotion();
       if (!isExpanded) setPanelClosed(true);
       return;
     }
 
+    cancelUpgradePanelAnims();
     panelBgAnimatingRef.current = true;
-    let cancelled = false;
-    const start = performance.now();
-    const tick = (now: number) => {
-      if (cancelled) return;
-      const e = upgradePanelAnimEase(Math.min(1, (now - start) / UPGRADE_PANEL_ANIM_DURATION_MS));
-      writeProgress(from + (target - from) * e);
-      if (now - start < UPGRADE_PANEL_ANIM_DURATION_MS) {
-        panelAnimRafRef.current = requestAnimationFrame(tick);
-      } else {
-        panelAnimRafRef.current = null;
-        writeProgress(target);
-        panelBgAnimatingRef.current = false;
-        if (!isExpanded) setPanelClosed(true);
-      }
+    setPanelMotionActive(true);
+
+    const expandedH = upgradePanelExpandedHeightRef.current;
+    const ppd = expandedH - UPGRADE_PANEL_CLOSED_VISIBLE_PX;
+    const pcd = ppd / 2;
+    const pgd = ppd + GARDEN_BG_CLOSED_EXTRA_DOWN_PX;
+    const col = farmColumnRef.current;
+    const pcl = col?.style.getPropertyValue('--pcl')?.trim() || '0px';
+    const pct = parseFloat(col?.style.getPropertyValue('--pct') || '0') || 0;
+    const pgl = parseFloat(col?.style.getPropertyValue('--pgl') || '0') || 0;
+    const fromFull = (1 - from) * ppd;
+    const toFull = (1 - target) * ppd;
+    const fromHalf = (1 - from) * pcd;
+    const toHalf = (1 - target) * pcd;
+    const fromGarden = -pgl + (1 - from) * pgd;
+    const toGarden = -pgl + (1 - target) * pgd;
+    const fromGrass = -from * pcd;
+    const toGrass = -target * pcd;
+    const fromCenter = `translate(${pcl}, ${pct + fromHalf}px) translate(-50%, -50%) scale(0.75)`;
+    const toCenter = `translate(${pcl}, ${pct + toHalf}px) translate(-50%, -50%) scale(0.75)`;
+    const sideScale = GARDEN_SIDE_SPRITE_SCALE;
+
+    const opts: KeyframeAnimationOptions = {
+      duration: UPGRADE_PANEL_ANIM_DURATION_MS,
+      easing: UPGRADE_PANEL_WAAPI_EASING,
+      fill: 'forwards',
     };
-    panelAnimRafRef.current = requestAnimationFrame(tick);
+
+    const anims: Animation[] = [];
+    const tween = (el: HTMLElement | null, fromXf: string, toXf: string) => {
+      if (!el) return;
+      anims.push(el.animate([{ transform: fromXf }, { transform: toXf }], opts));
+    };
+    tween(upgradePanelRef.current, `translateY(${fromFull}px)`, `translateY(${toFull}px)`);
+    tween(seedHarvestRowRef.current, `translateY(${fromFull}px)`, `translateY(${toFull}px)`);
+    tween(hexGridBgRef.current, `translateY(${fromHalf}px)`, `translateY(${toHalf}px)`);
+    tween(gardenCenterBgRef.current, fromCenter, toCenter);
+    tween(gardenCenterTopBgRef.current, fromCenter, toCenter);
+    tween(gardenGrassBgRef.current, `translateY(${fromGrass}px)`, `translateY(${toGrass}px)`);
+    tween(
+      gardenBottomBgRef.current,
+      `translate(-50%, ${fromGarden}px) scale(${sideScale})`,
+      `translate(-50%, ${toGarden}px) scale(${sideScale})`,
+    );
+    tween(
+      gardenLeftBgRef.current,
+      `translateY(${fromGarden}px) scale(${sideScale})`,
+      `translateY(${toGarden}px) scale(${sideScale})`,
+    );
+    tween(
+      gardenRightBgRef.current,
+      `translateY(${fromGarden}px) scale(${sideScale})`,
+      `translateY(${toGarden}px) scale(${sideScale})`,
+    );
+    tween(gardenGradientBgRef.current, `translateY(${fromGarden}px)`, `translateY(${toGarden}px)`);
+    panelAnimsRef.current = anims;
+
+    let cancelled = false;
+    void Promise.all(anims.map((a) => a.finished.catch(() => undefined))).then(() => {
+      if (cancelled) return;
+      applyUpgradePanelPose(target);
+      cancelUpgradePanelAnims();
+      endMotion();
+      if (!isExpanded) setPanelClosed(true);
+    });
 
     return () => {
       cancelled = true;
-      // Keep panelBgAnimatingRef true across effect teardown → next setup. Clearing it here
-      // raced ResizeObserver between cleanup and the new effect (one-frame measure flash).
-      if (panelAnimRafRef.current != null) {
-        cancelAnimationFrame(panelAnimRafRef.current);
-        panelAnimRafRef.current = null;
-      }
+      const p = sampleProgressFromPanel();
+      panelProgressRef.current = p;
+      // Keep panelBgAnimatingRef true across teardown → next setup (avoids RO measure mid-retarget).
+      cancelUpgradePanelAnims();
+      applyUpgradePanelPose(p);
     };
-  }, [isExpanded]);
+  }, [isExpanded, applyUpgradePanelPose, cancelUpgradePanelAnims]);
 
   const [plantCollectionViewBonusesPressed, setPlantCollectionViewBonusesPressed] = useState(false);
   const [collectionFtueCtaPressed, setCollectionFtueCtaPressed] = useState(false);
@@ -9387,31 +9517,25 @@ export default function App() {
               className="h-full shrink-0 flex flex-col relative overflow-hidden bg-black"
               style={{ width: designWidth }}
             >
-              {/* Grass: full-bleed clip stays fixed. Travel matches hex/center (--pcd), NOT the
-                  larger bottom/side delta. Closed = covers the whole screen (incl. safe area);
-                  open = shifts up by --pcd. Layer is taller by --pcd so the bottom never gaps. */}
+              {/* Grass: full-bleed; shifts with hex half-travel so coverage never gaps. */}
               <div
                 className="absolute inset-0 pointer-events-none overflow-hidden z-[5]"
                 aria-hidden
               >
                 <div
+                  ref={gardenGrassBgRef}
                   className="absolute left-0 right-0 top-0 bg-no-repeat"
                   style={{
-                    // Extra height below the clip = open travel, so shifting up never exposes black.
-                    height: 'calc(100% + var(--pcd, 0px))',
                     backgroundImage: `url(${assetPath(gardenBg.grass)})`,
                     backgroundSize: 'auto 100%',
                     backgroundPosition: 'top center',
-                    // Same Y travel as hex grid / center / centerTop (via --pcd + --pp).
-                    // No permanent will-change: it forced ~10 full-bleed GPU layers on Android WebView
-                    // and caused black flicker when Settings/popups added more compositor work.
-                    transform: 'translateY(calc(var(--pp, 0) * var(--pcd, 0px) * -1))',
                   }}
                 />
               </div>
 
               {/* Center: pinned to hex grid; above grass, below bottom/left/right/gradient */}
               <img
+                ref={gardenCenterBgRef}
                 src={assetPath(gardenBg.center)}
                 alt=""
                 className="absolute pointer-events-none z-[5] max-w-none"
@@ -9421,14 +9545,13 @@ export default function App() {
                   top: 0,
                   width: 'auto',
                   height: 'auto',
-                  // Pin sprite center to hex-grid center (same --pcl/--pct/--pcd as the grid).
-                  transform: 'translate(var(--pcl, 0px), calc(var(--pct, 0px) + (1 - var(--pp, 0)) * var(--pcd, 0px))) translate(-50%, -50%) scale(0.75)',
                 }}
                 aria-hidden
               />
 
               {/* Bottom accent: bottom-center pinned; above center, below left/right */}
               <img
+                ref={gardenBottomBgRef}
                 src={assetPath(gardenBg.bottom)}
                 alt=""
                 className="absolute bottom-0 left-1/2 pointer-events-none z-[6] max-w-none"
@@ -9437,13 +9560,13 @@ export default function App() {
                   width: 'auto',
                   height: 'auto',
                   transformOrigin: 'bottom center',
-                  transform: `translate(-50%, calc(var(--pgl, 0px) * -1 + (1 - var(--pp, 0)) * var(--pgd, 0px))) scale(${GARDEN_SIDE_SPRITE_SCALE})`,
                 }}
                 aria-hidden
               />
 
               {/* Side sprites: bottom corners; above bottom, below gradient */}
               <img
+                ref={gardenLeftBgRef}
                 src={assetPath(gardenBg.left)}
                 alt=""
                 className="absolute bottom-0 left-0 pointer-events-none z-[7] max-w-none"
@@ -9452,11 +9575,11 @@ export default function App() {
                   width: 'auto',
                   height: 'auto',
                   transformOrigin: 'bottom left',
-                  transform: `translateY(calc(var(--pgl, 0px) * -1 + (1 - var(--pp, 0)) * var(--pgd, 0px))) scale(${GARDEN_SIDE_SPRITE_SCALE})`,
                 }}
                 aria-hidden
               />
               <img
+                ref={gardenRightBgRef}
                 src={assetPath(gardenBg.right)}
                 alt=""
                 className="absolute bottom-0 right-0 pointer-events-none z-[7] max-w-none"
@@ -9465,13 +9588,13 @@ export default function App() {
                   width: 'auto',
                   height: 'auto',
                   transformOrigin: 'bottom right',
-                  transform: `translateY(calc(var(--pgl, 0px) * -1 + (1 - var(--pp, 0)) * var(--pgd, 0px))) scale(${GARDEN_SIDE_SPRITE_SCALE})`,
                 }}
                 aria-hidden
               />
 
               {/* Center top: same hex anchor as center; above bottom/left/right, below gradient */}
               <img
+                ref={gardenCenterTopBgRef}
                 src={assetPath(gardenBg.centerTop)}
                 alt=""
                 className="absolute pointer-events-none z-[7] max-w-none"
@@ -9481,16 +9604,14 @@ export default function App() {
                   top: 0,
                   width: 'auto',
                   height: 'auto',
-                  // Same hex-grid pin as background_center.
-                  transform: 'translate(var(--pcl, 0px), calc(var(--pct, 0px) + (1 - var(--pp, 0)) * var(--pcd, 0px))) translate(-50%, -50%) scale(0.75)',
                 }}
                 aria-hidden
               />
 
               {/* Bottom gradient: same scale as bottom/left/right; full width stretch; height not stretched */}
               <div
+                ref={gardenGradientBgRef}
                 className="absolute left-0 right-0 bottom-0 pointer-events-none overflow-hidden z-[8]"
-                style={{ transform: 'translateY(calc(var(--pgl, 0px) * -1 + (1 - var(--pp, 0)) * var(--pgd, 0px)))' }}
                 aria-hidden
               >
                 <img
@@ -10111,12 +10232,9 @@ export default function App() {
                   }}
                   aria-label="Close upgrade panel"
                 />
-                <div 
+                <div
+                  ref={seedHarvestRowRef}
                   className="absolute bottom-[10px] w-full px-0 flex justify-between items-end z-20 pointer-events-none"
-                  style={{
-                    // Same close travel as the panel so the row stays glued to the peek top.
-                    transform: 'translateY(calc((1 - var(--pp, 0)) * var(--ppd, 229px)))',
-                  }}
                 >
                    <div
                      className="pointer-events-auto relative flex items-center justify-center"
@@ -10230,12 +10348,7 @@ export default function App() {
                 <div
                   ref={hexGridBgRef}
                   className="relative w-full flex items-center justify-center h-[323px] overflow-visible pointer-events-none"
-                  style={{
-                    marginBottom: '35px',
-                    // Grid shifts down by the measured center delta (~half the panel delta) when
-                    // closed, matching the garden center sprites. Transform moves the hit area too.
-                    transform: 'translateY(calc((1 - var(--pp, 0)) * var(--pcd, 0px)))',
-                  }}
+                  style={{ marginBottom: '35px' }}
                 >
                   <div className="relative w-full pointer-events-auto">
                   <HexBoard
@@ -10401,14 +10514,14 @@ export default function App() {
 
               {/* Ambient leaves: two identical emitters (leaf 8 below, leaf 7 above); upgrade panel z-60 stays on top */}
               <AmbientFallingLeaves
-                enabled={!isLoading && activeScreen === 'FARM' && !farmOverlayBlocksAmbientVfx}
+                enabled={!isLoading && activeScreen === 'FARM' && !farmOverlayBlocksAmbientVfx && !panelMotionActive}
                 spriteUrl={assetPath('/assets/vfx/particle_leaf_background_shadow.png')}
                 zIndex={54}
                 spawnIntervalMs={6000}
                 noiseStrength={0.5}
               />
               <AmbientFallingLeaves
-                enabled={!isLoading && activeScreen === 'FARM' && !farmOverlayBlocksAmbientVfx}
+                enabled={!isLoading && activeScreen === 'FARM' && !farmOverlayBlocksAmbientVfx && !panelMotionActive}
                 spriteUrl={getGardenAmbientLeafSpritePath()}
                 zIndex={55}
                 spawnIntervalMs={5000}
@@ -10426,8 +10539,7 @@ export default function App() {
                   touchAction: 'manipulation',
                   opacity: ftueUpgradePanelVisible ? 1 : 0,
                   pointerEvents: ftueUpgradePanelVisible ? 'auto' : 'none',
-                  // Closed = slid down by --ppd so only the tab strip peeks; open = translateY(0).
-                  transform: 'translateY(calc((1 - var(--pp, 0)) * var(--ppd, 229px)))',
+                  // Transform set by WAAPI / applyUpgradePanelPose (full panel travel).
                   transition: 'opacity 400ms ease-out',
                 }}
               >
@@ -10439,7 +10551,10 @@ export default function App() {
                     playSfx(SFX_IDS.uiConfirmNormal);
                     // Claim bg vars before React commits isExpanded — blocks ResizeObserver race.
                     panelBgAnimatingRef.current = true;
-                    setIsExpanded((prev) => !prev);
+                    const next = !isExpandedRef.current;
+                    // Batch with isExpanded so open does not double-render App.
+                    if (next) setPanelClosed(false);
+                    setIsExpanded(next);
                   }}
                   className="pointer-events-auto absolute left-1/2 top-0"
                   style={{
