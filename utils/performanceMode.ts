@@ -21,6 +21,11 @@ export function getPerformanceMode(): boolean {
   return performanceMode;
 }
 
+/** Popup open leaf bursts (rect perimeter / inline 40-leaf VFX). Off in performance mode. */
+export function shouldPlayPopupLeafBurst(): boolean {
+  return !performanceMode;
+}
+
 /** Set and persist. Call when user toggles in settings. */
 export function setPerformanceMode(on: boolean): void {
   performanceMode = on;

@@ -19,6 +19,7 @@ import {
 import { LeafBurst, LEAF_BURST_SMALL_COUNT } from './LeafBurst';
 import { PopupVectorBackground } from './PopupVectorBackground';
 import { PopupPrescaleFrame } from './PopupPrescaleFrame';
+import { shouldPlayPopupLeafBurst } from '../utils/performanceMode';
 
 const LEAF_SPRITES = [
   assetPath('/assets/vfx/particle_leaf_yellow_1.png'),
@@ -220,7 +221,7 @@ export const RateUsPopup: React.FC<RateUsPopupProps> = ({
           });
 
           const el = starButtonRefs.current[i];
-          if (el) {
+          if (el && shouldPlayPopupLeafBurst()) {
             const r = el.getBoundingClientRect();
             setStarBursts((prev) => [
               ...prev,
@@ -323,29 +324,34 @@ export const RateUsPopup: React.FC<RateUsPopupProps> = ({
   }, [leaves]);
 
   const beginEnterAfterPreflight = useCallback(() => {
-    const newLeaves = createPopupLeaves();
-    setLeaves(newLeaves);
-    leafStartTimeRef.current = Date.now();
-    leafPosRef.current = newLeaves.map((leaf) => ({
-      x: leaf.spawnX ?? 0,
-      y: leaf.spawnY ?? 0,
-      vx: 0,
-      vy: 0,
-      opacity: 1,
-      rotation: 0,
-      scale: 1,
-      started: false,
-    }));
-    setLeafPositions(
-      newLeaves.map((leaf) => ({
+    if (shouldPlayPopupLeafBurst()) {
+      const newLeaves = createPopupLeaves();
+      setLeaves(newLeaves);
+      leafStartTimeRef.current = Date.now();
+      leafPosRef.current = newLeaves.map((leaf) => ({
         x: leaf.spawnX ?? 0,
         y: leaf.spawnY ?? 0,
+        vx: 0,
+        vy: 0,
         opacity: 1,
         rotation: 0,
         scale: 1,
-      })),
-    );
-    setImgFailed({});
+        started: false,
+      }));
+      setLeafPositions(
+        newLeaves.map((leaf) => ({
+          x: leaf.spawnX ?? 0,
+          y: leaf.spawnY ?? 0,
+          opacity: 1,
+          rotation: 0,
+          scale: 1,
+        })),
+      );
+      setImgFailed({});
+    } else {
+      setLeaves([]);
+      setLeafPositions([]);
+    }
     setAnimState('entering');
     setTimeout(() => setAnimState('visible'), 250);
   }, []);

@@ -41,6 +41,7 @@ import {
 } from './GardenPickerRow';
 import { NewGardenPickerFtueOverlay } from './NewGardenPickerFtueOverlay';
 import { NEW_GARDEN_FTUE_VIEW_BUTTON_ID } from '../constants/newGardenFtue';
+import { shouldPlayPopupLeafBurst } from '../utils/performanceMode';
 
 interface GardenPickerPopupProps {
   isVisible: boolean;
@@ -199,16 +200,18 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
 
   const triggerPurchasePresentation = useCallback((rowKey: string, fx: GardenPickerPurchaseFx) => {
     setBounceRowKeys((prev) => (prev.includes(rowKey) ? prev : [...prev, rowKey]));
-    setLeafBursts((prev) => [
-      ...prev,
-      {
-        id: `garden-purchase-${rowKey}-${Date.now()}`,
-        x: fx.rowCenter.x,
-        y: fx.rowCenter.y,
-        rectWidth: fx.rowWidth,
-        rectHeight: fx.rowHeight,
-      },
-    ]);
+    if (shouldPlayPopupLeafBurst()) {
+      setLeafBursts((prev) => [
+        ...prev,
+        {
+          id: `garden-purchase-${rowKey}-${Date.now()}`,
+          x: fx.rowCenter.x,
+          y: fx.rowCenter.y,
+          rectWidth: fx.rowWidth,
+          rectHeight: fx.rowHeight,
+        },
+      ]);
+    }
     window.setTimeout(() => {
       setBounceRowKeys((prev) => prev.filter((k) => k !== rowKey));
     }, 220);

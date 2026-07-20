@@ -23,6 +23,7 @@ import {
   REWARD_PILL_STROKE_COLOR,
   REWARD_PILL_STROKE_WIDTH_PX,
 } from './Reward';
+import { shouldPlayPopupLeafBurst } from '../utils/performanceMode';
 
 /** Match DiscoveryPopup coin reward icon size (2× layout space). */
 const LEVEL_UP_REWARD_ICON_PX = Math.round(40 * 1.15);
@@ -221,21 +222,26 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
   }, [leaves]);
 
   const beginEnterAfterPreflight = useCallback(() => {
-    const newLeaves = createPopupLeaves();
-    setLeaves(newLeaves);
-    leafStartTimeRef.current = Date.now();
-    leafPosRef.current = newLeaves.map((leaf) => ({
-      x: leaf.spawnX ?? 0,
-      y: leaf.spawnY ?? 0,
-      vx: 0,
-      vy: 0,
-      opacity: 1,
-      rotation: 0,
-      scale: 1,
-      started: false,
-    }));
-    setLeafPositions(newLeaves.map((leaf) => ({ x: leaf.spawnX ?? 0, y: leaf.spawnY ?? 0, opacity: 1, rotation: 0, scale: 1 })));
-    setImgFailed({});
+    if (shouldPlayPopupLeafBurst()) {
+      const newLeaves = createPopupLeaves();
+      setLeaves(newLeaves);
+      leafStartTimeRef.current = Date.now();
+      leafPosRef.current = newLeaves.map((leaf) => ({
+        x: leaf.spawnX ?? 0,
+        y: leaf.spawnY ?? 0,
+        vx: 0,
+        vy: 0,
+        opacity: 1,
+        rotation: 0,
+        scale: 1,
+        started: false,
+      }));
+      setLeafPositions(newLeaves.map((leaf) => ({ x: leaf.spawnX ?? 0, y: leaf.spawnY ?? 0, opacity: 1, rotation: 0, scale: 1 })));
+      setImgFailed({});
+    } else {
+      setLeaves([]);
+      setLeafPositions([]);
+    }
     setAnimState('entering');
     setTimeout(() => setAnimState('visible'), 250);
   }, []);

@@ -150,7 +150,7 @@ import { TabType, ScreenType, BoardCell, Item, DragState } from './types';
 import type { FtueStageId } from './ftue/ftueConfig';
 import { assetPath } from './utils/assetPath';
 import { getTickCount60, TARGET_FRAME_MS, scheduleNextFrame } from './utils/raf60';
-import { getPerformanceMode, setPerformanceMode } from './utils/performanceMode';
+import { getPerformanceMode, setPerformanceMode, shouldPlayPopupLeafBurst } from './utils/performanceMode';
 import { getAutoMergeMode, setAutoMergeMode } from './utils/autoMergeMode';
 import { playMusicLoop, playSfx, setAudioSettings, setAdAudioSuspended, SFX_IDS, applySavedAudioSettingsEarly } from './utils/sfx';
 import { loadUserPrefs, persistUserPrefs, resetUserPrefsTogglesToDefaults } from './utils/userPrefs';
@@ -4922,26 +4922,28 @@ export default function App() {
   );
 
   // Keep a live “any popup open?” flag for the limited-offer auto poll (avoids stale interval closures).
+  const farmOverlayBlocksAmbientVfx =
+    !!limitedOfferPopup?.isVisible ||
+    !!levelUpPopup?.isVisible ||
+    !!discoveryPopup?.isVisible ||
+    goldenPotBonusesPopupOpen ||
+    !!purchaseSuccessfulUi ||
+    !!iapOfferUi ||
+    !!plantInfoPopup?.isVisible ||
+    rateUsPopupOpen ||
+    rateUsThankYouOpen ||
+    corruptSavePopupOpen ||
+    dailyTasksPopupOpen ||
+    lockedDailyTasksPopupOpen ||
+    lockedGardenPickerPopupOpen ||
+    gardenPickerOpen ||
+    pauseMenuOpen ||
+    devToolsOpen ||
+    !!offlineEarningsUi?.open ||
+    showFakeAd;
+
   useEffect(() => {
-    const blocking =
-      !!limitedOfferPopup?.isVisible ||
-      !!levelUpPopup?.isVisible ||
-      !!discoveryPopup?.isVisible ||
-      goldenPotBonusesPopupOpen ||
-      !!purchaseSuccessfulUi ||
-      !!iapOfferUi ||
-      !!plantInfoPopup?.isVisible ||
-      rateUsPopupOpen ||
-      rateUsThankYouOpen ||
-      corruptSavePopupOpen ||
-      dailyTasksPopupOpen ||
-      lockedDailyTasksPopupOpen ||
-      lockedGardenPickerPopupOpen ||
-      gardenPickerOpen ||
-      pauseMenuOpen ||
-      devToolsOpen ||
-      !!offlineEarningsUi?.open ||
-      showFakeAdRef.current;
+    const blocking = farmOverlayBlocksAmbientVfx || showFakeAdRef.current;
 
     if (prevBlockingPopupForLimitedOfferRef.current && !blocking) {
       lastOtherPopupClosedAtRef.current = Date.now();
@@ -4949,23 +4951,7 @@ export default function App() {
     prevBlockingPopupForLimitedOfferRef.current = blocking;
     blockingPopupOpenForLimitedOfferRef.current = blocking;
   }, [
-    limitedOfferPopup?.isVisible,
-    levelUpPopup?.isVisible,
-    discoveryPopup?.isVisible,
-    goldenPotBonusesPopupOpen,
-    purchaseSuccessfulUi,
-    iapOfferUi,
-    plantInfoPopup?.isVisible,
-    rateUsPopupOpen,
-    rateUsThankYouOpen,
-    corruptSavePopupOpen,
-    dailyTasksPopupOpen,
-    lockedDailyTasksPopupOpen,
-    lockedGardenPickerPopupOpen,
-    gardenPickerOpen,
-    pauseMenuOpen,
-    devToolsOpen,
-    offlineEarningsUi?.open,
+    farmOverlayBlocksAmbientVfx,
     showFakeAd,
     rewardedAdFadeInActive,
     rewardedAdBlackHoldActive,
@@ -5866,7 +5852,7 @@ export default function App() {
     setCollectionFtuePanelBouncing(true);
     playSfx(SFX_IDS.popupLevelUp);
     const panelEl = collectionFtuePanelRef.current;
-    if (panelEl && !getPerformanceMode()) {
+    if (panelEl && shouldPlayPopupLeafBurst()) {
       const w = panelEl.offsetWidth;
       const h = panelEl.offsetHeight;
       if (w > 0 && h > 0) {
@@ -5955,7 +5941,7 @@ export default function App() {
             playSfx(SFX_IDS.popupLevelUp);
             setCollectionFtueFreeButtonBouncing(true);
             const btnEl = collectionFtueFreeButtonRef.current;
-            if (btnEl && !getPerformanceMode()) {
+            if (btnEl && shouldPlayPopupLeafBurst()) {
               const w = btnEl.offsetWidth;
               const h = btnEl.offsetHeight;
               if (w > 0 && h > 0) {
@@ -9417,8 +9403,9 @@ export default function App() {
                     backgroundSize: 'auto 100%',
                     backgroundPosition: 'top center',
                     // Same Y travel as hex grid / center / centerTop (via --pcd + --pp).
+                    // No permanent will-change: it forced ~10 full-bleed GPU layers on Android WebView
+                    // and caused black flicker when Settings/popups added more compositor work.
                     transform: 'translateY(calc(var(--pp, 0) * var(--pcd, 0px) * -1))',
-                    willChange: 'transform',
                   }}
                 />
               </div>
@@ -9436,7 +9423,6 @@ export default function App() {
                   height: 'auto',
                   // Pin sprite center to hex-grid center (same --pcl/--pct/--pcd as the grid).
                   transform: 'translate(var(--pcl, 0px), calc(var(--pct, 0px) + (1 - var(--pp, 0)) * var(--pcd, 0px))) translate(-50%, -50%) scale(0.75)',
-                  willChange: 'transform',
                 }}
                 aria-hidden
               />
@@ -9452,7 +9438,6 @@ export default function App() {
                   height: 'auto',
                   transformOrigin: 'bottom center',
                   transform: `translate(-50%, calc(var(--pgl, 0px) * -1 + (1 - var(--pp, 0)) * var(--pgd, 0px))) scale(${GARDEN_SIDE_SPRITE_SCALE})`,
-                  willChange: 'transform',
                 }}
                 aria-hidden
               />
@@ -9468,7 +9453,6 @@ export default function App() {
                   height: 'auto',
                   transformOrigin: 'bottom left',
                   transform: `translateY(calc(var(--pgl, 0px) * -1 + (1 - var(--pp, 0)) * var(--pgd, 0px))) scale(${GARDEN_SIDE_SPRITE_SCALE})`,
-                  willChange: 'transform',
                 }}
                 aria-hidden
               />
@@ -9482,7 +9466,6 @@ export default function App() {
                   height: 'auto',
                   transformOrigin: 'bottom right',
                   transform: `translateY(calc(var(--pgl, 0px) * -1 + (1 - var(--pp, 0)) * var(--pgd, 0px))) scale(${GARDEN_SIDE_SPRITE_SCALE})`,
-                  willChange: 'transform',
                 }}
                 aria-hidden
               />
@@ -9500,7 +9483,6 @@ export default function App() {
                   height: 'auto',
                   // Same hex-grid pin as background_center.
                   transform: 'translate(var(--pcl, 0px), calc(var(--pct, 0px) + (1 - var(--pp, 0)) * var(--pcd, 0px))) translate(-50%, -50%) scale(0.75)',
-                  willChange: 'transform',
                 }}
                 aria-hidden
               />
@@ -9508,7 +9490,7 @@ export default function App() {
               {/* Bottom gradient: same scale as bottom/left/right; full width stretch; height not stretched */}
               <div
                 className="absolute left-0 right-0 bottom-0 pointer-events-none overflow-hidden z-[8]"
-                style={{ transform: 'translateY(calc(var(--pgl, 0px) * -1 + (1 - var(--pp, 0)) * var(--pgd, 0px)))', willChange: 'transform' }}
+                style={{ transform: 'translateY(calc(var(--pgl, 0px) * -1 + (1 - var(--pp, 0)) * var(--pgd, 0px)))' }}
                 aria-hidden
               >
                 <img
@@ -10134,7 +10116,6 @@ export default function App() {
                   style={{
                     // Same close travel as the panel so the row stays glued to the peek top.
                     transform: 'translateY(calc((1 - var(--pp, 0)) * var(--ppd, 229px)))',
-                    willChange: 'transform',
                   }}
                 >
                    <div
@@ -10254,7 +10235,6 @@ export default function App() {
                     // Grid shifts down by the measured center delta (~half the panel delta) when
                     // closed, matching the garden center sprites. Transform moves the hit area too.
                     transform: 'translateY(calc((1 - var(--pp, 0)) * var(--pcd, 0px)))',
-                    willChange: 'transform',
                   }}
                 >
                   <div className="relative w-full pointer-events-auto">
@@ -10421,14 +10401,14 @@ export default function App() {
 
               {/* Ambient leaves: two identical emitters (leaf 8 below, leaf 7 above); upgrade panel z-60 stays on top */}
               <AmbientFallingLeaves
-                enabled={!isLoading && activeScreen === 'FARM'}
+                enabled={!isLoading && activeScreen === 'FARM' && !farmOverlayBlocksAmbientVfx}
                 spriteUrl={assetPath('/assets/vfx/particle_leaf_background_shadow.png')}
                 zIndex={54}
                 spawnIntervalMs={6000}
                 noiseStrength={0.5}
               />
               <AmbientFallingLeaves
-                enabled={!isLoading && activeScreen === 'FARM'}
+                enabled={!isLoading && activeScreen === 'FARM' && !farmOverlayBlocksAmbientVfx}
                 spriteUrl={getGardenAmbientLeafSpritePath()}
                 zIndex={55}
                 spawnIntervalMs={5000}
@@ -10448,7 +10428,6 @@ export default function App() {
                   pointerEvents: ftueUpgradePanelVisible ? 'auto' : 'none',
                   // Closed = slid down by --ppd so only the tab strip peeks; open = translateY(0).
                   transform: 'translateY(calc((1 - var(--pp, 0)) * var(--ppd, 229px)))',
-                  willChange: 'transform',
                   transition: 'opacity 400ms ease-out',
                 }}
               >
@@ -10504,10 +10483,8 @@ export default function App() {
                 <div
                   className="flex-grow min-h-0 overflow-hidden relative flex flex-col"
                   style={{
-                    contain: 'layout paint',
                     // Keep the list mounted + laid out while closed (clipped off-screen by the
-                    // column overflow + panel slide). Hiding via maxHeight/opacity on panelClosed
-                    // caused a one-frame layout thrash that flickered header / goals / FABs.
+                    // column overflow + panel slide). Avoid maxHeight/opacity thrash on open.
                     pointerEvents: isExpanded ? 'auto' : 'none',
                   }}
                 >

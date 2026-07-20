@@ -4,6 +4,7 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { shouldPlayPopupLeafBurst } from '../utils/performanceMode';
 
 const LEAF_SPRITES = [
   assetPath('/assets/vfx/particle_leaf_green_1.png'),
@@ -106,8 +107,11 @@ export const PopupRectLeafBurst: React.FC<PopupRectLeafBurstProps> = ({
   zIndex = 101,
   onComplete,
 }) => {
+  const skipBurst = !shouldPlayPopupLeafBurst();
   const [leaves, setLeaves] = useState<LeafParticle[]>(() =>
-    createRectPerimeterPopupLeaves(rectWidth, rectHeight, POPUP_RECT_LEAF_COUNT, topEdgeInsetPx),
+    skipBurst
+      ? []
+      : createRectPerimeterPopupLeaves(rectWidth, rectHeight, POPUP_RECT_LEAF_COUNT, topEdgeInsetPx),
   );
   const [leafPositions, setLeafPositions] = useState<
     { x: number; y: number; opacity: number; rotation: number; scale: number }[]
@@ -150,6 +154,10 @@ export const PopupRectLeafBurst: React.FC<PopupRectLeafBurstProps> = ({
   onCompleteRef.current = onComplete;
 
   useEffect(() => {
+    if (skipBurst) {
+      onCompleteRef.current?.();
+      return;
+    }
     if (leaves.length === 0) return;
 
     const tick = () => {
@@ -211,7 +219,7 @@ export const PopupRectLeafBurst: React.FC<PopupRectLeafBurstProps> = ({
 
     leafRafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(leafRafRef.current);
-  }, [leaves]);
+  }, [leaves, skipBurst]);
 
   if (leaves.length === 0) return null;
 

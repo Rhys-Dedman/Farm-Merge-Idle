@@ -19,7 +19,7 @@ import {
 import { PopupVectorBackground } from './PopupVectorBackground';
 import { PopupPrescaleFrame } from './PopupPrescaleFrame';
 import { PopupRectLeafBurst } from './PopupRectLeafBurst';
-import { getPerformanceMode, setPerformanceMode } from '../utils/performanceMode';
+import { getPerformanceMode, setPerformanceMode, shouldPlayPopupLeafBurst } from '../utils/performanceMode';
 import { APP_VERSION } from '../constants/appVersion';
 import { openSupportContact } from '../constants/supportContact';
 import { readRateUsPermanentlyDismissed } from '../utils/rateUsDismiss';
@@ -177,8 +177,11 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
   );
 
   const beginEnterAfterPreflight = useCallback(() => {
-    setLeafBurstKey((k) => k + 1);
-    setShowLeafBurst(true);
+    // Skip leaf burst in performance mode — Settings open already stresses Android WebView layers.
+    if (shouldPlayPopupLeafBurst()) {
+      setLeafBurstKey((k) => k + 1);
+      setShowLeafBurst(true);
+    }
     setAnimState('entering');
     setTimeout(() => setAnimState('visible'), 250);
   }, []);

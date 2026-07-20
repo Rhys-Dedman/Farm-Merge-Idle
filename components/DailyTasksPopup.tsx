@@ -21,6 +21,7 @@ import {
 import { PopupRectLeafBurst } from './PopupRectLeafBurst';
 import { DailyTaskRow, type DailyTaskClaimFx, type DailyTaskDefinition } from './DailyTaskRow';
 import { DailyTasksTimerPanel } from './DailyTasksTimerPanel';
+import { shouldPlayPopupLeafBurst } from '../utils/performanceMode';
 
 const POPUP_CLOSE_MS = 200;
 
@@ -91,8 +92,10 @@ export const DailyTasksPopup: React.FC<DailyTasksPopupProps> = ({
   }, [isVisible]);
 
   const beginEnterAfterPreflight = useCallback(() => {
-    setLeafBurstKey((k) => k + 1);
-    setShowLeafBurst(true);
+    if (shouldPlayPopupLeafBurst()) {
+      setLeafBurstKey((k) => k + 1);
+      setShowLeafBurst(true);
+    }
     setAnimState('entering');
     setTimeout(() => setAnimState('visible'), 250);
   }, []);

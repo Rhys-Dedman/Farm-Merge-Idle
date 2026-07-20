@@ -234,7 +234,6 @@ export const AmbientFallingLeaves: React.FC<AmbientFallingLeavesProps> = ({
             width: leaf.size,
             height: leaf.size,
             transform: `translate(-50%, -50%) rotate(${leaf.rotationRad}rad)`,
-            willChange: 'transform',
             pointerEvents: 'none',
           }}
         >

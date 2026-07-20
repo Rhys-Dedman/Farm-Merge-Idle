@@ -24,6 +24,7 @@ import { PopupVectorBackground } from './PopupVectorBackground';
 import { PopupPrescaleFrame } from './PopupPrescaleFrame';
 import { formatCompactNumber } from '../utils/formatCompactNumber';
 import { MAX_PLANT_TIER } from '../constants/plants';
+import { shouldPlayPopupLeafBurst } from '../utils/performanceMode';
 import { PlantWithPot } from './PlantWithPot';
 import {
   REWARD_OFFER_LINE_TEXT_COLOR,
@@ -272,21 +273,26 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
   }, [leaves]);
 
   const beginEnterAfterPreflight = useCallback(() => {
-    const newLeaves = createPopupLeaves();
-    setLeaves(newLeaves);
-    leafStartTimeRef.current = Date.now();
-    leafPosRef.current = newLeaves.map((leaf) => ({
-      x: leaf.spawnX ?? 0,
-      y: leaf.spawnY ?? 0,
-      vx: 0,
-      vy: 0,
-      opacity: 1,
-      rotation: 0,
-      scale: 1,
-      started: false,
-    }));
-    setLeafPositions(newLeaves.map((leaf) => ({ x: leaf.spawnX ?? 0, y: leaf.spawnY ?? 0, opacity: 1, rotation: 0, scale: 1 })));
-    setImgFailed({});
+    if (shouldPlayPopupLeafBurst()) {
+      const newLeaves = createPopupLeaves();
+      setLeaves(newLeaves);
+      leafStartTimeRef.current = Date.now();
+      leafPosRef.current = newLeaves.map((leaf) => ({
+        x: leaf.spawnX ?? 0,
+        y: leaf.spawnY ?? 0,
+        vx: 0,
+        vy: 0,
+        opacity: 1,
+        rotation: 0,
+        scale: 1,
+        started: false,
+      }));
+      setLeafPositions(newLeaves.map((leaf) => ({ x: leaf.spawnX ?? 0, y: leaf.spawnY ?? 0, opacity: 1, rotation: 0, scale: 1 })));
+      setImgFailed({});
+    } else {
+      setLeaves([]);
+      setLeafPositions([]);
+    }
     setAnimState('entering');
     setTimeout(() => setAnimState('visible'), 250);
   }, []);
