@@ -1505,7 +1505,7 @@ export default function App() {
   /** Locked garden bg positions at settled open/closed. Open/close only ease between these. */
   const gardenBgClosedRef = useRef<{ gl: number; cl: number; ct: number } | null>(null);
   const gardenBgOpenRef = useRef<{ gl: number; cl: number; ct: number } | null>(null);
-  /** While true, ResizeObserver must not overwrite --pgl/--pcl/--pct (the rAF loop owns them). */
+  /** While true, ResizeObserver must not remeasure garden anchors (the rAF loop owns --pp). */
   const panelBgAnimatingRef = useRef(false);
   const [money, setMoney] = useState(0);
   // Used for synchronous updates during pagehide/unload so persisted snapshots are correct.
@@ -5519,64 +5519,61 @@ export default function App() {
     // During open/close the rAF owns --pp; base vars/deltas only change on real layout/resize.
     if (panelBgAnimatingRef.current) return;
     const col = farmColumnRef.current;
-    const el = upgradePanelRef.current;
-    if (!col || !el) return;
+    if (!col) return;
     const scale = appScaleRef.current || 1;
 
-    const prevPp = col.style.getPropertyValue('--pp');
-    // Panel animates via transform, but garden/hex positions depend on flex reflow. Flash-measure
-    // at expanded vs collapsed HEIGHT (invisible sync) to get the true pcd/pgd travel values.
-    col.style.setProperty('--pp', '1');
-
-    const measureGardenAtPanelHeight = (panelH: number) => {
-      const prevHeight = el.style.height;
-      el.style.height = `${panelH}px`;
-      const colRect = col.getBoundingClientRect();
-      const tabLine = document.getElementById('upgrade-panel-tab-line');
-      const grid = hexGridBgRef.current;
-      let gl = 0;
-      let cl = 0;
-      let ct = 0;
-      if (tabLine) {
-        const lineRect = tabLine.getBoundingClientRect();
-        gl = Math.max(0, (colRect.bottom - lineRect.bottom) / scale - GARDEN_BG_TAB_LINE_OFFSET_PX);
-      }
-      if (grid) {
-        const gridRect = grid.getBoundingClientRect();
-        const HEX_GRID_CENTER_Y_RATIO = 0.48;
-        cl = (gridRect.left + gridRect.width / 2 - colRect.left) / scale;
-        ct = (gridRect.top + gridRect.height * HEX_GRID_CENTER_Y_RATIO - colRect.top) / scale;
-      }
-      el.style.height = prevHeight;
-      return { gl, cl, ct };
-    };
-
+    // Panel height is FIXED (open/close is transform-only). Never flash height or --pp — that was
+    // painting one bad frame (header / goals / floating buttons) on Android WebView.
+    // Open-pose anchors are measured from the current DOM, undoing the live --pp slide.
     const expandedH = upgradePanelExpandedHeightRef.current;
-    const open = measureGardenAtPanelHeight(expandedH);
-    const closed = measureGardenAtPanelHeight(UPGRADE_PANEL_CLOSED_VISIBLE_PX);
-    gardenBgClosedRef.current = closed;
-    gardenBgOpenRef.current = open;
+    const ppd = expandedH - UPGRADE_PANEL_CLOSED_VISIBLE_PX;
+    // Closed flex layout would grow the hex area by ppd; centered grid moves ~half that.
+    const pcd = ppd / 2;
+    const pgd = ppd + GARDEN_BG_CLOSED_EXTRA_DOWN_PX;
+    const pp = panelProgressRef.current;
+    const panelSlideY = (1 - pp) * ppd * scale;
+    const hexSlideY = (1 - pp) * pcd * scale;
 
-    col.style.setProperty('--ppd', `${expandedH - UPGRADE_PANEL_CLOSED_VISIBLE_PX}px`);
-    col.style.setProperty('--pgl', `${open.gl}px`);
-    col.style.setProperty('--pct', `${open.ct}px`);
-    col.style.setProperty('--pcl', `${open.cl}px`);
-    col.style.setProperty('--pgd', `${open.gl - closed.gl + GARDEN_BG_CLOSED_EXTRA_DOWN_PX}px`);
-    col.style.setProperty('--pcd', `${closed.ct - open.ct}px`);
+    const colRect = col.getBoundingClientRect();
+    const tabLine = document.getElementById('upgrade-panel-tab-line');
+    const grid = hexGridBgRef.current;
+    let gl = 0;
+    let cl = 0;
+    let ct = 0;
+    if (tabLine) {
+      const lineRect = tabLine.getBoundingClientRect();
+      const lineBottomOpen = lineRect.bottom - panelSlideY;
+      gl = Math.max(0, (colRect.bottom - lineBottomOpen) / scale - GARDEN_BG_TAB_LINE_OFFSET_PX);
+    }
+    if (grid) {
+      const gridRect = grid.getBoundingClientRect();
+      const HEX_GRID_CENTER_Y_RATIO = 0.48;
+      cl = (gridRect.left + gridRect.width / 2 - colRect.left) / scale;
+      const ctMeasured =
+        (gridRect.top + gridRect.height * HEX_GRID_CENTER_Y_RATIO - colRect.top) / scale;
+      ct = ctMeasured - hexSlideY / scale;
+    }
 
-    col.style.setProperty('--pp', prevPp !== '' ? prevPp : `${isExpandedRef.current ? 1 : 0}`);
+    gardenBgOpenRef.current = { gl, cl, ct };
+    gardenBgClosedRef.current = { gl: Math.max(0, gl - ppd), cl, ct: ct + pcd };
+
+    col.style.setProperty('--ppd', `${ppd}px`);
+    col.style.setProperty('--pgl', `${gl}px`);
+    col.style.setProperty('--pct', `${ct}px`);
+    col.style.setProperty('--pcl', `${cl}px`);
+    col.style.setProperty('--pgd', `${pgd}px`);
+    col.style.setProperty('--pcd', `${pcd}px`);
   }, []);
 
   useLayoutEffect(() => {
     updateGardenBgLayout();
     const col = farmColumnRef.current;
     const grid = hexGridBgRef.current;
-    const panel = upgradePanelRef.current;
     if (!col) return;
+    // Panel size is fixed during open/close — observing it only caused spurious remeasures.
     const ro = new ResizeObserver(updateGardenBgLayout);
     ro.observe(col);
     if (grid) ro.observe(grid);
-    if (panel) ro.observe(panel);
     return () => ro.disconnect();
   }, [updateGardenBgLayout, designWidth, designHeight, appScale, ftueUpgradePanelVisible]);
 
@@ -5633,7 +5630,8 @@ export default function App() {
 
     return () => {
       cancelled = true;
-      panelBgAnimatingRef.current = false;
+      // Keep panelBgAnimatingRef true across effect teardown → next setup. Clearing it here
+      // raced ResizeObserver between cleanup and the new effect (one-frame measure flash).
       if (panelAnimRafRef.current != null) {
         cancelAnimationFrame(panelAnimRafRef.current);
         panelAnimRafRef.current = null;
@@ -10507,10 +10505,9 @@ export default function App() {
                   className="flex-grow min-h-0 overflow-hidden relative flex flex-col"
                   style={{
                     contain: 'layout paint',
-                    // Hide list only after close has fully settled (panelClosed). Using isExpanded
-                    // would snap the upgrades away on tap-close while the panel is still sliding.
-                    maxHeight: panelClosed ? 0 : undefined,
-                    opacity: panelClosed ? 0 : 1,
+                    // Keep the list mounted + laid out while closed (clipped off-screen by the
+                    // column overflow + panel slide). Hiding via maxHeight/opacity on panelClosed
+                    // caused a one-frame layout thrash that flickered header / goals / FABs.
                     pointerEvents: isExpanded ? 'auto' : 'none',
                   }}
                 >
