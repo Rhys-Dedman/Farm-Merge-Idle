@@ -890,19 +890,38 @@ const getGoalCropRequired = (
 };
 import { ErrorBoundary } from './components/ErrorBoundary';
 
-/** Ease-out for opening: easeOutQuint over first 50% (fast start, slow end), then hold */
-const easeOutOpen = (t: number) => (t < 0.5 ? 1 - Math.pow(1 - t * 2, 5) : 1);
-/** Ease-out for closing */
-const easeOutClose = (t: number) => 1 - Math.pow(1 - t, 3);
+/**
+ * Upgrade panel open height is a % of the design canvas (same idea as the old 42% / 45vh / 30vh
+ * system). Closed peek is tabs-only. Open/close motion stays TRANSFORM-ONLY via --pp (no per-frame
+ * height animation) — only the settled open height scales with designHeight on resize.
+ *
+ * Git history: h-[42%] → calc(45vh - 55px) → calc(30vh - 55px) (hex/customer safe areas) → fixed 279.
+ * Restored as 25% of designHeight (tuned from the historical 30vh / 42% lineage).
+ */
+const UPGRADE_PANEL_OPEN_HEIGHT_FRAC = 0.25;
+/** Visible closed peek above the column bottom (= UpgradeTabs 43px + thin pad). */
+const UPGRADE_PANEL_CLOSED_VISIBLE_PX = 50;
+/** Floor / ceiling so extreme aspect ratios stay usable. */
+const UPGRADE_PANEL_EXPANDED_MIN_PX = 180;
+const UPGRADE_PANEL_EXPANDED_MAX_PX = 420;
 
-/** Animate height with JS for reliable easing (CSS transitions weren't applying curve on open) */
-const UPGRADE_PANEL_COLLAPSED_HEIGHT_PX = 50;
-const UPGRADE_PANEL_EXPANDED_HEIGHT_PX = 279;
+function getUpgradePanelExpandedHeightPx(designHeightPx: number): number {
+  const raw = Math.round(designHeightPx * UPGRADE_PANEL_OPEN_HEIGHT_FRAC);
+  return Math.max(
+    UPGRADE_PANEL_EXPANDED_MIN_PX,
+    Math.min(UPGRADE_PANEL_EXPANDED_MAX_PX, raw),
+  );
+}
 
 /** Shared scale for bottom / left / right / gradient garden sprites (relative to each other). */
 const GARDEN_SIDE_SPRITE_SCALE = 0.6;
 /** Pin garden backgrounds this many px below the upgrade panel tab underline. */
 const GARDEN_BG_TAB_LINE_OFFSET_PX = 20;
+/**
+ * Extra downward shift for garden bg layers ONLY when the panel is closed (open pose unchanged).
+ * Does not affect the panel, seed/harvest buttons, or hex grid.
+ */
+const GARDEN_BG_CLOSED_EXTRA_DOWN_PX = 10;
 /** Nudge collection column right to clear subpixel seam bleed on garden (design px). */
 const BARN_CAROUSEL_SEAM_OFFSET_PX = 1;
 const COLLECTION_BACKGROUND_WIDTH_PX = 2000;
@@ -914,43 +933,16 @@ const COLLECTION_ROOF_WIDTH_PX = 800;
 /** Native `collection_roof.png` height ÷ width (2048×512). */
 const COLLECTION_ROOF_ASPECT_HEIGHT = 512 / 2048;
 
-const UPGRADE_PANEL_OPEN_DURATION_MS = 1400;
-const UPGRADE_PANEL_CLOSE_DURATION_MS = 350;
-
-/** Upgrade panel height — rAF eased open/close. */
-function useUpgradePanelAnimation(isExpanded: boolean) {
-  const [height, setHeight] = useState(isExpanded ? UPGRADE_PANEL_EXPANDED_HEIGHT_PX : UPGRADE_PANEL_COLLAPSED_HEIGHT_PX);
-  const heightRef = useRef(height);
-  heightRef.current = height;
-  const rafRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    const target = isExpanded ? UPGRADE_PANEL_EXPANDED_HEIGHT_PX : UPGRADE_PANEL_COLLAPSED_HEIGHT_PX;
-    const from = heightRef.current;
-    if (Math.abs(from - target) < 1) return;
-
-    const startTime = Date.now();
-    const duration = isExpanded ? UPGRADE_PANEL_OPEN_DURATION_MS : UPGRADE_PANEL_CLOSE_DURATION_MS;
-    const ease = isExpanded ? easeOutOpen : easeOutClose;
-
-    const tick = () => {
-      const elapsed = Date.now() - startTime;
-      const t = Math.min(1, elapsed / duration);
-      const eased = ease(t);
-      const next = from + (target - from) * eased;
-      setHeight(t >= 1 ? target : next);
-      if (t < 1) {
-        rafRef.current = requestAnimationFrame(tick);
-      }
-    };
-    rafRef.current = requestAnimationFrame(tick);
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, [isExpanded]);
-
-  return height;
-}
+/**
+ * Panel open/close is TRANSFORM-ONLY. One rAF eases a single progress value `p` (0 = closed,
+ * 1 = open) written as the CSS var `--pp` on the farm column. The panel (fixed height), the hex
+ * grid, the seed/harvest row, and every garden bg layer all derive their position from `--pp` via
+ * `transform` — never `height`/`top` — so they run on the compositor on one clock and stay perfectly
+ * locked with no per-frame layout, no lag, and no duration hacks.
+ */
+const UPGRADE_PANEL_ANIM_DURATION_MS = 800;
+/** Strong ease-out (easeOutQuint): fast start, slow end. Shared by panel + garden bg. */
+const upgradePanelAnimEase = (t: number) => 1 - Math.pow(1 - t, 5);
 
 // Preload popup assets on module load to prevent flash of unstyled content
 const POPUP_ASSETS_TO_PRELOAD = [
@@ -1502,9 +1494,19 @@ export default function App() {
   const [fieldPackCountdownRefreshKey, setFieldPackCountdownRefreshKey] = useState(0);
   const [dailyTasksCountdownRefreshKey, setDailyTasksCountdownRefreshKey] = useState(0);
   const [isExpanded, setIsExpanded] = useState(false);
-  const panelHeight = useUpgradePanelAnimation(isExpanded);
-  /** Lifts garden bg so its bottom aligns with the SEEDS/GARDEN/MARKET tab underline. */
-  const [gardenGrassLiftPx, setGardenGrassLiftPx] = useState(0);
+  /** Live open/close progress (0 = closed, 1 = open). Written to --pp on the farm column each frame. */
+  const panelProgressRef = useRef(0);
+  /** Settled open panel height (design px); updated when designHeight changes. */
+  const upgradePanelExpandedHeightRef = useRef(getUpgradePanelExpandedHeightPx(796));
+  const isExpandedRef = useRef(isExpanded);
+  isExpandedRef.current = isExpanded;
+  /** True once the panel's close animation has fully settled (or it never opened). Gates FTUE 11. */
+  const [panelClosed, setPanelClosed] = useState(!isExpanded);
+  /** Locked garden bg positions at settled open/closed. Open/close only ease between these. */
+  const gardenBgClosedRef = useRef<{ gl: number; cl: number; ct: number } | null>(null);
+  const gardenBgOpenRef = useRef<{ gl: number; cl: number; ct: number } | null>(null);
+  /** While true, ResizeObserver must not overwrite --pgl/--pcl/--pct (the rAF loop owns them). */
+  const panelBgAnimatingRef = useRef(false);
   const [money, setMoney] = useState(0);
   // Used for synchronous updates during pagehide/unload so persisted snapshots are correct.
   const moneyRef = useRef<number>(money);
@@ -3708,10 +3710,10 @@ export default function App() {
   // FTUE 10 → 11: wait until upgrade panel is fully closed, enable surplus, then show FTUE 11.
   useEffect(() => {
     if (!ftue11StartQueued) return;
-    // Panel closed height target is 50 (see useAnimatedPanelHeight). Wait until we reach it.
-    if (panelHeight > 50.5) return;
+    // Wait until the upgrade panel has fully finished its close animation.
+    if (!panelClosed) return;
 
-    // Prevent double-scheduling if panelHeight fluctuates around the threshold.
+    // Prevent double-scheduling if this effect re-fires while already in flight.
     if (ftue11InFlightRef.current) return;
     ftue11InFlightRef.current = true;
 
@@ -3730,7 +3732,7 @@ export default function App() {
     setActiveFtueStage('recharge_intro');
     setFtue11StartQueued(false);
     ftue11InFlightRef.current = false;
-  }, [ftue11StartQueued, panelHeight, ftue10PostClosePending]);
+  }, [ftue11StartQueued, panelClosed, ftue10PostClosePending]);
 
   const clearSoftHarvestNudgeTimer = useCallback(() => {
     if (softHarvestNudgeTimerRef.current) {
@@ -4434,7 +4436,6 @@ export default function App() {
   const [gardenGradientHeightPx, setGardenGradientHeightPx] = useState<number | null>(null);
   const hexGridBgRef = useRef<HTMLDivElement>(null);
   const hexAreaRef = useRef<HTMLDivElement>(null);
-  const [gardenCenterBgPos, setGardenCenterBgPos] = useState({ left: 0, top: 0 });
   const walletRef = useRef<HTMLButtonElement>(null);
   const walletIconRef = useRef<HTMLSpanElement>(null);
   const goldenPotWalletRef = useRef<HTMLButtonElement>(null);
@@ -5094,6 +5095,9 @@ export default function App() {
   const appScale = isWideViewport ? scaleY : scaleX;
   const designWidth = isWideViewport ? viewportWidth / appScale : baseWidth;
   const designHeight = isWideViewport ? baseHeight : availableHeight / appScale;
+  /** Open height = 25% of design canvas (clamped). Close travel derived in updateGardenBgLayout. */
+  const upgradePanelExpandedPx = getUpgradePanelExpandedHeightPx(designHeight);
+  upgradePanelExpandedHeightRef.current = upgradePanelExpandedPx;
   const effectiveSafeTopInsetScreen = fakeNotchPreviewEnabled
     ? FAKE_SAFE_AREA_TOP_PX
     : safeTopInsetScreen;
@@ -5512,38 +5516,130 @@ export default function App() {
   );
 
   const updateGardenBgLayout = useCallback(() => {
+    // During open/close the rAF owns --pp; base vars/deltas only change on real layout/resize.
+    if (panelBgAnimatingRef.current) return;
     const col = farmColumnRef.current;
-    const tabLine = document.getElementById('upgrade-panel-tab-line');
-    const grid = hexGridBgRef.current;
-    if (!col) return;
+    const el = upgradePanelRef.current;
+    if (!col || !el) return;
     const scale = appScaleRef.current || 1;
-    const colRect = col.getBoundingClientRect();
-    if (tabLine) {
-      const lineRect = tabLine.getBoundingClientRect();
-      setGardenGrassLiftPx(
-        Math.max(0, (colRect.bottom - lineRect.bottom) / scale - GARDEN_BG_TAB_LINE_OFFSET_PX)
-      );
-    }
-    if (grid) {
-      const gridRect = grid.getBoundingClientRect();
-      const HEX_GRID_CENTER_Y_RATIO = 0.48;
-      setGardenCenterBgPos({
-        left: (gridRect.left + gridRect.width / 2 - colRect.left) / scale,
-        top: (gridRect.top + gridRect.height * HEX_GRID_CENTER_Y_RATIO - colRect.top) / scale,
-      });
-    }
+
+    const prevPp = col.style.getPropertyValue('--pp');
+    // Panel animates via transform, but garden/hex positions depend on flex reflow. Flash-measure
+    // at expanded vs collapsed HEIGHT (invisible sync) to get the true pcd/pgd travel values.
+    col.style.setProperty('--pp', '1');
+
+    const measureGardenAtPanelHeight = (panelH: number) => {
+      const prevHeight = el.style.height;
+      el.style.height = `${panelH}px`;
+      const colRect = col.getBoundingClientRect();
+      const tabLine = document.getElementById('upgrade-panel-tab-line');
+      const grid = hexGridBgRef.current;
+      let gl = 0;
+      let cl = 0;
+      let ct = 0;
+      if (tabLine) {
+        const lineRect = tabLine.getBoundingClientRect();
+        gl = Math.max(0, (colRect.bottom - lineRect.bottom) / scale - GARDEN_BG_TAB_LINE_OFFSET_PX);
+      }
+      if (grid) {
+        const gridRect = grid.getBoundingClientRect();
+        const HEX_GRID_CENTER_Y_RATIO = 0.48;
+        cl = (gridRect.left + gridRect.width / 2 - colRect.left) / scale;
+        ct = (gridRect.top + gridRect.height * HEX_GRID_CENTER_Y_RATIO - colRect.top) / scale;
+      }
+      el.style.height = prevHeight;
+      return { gl, cl, ct };
+    };
+
+    const expandedH = upgradePanelExpandedHeightRef.current;
+    const open = measureGardenAtPanelHeight(expandedH);
+    const closed = measureGardenAtPanelHeight(UPGRADE_PANEL_CLOSED_VISIBLE_PX);
+    gardenBgClosedRef.current = closed;
+    gardenBgOpenRef.current = open;
+
+    col.style.setProperty('--ppd', `${expandedH - UPGRADE_PANEL_CLOSED_VISIBLE_PX}px`);
+    col.style.setProperty('--pgl', `${open.gl}px`);
+    col.style.setProperty('--pct', `${open.ct}px`);
+    col.style.setProperty('--pcl', `${open.cl}px`);
+    col.style.setProperty('--pgd', `${open.gl - closed.gl + GARDEN_BG_CLOSED_EXTRA_DOWN_PX}px`);
+    col.style.setProperty('--pcd', `${closed.ct - open.ct}px`);
+
+    col.style.setProperty('--pp', prevPp !== '' ? prevPp : `${isExpandedRef.current ? 1 : 0}`);
   }, []);
 
   useLayoutEffect(() => {
     updateGardenBgLayout();
     const col = farmColumnRef.current;
     const grid = hexGridBgRef.current;
+    const panel = upgradePanelRef.current;
     if (!col) return;
     const ro = new ResizeObserver(updateGardenBgLayout);
     ro.observe(col);
     if (grid) ro.observe(grid);
+    if (panel) ro.observe(panel);
     return () => ro.disconnect();
-  }, [updateGardenBgLayout, panelHeight, designWidth, designHeight, appScale]);
+  }, [updateGardenBgLayout, designWidth, designHeight, appScale, ftueUpgradePanelVisible]);
+
+  // Open/close: ONE rAF eases a single progress p (0 = closed, 1 = open) written to --pp. The panel,
+  // grid, buttons and every garden bg layer derive their position from --pp via transform only —
+  // no layout, one clock, perfectly locked.
+  const panelAnimRafRef = useRef<number | null>(null);
+  const panelAnimFirstSyncRef = useRef(true);
+  useLayoutEffect(() => {
+    const col = farmColumnRef.current;
+    const target = isExpanded ? 1 : 0;
+
+    const writeProgress = (p: number) => {
+      if (col) col.style.setProperty('--pp', `${p}`);
+      panelProgressRef.current = p;
+    };
+
+    if (isExpanded) setPanelClosed(false);
+
+    // Mount: snap to settled progress, no animation.
+    if (panelAnimFirstSyncRef.current) {
+      panelAnimFirstSyncRef.current = false;
+      writeProgress(target);
+      panelBgAnimatingRef.current = false;
+      if (!isExpanded) setPanelClosed(true);
+      return;
+    }
+
+    const from = panelProgressRef.current;
+    if (Math.abs(from - target) < 0.001) {
+      writeProgress(target);
+      panelBgAnimatingRef.current = false;
+      if (!isExpanded) setPanelClosed(true);
+      return;
+    }
+
+    panelBgAnimatingRef.current = true;
+    let cancelled = false;
+    const start = performance.now();
+    const tick = (now: number) => {
+      if (cancelled) return;
+      const e = upgradePanelAnimEase(Math.min(1, (now - start) / UPGRADE_PANEL_ANIM_DURATION_MS));
+      writeProgress(from + (target - from) * e);
+      if (now - start < UPGRADE_PANEL_ANIM_DURATION_MS) {
+        panelAnimRafRef.current = requestAnimationFrame(tick);
+      } else {
+        panelAnimRafRef.current = null;
+        writeProgress(target);
+        panelBgAnimatingRef.current = false;
+        if (!isExpanded) setPanelClosed(true);
+      }
+    };
+    panelAnimRafRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      cancelled = true;
+      panelBgAnimatingRef.current = false;
+      if (panelAnimRafRef.current != null) {
+        cancelAnimationFrame(panelAnimRafRef.current);
+        panelAnimRafRef.current = null;
+      }
+    };
+  }, [isExpanded]);
 
   const [plantCollectionViewBonusesPressed, setPlantCollectionViewBonusesPressed] = useState(false);
   const [collectionFtueCtaPressed, setCollectionFtueCtaPressed] = useState(false);
@@ -9199,11 +9295,14 @@ export default function App() {
         style={{ paddingTop: `max(${safeTop}px, env(safe-area-inset-top, 0px))` }}
       />
       <div
-        className="relative flex items-center justify-center overflow-hidden shrink-0 box-border w-full h-full"
+        className="relative flex items-end justify-center overflow-hidden shrink-0 box-border w-full h-full"
         style={{
           width: viewportWidth,
           height: viewportHeight,
-          paddingBottom: `env(safe-area-inset-bottom, 0px)`,
+          // Do NOT pad safe-area-inset-bottom here. Navbar already extends into the home-indicator
+          // zone. paddingBottom + border-box + items-center made the canvas taller than the content
+          // box and vertically centered it — on tall phones (iPhone 12, Fold) that shifted the whole
+          // UI up so the closed upgrade peek looked too high. SE / iPad (≈0 inset) were unaffected.
         }}
       >
       <div
@@ -9304,18 +9403,24 @@ export default function App() {
               className="h-full shrink-0 flex flex-col relative overflow-hidden bg-black"
               style={{ width: designWidth }}
             >
-              {/* Grass: bottom at navbar top; height-scaled; lifts with upgrade panel */}
+              {/* Grass: full-bleed clip stays fixed. Travel matches hex/center (--pcd), NOT the
+                  larger bottom/side delta. Closed = covers the whole screen (incl. safe area);
+                  open = shifts up by --pcd. Layer is taller by --pcd so the bottom never gaps. */}
               <div
                 className="absolute inset-0 pointer-events-none overflow-hidden z-[5]"
-                style={{ transform: `translateY(-${gardenGrassLiftPx}px)` }}
                 aria-hidden
               >
                 <div
-                  className="absolute inset-0 bg-no-repeat"
+                  className="absolute left-0 right-0 top-0 bg-no-repeat"
                   style={{
+                    // Extra height below the clip = open travel, so shifting up never exposes black.
+                    height: 'calc(100% + var(--pcd, 0px))',
                     backgroundImage: `url(${assetPath(gardenBg.grass)})`,
                     backgroundSize: 'auto 100%',
-                    backgroundPosition: 'bottom center',
+                    backgroundPosition: 'top center',
+                    // Same Y travel as hex grid / center / centerTop (via --pcd + --pp).
+                    transform: 'translateY(calc(var(--pp, 0) * var(--pcd, 0px) * -1))',
+                    willChange: 'transform',
                   }}
                 />
               </div>
@@ -9327,11 +9432,13 @@ export default function App() {
                 className="absolute pointer-events-none z-[5] max-w-none"
                 draggable={false}
                 style={{
-                  left: gardenCenterBgPos.left,
-                  top: gardenCenterBgPos.top,
+                  left: 0,
+                  top: 0,
                   width: 'auto',
                   height: 'auto',
-                  transform: 'translate(-50%, -50%) scale(0.75)',
+                  // Pin sprite center to hex-grid center (same --pcl/--pct/--pcd as the grid).
+                  transform: 'translate(var(--pcl, 0px), calc(var(--pct, 0px) + (1 - var(--pp, 0)) * var(--pcd, 0px))) translate(-50%, -50%) scale(0.75)',
+                  willChange: 'transform',
                 }}
                 aria-hidden
               />
@@ -9346,7 +9453,8 @@ export default function App() {
                   width: 'auto',
                   height: 'auto',
                   transformOrigin: 'bottom center',
-                  transform: `translate(-50%, -${gardenGrassLiftPx}px) scale(${GARDEN_SIDE_SPRITE_SCALE})`,
+                  transform: `translate(-50%, calc(var(--pgl, 0px) * -1 + (1 - var(--pp, 0)) * var(--pgd, 0px))) scale(${GARDEN_SIDE_SPRITE_SCALE})`,
+                  willChange: 'transform',
                 }}
                 aria-hidden
               />
@@ -9361,7 +9469,8 @@ export default function App() {
                   width: 'auto',
                   height: 'auto',
                   transformOrigin: 'bottom left',
-                  transform: `translateY(-${gardenGrassLiftPx}px) scale(${GARDEN_SIDE_SPRITE_SCALE})`,
+                  transform: `translateY(calc(var(--pgl, 0px) * -1 + (1 - var(--pp, 0)) * var(--pgd, 0px))) scale(${GARDEN_SIDE_SPRITE_SCALE})`,
+                  willChange: 'transform',
                 }}
                 aria-hidden
               />
@@ -9374,7 +9483,8 @@ export default function App() {
                   width: 'auto',
                   height: 'auto',
                   transformOrigin: 'bottom right',
-                  transform: `translateY(-${gardenGrassLiftPx}px) scale(${GARDEN_SIDE_SPRITE_SCALE})`,
+                  transform: `translateY(calc(var(--pgl, 0px) * -1 + (1 - var(--pp, 0)) * var(--pgd, 0px))) scale(${GARDEN_SIDE_SPRITE_SCALE})`,
+                  willChange: 'transform',
                 }}
                 aria-hidden
               />
@@ -9386,11 +9496,13 @@ export default function App() {
                 className="absolute pointer-events-none z-[7] max-w-none"
                 draggable={false}
                 style={{
-                  left: gardenCenterBgPos.left,
-                  top: gardenCenterBgPos.top,
+                  left: 0,
+                  top: 0,
                   width: 'auto',
                   height: 'auto',
-                  transform: 'translate(-50%, -50%) scale(0.75)',
+                  // Same hex-grid pin as background_center.
+                  transform: 'translate(var(--pcl, 0px), calc(var(--pct, 0px) + (1 - var(--pp, 0)) * var(--pcd, 0px))) translate(-50%, -50%) scale(0.75)',
+                  willChange: 'transform',
                 }}
                 aria-hidden
               />
@@ -9398,7 +9510,7 @@ export default function App() {
               {/* Bottom gradient: same scale as bottom/left/right; full width stretch; height not stretched */}
               <div
                 className="absolute left-0 right-0 bottom-0 pointer-events-none overflow-hidden z-[8]"
-                style={{ transform: `translateY(-${gardenGrassLiftPx}px)` }}
+                style={{ transform: 'translateY(calc(var(--pgl, 0px) * -1 + (1 - var(--pp, 0)) * var(--pgd, 0px)))', willChange: 'transform' }}
                 aria-hidden
               >
                 <img
@@ -9763,7 +9875,16 @@ export default function App() {
                             </>
                           )}
                           {showLoadingText && (
-                            <span className="absolute left-1/2 font-bold pointer-events-none" style={{ zIndex: 6, bottom: '64%', color: '#fff4d0', fontSize: '13px', transform: 'translate(-50%, -1px)', opacity: 0.75 }}>{goalLoadingSeconds}s</span>
+                            <>
+                              {/* Same anchor as green plant icon so Order Speed particle / leaf burst hit the timer art. */}
+                              <div
+                                ref={goalIconRefs[slotIdx]}
+                                className="absolute left-1/2 pointer-events-none"
+                                style={{ zIndex: 6, bottom: '71%', width: 40, height: 40, transform: 'translate(-50%, -2px)' }}
+                                aria-hidden
+                              />
+                              <span className="absolute left-1/2 font-bold pointer-events-none" style={{ zIndex: 6, bottom: '64%', color: '#fff4d0', fontSize: '13px', transform: 'translate(-50%, -1px)', opacity: 0.75 }}>{goalLoadingSeconds}s</span>
+                            </>
                           )}
                         </>
                       )}
@@ -9996,7 +10117,7 @@ export default function App() {
 
               <div
                 ref={hexAreaRef}
-                className="relative flex-grow flex flex-col items-center justify-center overflow-visible z-10"
+                className="relative flex-grow min-h-0 flex flex-col items-center justify-center overflow-visible z-10"
               >
                 {/* Only tapping this backdrop (background) closes the panel; hex cells and plants do not */}
                 <div
@@ -10005,12 +10126,18 @@ export default function App() {
                   onClick={() => {
                     if (!isExpanded) return;
                     playSfx(SFX_IDS.uiConfirmNormal);
+                    panelBgAnimatingRef.current = true;
                     setIsExpanded(false);
                   }}
                   aria-label="Close upgrade panel"
                 />
                 <div 
                   className="absolute bottom-[10px] w-full px-0 flex justify-between items-end z-20 pointer-events-none"
+                  style={{
+                    // Same close travel as the panel so the row stays glued to the peek top.
+                    transform: 'translateY(calc((1 - var(--pp, 0)) * var(--ppd, 229px)))',
+                    willChange: 'transform',
+                  }}
                 >
                    <div
                      className="pointer-events-auto relative flex items-center justify-center"
@@ -10124,7 +10251,13 @@ export default function App() {
                 <div
                   ref={hexGridBgRef}
                   className="relative w-full flex items-center justify-center h-[323px] overflow-visible pointer-events-none"
-                  style={{ marginBottom: '35px' }}
+                  style={{
+                    marginBottom: '35px',
+                    // Grid shifts down by the measured center delta (~half the panel delta) when
+                    // closed, matching the garden center sprites. Transform moves the hit area too.
+                    transform: 'translateY(calc((1 - var(--pp, 0)) * var(--pcd, 0px)))',
+                    willChange: 'transform',
+                  }}
                 >
                   <div className="relative w-full pointer-events-auto">
                   <HexBoard
@@ -10308,13 +10441,16 @@ export default function App() {
                 onClick={(e) => e.stopPropagation()}
                 className="flex flex-col overflow-visible relative z-[60] flex-shrink-0 shadow-[0_-15px_50px_rgba(0,0,0,0.15)] rounded-t-[32px]"
                 style={{
-                  height: panelHeight,
+                  height: upgradePanelExpandedPx,
                   minHeight: 0,
                   background: '#fcf0c6',
                   borderTop: '1px solid #ebdbaf',
                   touchAction: 'manipulation',
                   opacity: ftueUpgradePanelVisible ? 1 : 0,
                   pointerEvents: ftueUpgradePanelVisible ? 'auto' : 'none',
+                  // Closed = slid down by --ppd so only the tab strip peeks; open = translateY(0).
+                  transform: 'translateY(calc((1 - var(--pp, 0)) * var(--ppd, 229px)))',
+                  willChange: 'transform',
                   transition: 'opacity 400ms ease-out',
                 }}
               >
@@ -10324,6 +10460,8 @@ export default function App() {
                   onClick={(e) => {
                     e.stopPropagation();
                     playSfx(SFX_IDS.uiConfirmNormal);
+                    // Claim bg vars before React commits isExpanded — blocks ResizeObserver race.
+                    panelBgAnimatingRef.current = true;
                     setIsExpanded((prev) => !prev);
                   }}
                   className="pointer-events-auto absolute left-1/2 top-0"
@@ -10365,7 +10503,17 @@ export default function App() {
                     activeFtueStage === 'first_upgrade' && ftue10Phase === 'panel_open_orders'
                   }
                 />
-                <div className="flex-grow min-h-0 overflow-hidden relative flex flex-col">
+                <div
+                  className="flex-grow min-h-0 overflow-hidden relative flex flex-col"
+                  style={{
+                    contain: 'layout paint',
+                    // Hide list only after close has fully settled (panelClosed). Using isExpanded
+                    // would snap the upgrades away on tap-close while the panel is still sliding.
+                    maxHeight: panelClosed ? 0 : undefined,
+                    opacity: panelClosed ? 0 : 1,
+                    pointerEvents: isExpanded ? 'auto' : 'none',
+                  }}
+                >
                   <UpgradeList 
                     activeTab={activeTab} 
                     onTabChange={handleTabChange} 
@@ -13332,18 +13480,31 @@ export default function App() {
                     setGoalBounceSlots((b) => b.filter((i) => i !== slotIdx));
                   }, 400);
                   if (!getPerformanceMode()) {
+                    const icon = goalIconRefs[slotIdx]?.current;
                     const slotEl = document.querySelector(
                       `[data-goal-slot="${slotIdx}"]`,
                     ) as HTMLElement | null;
-                    const el = goalIconRefs[slotIdx]?.current ?? slotEl;
-                    if (el) {
-                      const r = el.getBoundingClientRect();
+                    // Prefer timer/plant icon anchor; never use full slot center (210px tall → burst too low).
+                    if (icon) {
+                      const r = icon.getBoundingClientRect();
                       setGoalCoinLeafBursts((prev) => [
                         ...prev,
                         {
                           id: `goal-load-lb-${nextGoalCoinBurstIdRef.current++}`,
                           x: r.left + r.width / 2,
                           y: r.top + r.height / 2 + 30,
+                          startTime: Date.now(),
+                          spriteVariant: 'default',
+                        },
+                      ]);
+                    } else if (slotEl) {
+                      const r = slotEl.getBoundingClientRect();
+                      setGoalCoinLeafBursts((prev) => [
+                        ...prev,
+                        {
+                          id: `goal-load-lb-${nextGoalCoinBurstIdRef.current++}`,
+                          x: r.left + r.width / 2,
+                          y: r.top + 40 + 30,
                           startTime: Date.now(),
                           spriteVariant: 'default',
                         },

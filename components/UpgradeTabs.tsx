@@ -153,7 +153,7 @@ export const UpgradeTabs = forwardRef<UpgradeTabsRef, UpgradeTabsProps>(
             />
             <span 
               ref={(el) => { tabRefs.current[tab] = el; }}
-              className="relative z-[1] text-[12px] font-black tracking-[0.1em] transition-colors duration-300"
+              className="relative z-[1] text-[13px] font-black tracking-[0.1em] transition-colors duration-300"
               style={{ color: getTextColor() }}
             >
               {TAB_LABELS[tab]}

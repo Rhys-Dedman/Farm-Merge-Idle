@@ -1413,7 +1413,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
                 </div>
                 {/* Description */}
                 <div
-                  className={`text-[13px] font-semibold mt-0.5 tracking-tight leading-[1.1] ${upgrade.description ? '' : 'uppercase'} ${isFlashing && !isUnlockFlashing ? 'text-[#386641]/50' : ''}`}
+                  className={`text-[14px] font-semibold mt-0.5 tracking-tight leading-[1.1] ${upgrade.description ? '' : 'uppercase'} ${isFlashing && !isUnlockFlashing ? 'text-[#386641]/50' : ''}`}
                   style={{
                     color: isUnlockFlashing ? '#7497b0' : isFlashing ? undefined : (affordBlinkOn ? AFFORD_BLINK_DESC : descTextColor),
                     ...(isAffordBlinkUpgrade ? { transition: `color ${affordBlinkColorTransition}` } : {}),
@@ -1448,7 +1448,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
                 {isLocked ? (
                   <span className="flex items-center gap-0.5 -translate-x-1">
                     <div
-                      className="w-4 h-4 shrink-0"
+                      className="w-[18px] h-[18px] shrink-0"
                       style={{
                         backgroundColor: LOCKED_FONT,
                         maskImage: `url(${ICON_LOCK})`,
@@ -1461,7 +1461,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
                         WebkitMaskPosition: 'center',
                       }}
                     />
-                    <span className="text-[13px] font-black tracking-tighter" style={{ color: LOCKED_FONT }}>
+                    <span className="text-[14px] font-black tracking-tighter" style={{ color: LOCKED_FONT }}>
                       lvl {unlockLevel}
                     </span>
                   </span>
@@ -1469,7 +1469,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
                   <>
                     {isMaxed ? (
                       <span
-                        className="text-[13px] font-black tracking-tighter"
+                        className="text-[14px] font-black tracking-tighter"
                         style={{
                           color: buttonDisabledFontColor,
                           display: 'inline-block',
@@ -1484,10 +1484,10 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
                           src={getGardenCoinSmallIconPath()}
                           alt=""
                           className="shrink-0 object-contain"
-                          style={{ width: 16, height: 16, minWidth: 16, maxWidth: 16, minHeight: 16, maxHeight: 16, display: 'block', position: 'relative', zIndex: 1, flexShrink: 0, transform: 'translateY(-1px)' }}
+                          style={{ width: 18, height: 18, minWidth: 18, maxWidth: 18, minHeight: 18, maxHeight: 18, display: 'block', position: 'relative', zIndex: 1, flexShrink: 0, transform: 'translateY(-1px)' }}
                         />
                         <span
-                          className="text-[13px] font-black tracking-tighter"
+                          className="text-[14px] font-black tracking-tighter"
                           style={{
                             color: isPressed ? buttonActiveFontColor : (!effectiveCanAfford ? buttonDisabledFontColor : buttonFontColor),
                           }}
@@ -1539,7 +1539,11 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
         style={{ 
           transform: `translateX(${translateX})`,
           transitionDuration: isExpanded ? '700ms' : '250ms',
-          transitionTimingFunction: isExpanded ? 'cubic-bezier(0.05, 0, 0, 1)' : 'cubic-bezier(0.22, 0, 0.12, 1)',
+          // Smooth start + soft settle. Extreme ease-out (0.05,0,0,1) restarted mid-slide when
+          // the player tapped another tab, which made the list jump to "fast start" velocity.
+          transitionTimingFunction: isExpanded
+            ? 'cubic-bezier(0.33, 0.0, 0.2, 1)'
+            : 'cubic-bezier(0.22, 0, 0.12, 1)',
         }}
       >
         <div className="tab-pane h-full min-h-0 flex flex-col">{renderUpgradeItems('SEEDS', seedsState)}</div>
