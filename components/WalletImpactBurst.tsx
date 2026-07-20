@@ -2,6 +2,8 @@
  * Yellow particle burst from wallet icon on coin impact. Mobile-game style feedback.
  */
 import React, { useEffect, useRef, useState } from 'react';
+import { scheduleNextFrame } from '../utils/raf60';
+import { getPerformanceMode } from '../utils/performanceMode';
 
 const PARTICLE_COUNT = 12;
 const DURATION_MS = 380;
@@ -78,6 +80,12 @@ export const WalletImpactBurst: React.FC<WalletImpactBurstProps> = ({
 
   useEffect(() => {
     if (trigger === 0) return;
+    if (getPerformanceMode()) {
+      setIsDone(true);
+      setParticles([]);
+      onCompleteRef.current?.();
+      return;
+    }
     const origin = originRef.current;
 
     const tick = () => {
@@ -111,9 +119,9 @@ export const WalletImpactBurst: React.FC<WalletImpactBurstProps> = ({
         setIsDone(true);
         onCompleteRef.current?.();
       }
-      if (t < 1) rafRef.current = requestAnimationFrame(tick);
+      if (t < 1) rafRef.current = scheduleNextFrame(tick);
     };
-    rafRef.current = requestAnimationFrame(tick);
+    rafRef.current = scheduleNextFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
   }, [trigger]);
 

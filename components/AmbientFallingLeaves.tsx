@@ -1,10 +1,10 @@
 /**
  * Sparse ambient leaves: spawn on `spawnIntervalMs` cadence along the top; layered sine “wind”.
- * (similar to game VFX that combines gravity + horizontal noise / multiple frequencies).
+ * Transforms are written to the DOM (no React setState per frame) to keep farm idle cheap.
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { scheduleNextFrame } from '../utils/raf60';
-import { getPerformanceMode } from '../utils/performanceMode';
+import { getPerformanceMode, subscribePerformanceMode } from '../utils/performanceMode';
 
 /** Start slightly above the visible area */
 const SPAWN_Y_PX = -20;
@@ -30,15 +30,7 @@ interface AmbientLeafSim {
   rotWobbleA: number;
   rotWobbleW: number;
   rotWobbleP: number;
-}
-
-interface AmbientLeafDraw {
-  id: number;
-  sprite: string;
-  x: number;
-  y: number;
-  rotationRad: number;
-  size: number;
+  el: HTMLDivElement | null;
 }
 
 function createLeaf(id: number, widthPx: number, spriteUrl: string, noiseStrength: number): AmbientLeafSim {
@@ -63,7 +55,51 @@ function createLeaf(id: number, widthPx: number, spriteUrl: string, noiseStrengt
     rotWobbleA: (0.12 + Math.random() * 0.22) * n,
     rotWobbleW: 1.6 + Math.random() * 1.8,
     rotWobbleP: Math.random() * Math.PI * 2,
+    el: null,
   };
+}
+
+function applyLeafTransform(leaf: AmbientLeafSim, now: number): { x: number; y: number } {
+  const t = (now - leaf.spawnTime) / 1000;
+  const y = SPAWN_Y_PX + leaf.vy * t;
+  const x =
+    leaf.spawnX +
+    leaf.drift * t +
+    leaf.swayA1 * Math.sin(leaf.swayW1 * t + leaf.swayP1) +
+    leaf.swayA2 * Math.sin(leaf.swayW2 * t + leaf.swayP2);
+  const rotationRad =
+    leaf.rot0 + leaf.rotSpeed * t + leaf.rotWobbleA * Math.sin(leaf.rotWobbleW * t + leaf.rotWobbleP);
+  const el = leaf.el;
+  if (el) {
+    el.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px) rotate(${rotationRad}rad)`;
+  }
+  return { x, y };
+}
+
+function mountLeafEl(root: HTMLDivElement, leaf: AmbientLeafSim): HTMLDivElement {
+  const wrap = document.createElement('div');
+  wrap.style.cssText =
+    'position:absolute;left:0;top:0;pointer-events:none';
+  wrap.style.width = `${leaf.size}px`;
+  wrap.style.height = `${leaf.size}px`;
+  const img = document.createElement('img');
+  img.src = leaf.sprite;
+  img.alt = '';
+  img.draggable = false;
+  img.className = 'h-full w-full object-contain pointer-events-none';
+  img.style.pointerEvents = 'none';
+  img.addEventListener('error', () => {
+    img.remove();
+    const fallback = document.createElement('div');
+    fallback.className = 'pointer-events-none h-full w-full rounded-sm opacity-80';
+    fallback.style.background = 'linear-gradient(135deg, #4a7c23 0%, #6b8e23 100%)';
+    fallback.style.boxShadow = '0 1px 2px rgba(0,0,0,0.25)';
+    wrap.appendChild(fallback);
+  });
+  wrap.appendChild(img);
+  root.appendChild(wrap);
+  leaf.el = wrap;
+  return wrap;
 }
 
 /** Mid-fall leaves when garden becomes visible (per layer, per return visit). */
@@ -88,19 +124,6 @@ function prewarmAmbientLeaves(
     leaf.spawnTime = now - ageSec * 1000;
     out.push(leaf);
   }
-}
-
-function simToDraw(leaf: AmbientLeafSim, now: number): AmbientLeafDraw {
-  const t = (now - leaf.spawnTime) / 1000;
-  const y = SPAWN_Y_PX + leaf.vy * t;
-  const x =
-    leaf.spawnX +
-    leaf.drift * t +
-    leaf.swayA1 * Math.sin(leaf.swayW1 * t + leaf.swayP1) +
-    leaf.swayA2 * Math.sin(leaf.swayW2 * t + leaf.swayP2);
-  const rotationRad =
-    leaf.rot0 + leaf.rotSpeed * t + leaf.rotWobbleA * Math.sin(leaf.rotWobbleW * t + leaf.rotWobbleP);
-  return { id: leaf.id, sprite: leaf.sprite, x, y, rotationRad, size: leaf.size };
 }
 
 export interface AmbientFallingLeavesProps {
@@ -134,7 +157,6 @@ export const AmbientFallingLeaves: React.FC<AmbientFallingLeavesProps> = ({
   const nextIdRef = useRef(0);
   const nextSpawnAtRef = useRef(0);
   const rafRef = useRef(0);
-  const frameCountRef = useRef(0);
   const spriteUrlRef = useRef(spriteUrl);
   spriteUrlRef.current = spriteUrl;
   const spawnIntervalMsRef = useRef(spawnIntervalMs);
@@ -142,9 +164,9 @@ export const AmbientFallingLeaves: React.FC<AmbientFallingLeavesProps> = ({
   const noiseStrengthRef = useRef(noiseStrength);
   noiseStrengthRef.current = noiseStrength;
   const prewarmPendingRef = useRef(true);
-  const [drawList, setDrawList] = useState<AmbientLeafDraw[]>([]);
-  const [imgFailed, setImgFailed] = useState<Record<number, boolean>>({});
   const [layerOpacity, setLayerOpacity] = useState(0);
+  /** Bumps when Performance Mode toggles so the sim effect restarts. */
+  const [perfEpoch, setPerfEpoch] = useState(0);
 
   useEffect(() => {
     const el = rootRef.current;
@@ -157,82 +179,121 @@ export const AmbientFallingLeaves: React.FC<AmbientFallingLeavesProps> = ({
     return () => ro.disconnect();
   }, []);
 
+  useEffect(() => subscribePerformanceMode(() => setPerfEpoch((n) => n + 1)), []);
+
   useEffect(() => {
-    if (!enabled) {
+    const root = rootRef.current;
+    if (!enabled || !root) {
       setLayerOpacity(0);
+      for (const leaf of leavesRef.current) {
+        leaf.el?.remove();
+      }
       leavesRef.current = [];
-      setDrawList([]);
       nextSpawnAtRef.current = 0;
       prewarmPendingRef.current = true;
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = 0;
+      }
+      return;
+    }
+
+    // Performance mode: no ambient leaves at all (no spawn, no rAF).
+    if (getPerformanceMode()) {
+      setLayerOpacity(0);
+      for (const leaf of leavesRef.current) {
+        leaf.el?.remove();
+      }
+      leavesRef.current = [];
       return;
     }
 
     // Re-enable: start invisible, then fade in after paint.
     setLayerOpacity(0);
     let cancelled = false;
-    const id = requestAnimationFrame(() => {
+    const fadeRaf = requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (!cancelled) setLayerOpacity(1);
       });
     });
 
-    const tick = (now: number) => {
-      if (!enabled) return;
+    const clearLeaves = () => {
+      for (const leaf of leavesRef.current) {
+        leaf.el?.remove();
+      }
+      leavesRef.current = [];
+    };
 
-      const perf = getPerformanceMode();
+    const tick = (now: number) => {
+      if (cancelled) return;
+
+      // Perf mode toggled mid-run: stop entirely.
+      if (getPerformanceMode()) {
+        clearLeaves();
+        rafRef.current = 0;
+        return;
+      }
+
       const { w, h } = sizeRef.current;
       const maxY = h + BOTTOM_CULL_MARGIN_PX;
 
       if (w > 8 && prewarmPendingRef.current) {
         prewarmPendingRef.current = false;
-        if (!perf) {
-          prewarmAmbientLeaves(
-            leavesRef.current,
-            nextIdRef,
-            w,
-            h,
-            now,
-            spriteUrlRef.current,
-            noiseStrengthRef.current
-          );
-          setDrawList(leavesRef.current.map((l) => simToDraw(l, now)));
+        prewarmAmbientLeaves(
+          leavesRef.current,
+          nextIdRef,
+          w,
+          h,
+          now,
+          spriteUrlRef.current,
+          noiseStrengthRef.current
+        );
+        for (const leaf of leavesRef.current) {
+          if (!leaf.el) mountLeafEl(root, leaf);
+          applyLeafTransform(leaf, now);
         }
       }
 
-      if (!perf && w > 8) {
+      if (w > 8) {
         const interval = spawnIntervalMsRef.current;
         if (nextSpawnAtRef.current === 0) {
           nextSpawnAtRef.current = now + interval;
         }
         if (now >= nextSpawnAtRef.current) {
-          leavesRef.current.push(
-            createLeaf(nextIdRef.current++, w, spriteUrlRef.current, noiseStrengthRef.current)
-          );
+          const leaf = createLeaf(nextIdRef.current++, w, spriteUrlRef.current, noiseStrengthRef.current);
+          leavesRef.current.push(leaf);
+          mountLeafEl(root, leaf);
+          applyLeafTransform(leaf, now);
           nextSpawnAtRef.current = now + interval;
         }
       }
 
-      leavesRef.current = leavesRef.current.filter((leaf) => {
-        const t = (now - leaf.spawnTime) / 1000;
-        const y = SPAWN_Y_PX + leaf.vy * t;
-        return y < maxY;
-      });
-
-      frameCountRef.current += 1;
-      if (frameCountRef.current % 2 === 0) {
-        setDrawList(leavesRef.current.map((l) => simToDraw(l, now)));
+      const next: AmbientLeafSim[] = [];
+      for (const leaf of leavesRef.current) {
+        const { y } = applyLeafTransform(leaf, now);
+        if (y < maxY) {
+          next.push(leaf);
+        } else {
+          leaf.el?.remove();
+          leaf.el = null;
+        }
       }
+      leavesRef.current = next;
 
+      // No leaves and next spawn is in the future: still need the loop for spawn cadence,
+      // but scheduleNextFrame already caps cost in perf mode (which we exit above).
       rafRef.current = scheduleNextFrame(tick);
     };
 
     rafRef.current = scheduleNextFrame(tick);
     return () => {
       cancelled = true;
-      cancelAnimationFrame(id);
+      cancelAnimationFrame(fadeRaf);
       cancelAnimationFrame(rafRef.current);
+      rafRef.current = 0;
+      clearLeaves();
     };
-  }, [enabled, spriteUrl, spawnIntervalMs, noiseStrength]);
+  }, [enabled, spriteUrl, spawnIntervalMs, noiseStrength, perfEpoch]);
 
   if (!enabled) return null;
 
@@ -247,40 +308,6 @@ export const AmbientFallingLeaves: React.FC<AmbientFallingLeavesProps> = ({
         transition: layerOpacity > 0 ? `opacity ${fadeInMs}ms ease-out` : undefined,
       }}
       aria-hidden
-    >
-      {drawList.map((leaf) => (
-        <div
-          key={leaf.id}
-          className="absolute"
-          style={{
-            left: leaf.x,
-            top: leaf.y,
-            width: leaf.size,
-            height: leaf.size,
-            transform: `translate(-50%, -50%) rotate(${leaf.rotationRad}rad)`,
-            pointerEvents: 'none',
-          }}
-        >
-          {imgFailed[leaf.id] ? (
-            <div
-              className="pointer-events-none h-full w-full rounded-sm opacity-80"
-              style={{
-                background: 'linear-gradient(135deg, #4a7c23 0%, #6b8e23 100%)',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.25)',
-              }}
-            />
-          ) : (
-            <img
-              src={leaf.sprite}
-              alt=""
-              draggable={false}
-              className="h-full w-full object-contain pointer-events-none"
-              style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.2))', pointerEvents: 'none' }}
-              onError={() => setImgFailed((prev) => ({ ...prev, [leaf.id]: true }))}
-            />
-          )}
-        </div>
-      ))}
-    </div>
+    />
   );
 };

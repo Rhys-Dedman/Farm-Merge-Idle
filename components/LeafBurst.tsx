@@ -5,6 +5,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { PLANT_CONTAINER_WIDTH, PLANT_CONTAINER_HEIGHT } from '../constants/boardLayout';
 import { assetPath } from '../utils/assetPath';
+import { scheduleNextFrame } from '../utils/raf60';
+import { getPerformanceMode } from '../utils/performanceMode';
 
 const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_green_1.png'), assetPath('/assets/vfx/particle_leaf_green_2.png')];
 const LEAF_SPRITES_GOLD = [assetPath('/assets/vfx/particle_leaf_yellow_1.png'), assetPath('/assets/vfx/particle_leaf_yellow_2.png')];
@@ -118,6 +120,10 @@ export const LeafBurst: React.FC<LeafBurstProps> = ({
   onCompleteRef.current = onComplete;
 
   useEffect(() => {
+    if (getPerformanceMode()) {
+      onCompleteRef.current();
+      return;
+    }
     // Anchor to mount time — parent setState batching (e.g. first store allowance claim) can
     // delay mount by 50–100ms+; using the prop startTime makes the burst look late or frozen.
     const start = Date.now();
@@ -201,12 +207,14 @@ export const LeafBurst: React.FC<LeafBurstProps> = ({
           posRef.current.map((p) => ({ x: p.x, y: p.y, opacity: p.opacity, rotation: p.rotation, scale: p.scale }))
         );
       }
-      rafRef.current = requestAnimationFrame(tick);
+      rafRef.current = scheduleNextFrame(tick);
     };
 
-    rafRef.current = requestAnimationFrame(tick);
+    rafRef.current = scheduleNextFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
   }, [leaves, useCircle]);
+
+  if (getPerformanceMode()) return null;
 
   return (
     <div

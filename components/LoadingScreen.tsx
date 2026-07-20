@@ -63,8 +63,8 @@ const ASSETS_TO_PRELOAD = [
   '/assets/icons/upgrades/icon_happycustomer.png',
   '/assets/icons/upgrades/icon_premiumorders.png',
   // Backgrounds
-  '/assets/collection/background_collection.png',
-  '/assets/background/background_loading.png',
+  '/assets/collection/background_collection.webp',
+  '/assets/background/background_loading.webp',
   // Barn
   '/assets/collection/collection_shelf.png',
   '/assets/collection/collection_shelf_upgrade.png',
@@ -187,7 +187,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
 
   const preloadCriticalSplashAssets = useCallback(async () => {
     const critical = [
-      '/assets/background/background_loading.png',
+      '/assets/background/background_loading.webp',
       '/assets/ui/ui_logo.png',
     ];
     const loadImage = (src: string): Promise<void> =>
@@ -335,7 +335,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
     );
   }
 
-  const splashBackgroundUrl = assetPath('/assets/background/background_loading.png');
+  const splashBackgroundUrl = assetPath('/assets/background/background_loading.webp');
 
   return (
     <div 

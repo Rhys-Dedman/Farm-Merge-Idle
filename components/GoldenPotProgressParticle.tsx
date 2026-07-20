@@ -121,7 +121,20 @@ export const GoldenPotProgressParticle: React.FC<GoldenPotProgressParticleProps>
     trailRef.current = [{ p: { x: data.startX, y: data.startY }, color: TRAIL_COLOR, t: 0 }];
   }, [data.id, data.startX, data.startY]);
 
+  // Performance Mode: impact immediately (clears bar hold), skip flight.
   useEffect(() => {
+    if (!getPerformanceMode()) return;
+    const target = resolveTarget(
+      { x: data.startX, y: data.startY },
+      progressBarTargetRef?.current ?? null,
+      walletFallbackTargetRef.current,
+    );
+    onImpactRef.current(target.kind);
+    onCompleteRef.current();
+  }, [data.id, data.startX, data.startY, progressBarTargetRef, walletFallbackTargetRef]);
+
+  useEffect(() => {
+    if (getPerformanceMode()) return;
     mountedRef.current = true;
     completeScheduledRef.current = false;
     const start = { x: data.startX, y: data.startY };
@@ -233,6 +246,7 @@ export const GoldenPotProgressParticle: React.FC<GoldenPotProgressParticleProps>
   }, [data, progressBarTargetRef, walletFallbackTargetRef, useTrail, moveDurationMs, trailFadeAfterHitMs]);
 
   useEffect(() => {
+    if (getPerformanceMode()) return;
     const timer = window.setTimeout(() => {
       if (!impactFiredRef.current) {
         impactFiredRef.current = true;
@@ -245,6 +259,8 @@ export const GoldenPotProgressParticle: React.FC<GoldenPotProgressParticleProps>
     }, 5000);
     return () => clearTimeout(timer);
   }, [data.id]);
+
+  if (getPerformanceMode()) return null;
 
   const { phase, pos, scale, trail, trailOpacity } = frame;
 

@@ -2,6 +2,7 @@
  * Plant panel: reveal above plant → hold → move to goal icon with green trail; on impact decrement goal count.
  */
 import React, { useEffect, useRef, useState } from 'react';
+import { getPerformanceMode } from '../utils/performanceMode';
 
 const REVEAL_MS = 220;
 const HOLD_MS = 250;
@@ -85,6 +86,10 @@ export const PlantPanel: React.FC<PlantPanelProps> = ({
   const impactFiredRef = useRef(false);
   const trailOnlyStartRef = useRef<number>(0);
   const rafRef = useRef<number>(0);
+  const onImpactRef = useRef(onImpact);
+  const onCompleteRef = useRef(onComplete);
+  onImpactRef.current = onImpact;
+  onCompleteRef.current = onComplete;
 
   /** Normal harvest: 1.5x panel size; FTUE can override via visualScale (e.g. 2). */
   const scaleMult = data.visualScale !== undefined ? data.visualScale : 1.5;
@@ -98,7 +103,15 @@ export const PlantPanel: React.FC<PlantPanelProps> = ({
     startTimeRef.current = Date.now();
   }, [data.id]);
 
+  // Performance Mode: apply goal credit immediately, skip flight VFX.
   useEffect(() => {
+    if (!getPerformanceMode()) return;
+    onImpactRef.current(data.goalSlotIdx, data.harvestAmount ?? 1);
+    onCompleteRef.current();
+  }, [data.id, data.goalSlotIdx, data.harvestAmount]);
+
+  useEffect(() => {
+    if (getPerformanceMode()) return;
     const container = containerRef.current;
     const target = targetRef.current;
     if (!container || !target) return;
@@ -186,7 +199,7 @@ export const PlantPanel: React.FC<PlantPanelProps> = ({
         if (t >= 1) {
           if (!impactFiredRef.current) {
             impactFiredRef.current = true;
-            onImpact(data.goalSlotIdx, data.harvestAmount ?? 1);
+            onImpactRef.current(data.goalSlotIdx, data.harvestAmount ?? 1);
           }
           setPhase('trailOnly');
           trailOnlyStartRef.current = now;
@@ -201,7 +214,7 @@ export const PlantPanel: React.FC<PlantPanelProps> = ({
         setTrailOpacity(fade);
         setTrail([...trailRef.current]);
         if (fade <= 0) {
-          onComplete();
+          onCompleteRef.current();
           return;
         }
         rafRef.current = requestAnimationFrame(tick);
@@ -214,6 +227,8 @@ export const PlantPanel: React.FC<PlantPanelProps> = ({
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
   }, [phase, data, containerRef, targetRef, appScale, onImpact, onComplete]);
+
+  if (getPerformanceMode()) return null;
 
   const showPanel = phase === 'reveal' || phase === 'hold' || (phase === 'moveToTarget' && !isCircle);
   const showCircle = phase === 'moveToTarget' && isCircle;

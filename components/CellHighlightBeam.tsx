@@ -10,6 +10,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { type GardenId } from '../constants/gardens';
 import { getHexCellAssetPath } from '../utils/gardenAssets';
+import { getPerformanceMode } from '../utils/performanceMode';
 
 interface CellHighlightBeamProps {
   x: number;
@@ -99,6 +100,10 @@ export const CellHighlightBeam: React.FC<CellHighlightBeamProps> = ({
 
   const frameCountRef = useRef(0);
   useEffect(() => {
+    if (getPerformanceMode()) {
+      onComplete();
+      return;
+    }
     let rafId: number;
     const animate = () => {
       const elapsed = Date.now() - startTime;
@@ -128,6 +133,8 @@ export const CellHighlightBeam: React.FC<CellHighlightBeamProps> = ({
     rafId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(rafId);
   }, [startTime, onComplete]);
+
+  if (getPerformanceMode()) return null;
 
   const sparkleMaxHeight = cellHeight * SPARKLE_HEIGHT_MULTIPLIER * sparkleHeightScale;
   

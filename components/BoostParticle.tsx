@@ -2,6 +2,7 @@
  * Yellow particle: flies from "Activate Reward" button (fake ad) to the active boost area in the top bar.
  */
 import React, { useEffect, useRef, useState } from 'react';
+import { getPerformanceMode } from '../utils/performanceMode';
 
 const MOVE_DURATION_MS = 500;
 const MAX_TRAIL_POINTS = 9;
@@ -75,7 +76,16 @@ export const BoostParticle: React.FC<BoostParticleProps> = ({
     trailRef.current = [{ x: data.startX, y: data.startY }];
   }, [data.id, data.startX, data.startY]);
 
+  // Performance Mode: apply boost immediately, skip flight.
   useEffect(() => {
+    if (!getPerformanceMode()) return;
+    onImpactRef.current?.(data);
+    onCompleteRef.current();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only once per particle id
+  }, [data.id]);
+
+  useEffect(() => {
+    if (getPerformanceMode()) return;
     const container = containerRef.current;
     const boostArea = boostAreaRef.current;
     if (!container || !boostArea) return;
@@ -160,6 +170,7 @@ export const BoostParticle: React.FC<BoostParticleProps> = ({
 
   // Safety net: force-complete if animation is stuck
   useEffect(() => {
+    if (getPerformanceMode()) return;
     const timer = window.setTimeout(() => {
       if (!impactFiredRef.current) {
         impactFiredRef.current = true;
@@ -173,6 +184,8 @@ export const BoostParticle: React.FC<BoostParticleProps> = ({
     }, 5000);
     return () => clearTimeout(timer);
   }, [data.id]);
+
+  if (getPerformanceMode()) return null;
 
   const { phase, pos, trail, trailOpacity } = frame;
 

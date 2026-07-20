@@ -4,6 +4,8 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { scheduleNextFrame } from '../utils/raf60';
+import { getPerformanceMode } from '../utils/performanceMode';
 
 const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_green_1.png'), assetPath('/assets/vfx/particle_leaf_green_2.png')];
 
@@ -85,6 +87,10 @@ export const ShelfUnlockConeBurst: React.FC<ShelfUnlockConeBurstProps> = ({
   const frameRef = useRef(0);
 
   useEffect(() => {
+    if (getPerformanceMode()) {
+      onCompleteRef.current();
+      return;
+    }
     completedRef.current = false;
     frameRef.current = 0;
     const fresh = createParticles(particleCount);
@@ -134,12 +140,14 @@ export const ShelfUnlockConeBurst: React.FC<ShelfUnlockConeBurstProps> = ({
       if (frameRef.current % 2 === 0) {
         setPositions(prs.map((pr) => ({ ...pr })));
       }
-      rafRef.current = requestAnimationFrame(tick);
+      rafRef.current = scheduleNextFrame(tick);
     };
 
-    rafRef.current = requestAnimationFrame(tick);
+    rafRef.current = scheduleNextFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
   }, [startTime, particleCount]);
+
+  if (getPerformanceMode()) return null;
 
   const prList = particlesRef.current!;
 

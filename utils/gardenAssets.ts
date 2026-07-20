@@ -116,10 +116,10 @@ export function getGardenBackgroundPaths(gardenId: GardenId = activeGardenId): G
   const folder = resolveFarmArtGardenId(gardenId);
   const base = `/assets/background/${folder}`;
   return {
-    grass: `${base}/background_grass.png`,
-    bottom: `${base}/background_bottom.png`,
-    left: `${base}/background_left.png`,
-    right: `${base}/background_right.png`,
+    grass: `${base}/background_grass.webp`,
+    bottom: `${base}/background_bottom.webp`,
+    left: `${base}/background_left.webp`,
+    right: `${base}/background_right.webp`,
     center: `${base}/background_center.png`,
     centerTop: `${base}/background_centertop.png`,
     gradient: `${base}/background_gradient.png`,

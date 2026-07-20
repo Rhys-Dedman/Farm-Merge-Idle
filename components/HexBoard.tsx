@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback, useState, forwardRef, useImperativeHandle, useMemo } from 'react';
+import React, { useRef, useEffect, useCallback, useState, forwardRef, useImperativeHandle, useMemo, memo } from 'react';
 import { flushSync } from 'react-dom';
 import { BoardCell, Item, DragState } from '../types';
 import { PLANT_CONTAINER_WIDTH, PLANT_CONTAINER_HEIGHT } from '../constants/boardLayout';
@@ -86,7 +86,7 @@ function useHexCellSprites(gardenId?: GardenId) {
   }, [gardenId]);
 }
 
-export const HexBoard = forwardRef<HexBoardHandle, HexBoardProps>(function HexBoard({
+export const HexBoard = memo(forwardRef<HexBoardHandle, HexBoardProps>(function HexBoard({
   isActive,
   grid,
   onMerge,
@@ -785,7 +785,7 @@ export const HexBoard = forwardRef<HexBoardHandle, HexBoardProps>(function HexBo
           );
         })}
 
-        {/* PASS 2: hexcell_normal, hexcell_fertile, or hexcell_locked — one sprite per cell (idle) */}
+        {/* PASS 2: one hexcell sprite per cell when idle; dual imgs only during unlock/fertilize crossfade */}
         {grid.map((cell, i) => {
           const x = hexSize * (3 / 2) * cell.q * horizontalSpacing * gridSpacing;
           const y = hexSize * Math.sqrt(3) * (cell.r + cell.q / 2) * verticalSpacing * gridSpacing;
@@ -819,30 +819,50 @@ export const HexBoard = forwardRef<HexBoardHandle, HexBoardProps>(function HexBo
                 userSelect: 'none',
               }}
             >
-              {/* Locked cell sprite */}
-              <img
-                src={hexSprites.locked}
-                alt=""
-                className={`hex-cell-img w-full h-full object-contain absolute inset-0 transition-opacity duration-200 ${isUnlocking ? 'opacity-0' : ''}`}
-                style={{ opacity: isLocked && !isUnlocking ? 1 : 0 }}
-                onError={hideBrokenHexImg}
-              />
-              {/* Green cell sprite (shown when not locked/fertile, or fading in during unlock, or fading out during fertilize) */}
-              <img
-                src={hexSprites.normal}
-                alt=""
-                className={`hex-cell-img w-full h-full object-contain absolute inset-0 transition-all duration-200 ${isUnlocking ? 'hexcell-unlock-bounce' : ''}`}
-                style={{ opacity: isLocked && !isUnlocking ? 0 : isFertile && !isFertilizing ? 0 : 1 }}
-                onError={hideBrokenHexImg}
-              />
-              {/* Fertile cell sprite (shown when fertile, or fading in during fertilize) */}
-              <img
-                src={hexSprites.fertile}
-                alt=""
-                className={`hex-cell-img w-full h-full object-contain absolute inset-0 transition-all duration-200 ${isFertilizing ? 'hexcell-unlock-bounce' : ''}`}
-                style={{ opacity: isFertile || isFertilizing ? 1 : 0 }}
-                onError={hideBrokenHexImg}
-              />
+              {isUnlocking ? (
+                <>
+                  <img
+                    src={hexSprites.locked}
+                    alt=""
+                    className="hex-cell-img w-full h-full object-contain absolute inset-0 transition-opacity duration-200 opacity-0"
+                    onError={hideBrokenHexImg}
+                  />
+                  <img
+                    src={hexSprites.normal}
+                    alt=""
+                    className="hex-cell-img w-full h-full object-contain absolute inset-0 transition-all duration-200 hexcell-unlock-bounce"
+                    onError={hideBrokenHexImg}
+                  />
+                </>
+              ) : isFertilizing ? (
+                <>
+                  <img
+                    src={hexSprites.normal}
+                    alt=""
+                    className="hex-cell-img w-full h-full object-contain absolute inset-0 transition-all duration-200"
+                    onError={hideBrokenHexImg}
+                  />
+                  <img
+                    src={hexSprites.fertile}
+                    alt=""
+                    className="hex-cell-img w-full h-full object-contain absolute inset-0 transition-all duration-200 hexcell-unlock-bounce"
+                    onError={hideBrokenHexImg}
+                  />
+                </>
+              ) : (
+                <img
+                  src={
+                    isLocked
+                      ? hexSprites.locked
+                      : isFertile
+                        ? hexSprites.fertile
+                        : hexSprites.normal
+                  }
+                  alt=""
+                  className="hex-cell-img w-full h-full object-contain absolute inset-0"
+                  onError={hideBrokenHexImg}
+                />
+              )}
             </div>
           );
         })}
@@ -1091,4 +1111,6 @@ export const HexBoard = forwardRef<HexBoardHandle, HexBoardProps>(function HexBo
     </div>
     </>
   );
-});
+}));
+
+HexBoard.displayName = 'HexBoard';

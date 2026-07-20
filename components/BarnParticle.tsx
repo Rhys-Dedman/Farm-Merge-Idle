@@ -2,6 +2,7 @@
  * Barn particle: flies from "Add to Barn" button to the Barn nav button with a green trail.
  */
 import React, { useEffect, useRef, useState } from 'react';
+import { getPerformanceMode } from '../utils/performanceMode';
 
 const MOVE_DURATION_MS = 475;
 const MAX_TRAIL_POINTS = 9;
@@ -73,7 +74,15 @@ export const BarnParticle: React.FC<BarnParticleProps> = ({
     trailRef.current = [{ x: data.startX, y: data.startY }];
   }, [data.id, data.startX, data.startY]);
 
+  // Performance Mode: fire impact immediately, skip flight.
   useEffect(() => {
+    if (!getPerformanceMode()) return;
+    onImpactRef.current?.();
+    onCompleteRef.current();
+  }, [data.id]);
+
+  useEffect(() => {
+    if (getPerformanceMode()) return;
     const container = containerRef.current;
     const barnButton = barnButtonRef.current;
     if (!container || !barnButton) return;
@@ -160,6 +169,7 @@ export const BarnParticle: React.FC<BarnParticleProps> = ({
 
   // Safety net: force-complete if animation is stuck
   useEffect(() => {
+    if (getPerformanceMode()) return;
     const timer = window.setTimeout(() => {
       if (!impactFiredRef.current) {
         impactFiredRef.current = true;
@@ -173,6 +183,8 @@ export const BarnParticle: React.FC<BarnParticleProps> = ({
     }, 5000);
     return () => clearTimeout(timer);
   }, [data.id]);
+
+  if (getPerformanceMode()) return null;
 
   const { phase, pos, trail, trailOpacity } = frame;
 

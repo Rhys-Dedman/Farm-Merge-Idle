@@ -8,6 +8,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { PLANT_CONTAINER_WIDTH } from '../constants/boardLayout';
 import { assetPath } from '../utils/assetPath';
+import { scheduleNextFrame } from '../utils/raf60';
+import { getPerformanceMode } from '../utils/performanceMode';
 
 const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_green_1.png'), assetPath('/assets/vfx/particle_leaf_green_2.png')];
 const CELL_SCALE = 1.2;
@@ -72,6 +74,10 @@ export const UnlockBurst: React.FC<UnlockBurstProps> = ({ x, y, startTime, onCom
   onCompleteRef.current = onComplete;
 
   useEffect(() => {
+    if (getPerformanceMode()) {
+      onCompleteRef.current();
+      return;
+    }
     const start = startTime;
     const totalDurationMs = Math.max(...leaves.map((l) => l.lifetimeMs)) + 80;
     leaves.forEach((l, i) => {
@@ -150,12 +156,14 @@ export const UnlockBurst: React.FC<UnlockBurstProps> = ({ x, y, startTime, onCom
           posRef.current.map((p) => ({ x: p.x, y: p.y, opacity: p.opacity, rotation: p.rotation, scale: p.scale }))
         );
       }
-      rafRef.current = requestAnimationFrame(tick);
+      rafRef.current = scheduleNextFrame(tick);
     };
 
-    rafRef.current = requestAnimationFrame(tick);
+    rafRef.current = scheduleNextFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
   }, [startTime, leaves]);
+
+  if (getPerformanceMode()) return null;
 
   return (
     <div

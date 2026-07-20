@@ -5,6 +5,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { assetPath } from '../utils/assetPath';
 import { shouldPlayPopupLeafBurst } from '../utils/performanceMode';
+import { scheduleNextFrame } from '../utils/raf60';
 
 const LEAF_SPRITES = [
   assetPath('/assets/vfx/particle_leaf_green_1.png'),
@@ -214,10 +215,10 @@ export const PopupRectLeafBurst: React.FC<PopupRectLeafBurstProps> = ({
           scale: p.scale,
         })),
       );
-      leafRafRef.current = requestAnimationFrame(tick);
+      leafRafRef.current = scheduleNextFrame(tick);
     };
 
-    leafRafRef.current = requestAnimationFrame(tick);
+    leafRafRef.current = scheduleNextFrame(tick);
     return () => cancelAnimationFrame(leafRafRef.current);
   }, [leaves, skipBurst]);
 

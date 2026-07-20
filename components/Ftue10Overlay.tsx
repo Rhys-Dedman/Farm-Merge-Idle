@@ -19,6 +19,12 @@ const FINGER_SIZE = 270 * FTUE_VISUAL_SCALE;
 const FINGER_TAP_OFFSET_X = -14.14 * FTUE_VISUAL_SCALE;
 const FINGER_TAP_OFFSET_Y = 14.14 * FTUE_VISUAL_SCALE;
 const FINGER_TAP_DOWN_PX = 18 * FTUE_VISUAL_SCALE;
+/**
+ * Pin textbox above the *open* upgrade panel (design px), same anchoring model as
+ * seed/harvest (`bottom` of hex area = panel top). Tuned to sit above the circles
+ * with the clearance settled in playtest (~240px above button tops ≈ 360 above panel).
+ */
+const TEXTBOX_OFFSET_ABOVE_OPEN_PANEL_TOP_PX = 180;
 /** Expand hole so the tab/button is fully inside the tappable cutout (avoids blocking from rect drift). */
 const HOLE_PADDING_PX = 12;
 /** Finger 1: smaller hole (tighten width + height). */
@@ -69,6 +75,11 @@ export type Ftue10Phase = 'point_orders' | 'panel_open_orders' | 'finger';
 export interface Ftue10OverlayProps {
   /** Harvest button rect in game-container coordinates (448×796 space). */
   harvestButtonRect: Rect | null;
+  /**
+   * Open upgrade panel height in design px (`upgradePanelExpandedPx`).
+   * Textbox is pinned above this so it tracks panel height across devices.
+   */
+  upgradePanelOpenHeightPx: number;
   phase: Ftue10Phase | null;
   /** Purchase button rect in game-container coordinates (448×796 space). */
   purchaseButtonRect?: Rect | null;
@@ -80,6 +91,7 @@ export interface Ftue10OverlayProps {
 
 export const Ftue10Overlay: React.FC<Ftue10OverlayProps> = ({
   harvestButtonRect,
+  upgradePanelOpenHeightPx,
   phase,
   purchaseButtonRect: purchaseButtonRectProp = null,
   appScale,
@@ -230,7 +242,7 @@ export const Ftue10Overlay: React.FC<Ftue10OverlayProps> = ({
     }
   }, [phase, showPanelOpenContent]);
 
-  const showTextbox = ((phase === 'panel_open_orders' && showPanelOpenContent) || phase === 'finger') && harvestButtonRect && opacity > 0 && fadeOutOpacity > 0;
+  const showTextbox = ((phase === 'panel_open_orders' && showPanelOpenContent) || phase === 'finger') && opacity > 0 && fadeOutOpacity > 0;
   const effectiveOpacity = isFadingOut ? fadeOutOpacity : opacity;
 
   const isFingerPhase = phase === 'finger';
@@ -387,13 +399,13 @@ export const Ftue10Overlay: React.FC<Ftue10OverlayProps> = ({
         </div>
       )}
 
-      {/* Textbox: center of screen (slightly high) for panel_open_orders and finger phase */}
-      {harvestButtonRect && showTextbox && (
+      {/* Textbox: pinned above open upgrade panel height (same model as seed/harvest row). */}
+      {showTextbox && (
         <div
           className="absolute pointer-events-none"
           style={{
             left: '50%',
-            top: '40%',
+            bottom: upgradePanelOpenHeightPx + TEXTBOX_OFFSET_ABOVE_OPEN_PANEL_TOP_PX,
             transform: 'translateX(-50%)',
             ...FTUE_TEXTBOX,
             width: 360 * FTUE_VISUAL_SCALE,

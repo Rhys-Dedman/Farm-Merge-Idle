@@ -125,7 +125,15 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
     trailRef.current = [{ p: { x: data.startX, y: data.startY }, color: TRAIL_COLOR, t: 0 }];
   }, [data.id, data.startX, data.startY]);
 
+  // Performance Mode: credit immediately, skip flight.
   useEffect(() => {
+    if (!getPerformanceMode()) return;
+    onImpactRef.current(data.value);
+    onCompleteRef.current();
+  }, [data.id, data.value]);
+
+  useEffect(() => {
+    if (getPerformanceMode()) return;
     mountedRef.current = true;
     completeScheduledRef.current = false;
     const container = containerRef.current;
@@ -251,6 +259,7 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
 
   // Safety net: force-complete if animation is stuck (RAF starvation during heavy renders)
   useEffect(() => {
+    if (getPerformanceMode()) return;
     const timer = window.setTimeout(() => {
       if (!impactFiredRef.current) {
         impactFiredRef.current = true;
@@ -264,6 +273,8 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
     }, 5000);
     return () => clearTimeout(timer);
   }, [data.id, data.value]);
+
+  if (getPerformanceMode()) return null;
 
   const { phase, pos, scale, trail, trailOpacity } = frame;
 

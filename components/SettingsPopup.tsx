@@ -296,6 +296,7 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
     {
       key: 'performance',
       label: 'Performance Mode',
+      /** Reduces VFX / particles and caps animation FPS for low-end devices. */
       enabled: performanceMode,
       onToggle: () => {
         onAnyButtonClick?.();

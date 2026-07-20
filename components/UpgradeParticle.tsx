@@ -168,7 +168,15 @@ export const UpgradeParticle: React.FC<UpgradeParticleProps> = ({
     completeScheduledRef.current = false;
   }, [data.id, data.startX, data.startY]);
 
+  // Performance Mode: fire impact (unlock / bounce / etc.) immediately.
   useEffect(() => {
+    if (!getPerformanceMode()) return;
+    onImpactRef.current();
+    onCompleteRef.current();
+  }, [data.id]);
+
+  useEffect(() => {
+    if (getPerformanceMode()) return;
     mountedRef.current = true;
     completeScheduledRef.current = false;
 
@@ -257,6 +265,7 @@ export const UpgradeParticle: React.FC<UpgradeParticleProps> = ({
   }, [data, useTrail]);
 
   useEffect(() => {
+    if (getPerformanceMode()) return;
     const timer = window.setTimeout(() => {
       if (!impactFiredRef.current) {
         impactFiredRef.current = true;
@@ -273,6 +282,8 @@ export const UpgradeParticle: React.FC<UpgradeParticleProps> = ({
     }, 5000);
     return () => clearTimeout(timer);
   }, [data.id]);
+
+  if (getPerformanceMode()) return null;
 
   const { trail } = frame;
   const innerTrail = trail.slice(0, MAX_TRAIL_POINTS_INNER);

@@ -30,9 +30,8 @@ import { Projectile } from './components/Projectile';
 import { LeafBurst, LEAF_BURST_BASELINE_COUNT, LEAF_BURST_SMALL_COUNT } from './components/LeafBurst';
 import { PopupRectLeafBurst } from './components/PopupRectLeafBurst';
 import { AmbientFallingLeaves } from './components/AmbientFallingLeaves';
-import { UnlockBurst } from './components/UnlockBurst';
+import { FarmVfxLayer } from './components/FarmVfxLayer';
 import { CellHighlightBeam } from './components/CellHighlightBeam';
-import { ShelfUnlockConeBurst } from './components/ShelfUnlockConeBurst';
 import { CoinPanel, CoinPanelData } from './components/CoinPanel';
 import { PlantPanel, PlantPanelData } from './components/PlantPanel';
 import { GoalCoinParticle, GoalCoinParticleData } from './components/GoalCoinParticle';
@@ -53,6 +52,15 @@ import { AdFullscreenFadeOverlay } from './components/AdFullscreenFadeOverlay';
 import { AdBreakIntroOverlay } from './components/AdBreakIntroOverlay';
 import { InterstitialAdLayer } from './components/InterstitialAdLayer';
 import { RewardedAdLayer } from './components/RewardedAdLayer';
+import {
+  spawnButtonLeafBurst,
+  spawnGoalCoinLeafBurst,
+  spawnLeafBurst,
+  spawnLeafBurstSmall,
+  spawnLeafBurstsSmallMany,
+  spawnMasteryConeBurst,
+  spawnUnlockBurst,
+} from './utils/farmVfxStore';
 import {
   AD_REWARDED_FADE_IN_MS,
   AD_REWARDED_FADE_OUT_MS,
@@ -129,7 +137,6 @@ import { getDailyTaskClaimFxFromDom } from './utils/dailyTaskClaimFx';
 import { BoostParticle, BoostParticleData } from './components/BoostParticle';
 import { ActiveBoostData, ACTIVE_BOOST_INDICATOR_SIZE_PX } from './components/ActiveBoostIndicator';
 import { UpgradeTabsRef } from './components/UpgradeTabs';
-import { ButtonLeafBurst } from './components/ButtonLeafBurst';
 import { BarnParticle, BarnParticleData } from './components/BarnParticle';
 import { LoadingScreen } from './components/LoadingScreen';
 import { FtuePopup } from './components/FtuePopup';
@@ -922,10 +929,15 @@ const GARDEN_BG_TAB_LINE_OFFSET_PX = 20;
  * (open pose unchanged). Matches pre-simplify panel motion.
  */
 const GARDEN_BG_CLOSED_EXTRA_DOWN_PX = 10;
+/**
+ * Closed-only lift for bottom/left/right/gradient (same Y so bottoms line up).
+ * Open pose unchanged. Slightly less than prior 30px side lift = tiny bit lower.
+ */
+const GARDEN_SIDE_CLOSED_LIFT_PX = 20;
 /** Nudge collection column right to clear subpixel seam bleed on garden (design px). */
 const BARN_CAROUSEL_SEAM_OFFSET_PX = 1;
 const COLLECTION_BACKGROUND_WIDTH_PX = 2000;
-const COLLECTION_BACKGROUND_IMAGE = assetPath('/assets/collection/background_collection.png');
+const COLLECTION_BACKGROUND_IMAGE = assetPath('/assets/collection/background_collection.webp');
 const COLLECTION_CONTENT_BOTTOM_PAD_PX = 140;
 /** Widest collection art (shelf); barn scale targets filling the design column on phones. */
 const COLLECTION_BARN_LAYOUT_WIDTH_PX = 490;
@@ -936,7 +948,7 @@ const COLLECTION_ROOF_ASPECT_HEIGHT = 512 / 2048;
 /**
  * Panel open/close: browser WAAPI tweens (same poses / travels / ease-out curve as before).
  * Movers: panel + seed/harvest (full --ppd), hex + centers (half --pcd), grass (half),
- * sides/bottom/gradient (full garden delta --pgd). No per-frame JS `--pp` writes.
+ * sides/bottom/gradient (--pgd + shared closed lift so bottoms align).
  */
 const UPGRADE_PANEL_ANIM_DURATION_MS = 800;
 /** Matches prior easeOutQuint (1-(1-t)^5) closely for WAAPI. */
@@ -2085,18 +2097,6 @@ export default function App() {
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [sourceCellFadeOutIdx, setSourceCellFadeOutIdx] = useState<number | null>(null);
   const [newCellImpactIdx, setNewCellImpactIdx] = useState<number | null>(null);
-  const [leafBursts, setLeafBursts] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
-  const [leafBurstsSmall, setLeafBurstsSmall] = useState<
-    { id: string; x: number; y: number; startTime: number; particleCount?: number; useCircle?: boolean; burstScale?: number }[]
-  >([]);
-  const [unlockBursts, setUnlockBursts] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
-  const [masteryPurchaseConeBursts, setMasteryPurchaseConeBursts] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
-  const [buttonLeafBursts, setButtonLeafBursts] = useState<
-    { id: string; x: number; y: number; startTime: number; radiusScale?: number; speedScale?: number }[]
-  >([]);
-  const [goalCoinLeafBursts, setGoalCoinLeafBursts] = useState<
-    { id: string; x: number; y: number; startTime: number; spriteVariant?: 'default' | 'gold' }[]
-  >([]);
   const [cellHighlightBeams, setCellHighlightBeams] = useState<{ id: string; x: number; y: number; cellWidth: number; cellHeight: number; startTime: number; showHexSprite?: boolean; sparkleCount?: number; sparkleSizeScale?: number; sparkleHeightScale?: number }[]>([]);
   const [activeCoinPanels, setActiveCoinPanels] = useState<CoinPanelData[]>([]);
   const [coinPanelPortalRect, setCoinPanelPortalRect] = useState<{ left: number; top: number; width: number; height: number; scale: number } | null>(null);
@@ -3344,10 +3344,7 @@ export default function App() {
       const cx = r.left + r.width / 2;
       const cy = r.top + r.height / 2;
       const startTime = Date.now();
-      setMasteryPurchaseConeBursts((prev) => [
-        ...prev,
-        { id: `mastery-buy-cone-${level}-${startTime}-${Math.random().toString(36).slice(2)}`, x: cx, y: cy, startTime },
-      ]);
+      spawnMasteryConeBurst({ id: `mastery-buy-cone-${level}-${startTime}-${Math.random().toString(36).slice(2)}`, x: cx, y: cy, startTime });
       setCellHighlightBeams((prev) => [
         ...prev,
         {
@@ -3682,6 +3679,7 @@ export default function App() {
   const [ftue10Phase, setFtue10Phase] = useState<Ftue10Phase | null>(null);
   const [ftue10GreenFlashUpgradeId, setFtue10GreenFlashUpgradeId] = useState<string | null>(null);
   const [ftue10FadingOut, setFtue10FadingOut] = useState(false);
+  const ftue10PostPurchaseHoldTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [ftueSeedSurplusActivated, setFtueSeedSurplusActivated] = useState(false);
   const [ftueHarvestSurplusActivated, setFtueHarvestSurplusActivated] = useState(false);
   const [ftue10PostClosePending, setFtue10PostClosePending] = useState(false);
@@ -4386,6 +4384,7 @@ export default function App() {
       if (ftue11Delay1Ref.current) clearTimeout(ftue11Delay1Ref.current);
       if (ftue11Delay2Ref.current) clearTimeout(ftue11Delay2Ref.current);
       if (ftue10BigBounceTimeoutRef.current) clearTimeout(ftue10BigBounceTimeoutRef.current);
+      if (ftue10PostPurchaseHoldTimeoutRef.current) clearTimeout(ftue10PostPurchaseHoldTimeoutRef.current);
       if (ftue95EnterTimeoutRef.current) clearTimeout(ftue95EnterTimeoutRef.current);
       if (sideButtonToastTimeoutRef.current) clearTimeout(sideButtonToastTimeoutRef.current);
     };
@@ -5586,7 +5585,8 @@ export default function App() {
     const pgl = parseFloat(col?.style.getPropertyValue('--pgl') || '0') || 0;
     const yFull = (1 - pp) * ppd;
     const yHalf = (1 - pp) * pcd;
-    const yGarden = -pgl + (1 - pp) * pgd;
+    const closedT = 1 - pp;
+    const yGarden = -pgl + closedT * pgd - closedT * GARDEN_SIDE_CLOSED_LIFT_PX;
     const yGrass = -pp * pcd;
     const centerXf = `translate(${pcl}, ${pct + yHalf}px) translate(-50%, -50%) scale(0.75)`;
     const sideScale = GARDEN_SIDE_SPRITE_SCALE;
@@ -5693,8 +5693,8 @@ export default function App() {
     const toFull = (1 - target) * ppd;
     const fromHalf = (1 - from) * pcd;
     const toHalf = (1 - target) * pcd;
-    const fromGarden = -pgl + (1 - from) * pgd;
-    const toGarden = -pgl + (1 - target) * pgd;
+    const fromGarden = -pgl + (1 - from) * pgd - (1 - from) * GARDEN_SIDE_CLOSED_LIFT_PX;
+    const toGarden = -pgl + (1 - target) * pgd - (1 - target) * GARDEN_SIDE_CLOSED_LIFT_PX;
     const fromGrass = -from * pcd;
     const toGrass = -target * pcd;
     const fromCenter = `translate(${pcl}, ${pct + fromHalf}px) translate(-50%, -50%) scale(0.75)`;
@@ -6998,12 +6998,12 @@ export default function App() {
     prevHarvestChargesRef.current = harvestCharges;
     if (prev === 0 && harvestCharges > 0 && harvestButtonRef.current && !getPerformanceMode()) {
       const rect = harvestButtonRef.current.getBoundingClientRect();
-      setButtonLeafBursts(prev => [...prev, {
+      spawnButtonLeafBurst({
         id: `harvest-${Date.now()}`,
         x: rect.left + rect.width / 2,
         y: rect.top + rect.height / 2,
         startTime: Date.now()
-      }]);
+      });
     }
   }, [harvestCharges]);
 
@@ -7013,24 +7013,24 @@ export default function App() {
       const rect = plantButtonRef.current.getBoundingClientRect();
       const centerX = rect.left + rect.width / 2;
       const centerY = rect.top + rect.height / 2;
-      setButtonLeafBursts(prev => [...prev, {
+      spawnButtonLeafBurst({
         id: `seed-${Date.now()}`,
         x: centerX,
         y: centerY,
         startTime: Date.now()
-      }]);
+      });
     }
   }, []);
 
   const triggerHarvestButtonLeafBurst = useCallback(() => {
     if (harvestButtonRef.current && !getPerformanceMode()) {
       const rect = harvestButtonRef.current.getBoundingClientRect();
-      setButtonLeafBursts(prev => [...prev, {
+      spawnButtonLeafBurst({
         id: `harvest-tap-${Date.now()}`,
         x: rect.left + rect.width / 2,
         y: rect.top + rect.height / 2,
         startTime: Date.now()
-      }]);
+      });
     }
   }, []);
 
@@ -7109,15 +7109,12 @@ export default function App() {
       if (!hexEl) return;
       const r = hexEl.getBoundingClientRect();
       if (!getPerformanceMode()) {
-        setLeafBurstsSmall((prev) => [
-          ...prev,
-          {
+        spawnLeafBurstSmall({
             id: `wild-growth-burst-${targetIdx}-${Date.now()}`,
             x: r.left + r.width / 2,
             y: r.top + r.height / 2,
             startTime: Date.now(),
-          },
-        ]);
+          });
       }
       setCellHighlightBeams((prev) => [
         ...prev,
@@ -7180,15 +7177,12 @@ export default function App() {
     const hexEl = document.getElementById(`hex-${cellIdx}`);
     if (hexEl) {
       const rect = hexEl.getBoundingClientRect();
-      setUnlockBursts((prev) => [
-        ...prev,
-        {
+      spawnUnlockBurst({
           id: `unlock-${cellIdx}-${Date.now()}`,
           x: rect.left + rect.width / 2,
           y: rect.top + rect.height / 2,
           startTime: Date.now(),
-        },
-      ]);
+        });
       setCellHighlightBeams((prev) => [
         ...prev,
         {
@@ -7745,7 +7739,7 @@ export default function App() {
           })
           .filter((b): b is NonNullable<typeof b> => b !== null);
         if (newBursts.length > 0 && !getPerformanceMode()) {
-          setLeafBurstsSmall((prev) => [...prev, ...newBursts]);
+          spawnLeafBurstsSmallMany(newBursts);
         }
 
         if (coinPanelsWithDist.length > 0) {
@@ -7924,7 +7918,7 @@ export default function App() {
     });
 
     if (mergeBursts.length > 0 && !getPerformanceMode()) {
-      setLeafBurstsSmall((prev) => [...prev, ...mergeBursts]);
+      spawnLeafBurstsSmallMany(mergeBursts);
     }
     if (mergeBeams.length > 0) {
       setCellHighlightBeams((prev) => [...prev, ...mergeBeams]);
@@ -9730,6 +9724,7 @@ export default function App() {
                       const state = buildLimitedOfferPopupState(boost.offerId, { activeBoostEndTime: boost.endTime, highestPlantEver });
                       if (state) setLimitedOfferPopup(state);
                     }}
+                    hideFps={false}
                     gardenId={activeGardenId}
                   />
                 ) : (
@@ -9832,12 +9827,12 @@ export default function App() {
                       });
                       setPlayerLevelFlashTrigger((t) => t + 1);
                       if (!getPerformanceMode()) {
-                        setGoalCoinLeafBursts((prev) => [...prev, {
+                        spawnGoalCoinLeafBurst({
                           id: `goal-coin-lb-${nextGoalCoinBurstIdRef.current++}`,
                           x: r.left + r.width / 2,
                           y: r.top + r.height / 2 + 30,
                           startTime: Date.now(),
-                        }]);
+                        });
                       }
                     }
                     setTimeout(() => {
@@ -10034,12 +10029,12 @@ export default function App() {
                           const startX = (r.left + r.width / 2 - cr.left) / appScale;
                           const startY = (r.top + r.height / 2 - cr.top) / appScale;
                           if (!getPerformanceMode()) {
-                            setGoalCoinLeafBursts((prev) => [...prev, {
+                            spawnGoalCoinLeafBurst({
                               id: `goal-coin-lb-${nextGoalCoinBurstIdRef.current++}`,
                               x: r.left + r.width / 2,
                               y: r.top + r.height / 2 + 30,
                               startTime: Date.now(),
-                            }]);
+                            });
                           }
                           setActiveGoalCoinParticles((prev) => [
                             ...prev,
@@ -10397,15 +10392,12 @@ export default function App() {
                       const scale = appScaleRef.current;
                       const rect = container.getBoundingClientRect();
                       if (!getPerformanceMode()) {
-                        setLeafBursts((prev) => [
-                          ...prev,
-                          {
+                        spawnLeafBurst({
                             id: Math.random().toString(36).slice(2),
                             x: rect.left + px * scale,
                             y: rect.top + py * scale,
                             startTime: Date.now(),
-                          },
-                        ]);
+                          });
                       }
                       if (mergeResultLevel != null) {
                         const slotIdx = mergeResultLevel >= 1 && mergeResultLevel <= MAX_PLANT_TIER
@@ -10488,17 +10480,14 @@ export default function App() {
                       const scale = appScaleRef.current;
                       const rect = container.getBoundingClientRect();
                       if (!getPerformanceMode()) {
-                        setLeafBurstsSmall((prev) => [
-                          ...prev,
-                          {
+                        spawnLeafBurstSmall({
                             id: `delete-${cellIdx}-${Date.now()}`,
                             x: rect.left + px * scale,
                             y: rect.top + py * scale,
                             startTime: Date.now(),
                             particleCount: 30,
                             useCircle: true,
-                          },
-                        ]);
+                          });
                       }
                       // Remove the plant from the grid
                       setGrid((prev) => {
@@ -10643,17 +10632,14 @@ export default function App() {
                       // Small leaf burst around the purchase button on every upgrade.
                       if (sourceButton && !getPerformanceMode()) {
                         const sr = sourceButton.getBoundingClientRect();
-                        setButtonLeafBursts((prev) => [
-                          ...prev,
-                          {
+                        spawnButtonLeafBurst({
                             id: `upgrade-btn-${upgradeId}-${Date.now()}`,
                             x: sr.left + sr.width / 2,
                             y: sr.top + sr.height / 2,
                             startTime: Date.now(),
                             radiusScale: 0.55,
                             speedScale: 0.9,
-                          },
-                        ]);
+                          });
                       }
                       // Seeds tab: green upgrade particle → seed button (bounce + leaf burst on impact).
                       if (
@@ -10989,15 +10975,22 @@ export default function App() {
                         }
                       }
                       if (upgradeId === 'harvest_speed' && activeFtueStage === 'first_upgrade') {
-                        // FTUE 10: bounce harvest on particle impact when possible; fade overlay now.
+                        // FTUE 10: bounce harvest on particle impact when possible; hold panel open
+                        // briefly so the purchase lands, then fade overlay and close panel.
                         if (!spawnedHarvestParticle) {
                           setHarvestBounceTrigger((t) => t + 1);
                         }
-                        setFtue10Phase(null);
-                        setFtue10GreenFlashUpgradeId(null);
-                        setFtue10FadingOut(true);
-                        // Defer the "return to normal" + seed surplus activation until the upgrade panel has fully closed.
-                        setFtue10PostClosePending(true);
+                        if (ftue10PostPurchaseHoldTimeoutRef.current) {
+                          clearTimeout(ftue10PostPurchaseHoldTimeoutRef.current);
+                        }
+                        ftue10PostPurchaseHoldTimeoutRef.current = setTimeout(() => {
+                          ftue10PostPurchaseHoldTimeoutRef.current = null;
+                          setFtue10Phase(null);
+                          setFtue10GreenFlashUpgradeId(null);
+                          setFtue10FadingOut(true);
+                          // Defer surplus activation until the upgrade panel has fully closed.
+                          setFtue10PostClosePending(true);
+                        }, 500);
                       }
                     }}
                     onRewardedOfferPanelClick={(offerId) => {
@@ -11681,75 +11674,7 @@ export default function App() {
                 Max Plant Reached
               </div>
             ))}
-            {leafBursts.map((b) => (
-              <LeafBurst
-                key={b.id}
-                x={b.x}
-                y={b.y}
-                startTime={b.startTime}
-                appScale={appScale}
-                onComplete={() => setLeafBursts((prev) => prev.filter((x) => x.id !== b.id))}
-              />
-            ))}
-            {leafBurstsSmall.map((b) => (
-              <LeafBurst
-                key={b.id}
-                x={b.x}
-                y={b.y}
-                startTime={b.startTime}
-                particleCount={b.particleCount ?? LEAF_BURST_SMALL_COUNT}
-                useCircle={b.useCircle}
-                burstScale={b.burstScale}
-                appScale={appScale}
-                onComplete={() => setLeafBurstsSmall((prev) => prev.filter((x) => x.id !== b.id))}
-              />
-            ))}
-            {masteryPurchaseConeBursts.map((b) => (
-              <ShelfUnlockConeBurst
-                key={b.id}
-                x={b.x}
-                y={b.y}
-                startTime={b.startTime}
-                scale={1.35}
-                particleCount={26}
-                onComplete={() => setMasteryPurchaseConeBursts((prev) => prev.filter((x) => x.id !== b.id))}
-              />
-            ))}
-            {unlockBursts.map((b) => (
-              <UnlockBurst
-                key={b.id}
-                x={b.x}
-                y={b.y}
-                startTime={b.startTime}
-                appScale={appScale}
-                onComplete={() => setUnlockBursts((prev) => prev.filter((x) => x.id !== b.id))}
-              />
-            ))}
-            {buttonLeafBursts.map((b) => (
-              <ButtonLeafBurst
-                key={b.id}
-                x={b.x}
-                y={b.y}
-                startTime={b.startTime}
-                radiusScale={b.radiusScale}
-                speedScale={b.speedScale}
-                appScale={appScale}
-                onComplete={() => setButtonLeafBursts((prev) => prev.filter((x) => x.id !== b.id))}
-              />
-            ))}
-            {goalCoinLeafBursts.map((b) => (
-              <LeafBurst
-                key={b.id}
-                x={b.x}
-                y={b.y}
-                startTime={b.startTime}
-                particleCount={LEAF_BURST_BASELINE_COUNT}
-                appScale={appScale}
-                spriteVariant={b.spriteVariant ?? 'gold'}
-                burstScale={1.25}
-                onComplete={() => setGoalCoinLeafBursts((prev) => prev.filter((x) => x.id !== b.id))}
-              />
-            ))}
+            <FarmVfxLayer appScale={appScale} />
             {tasksFbLeafBursts.map((b) => (
               <LeafBurst
                 key={b.id}
@@ -11966,6 +11891,7 @@ export default function App() {
             {(activeFtueStage === 'first_upgrade' || ftue10FadingOut) && (
               <Ftue10Overlay
                 harvestButtonRect={harvestButtonRect}
+                upgradePanelOpenHeightPx={upgradePanelExpandedPx}
                 phase={ftue10Phase}
                 purchaseButtonRect={ftue10PurchaseButtonRect}
                 appScale={appScale}
@@ -13260,7 +13186,7 @@ export default function App() {
                   if (hexEl) {
                     const r = hexEl.getBoundingClientRect();
                     if (!getPerformanceMode()) {
-                      setLeafBurstsSmall((prev) => [...prev, { id: `sd-burst-${targetIdx}-${Date.now()}`, x: r.left + r.width / 2, y: r.top + r.height / 2, startTime: Date.now() }]);
+                      spawnLeafBurstSmall({ id: `sd-burst-${targetIdx}-${Date.now()}`, x: r.left + r.width / 2, y: r.top + r.height / 2, startTime: Date.now() });
                     }
                     setCellHighlightBeams((prev) => [...prev, { id: `special-delivery-${targetIdx}-${Date.now()}`, x: r.left + r.width / 2, y: r.top + r.height / 2, cellWidth: r.width, cellHeight: r.height, startTime: Date.now() }]);
                   }
@@ -13272,15 +13198,12 @@ export default function App() {
                 if (hexEl) {
                   const r = hexEl.getBoundingClientRect();
                   if (!getPerformanceMode()) {
-                    setLeafBurstsSmall((prev) => [
-                      ...prev,
-                      {
+                    spawnLeafBurstSmall({
                         id: Math.random().toString(36).slice(2),
                         x: r.left + r.width / 2,
                         y: r.top + r.height / 2,
                         startTime: Date.now(),
-                      },
-                    ]);
+                      });
                   }
                   
                   if (p.plantLevel > seedLevel) {
@@ -13544,16 +13467,13 @@ export default function App() {
                     const el = icon ?? slotEl;
                     if (el) {
                       const r = el.getBoundingClientRect();
-                      setGoalCoinLeafBursts((prev) => [
-                        ...prev,
-                        {
+                      spawnGoalCoinLeafBurst({
                           id: `goal-upg-lb-${nextGoalCoinBurstIdRef.current++}`,
                           x: r.left + r.width / 2,
                           y: r.top + r.height / 2 + 30,
                           startTime: Date.now(),
                           spriteVariant: 'default',
-                        },
-                      ]);
+                        });
                     }
                   }
                   return;
@@ -13576,28 +13496,22 @@ export default function App() {
                     // Prefer timer/plant icon anchor; never use full slot center (210px tall → burst too low).
                     if (icon) {
                       const r = icon.getBoundingClientRect();
-                      setGoalCoinLeafBursts((prev) => [
-                        ...prev,
-                        {
+                      spawnGoalCoinLeafBurst({
                           id: `goal-load-lb-${nextGoalCoinBurstIdRef.current++}`,
                           x: r.left + r.width / 2,
                           y: r.top + r.height / 2 + 30,
                           startTime: Date.now(),
                           spriteVariant: 'default',
-                        },
-                      ]);
+                        });
                     } else if (slotEl) {
                       const r = slotEl.getBoundingClientRect();
-                      setGoalCoinLeafBursts((prev) => [
-                        ...prev,
-                        {
+                      spawnGoalCoinLeafBurst({
                           id: `goal-load-lb-${nextGoalCoinBurstIdRef.current++}`,
                           x: r.left + r.width / 2,
                           y: r.top + 40 + 30,
                           startTime: Date.now(),
                           spriteVariant: 'default',
-                        },
-                      ]);
+                        });
                     }
                   }
                 }

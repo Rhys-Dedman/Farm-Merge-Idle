@@ -128,7 +128,15 @@ export const CoinPanel: React.FC<CoinPanelProps> = ({
     setBgColor(data.panelBg ?? PANEL_BG);
   }, [data.id, data.panelBg]);
 
+  // Performance Mode: credit wallet immediately, skip flight VFX.
   useEffect(() => {
+    if (!getPerformanceMode()) return;
+    onImpactRef.current(dataRef.current.value);
+    onCompleteRef.current();
+  }, [data.id]);
+
+  useEffect(() => {
+    if (getPerformanceMode()) return;
     const container = containerRef.current;
     const wallet = walletRef.current;
     if (!container || !wallet) return;
@@ -268,6 +276,7 @@ export const CoinPanel: React.FC<CoinPanelProps> = ({
 
   // Safety net: force-complete if animation is stuck (RAF starvation during heavy renders)
   useEffect(() => {
+    if (getPerformanceMode()) return;
     const safetyMs = Math.max(3000, REVEAL_MS + HOLD_MS + data.moveToWalletDelayMs + MOVE_TO_WALLET_MS + TRAIL_FADE_AFTER_HIT_MS + 1500);
     const timer = window.setTimeout(() => {
       if (!impactFiredRef.current) {
@@ -282,6 +291,8 @@ export const CoinPanel: React.FC<CoinPanelProps> = ({
     }, safetyMs);
     return () => clearTimeout(timer);
   }, [data.id, data.value, data.moveToWalletDelayMs]);
+
+  if (getPerformanceMode()) return null;
 
   const showPanel = phase === 'reveal' || phase === 'hold' || (phase === 'moveToWallet' && !isCircle);
   const showCircle = phase === 'moveToWallet' && isCircle;
