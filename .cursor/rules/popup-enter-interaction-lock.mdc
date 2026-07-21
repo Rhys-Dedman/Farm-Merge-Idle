@@ -1,0 +1,63 @@
+---
+description: >-
+  All game popups must block interaction until the open bounce finishes.
+  Use shared helpers from usePopupPreflightEnter (POPUP_ENTER_MS, pointerEvents gate).
+globs: components/**/*Popup*.tsx,hooks/usePopupPreflightEnter.ts
+alwaysApply: false
+---
+
+# Popup open interaction lock
+
+When any popup opens, **players must not be able to tap buttons, the X, or the backdrop** until the open bounce animation finishes. Accidental taps under a newly opened popup must not activate it.
+
+## Required pattern
+
+Use the shared helpers in `hooks/usePopupPreflightEnter.ts`:
+
+- `POPUP_ENTER_MS` (250) — enter bounce duration; must match the CSS `popupEnter` animation and the `setTimeout` that flips to `'visible'`
+- `isPopupEnterInteractionLocked(animState)` — true during `'preflight'` and `'entering'`
+- `popupEnterInteractionPointerEvents(animState)` — `'none'` until `'visible'`, then `'auto'`
+
+### Overlay
+
+```tsx
+style={popupOverlayStyle({
+  pointerEvents: popupEnterInteractionPointerEvents(animState),
+})}
+```
+
+### Enter timing
+
+```tsx
+setAnimState('entering');
+setTimeout(() => setAnimState('visible'), POPUP_ENTER_MS);
+```
+
+```tsx
+...popupCardSurfaceStyle(
+  animState,
+  isEntering,
+  isLeaving,
+  `popupEnter ${POPUP_ENTER_MS}ms ease-out forwards`,
+  `popupLeave ${POPUP_CLOSE_MS}ms ease-in forwards`,
+)
+```
+
+### Click / dismiss handlers
+
+Also guard handlers (defense in depth):
+
+```tsx
+if (isPopupEnterInteractionLocked(animState)) return;
+// or: if (animState !== 'visible') return;
+```
+
+## Do not
+
+- Do not use `pointerEvents: isPreflight ? 'none' : 'auto'` — that still allows taps during `'entering'`
+- Do not hardcode `250` for enter duration — use `POPUP_ENTER_MS`
+- Do not invent a per-popup open-lock; reuse the shared helpers
+
+## New popups
+
+Any new `*Popup.tsx` that uses `usePopupPreflightEnter` / `PopupAnimWithPreflight` must follow this pattern from day one.

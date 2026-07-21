@@ -3,12 +3,17 @@ import React, { useState, useRef, useEffect } from 'react';
 import { TabType } from '../types';
 import { assetPath } from '../utils/assetPath';
 import { iconAssetPath } from '../utils/iconAssetPath';
-import { getGardenCoinSmallIconPath, getSpecialDeliveryPlantLevel } from '../utils/gardenAssets';
+import {
+  getGardenCoinIconPath,
+  getGardenCoinSmallIconPath,
+  getSpecialDeliveryPlantLevel,
+} from '../utils/gardenAssets';
 import { getRewardedOfferTimeRemainingSec } from '../utils/rewardedOfferPanel';
 import { playSfx, SFX_IDS } from '../utils/sfx';
 import { getPlantCoinValue } from '../utils/plantValue';
 import {
   DEFAULT_GARDEN_ID,
+  getCollectionGardenDisplayName,
   getCollectionPanelTitle,
   type GardenId,
 } from '../constants/gardens';
@@ -425,28 +430,37 @@ export type LevelUnlockInfo = {
   rewardCoins?: number;
 };
 
-/** Get level unlock info for level-up popup. Returns title, description, icon, and optionally upgradeId/tab for Unlock Now behavior. */
-export const getLevelUnlockInfo = (
-  level: number,
-  gardenId: GardenId = DEFAULT_GARDEN_ID,
-): LevelUnlockInfo => {
-  type Row = {
-    level: number;
-    upgradeId: string;
-    tab: TabType;
-    name: string;
-    description: string;
-    icon: string;
-    popupDescription?: string;
-    plantCollectionHeader?: boolean;
-    navigateToBarnOnUnlock?: boolean;
-    buttonText?: string;
-    headerIconScale?: number;
-  };
+export type LevelUpRewardTrackItem = {
+  level: number;
+  title: string;
+  icon: string;
+  /**
+   * When false, the node stays visible on the track but is not a snap / scroll-lock target
+   * (e.g. garden start left of level 2, trailing coins after the last major unlock).
+   */
+  scrollLock?: boolean;
+};
+
+type LevelUnlockRow = {
+  level: number;
+  upgradeId: string;
+  tab: TabType;
+  name: string;
+  description: string;
+  icon: string;
+  popupDescription?: string;
+  plantCollectionHeader?: boolean;
+  navigateToBarnOnUnlock?: boolean;
+  buttonText?: string;
+  headerIconScale?: number;
+};
+
+/** Milestone unlocks shown on the level-up future-rewards track (and used by getLevelUnlockInfo). */
+function getLevelUnlockMilestoneRows(gardenId: GardenId = DEFAULT_GARDEN_ID): LevelUnlockRow[] {
   const isGarden1 = gardenId === DEFAULT_GARDEN_ID;
   const cropYieldLevel = getCropYieldUnlockLevel(gardenId);
   const happyCustomerLevel = getHappyCustomerUnlockLevel(gardenId);
-  const allUnlocks: Row[] = [
+  return [
     { level: 2, upgradeId: 'plot_expansion', tab: 'CROPS', name: 'Garden Expansion', description: 'Unlock additional plots in the garden', icon: 'icon_plotexpansion.png', popupDescription: 'You can now unlock additional plots in the garden' },
     { level: 3, upgradeId: 'market_value', tab: 'HARVEST', name: 'Market Value', description: 'Increase the coins earned when completing orders', icon: 'icon_marketvalue.png', popupDescription: 'You can now increase the coins earned when completing orders' },
     {
@@ -465,7 +479,7 @@ export const getLevelUnlockInfo = (
       tab: 'CROPS',
       name: getCollectionPanelTitle(gardenId),
       description: 'Upgrade your discovered plants to unlock powerful bonuses!',
-      icon: 'icon_plantmastery.png',
+      icon: 'icon_collection_goldenpot.png',
       popupDescription: 'Upgrade your discovered plants to unlock powerful bonuses!',
       plantCollectionHeader: true,
       navigateToBarnOnUnlock: true,
@@ -505,8 +519,95 @@ export const getLevelUnlockInfo = (
       icon: 'icon_happycustomer.png',
       popupDescription: 'You can now increase the chance for customers to pay double coins for orders',
     },
-  ];
-  const match = allUnlocks.find((u) => u.level === level);
+  ].sort((a, b) => a.level - b.level);
+}
+
+/** First level-up that is coins-only (after the last scripted feature unlock). */
+export function getFirstCoinOnlyLevelUp(gardenId: GardenId = DEFAULT_GARDEN_ID): number {
+  return getMaxLevelWithCustomUnlockPopup(gardenId) + 1;
+}
+
+/** Hide the future-rewards track once the player reaches coins-only level-ups. */
+export function shouldShowLevelUpRewardTrack(
+  level: number,
+  gardenId: GardenId = DEFAULT_GARDEN_ID,
+): boolean {
+  return level < getFirstCoinOnlyLevelUp(gardenId);
+}
+
+/**
+ * Ordered milestone rewards for the level-up scrolling track.
+ * Garden-specific unlock levels/order come from `getLevelUnlockMilestoneRows`.
+ * Includes level 1 start, level-4 limited pack (track-only; IAP handles that popup),
+ * and one trailing coins node after the last major unlock (visible, not scroll-locked).
+ */
+export function getLevelUpRewardTrack(gardenId: GardenId = DEFAULT_GARDEN_ID): LevelUpRewardTrackItem[] {
+  const milestones = getLevelUnlockMilestoneRows(gardenId).map((row) => ({
+    level: row.level,
+    title: row.name,
+    icon: iconAssetPath(row.icon),
+    scrollLock: true as const,
+  }));
+  const packItem: LevelUpRewardTrackItem = {
+    level: 4,
+    title: 'Limited Offer',
+    icon: iconAssetPath(
+      gardenId === DEFAULT_GARDEN_ID ? 'icon_starterpack.png' : 'icon_fieldpack.png',
+    ),
+    scrollLock: true,
+  };
+  const coinLevel = getFirstCoinOnlyLevelUp(gardenId);
+  const coinItem: LevelUpRewardTrackItem = {
+    level: coinLevel,
+    title: 'Coin Reward',
+    icon: getGardenCoinIconPath(gardenId),
+    scrollLock: false,
+  };
+  return [
+    {
+      level: 1,
+      title: getCollectionGardenDisplayName(gardenId),
+      icon: iconAssetPath('icon_plantseed.png'),
+      scrollLock: false,
+    },
+    ...milestones,
+    packItem,
+    coinItem,
+  ].sort((a, b) => a.level - b.level);
+}
+
+/**
+ * Garden Level popup track: same majors as level-up, but once the player is on
+ * generic coin level-ups, extends through `currentLevel + 1` so the next reward
+ * stays visible. Scroll-lock extremes stay first/last only (handled by the track UI).
+ */
+export function getGardenLevelRewardTrack(
+  gardenId: GardenId = DEFAULT_GARDEN_ID,
+  currentLevel: number,
+): LevelUpRewardTrackItem[] {
+  const firstCoin = getFirstCoinOnlyLevelUp(gardenId);
+  const core = getLevelUpRewardTrack(gardenId).filter((item) => item.level < firstCoin);
+  const maxShown = Math.max(firstCoin, currentLevel + 1);
+  const coinIcon = getGardenCoinIconPath(gardenId);
+  const coinNodes: LevelUpRewardTrackItem[] = [];
+  for (let level = firstCoin; level <= maxShown; level++) {
+    coinNodes.push({
+      level,
+      title: 'Coin Reward',
+      icon: coinIcon,
+      // Extremes (garden start + trailing peek) are non-lock; track UI also clamps by index.
+      scrollLock: level < maxShown,
+    });
+  }
+  return [...core, ...coinNodes];
+}
+
+/** Get level unlock info for level-up popup. Returns title, description, icon, and optionally upgradeId/tab for Unlock Now behavior. */
+export const getLevelUnlockInfo = (
+  level: number,
+  gardenId: GardenId = DEFAULT_GARDEN_ID,
+): LevelUnlockInfo => {
+  const match = getLevelUnlockMilestoneRows(gardenId).find((u) => u.level === level);
   if (match) {
     const desc =
       match.popupDescription ?? (match.upgradeId ? `You can now ${match.description.toLowerCase()}` : match.description);
@@ -1271,7 +1372,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
     const upgrades = getUpgradesForTab(category);
     const categoryOffers = rewardedOffers.filter(o => o.tab === category);
     return (
-    <div ref={(scrollRefs as any)[category]} className={`flex-1 min-h-0 no-scrollbar px-3 pt-3 space-y-2.5 overscroll-contain select-none ${ftue10LockScroll && category === activeTab ? '' : 'cursor-grab active:cursor-grabbing'}`} style={{ paddingBottom: 75, overflow: ftue10LockScroll && category === activeTab ? 'hidden' : 'auto', touchAction: ftue10LockScroll && category === activeTab ? 'none' : 'auto' }}>
+    <div ref={(scrollRefs as any)[category]} className={`flex-1 min-h-0 no-scrollbar px-3 pt-3 space-y-2.5 overscroll-contain select-none ${ftue10LockScroll && category === activeTab ? '' : 'cursor-grab active:cursor-grabbing'}`} style={{ paddingBottom: 20, overflow: ftue10LockScroll && category === activeTab ? 'hidden' : 'auto', touchAction: ftue10LockScroll && category === activeTab ? 'none' : 'auto' }}>
       {/* Rewarded offers at top */}
       {categoryOffers.map(offer => renderRewardedOfferItem(offer))}
       {upgrades.map((upgrade) => {

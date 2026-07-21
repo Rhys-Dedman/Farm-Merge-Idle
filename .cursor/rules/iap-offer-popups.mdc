@@ -1,20 +1,28 @@
 ---
 description: >-
   Names the premium pre-purchase IAP shells (Starter Pack popup, Field Pack popup,
-  Remove Ads popup), their offer ids, and how they map to IapOfferPopup vs PurchaseSuccessfulPopup.
+  Remove Ads popup), their offer ids, and how they map to wrappers vs IapOfferPopup.
 alwaysApply: false
 ---
 
 # IAP offer popups (named)
 
-All of these use **`IapOfferPopup`** (`components/IapOfferPopup.tsx`) — premium top band + header ring (not the post-purchase **`PurchaseSuccessfulPopup`**, which stays plain cream). **Starter Pack popup** and **Field Pack popup** use purple band / `assets/ui/popup_header_purple.png`. **Remove Ads popup** uses red band (`#eb5761` fill, `#d33d57` wide stroke), `assets/ui/popup_header_red.png`, title `#af233a`, and a vertical shell nudge in `App.tsx`.
+**Starter Pack popup** → `components/StarterPackPopup.tsx` (wraps `IapOfferPopup`).  
+**Field Pack popup** → `components/FieldPackPopup.tsx` (wraps `IapOfferPopup`).  
+**Remove Ads popup** → `IapOfferPopup` directly with red chrome.  
 
-| Name (when talking to the AI) | `offerId` constant | `offers.ts` row |
-| --- | --- | --- |
-| **Starter Pack popup** | `STORE_IAP_OFFER_STARTER_PACK_ID` | `STORE_BUNDLE_OFFERS` starter bundle (garden 1 level 4) |
-| **Field Pack popup** | `STORE_IAP_OFFER_FIELD_PACK_ID` | `STORE_BUNDLE_OFFERS` field bundle (garden 2+ level 4; own rewards/timer keys) |
-| **Remove Ads popup** | `STORE_IAP_OFFER_REMOVE_ADS_ID` | `STORE_COIN_OFFERS` Remove Ads (7d, same price/icon as store small row) |
+Shared shell: `components/IapOfferPopup.tsx` (premium top band + header ring). Post-purchase confirmation stays **`PurchaseSuccessfulPopup`** (plain cream).
+
+| Name (when talking to the AI) | Component | `offerId` constant | Notes |
+| --- | --- | --- | --- |
+| **Starter Pack popup** | `StarterPackPopup` | `STORE_IAP_OFFER_STARTER_PACK_ID` | Garden 1 level 4; purple chrome |
+| **Field Pack popup** | `FieldPackPopup` | `STORE_IAP_OFFER_FIELD_PACK_ID` | Garden 2+ level 4; own title/icon/FB |
+| **Remove Ads popup** | `IapOfferPopup` | `STORE_IAP_OFFER_REMOVE_ADS_ID` | Red band / `popup_header_red.png` |
 
 - **State:** `iapOfferUi` in `App.tsx` — `setIapOfferUi({ offerId: … })`.
-- **Farm:** Starter / Field Pack floating button → matching popup; NO ADS floating button → Remove Ads popup.
-- **Leaf burst:** Starter / Field Pack use `particle_leaf_purple_1` / `2`; Remove Ads uses `particle_leaf_red_1` / `2` (`IapOfferPopup` `leafBurstVariant`).
+- **Farm floating buttons:**
+  - Garden 1 → `FloatingButtonStarterPack` → Starter Pack popup
+  - Garden 2+ → `FloatingButtonFieldPack` → Field Pack popup (`icon_fb_fieldpack.png`)
+  - NO ADS → Remove Ads popup
+- Never show Starter Pack FB on garden 2+ (or Field Pack FB on garden 1), even if the other offer is still unlocked.
+- **Leaf burst:** Starter / Field Pack use purple leaves; Remove Ads uses red.

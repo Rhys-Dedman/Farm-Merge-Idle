@@ -4,7 +4,7 @@
  */
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
-import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
+import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight, POPUP_ENTER_MS, popupEnterInteractionPointerEvents, isPopupEnterInteractionLocked } from '../hooks/usePopupPreflightEnter';
 import {
   POPUP_CREAM_STACK_MARGIN_TOP_PX,
   POPUP_HEADER_TOP_PX,
@@ -237,7 +237,7 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
       setLeafPositions([]);
     }
     setAnimState('entering');
-    setTimeout(() => setAnimState('visible'), 250);
+    setTimeout(() => setAnimState('visible'), POPUP_ENTER_MS);
   }, []);
 
   usePopupPreflightEnter(animState, beginEnterAfterPreflight, popupCardLayoutRef);
@@ -258,7 +258,7 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   const handleCollectClick = () => {
-    if (isClosing || animState === 'preflight') return;
+    if (isClosing || isPopupEnterInteractionLocked(animState)) return;
     setIsClosing(true);
     if (onCollect && buttonRef.current) {
       onCollect(buttonRef.current.getBoundingClientRect());
@@ -284,7 +284,7 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
   return (
     <div 
       className="fixed inset-0 flex items-center justify-center"
-      style={popupOverlayStyle({ zIndex: 115, pointerEvents: isPreflight ? 'none' : 'auto' })}
+      style={popupOverlayStyle({ zIndex: 115, pointerEvents: popupEnterInteractionPointerEvents(animState) })}
     >
 {/* Backdrop - not scaled, covers full screen */}
       <div
@@ -365,7 +365,7 @@ export const PurchaseSuccessfulPopup: React.FC<PurchaseSuccessfulPopupProps> = (
             animState,
             isEntering,
             isLeaving,
-            'popupEnter 250ms ease-out forwards',
+            `popupEnter ${POPUP_ENTER_MS}ms ease-out forwards`,
             `popupLeave ${POPUP_CLOSE_MS}ms ease-in forwards`
           ),
         }}

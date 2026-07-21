@@ -27,6 +27,30 @@ function allImagesComplete(el: HTMLElement): boolean {
 export type PopupAnimWithPreflight = 'hidden' | 'preflight' | 'entering' | 'visible' | 'leaving';
 
 /**
+ * Standard open bounce duration — must match `popupEnter ${POPUP_ENTER_MS}ms`
+ * and the `setTimeout` that flips animState to `'visible'`.
+ */
+export const POPUP_ENTER_MS = 250;
+
+/**
+ * While preflight or the open bounce is running, block all popup interaction
+ * (buttons, X, backdrop dismiss) so accidental taps under an opening popup
+ * cannot activate it.
+ */
+export function isPopupEnterInteractionLocked(
+  animState: PopupAnimWithPreflight,
+): boolean {
+  return animState === 'preflight' || animState === 'entering';
+}
+
+/** Overlay `pointerEvents` — `'none'` until enter bounce finishes (`'visible'`). */
+export function popupEnterInteractionPointerEvents(
+  animState: PopupAnimWithPreflight,
+): 'none' | 'auto' {
+  return isPopupEnterInteractionLocked(animState) ? 'none' : 'auto';
+}
+
+/**
  * When `animState === 'preflight'`, waits for the popup card's layout to fully
  * settle (images decoded, height stable) then calls `onBeginEnter` once.
  *

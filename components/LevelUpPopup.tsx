@@ -7,7 +7,7 @@ import { assetPath } from '../utils/assetPath';
 import { formatCompactNumber } from '../utils/formatCompactNumber';
 import { getGardenCoinIconPath } from '../utils/gardenAssets';
 import { DEFAULT_GARDEN_ID, type GardenId } from '../constants/gardens';
-import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
+import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight, POPUP_ENTER_MS, popupEnterInteractionPointerEvents, isPopupEnterInteractionLocked } from '../hooks/usePopupPreflightEnter';
 import {
   POPUP_CREAM_STACK_MARGIN_TOP_PX,
   POPUP_HEADER_TOP_PX,
@@ -24,6 +24,10 @@ import {
   REWARD_PILL_STROKE_WIDTH_PX,
 } from './Reward';
 import { shouldPlayPopupLeafBurst } from '../utils/performanceMode';
+import { LevelUpRewardTrack, INTRO_BUTTON_DELAY_MS } from './LevelUpRewardTrack';
+import { shouldShowLevelUpRewardTrack } from './UpgradeList';
+import { PopupRectLeafBurst } from './PopupRectLeafBurst';
+import { playSfx, SFX_IDS } from '../utils/sfx';
 
 /** Match DiscoveryPopup coin reward icon size (2× layout space). */
 const LEVEL_UP_REWARD_ICON_PX = Math.round(40 * 1.15);
@@ -74,13 +78,21 @@ interface LevelUpPopupProps {
   gardenId?: GardenId;
   /** When true after primary button tap, skip close animation (e.g. ad break playing). */
   shouldDeferPrimaryClose?: (rewardStartPoint?: { x: number; y: number }) => boolean;
-}
+  /**
+   * Garden 1 level-2 only: intro that explains garden leveling (Garden Level copy +
+   * track reveal scroll). Button starts disabled as “Lets go!” until the reveal finishes.
+   */
+  gardenLevelIntroFtue?: boolean;
+  /** Increment to skip the garden-level intro reveal (dev Shift+T). */
+  introSkipNonce?: number;
+};
 
 const POPUP_LEAF_COUNT = 40;
 const POPUP_LEAF_MIN_LIFETIME_MS = 250;
 const POPUP_LEAF_MAX_LIFETIME_MS = 1000;
 const POPUP_WIDTH = 260;
-const POPUP_HEIGHT = 320;
+/** Slightly taller leaf burst to cover cream card with reward track. */
+const POPUP_HEIGHT = 380;
 const POPUP_CLOSE_MS = 200;
 
 function createPopupLeaves(): LeafParticle[] {
@@ -144,6 +156,8 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
   rewardAmount,
   gardenId = DEFAULT_GARDEN_ID,
   shouldDeferPrimaryClose,
+  gardenLevelIntroFtue = false,
+  introSkipNonce = 0,
 }) => {
   const [animState, setAnimState] = useState<PopupAnimWithPreflight>('hidden');
   const [assetsReady, setAssetsReady] = useState(false);
@@ -151,6 +165,13 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
   const [leafPositions, setLeafPositions] = useState<{ x: number; y: number; opacity: number; rotation: number; scale: number }[]>([]);
   const [imgFailed, setImgFailed] = useState<Record<number, boolean>>({});
   const [buttonPressed, setButtonPressed] = useState(false);
+  const [introButtonReady, setIntroButtonReady] = useState(!gardenLevelIntroFtue);
+  const [introButtonBounce, setIntroButtonBounce] = useState(false);
+  const [introButtonLeafBurst, setIntroButtonLeafBurst] = useState<{
+    id: string;
+    rectWidth: number;
+    rectHeight: number;
+  } | null>(null);
   const leafRafRef = useRef<number>(0);
   const leafStartTimeRef = useRef<number>(0);
   const leafPosRef = useRef<{ x: number; y: number; vx: number; vy: number; opacity: number; rotation: number; scale: number; started: boolean }[]>([]);
@@ -243,7 +264,7 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
       setLeafPositions([]);
     }
     setAnimState('entering');
-    setTimeout(() => setAnimState('visible'), 250);
+    setTimeout(() => setAnimState('visible'), POPUP_ENTER_MS);
   }, []);
 
   usePopupPreflightEnter(animState, beginEnterAfterPreflight, popupCardLayoutRef);
@@ -265,7 +286,8 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
   const rewardCoinRef = useRef<HTMLImageElement>(null);
 
   const handleButtonClick = () => {
-    if (animState === 'preflight') return;
+    if (isPopupEnterInteractionLocked(animState)) return;
+    if (gardenLevelIntroFtue && !introButtonReady) return;
     let startPoint: { x: number; y: number } | undefined;
     if (rewardCoinRef.current) {
       const r = rewardCoinRef.current.getBoundingClientRect();
@@ -283,21 +305,68 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
     }, POPUP_CLOSE_MS);
   };
 
+  const handleIntroRevealComplete = useCallback((opts?: { immediate?: boolean }) => {
+    if (!gardenLevelIntroFtue) return;
+    const immediate = opts?.immediate === true;
+    const runButtonReveal = () => {
+      // Same SFX as collection FTUE FREE button reveal.
+      playSfx(SFX_IDS.popupLevelUp);
+      setIntroButtonBounce(true);
+      const btn = buttonRef.current;
+      if (btn && shouldPlayPopupLeafBurst()) {
+        const w = btn.offsetWidth;
+        const h = btn.offsetHeight;
+        if (w > 0 && h > 0) {
+          setIntroButtonLeafBurst({
+            id: `level-up-intro-lb-${Date.now()}`,
+            rectWidth: w,
+            rectHeight: h,
+          });
+        }
+      }
+      // Flip to enabled blue on the next frame so the color transition plays during bounce.
+      window.setTimeout(() => setIntroButtonReady(true), 16);
+      window.setTimeout(() => setIntroButtonBounce(false), 320);
+    };
+    if (immediate || introButtonReady) {
+      if (!introButtonReady) {
+        setIntroButtonReady(true);
+      }
+      return;
+    }
+    // After selected bounce, wait 0.25s before bouncing the Lets go button.
+    window.setTimeout(runButtonReveal, INTRO_BUTTON_DELAY_MS);
+  }, [gardenLevelIntroFtue, introButtonReady]);
+
+  useEffect(() => {
+    if (!gardenLevelIntroFtue || introSkipNonce <= 0) return;
+    handleIntroRevealComplete({ immediate: true });
+  }, [introSkipNonce, gardenLevelIntroFtue, handleIntroRevealComplete]);
+
   if (animState === 'hidden') return null;
 
   const isPreflight = animState === 'preflight';
   const isEntering = animState === 'entering';
   const isLeaving = animState === 'leaving';
 
-  const buttonBgColor = '#89c8e1';
-  const buttonBorderColor = '#6fa4c5';
-  const buttonTextColor = '#4580a8';
+  const buttonDisabled = gardenLevelIntroFtue && !introButtonReady;
+  // Match collection FTUE disabled brown, then settle into level-up blue when ready.
+  const buttonBgColor = buttonDisabled ? '#e3c28c' : '#89c8e1';
+  const buttonBorderColor = buttonDisabled ? '#c7a36e' : '#6fa4c5';
+  const buttonTextColor = buttonDisabled ? '#a68e64' : '#4580a8';
   const buttonPressedBg = '#7ab8d1';
+  const displayTitle = gardenLevelIntroFtue ? 'Garden Level' : title;
+  const displayDescription = gardenLevelIntroFtue
+    ? 'Complete orders to level up your garden and unlock rewards'
+    : description;
+  const displayButtonText = gardenLevelIntroFtue ? "Lets go!" : buttonText;
+  const displayLevelLabel = gardenLevelIntroFtue ? 'Level Up' : `Level ${level}`;
+  const titleFontSize = gardenLevelIntroFtue ? '4.375rem' : '3.5rem';
 
   return (
     <div
       className="fixed inset-0 flex items-center justify-center"
-      style={popupOverlayStyle({ pointerEvents: isPreflight ? 'none' : 'auto' })}
+      style={popupOverlayStyle({ pointerEvents: popupEnterInteractionPointerEvents(animState) })}
     >
       {/* Backdrop - tapping outside does NOT close */}
       <div
@@ -376,7 +445,7 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
               animState,
               isEntering,
               isLeaving,
-              'popupEnter 250ms ease-out forwards',
+              `popupEnter ${POPUP_ENTER_MS}ms ease-out forwards`,
               `popupLeave ${POPUP_CLOSE_MS}ms ease-in forwards`
             ),
           }}
@@ -459,7 +528,7 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
                       fontSize: '2.25rem',
                     }}
                   >
-                    Level {level}
+                    {displayLevelLabel}
                   </h2>
                 )}
 
@@ -486,10 +555,10 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
                     color: '#5c4a32',
                     fontFamily: 'Inter, sans-serif',
                     marginTop: subtitle ? '4px' : '-8px',
-                    fontSize: '3.5rem',
+                    fontSize: titleFontSize,
                   }}
                 >
-                  {title}
+                  {displayTitle}
                 </h3>
 
                 {/* Divider - popup_divider_Blue */}
@@ -513,11 +582,28 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
                     fontSize: '2rem',
                   }}
                 >
-                  {description}
+                  {displayDescription}
                 </p>
 
+                {!hideLevel &&
+                  level != null &&
+                  (gardenLevelIntroFtue || shouldShowLevelUpRewardTrack(level, gardenId)) && (
+                  <LevelUpRewardTrack
+                    currentLevel={level}
+                    gardenId={gardenId}
+                    introReveal={gardenLevelIntroFtue}
+                    introRevealPlay={gardenLevelIntroFtue && animState === 'visible'}
+                    introSkipNonce={introSkipNonce}
+                    onIntroRevealComplete={
+                      gardenLevelIntroFtue
+                        ? () => handleIntroRevealComplete()
+                        : undefined
+                    }
+                  />
+                )}
+
                 {showGoldenPotAvailableRow && (
-                  <div className="flex items-center justify-center" style={{ marginTop: '20px' }}>
+                  <div className="flex items-center justify-center" style={{ marginTop: '12px' }}>
                     <div
                       className="inline-flex items-center justify-center box-border rounded-full"
                       style={{
@@ -558,7 +644,7 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
                 )}
 
                 {rewardAmount != null && rewardAmount > 0 && !showGoldenPotAvailableRow && (
-                  <div className="flex items-center justify-center" style={{ marginTop: '20px' }}>
+                  <div className="flex items-center justify-center" style={{ marginTop: '12px' }}>
                     <div
                       className="inline-flex items-center justify-center box-border rounded-full"
                       style={{
@@ -600,44 +686,86 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
                 <div
                   className={`flex-grow ${
                     showGoldenPotAvailableRow || (rewardAmount != null && rewardAmount > 0)
-                      ? 'min-h-[40px]'
-                      : 'min-h-[48px]'
+                      ? 'min-h-[24px]'
+                      : 'min-h-[28px]'
                   }`}
                 />
 
-                {/* Unlock Now Button - blue */}
-                <button
-                  ref={buttonRef}
-                  onMouseDown={() => setButtonPressed(true)}
-                  onMouseUp={() => setButtonPressed(false)}
-                  onMouseLeave={() => setButtonPressed(false)}
-                  onClick={handleButtonClick}
-                  className="relative flex items-center justify-center rounded-xl transition-all"
-                  style={{
-                    width: '360px',
-                    height: '88px',
-                    marginBottom: '0px',
-                    backgroundColor: buttonPressed ? buttonPressedBg : buttonBgColor,
-                    border: `4px solid ${buttonBorderColor}`,
-                    borderRadius: '24px',
-                    boxShadow: buttonPressed
-                      ? 'inset 0 4px 8px rgba(0,0,0,0.15)'
-                      : `0 8px 0 ${buttonBorderColor}, 0 12px 24px rgba(0,0,0,0.15)`,
-                    transform: buttonPressed ? 'translateY(4px)' : 'translateY(0)',
-                  }}
+                {/* Unlock Now / Lets go Button - blue (gray while garden-level intro runs) */}
+                <div
+                  className="relative flex items-center justify-center"
+                  style={{ width: '360px' }}
                 >
-                  <span
-                    className="font-bold tracking-tight"
+                  {/* Leaf burst sits outside the bounce transform so it does not scale with the button. */}
+                  {introButtonLeafBurst && (
+                    <div
+                      className="absolute left-1/2 top-1/2 pointer-events-none"
+                      style={{
+                        width: introButtonLeafBurst.rectWidth,
+                        height: introButtonLeafBurst.rectHeight,
+                        transform: 'translate(-50%, -50%)',
+                        zIndex: 0,
+                      }}
+                    >
+                      <PopupRectLeafBurst
+                        key={introButtonLeafBurst.id}
+                        rectWidth={introButtonLeafBurst.rectWidth}
+                        rectHeight={introButtonLeafBurst.rectHeight}
+                        spriteVariant="blue"
+                        zIndex={0}
+                        onComplete={() => setIntroButtonLeafBurst(null)}
+                      />
+                    </div>
+                  )}
+                  <button
+                    ref={buttonRef}
+                    type="button"
+                    disabled={buttonDisabled}
+                    onMouseDown={() => {
+                      if (!buttonDisabled) setButtonPressed(true);
+                    }}
+                    onMouseUp={() => setButtonPressed(false)}
+                    onMouseLeave={() => setButtonPressed(false)}
+                    onClick={handleButtonClick}
+                    className={`relative flex items-center justify-center rounded-xl${
+                      introButtonBounce ? ' collection-ftue-free-button-bounce' : ''
+                    }`}
                     style={{
-                      color: buttonTextColor,
-                      fontFamily: 'Inter, sans-serif',
-                      textShadow: '0 2px 0 rgba(255,255,255,0.3)',
-                      fontSize: '2rem',
+                      width: '360px',
+                      height: '88px',
+                      marginBottom: '0px',
+                      zIndex: 1,
+                      backgroundColor:
+                        !buttonDisabled && buttonPressed ? buttonPressedBg : buttonBgColor,
+                      border: `4px solid ${buttonBorderColor}`,
+                      borderRadius: '24px',
+                      boxShadow:
+                        buttonDisabled
+                          ? `0 8px 0 ${buttonBorderColor}, 0 12px 24px rgba(0,0,0,0.12)`
+                          : !buttonDisabled && buttonPressed
+                            ? 'inset 0 4px 8px rgba(0,0,0,0.15)'
+                            : `0 8px 0 ${buttonBorderColor}, 0 12px 24px rgba(0,0,0,0.15)`,
+                      transform:
+                        !buttonDisabled && buttonPressed ? 'translateY(4px)' : 'translateY(0)',
+                      transition:
+                        'background-color 320ms ease-out, border-color 320ms ease-out, color 320ms ease-out, box-shadow 320ms ease-out',
+                      cursor: buttonDisabled ? 'default' : 'pointer',
                     }}
                   >
-                    {buttonText}
-                  </span>
-                </button>
+                    <span
+                      className="font-bold tracking-tight"
+                      style={{
+                        color: buttonTextColor,
+                        fontFamily: 'Inter, sans-serif',
+                        textShadow: buttonDisabled ? 'none' : '0 2px 0 rgba(255,255,255,0.3)',
+                        fontSize: '2rem',
+                        transition: 'color 320ms ease-out',
+                      }}
+                    >
+                      {displayButtonText}
+                    </span>
+                  </button>
+                </div>
               </div>
             </div>
           </PopupPrescaleFrame>

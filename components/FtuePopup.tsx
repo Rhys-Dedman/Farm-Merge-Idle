@@ -4,7 +4,7 @@
  */
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
-import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
+import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight, POPUP_ENTER_MS, popupEnterInteractionPointerEvents, isPopupEnterInteractionLocked } from '../hooks/usePopupPreflightEnter';
 import {
   POPUP_CREAM_DROP_SHADOW_FILTER,
   POPUP_CREAM_HIT_TARGET,
@@ -226,7 +226,7 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
       setLeafPositions([]);
     }
     setAnimState('entering');
-    setTimeout(() => setAnimState('visible'), 250);
+    setTimeout(() => setAnimState('visible'), POPUP_ENTER_MS);
   }, [burstWidth, burstHeight]);
 
   usePopupPreflightEnter(animState, beginEnterAfterPreflight, popupCardLayoutRef);
@@ -244,7 +244,7 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
   }, [isVisible, assetsReady, animState, onClose]);
 
   const dismissWithAnimation = () => {
-    if (animState === 'leaving' || animState === 'preflight') return;
+    if (animState === 'leaving' || isPopupEnterInteractionLocked(animState)) return;
     setAnimState('leaving');
     setTimeout(() => {
       setAnimState('hidden');
@@ -267,7 +267,7 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
   return (
     <div
       className={`absolute inset-0 flex ${alignClass} justify-center`}
-      style={popupOverlayStyle({ pointerEvents: isPreflight ? 'none' : 'auto' })}
+      style={popupOverlayStyle({ pointerEvents: popupEnterInteractionPointerEvents(animState) })}
     >
       <div
         className="absolute transition-opacity duration-200"
@@ -336,7 +336,7 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
               animState,
               isEntering,
               isLeaving,
-              'ftuePopupEnter 250ms ease-out forwards',
+              `ftuePopupEnter ${POPUP_ENTER_MS}ms ease-out forwards`,
               `ftuePopupLeave ${POPUP_CLOSE_MS}ms ease-in forwards`
             ),
           }}

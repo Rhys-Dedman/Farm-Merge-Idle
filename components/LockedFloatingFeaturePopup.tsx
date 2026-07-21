@@ -4,7 +4,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { assetPath } from '../utils/assetPath';
-import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
+import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight, POPUP_ENTER_MS, popupEnterInteractionPointerEvents, isPopupEnterInteractionLocked } from '../hooks/usePopupPreflightEnter';
 import {
   POPUP_CLOSE_HIT_TARGET,
   POPUP_CLOSE_TOP_PX,
@@ -78,7 +78,7 @@ export const LockedFloatingFeaturePopup: React.FC<LockedFloatingFeaturePopupProp
 
   const beginEnterAfterPreflight = useCallback(() => {
     setAnimState('entering');
-    setTimeout(() => setAnimState('visible'), 250);
+    setTimeout(() => setAnimState('visible'), POPUP_ENTER_MS);
   }, []);
 
   usePopupPreflightEnter(animState, beginEnterAfterPreflight, popupCardLayoutRef);
@@ -96,7 +96,7 @@ export const LockedFloatingFeaturePopup: React.FC<LockedFloatingFeaturePopupProp
   }, [isVisible, animState, onClose]);
 
   const dismiss = () => {
-    if (animState === 'leaving' || animState === 'hidden' || animState === 'preflight') return;
+    if (animState === 'leaving' || animState === 'hidden' || isPopupEnterInteractionLocked(animState)) return;
     onUserDismiss?.();
     setAnimState('leaving');
     setTimeout(() => {
@@ -115,7 +115,7 @@ export const LockedFloatingFeaturePopup: React.FC<LockedFloatingFeaturePopupProp
   return (
     <div
       className="fixed inset-0 flex items-center justify-center"
-      style={popupOverlayStyle({ pointerEvents: isPreflight ? 'none' : 'auto' })}
+      style={popupOverlayStyle({ pointerEvents: popupEnterInteractionPointerEvents(animState) })}
     >
       <div
         className="absolute transition-opacity duration-200"
@@ -146,7 +146,7 @@ export const LockedFloatingFeaturePopup: React.FC<LockedFloatingFeaturePopupProp
               animState,
               isEntering,
               isLeaving,
-              'lockedFeatureEnter 250ms ease-out forwards',
+              `lockedFeatureEnter ${POPUP_ENTER_MS}ms ease-out forwards`,
               `lockedFeatureLeave ${POPUP_CLOSE_MS}ms ease-in forwards`,
             ),
           }}

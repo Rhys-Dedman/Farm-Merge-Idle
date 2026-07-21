@@ -1,11 +1,9 @@
 import React, { useMemo } from 'react';
-import { type GardenId } from '../constants/gardens';
+import { DEFAULT_GARDEN_ID, type GardenId } from '../constants/gardens';
 import { FloatingButton } from './FloatingButton';
 import { FloatingButtonStack } from './FloatingButtonStack';
-import {
-  FloatingButtonFieldPack,
-  FloatingButtonStarterPack,
-} from './FloatingButtonStarterPack';
+import { FloatingButtonFieldPack } from './FloatingButtonFieldPack';
+import { FloatingButtonStarterPack } from './FloatingButtonStarterPack';
 import {
   useFieldPackCountdown,
   useStarterPackCountdown,
@@ -64,13 +62,16 @@ export const FarmLeftFloatingButtonStack: React.FC<FarmLeftFloatingButtonStackPr
     fieldPackCountdownRefreshKey,
   );
 
+  const isGarden1 = gardenId == null || gardenId === DEFAULT_GARDEN_ID;
+  // Starter Pack is garden-1 only; Field Pack is garden 2+ — never show the wrong pack FB.
   const showStarterPackFb =
+    isGarden1 &&
     isStoreIapEnabled(STORE_IAP_OFFER_STARTER_PACK_ID) &&
     !starterPackPurchased &&
     starterPackUnlocked &&
     starterPackRemainingMs > 0;
   const showFieldPackFb =
-    !showStarterPackFb &&
+    !isGarden1 &&
     isStoreIapEnabled(STORE_IAP_OFFER_FIELD_PACK_ID) &&
     !fieldPackPurchased &&
     fieldPackUnlocked &&

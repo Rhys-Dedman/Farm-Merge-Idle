@@ -1,13 +1,14 @@
 /**
- * Premium **IAP Offer** pre-purchase shell (purple top band + ring, shared layout).
- * Which product is shown is chosen by `offerId` in `App` (see `offers.ts`):
- * - **Starter Pack popup** — `STORE_IAP_OFFER_STARTER_PACK_ID` (limited-offer pill + bundle copy).
- * - **Remove Ads popup** — `STORE_IAP_OFFER_REMOVE_ADS_ID` (store Remove Ads 7d row / price / icon).
- * Post-purchase confirmation uses `PurchaseSuccessfulPopup` (plain panel, no purple band).
+ * Premium **IAP Offer** pre-purchase shell (purple/red top band + ring, shared layout).
+ * Named product shells in App:
+ * - **Starter Pack popup** — `StarterPackPopup` / `STORE_IAP_OFFER_STARTER_PACK_ID`
+ * - **Field Pack popup** — `FieldPackPopup` / `STORE_IAP_OFFER_FIELD_PACK_ID`
+ * - **Remove Ads popup** — this component with `STORE_IAP_OFFER_REMOVE_ADS_ID`
+ * Post-purchase confirmation uses `PurchaseSuccessfulPopup` (plain panel, no premium band).
  */
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
-import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
+import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight, POPUP_ENTER_MS, popupEnterInteractionPointerEvents, isPopupEnterInteractionLocked } from '../hooks/usePopupPreflightEnter';
 import {
   POPUP_CLOSE_HIT_TARGET,
   POPUP_CLOSE_TOP_PX,
@@ -311,7 +312,7 @@ export const IapOfferPopup: React.FC<IapOfferPopupProps> = ({
       setLeafPositions([]);
     }
     setAnimState('entering');
-    setTimeout(() => setAnimState('visible'), 250);
+    setTimeout(() => setAnimState('visible'), POPUP_ENTER_MS);
   }, [leafBurstSprites]);
 
   usePopupPreflightEnter(animState, beginEnterAfterPreflight, popupCardLayoutRef);
@@ -332,7 +333,7 @@ export const IapOfferPopup: React.FC<IapOfferPopupProps> = ({
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   const dismissPopup = () => {
-    if (isClosing || animState === 'preflight') return;
+    if (isClosing || isPopupEnterInteractionLocked(animState)) return;
     onUserDismiss?.();
     setIsClosing(true);
     setAnimState('leaving');
@@ -343,7 +344,7 @@ export const IapOfferPopup: React.FC<IapOfferPopupProps> = ({
   };
 
   const handlePurchaseClick = () => {
-    if (isClosing || animState === 'preflight') return;
+    if (isClosing || isPopupEnterInteractionLocked(animState)) return;
     setIsClosing(true);
     if (onPurchase && buttonRef.current) {
       onPurchase(buttonRef.current.getBoundingClientRect());
@@ -369,7 +370,7 @@ export const IapOfferPopup: React.FC<IapOfferPopupProps> = ({
   return (
     <div 
       className="fixed inset-0 flex items-center justify-center"
-      style={popupOverlayStyle({ pointerEvents: isPreflight ? 'none' : 'auto' })}
+      style={popupOverlayStyle({ pointerEvents: popupEnterInteractionPointerEvents(animState) })}
     >
 {/* Backdrop - not scaled, covers full screen */}
       <div
@@ -452,7 +453,7 @@ export const IapOfferPopup: React.FC<IapOfferPopupProps> = ({
             animState,
             isEntering,
             isLeaving,
-            'popupEnter 250ms ease-out forwards',
+            `popupEnter ${POPUP_ENTER_MS}ms ease-out forwards`,
             `popupLeave ${POPUP_CLOSE_MS}ms ease-in forwards`
           ),
         }}

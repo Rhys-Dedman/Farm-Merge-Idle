@@ -1,29 +1,29 @@
 /**
- * Rate Us thank-you confirmation — same card shell as RateUsPopup, no star row.
+ * Garden Level popup — opened from the top-bar level progress.
+ * Same blue leaf burst / enter animation as Level Up; dismiss via X or backdrop (no primary button).
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { DEFAULT_GARDEN_ID, type GardenId } from '../constants/gardens';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight, POPUP_ENTER_MS, popupEnterInteractionPointerEvents, isPopupEnterInteractionLocked } from '../hooks/usePopupPreflightEnter';
 import {
   POPUP_CLOSE_HIT_TARGET,
   POPUP_CLOSE_TOP_PX,
-  POPUP_CREAM_DROP_SHADOW_FILTER,
-  POPUP_CREAM_HIT_TARGET,
   POPUP_CREAM_STACK_MARGIN_TOP_PX,
-  POPUP_HEADER_PASS_THROUGH,
   POPUP_HEADER_TOP_PX,
-  POPUP_LAYOUT_PASS_THROUGH,
   popupAppScaleStyle,
   popupOverlayStyle,
 } from '../constants/popupPointerEvents';
 import { PopupVectorBackground } from './PopupVectorBackground';
 import { PopupPrescaleFrame } from './PopupPrescaleFrame';
-import { playSfx, SFX_IDS } from '../utils/sfx';
 import { shouldPlayPopupLeafBurst } from '../utils/performanceMode';
+import { LevelUpRewardTrack } from './LevelUpRewardTrack';
+
+const GENERIC_LEVEL_UP_ICON = assetPath('/assets/icons/upgrades/icon_levelup.png');
 
 const LEAF_SPRITES = [
-  assetPath('/assets/vfx/particle_leaf_yellow_1.png'),
-  assetPath('/assets/vfx/particle_leaf_yellow_2.png'),
+  assetPath('/assets/vfx/particle_leaf_blue_1.png'),
+  assetPath('/assets/vfx/particle_leaf_blue_2.png'),
 ];
 
 interface LeafParticle {
@@ -40,12 +40,24 @@ interface LeafParticle {
   lifetime: number;
 }
 
+export interface GardenLevelPopupProps {
+  isVisible: boolean;
+  onClose: () => void;
+  /** Fired immediately on X / backdrop dismiss (for decline SFX). */
+  onUserDismiss?: () => void;
+  level: number;
+  /** Goals completed toward next level / goals required (0–1). */
+  levelProgressFraction?: number;
+  gardenId?: GardenId;
+  appScale?: number;
+}
+
 const POPUP_LEAF_COUNT = 40;
 const POPUP_LEAF_MIN_LIFETIME_MS = 250;
 const POPUP_LEAF_MAX_LIFETIME_MS = 1000;
-const POPUP_CLOSE_MS = 200;
 const POPUP_WIDTH = 260;
-const POPUP_HEIGHT = 320;
+const POPUP_HEIGHT = 380;
+const POPUP_CLOSE_MS = 200;
 
 function createPopupLeaves(): LeafParticle[] {
   return Array.from({ length: POPUP_LEAF_COUNT }, (_, i) => {
@@ -76,7 +88,7 @@ function createPopupLeaves(): LeafParticle[] {
 
     return {
       id: i,
-      sprite: LEAF_SPRITES[i % LEAF_SPRITES.length],
+      sprite: LEAF_SPRITES[i % LEAF_SPRITES.length]!,
       angle: outwardAngle,
       speed: Math.random() * 600,
       rotationSpeed: (Math.random() - 0.5) * 540,
@@ -92,37 +104,13 @@ function createPopupLeaves(): LeafParticle[] {
   });
 }
 
-const HEADER_ICON = assetPath('/assets/icons/rateus/icon_star_gold_completed.png');
-const HEADER_ICON_PX = 70;
-const TITLE_TEXT = 'Thank You';
-const DESCRIPTION_TEXT = 'We appreciate your feedback!';
-const RATE_US_DIVIDER_ROW_MIN_HEIGHT_PX = 40;
-
-const OKAY_BUTTON = {
-  bg: '#b8d458',
-  border: '#8fb33a',
-  text: '#4a6b1e',
-  pressedBg: '#9fc044',
-} as const;
-
-const PLANT_NAME_TITLE_COLOR = '#5c4a32';
-
-interface RateUsThankYouPopupProps {
-  isVisible: boolean;
-  onClose: () => void;
-  /** OK, X, or backdrop — Rate Us flow never shown again. */
-  onDismissForever?: () => void;
-  onUserDismiss?: () => void;
-  closeOnBackdropClick?: boolean;
-  appScale?: number;
-}
-
-export const RateUsThankYouPopup: React.FC<RateUsThankYouPopupProps> = ({
+export const GardenLevelPopup: React.FC<GardenLevelPopupProps> = ({
   isVisible,
   onClose,
-  onDismissForever,
   onUserDismiss,
-  closeOnBackdropClick = true,
+  level,
+  levelProgressFraction = 0,
+  gardenId = DEFAULT_GARDEN_ID,
   appScale = 1,
 }) => {
   const [animState, setAnimState] = useState<PopupAnimWithPreflight>('hidden');
@@ -132,8 +120,8 @@ export const RateUsThankYouPopup: React.FC<RateUsThankYouPopupProps> = ({
     { x: number; y: number; opacity: number; rotation: number; scale: number }[]
   >([]);
   const [imgFailed, setImgFailed] = useState<Record<number, boolean>>({});
-  const leafRafRef = useRef<number>(0);
-  const leafStartTimeRef = useRef<number>(0);
+  const leafRafRef = useRef(0);
+  const leafStartTimeRef = useRef(0);
   const leafPosRef = useRef<
     {
       x: number;
@@ -147,20 +135,11 @@ export const RateUsThankYouPopup: React.FC<RateUsThankYouPopupProps> = ({
     }[]
   >([]);
   const popupCardLayoutRef = useRef<HTMLDivElement>(null);
-  const [okayPressed, setOkayPressed] = useState(false);
-  const dismissForeverCalledRef = useRef(false);
-
-  const callDismissForeverOnce = useCallback(() => {
-    if (dismissForeverCalledRef.current) return;
-    dismissForeverCalledRef.current = true;
-    onDismissForever?.();
-  }, [onDismissForever]);
+  const closingFromGestureRef = useRef(false);
 
   useEffect(() => {
     if (!isVisible) {
       setAssetsReady(false);
-      setOkayPressed(false);
-      dismissForeverCalledRef.current = false;
       return;
     }
     setAssetsReady(true);
@@ -171,13 +150,14 @@ export const RateUsThankYouPopup: React.FC<RateUsThankYouPopupProps> = ({
 
     const tick = () => {
       const elapsed = Date.now() - leafStartTimeRef.current;
-      const allDone = leaves.every((leaf, i) => {
+      const allDone = leaves.every((leaf) => {
         const leafElapsed = elapsed - leaf.delay;
         return leafElapsed > leaf.lifetime + 100;
       });
 
       if (allDone) {
         setLeaves([]);
+        setLeafPositions([]);
         return;
       }
 
@@ -185,13 +165,11 @@ export const RateUsThankYouPopup: React.FC<RateUsThankYouPopupProps> = ({
         const leaf = leaves[i];
         if (!leaf) return;
         const leafElapsed = elapsed - leaf.delay;
-
         if (leafElapsed < 0) return;
         if (leafElapsed > leaf.lifetime) {
           p.opacity = 0;
           return;
         }
-
         if (!p.started) {
           p.started = true;
           p.vx = Math.cos(leaf.angle) * leaf.speed;
@@ -212,7 +190,9 @@ export const RateUsThankYouPopup: React.FC<RateUsThankYouPopupProps> = ({
         const fadeStart = leaf.lifetime * 0.5;
         const fadeDuration = leaf.lifetime * 0.5;
         p.opacity =
-          leafElapsed < fadeStart ? 1 : Math.max(0, 1 - (leafElapsed - fadeStart) / fadeDuration);
+          leafElapsed < fadeStart
+            ? 1
+            : Math.max(0, 1 - (leafElapsed - fadeStart) / fadeDuration);
         p.scale = 1 - 0.2 * Math.min(1, leafElapsed / leaf.lifetime);
       });
 
@@ -269,8 +249,12 @@ export const RateUsThankYouPopup: React.FC<RateUsThankYouPopupProps> = ({
 
   useEffect(() => {
     if (isVisible && assetsReady && animState === 'hidden') {
+      closingFromGestureRef.current = false;
       setAnimState('preflight');
-    } else if (!isVisible && (animState === 'visible' || animState === 'entering' || animState === 'preflight')) {
+    } else if (
+      !isVisible &&
+      (animState === 'visible' || animState === 'entering' || animState === 'preflight')
+    ) {
       setAnimState('leaving');
       setTimeout(() => {
         setAnimState('hidden');
@@ -279,9 +263,12 @@ export const RateUsThankYouPopup: React.FC<RateUsThankYouPopupProps> = ({
     }
   }, [isVisible, assetsReady, animState, onClose]);
 
-  const dismiss = () => {
-    if (animState === 'leaving' || animState === 'hidden' || isPopupEnterInteractionLocked(animState)) return;
-    callDismissForeverOnce();
+  const dismissToClose = () => {
+    if (isPopupEnterInteractionLocked(animState) || animState === 'leaving' || animState === 'hidden') return;
+    if (!closingFromGestureRef.current) {
+      closingFromGestureRef.current = true;
+      onUserDismiss?.();
+    }
     setAnimState('leaving');
     setTimeout(() => {
       setAnimState('hidden');
@@ -289,22 +276,11 @@ export const RateUsThankYouPopup: React.FC<RateUsThankYouPopupProps> = ({
     }, POPUP_CLOSE_MS);
   };
 
-  const dismissWithDeclineSfx = () => {
-    onUserDismiss?.();
-    dismiss();
-  };
-
-  const handleOkayClick = () => {
-    playSfx(SFX_IDS.uiConfirmNormal);
-    dismiss();
-  };
-
   if (animState === 'hidden') return null;
 
   const isPreflight = animState === 'preflight';
   const isEntering = animState === 'entering';
   const isLeaving = animState === 'leaving';
-  const titleFontSize = `min(4.375rem, ${580 / (TITLE_TEXT.length * 0.6)}px)`;
 
   return (
     <div
@@ -312,7 +288,7 @@ export const RateUsThankYouPopup: React.FC<RateUsThankYouPopupProps> = ({
       style={popupOverlayStyle({ pointerEvents: popupEnterInteractionPointerEvents(animState) })}
     >
       <div
-        className="absolute transition-opacity duration-200"
+        className="absolute"
         style={{
           top: '-10px',
           left: '-10px',
@@ -320,8 +296,9 @@ export const RateUsThankYouPopup: React.FC<RateUsThankYouPopupProps> = ({
           bottom: '-10px',
           backgroundColor: 'rgba(0, 0, 0, 0.7)',
           opacity: isLeaving || isPreflight ? 0 : 1,
+          transition: 'opacity 0.2s',
         }}
-        onClick={closeOnBackdropClick ? dismissWithDeclineSfx : undefined}
+        onClick={dismissToClose}
       />
 
       <div
@@ -357,8 +334,8 @@ export const RateUsThankYouPopup: React.FC<RateUsThankYouPopupProps> = ({
                   <div
                     className="w-full h-full rounded-sm"
                     style={{
-                      background: 'linear-gradient(135deg, #4a7c23 0%, #6b8e23 100%)',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                      background: 'linear-gradient(135deg, #559dcf 0%, #89c8e1 100%)',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
                     }}
                   />
                 ) : (
@@ -381,7 +358,6 @@ export const RateUsThankYouPopup: React.FC<RateUsThankYouPopupProps> = ({
           style={{
             width: '320px',
             zIndex: 102,
-            ...POPUP_LAYOUT_PASS_THROUGH,
             ...popupCardSurfaceStyle(
               animState,
               isEntering,
@@ -390,6 +366,7 @@ export const RateUsThankYouPopup: React.FC<RateUsThankYouPopupProps> = ({
               `popupLeave ${POPUP_CLOSE_MS}ms ease-in forwards`,
             ),
           }}
+          onClick={(e) => e.stopPropagation()}
         >
           <style>{`
             @keyframes popupEnter {
@@ -410,24 +387,21 @@ export const RateUsThankYouPopup: React.FC<RateUsThankYouPopupProps> = ({
               height: '120px',
               top: `${POPUP_HEADER_TOP_PX}px`,
               zIndex: 104,
-              ...POPUP_HEADER_PASS_THROUGH,
             }}
           >
             <img
-              src={assetPath('/assets/ui/popup_header_yellow.png')}
+              src={assetPath('/assets/ui/popup_header_blue.png')}
               alt=""
-              decoding="sync"
               className="absolute inset-0 w-full h-full object-contain"
               style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.25))' }}
             />
             <img
-              src={HEADER_ICON}
+              src={GENERIC_LEVEL_UP_ICON}
               alt=""
-              decoding="sync"
               className="relative object-contain"
               style={{
-                width: `${HEADER_ICON_PX}px`,
-                height: `${HEADER_ICON_PX}px`,
+                width: '75px',
+                height: '75px',
                 filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
                 marginTop: '-4px',
               }}
@@ -442,104 +416,79 @@ export const RateUsThankYouPopup: React.FC<RateUsThankYouPopupProps> = ({
             <div
               style={{
                 position: 'relative',
+                filter: 'drop-shadow(0 16px 48px rgba(0,0,0,0.3))',
                 padding: '150px 40px 60px 40px',
-                ...POPUP_CREAM_HIT_TARGET,
               }}
             >
-              <PopupVectorBackground style={{ filter: POPUP_CREAM_DROP_SHADOW_FILTER }} />
+              <PopupVectorBackground />
               <div className="relative z-[2] flex flex-col items-center">
                 <h2
-                  className="font-black tracking-tight text-center"
+                  className="font-normal text-center"
                   style={{
-                    color: PLANT_NAME_TITLE_COLOR,
+                    color: '#c2b280',
                     fontFamily: 'Inter, sans-serif',
-                    marginTop: '-8px',
-                    whiteSpace: 'nowrap',
-                    width: 'fit-content',
-                    maxWidth: '580px',
-                    fontSize: titleFontSize,
+                    letterSpacing: '-0.02em',
+                    fontSize: '2.25rem',
                   }}
                 >
-                  {TITLE_TEXT}
+                  Level {level}
                 </h2>
+
+                <h3
+                  className="font-black tracking-tight text-center"
+                  style={{
+                    color: '#5c4a32',
+                    fontFamily: 'Inter, sans-serif',
+                    marginTop: '-8px',
+                    // Match Level Up / Discovery cream popup main title scale (2× prescale).
+                    fontSize: '4.375rem',
+                  }}
+                >
+                  Garden Level
+                </h3>
 
                 <div
                   className="w-full flex items-center justify-center"
-                  style={{
-                    marginTop: '8px',
-                    marginBottom: '24px',
-                    minHeight: RATE_US_DIVIDER_ROW_MIN_HEIGHT_PX,
-                  }}
+                  style={{ marginTop: '8px', marginBottom: '24px' }}
                 >
                   <img
-                    src={assetPath('/assets/ui/popup_divider_yellow.png')}
+                    src={assetPath('/assets/ui/popup_divider_blue.png')}
                     alt=""
-                    decoding="sync"
                     className="h-auto object-contain"
-                    style={{ width: '520px', maxHeight: RATE_US_DIVIDER_ROW_MIN_HEIGHT_PX }}
+                    style={{ width: '520px' }}
                   />
                 </div>
 
                 <p
                   className="font-medium text-center leading-relaxed italic w-full"
                   style={{
-                    color: '#c2b280',
+                    color: '#76a0b7',
                     fontFamily: 'Inter, sans-serif',
                     paddingLeft: '24px',
                     paddingRight: '24px',
                     fontSize: '2rem',
-                    minHeight: '4.5rem',
-                    marginTop: '8px',
-                    marginBottom: '8px',
                   }}
                 >
-                  {DESCRIPTION_TEXT}
+                  Complete orders to level up your garden and unlock rewards
                 </p>
 
-                <div style={{ height: '16px', flexShrink: 0 }} />
-
-                <button
-                  type="button"
-                  onClick={handleOkayClick}
-                  onMouseDown={() => setOkayPressed(true)}
-                  onMouseUp={() => setOkayPressed(false)}
-                  onMouseLeave={() => setOkayPressed(false)}
-                  className="relative flex items-center justify-center rounded-xl transition-all cursor-pointer active:translate-y-[4px] active:mb-[4px]"
-                  style={{
-                    width: '360px',
-                    height: '88px',
-                    marginBottom: '0px',
-                    backgroundColor: okayPressed ? OKAY_BUTTON.pressedBg : OKAY_BUTTON.bg,
-                    border: `4px solid ${OKAY_BUTTON.border}`,
-                    borderRadius: '24px',
-                    boxShadow: okayPressed
-                      ? 'inset 0 4px 8px rgba(0,0,0,0.15)'
-                      : `0 8px 0 ${OKAY_BUTTON.border}, 0 12px 24px rgba(0,0,0,0.15)`,
-                    transform: okayPressed ? 'translateY(4px)' : 'translateY(0)',
-                  }}
-                >
-                  <span
-                    className="font-bold tracking-tight"
-                    style={{
-                      color: OKAY_BUTTON.text,
-                      fontFamily: 'Inter, sans-serif',
-                      fontSize: '2rem',
-                      textShadow: '0 2px 0 rgba(255,255,255,0.3)',
-                    }}
-                  >
-                    Okay
-                  </span>
-                </button>
+                <LevelUpRewardTrack
+                  currentLevel={level}
+                  gardenId={gardenId}
+                  levelProgressFraction={levelProgressFraction}
+                  variant="gardenLevel"
+                />
               </div>
             </div>
           </PopupPrescaleFrame>
 
           <button
             type="button"
-            onClick={dismissWithDeclineSfx}
-            className="absolute right-6 w-8 h-8 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
+            onClick={dismissToClose}
+            className="absolute w-7 h-7 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
             style={{
-              top: POPUP_CLOSE_TOP_PX,
+              top: `${POPUP_CLOSE_TOP_PX}px`,
+              right: '24px',
               backgroundColor: 'transparent',
               border: 'none',
               color: '#c2b280',
@@ -548,7 +497,15 @@ export const RateUsThankYouPopup: React.FC<RateUsThankYouPopupProps> = ({
             }}
             aria-label="Close"
           >
-            <svg width="16" height="16" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 14 14"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+            >
               <path d="M2 2L12 12M12 2L2 12" />
             </svg>
           </button>

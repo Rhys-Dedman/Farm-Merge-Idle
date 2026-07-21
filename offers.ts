@@ -59,8 +59,8 @@ export const STORE_IAP_OFFER_STARTER_PACK_ID = 'store_bundle_starter_pack' as co
 export const STORE_IAP_OFFER_FIELD_PACK_ID = 'store_bundle_field_pack' as const;
 /** Bundle main-column art (top of stacked pair). */
 export const STARTER_PACK_HEADER_ICON = '/assets/icons/store/icon_starterpack.png';
-/** Field Pack header art (own constant so it can diverge from Starter Pack later). */
-export const FIELD_PACK_HEADER_ICON = '/assets/icons/store/icon_starterpack.png';
+/** Field Pack header art (own asset so it can diverge from Starter Pack later). */
+export const FIELD_PACK_HEADER_ICON = '/assets/icons/store/icon_fieldpack.png';
 export const HARVESTER_PACK_HEADER_ICON = '/assets/icons/store/icon_farmerpack.png';
 export const STORE_NO_ADS_ROW_BACKGROUND = '/assets/ui/ui_store_noads.png';
 

@@ -190,6 +190,32 @@ img {
   }
 }
 
+/* Level reward track toast: spawn in place, hold, fade out (no rise) */
+@keyframes reward-track-toast-fade {
+  0% {
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.reward-track-toast-text {
+  display: block;
+  color: #fcf0c7;
+  font-weight: 800;
+  white-space: pre-line;
+  text-align: center;
+  transform-origin: center center;
+  animation: reward-track-toast-fade 1.15s forwards;
+}
+
 .side-action-toast-text {
   display: block;
   color: #fcf0c7;
@@ -418,6 +444,24 @@ img {
 
 .collection-ftue-free-button-bounce {
   animation: collection-ftue-free-button-bounce 320ms ease-out forwards;
+  transform-origin: 50% 50%;
+}
+
+/** Level-up track: selected header/icon pop when intro scroll lands (1 → 1.3 → 1). */
+@keyframes level-up-track-selected-bounce {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.3);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.level-up-track-selected-bounce {
+  animation: level-up-track-selected-bounce 320ms ease-out forwards;
   transform-origin: 50% 50%;
 }
 

@@ -3,7 +3,7 @@
  */
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
-import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
+import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight, POPUP_ENTER_MS, popupEnterInteractionPointerEvents, isPopupEnterInteractionLocked } from '../hooks/usePopupPreflightEnter';
 import {
   POPUP_CLOSE_HIT_TARGET,
   POPUP_CLOSE_TOP_PX,
@@ -172,7 +172,7 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
   const beginEnterAfterPreflight = useCallback(() => {
     // No leaf burst on Settings — open already stresses Android WebView layers (popup flicker).
     setAnimState('entering');
-    setTimeout(() => setAnimState('visible'), 250);
+    setTimeout(() => setAnimState('visible'), POPUP_ENTER_MS);
   }, []);
 
   usePopupPreflightEnter(animState, beginEnterAfterPreflight, popupCardLayoutRef);
@@ -190,7 +190,7 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
   }, [isVisible, animState, onClose]);
 
   const dismissToClose = (fromUserDismissGesture?: boolean) => {
-    if (animState === 'leaving' || animState === 'hidden' || animState === 'preflight') return;
+    if (animState === 'leaving' || animState === 'hidden' || isPopupEnterInteractionLocked(animState)) return;
     if (fromUserDismissGesture) onUserDismiss?.();
     setAnimState('leaving');
     setTimeout(() => {
@@ -299,7 +299,7 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
   return (
     <div
       className="fixed inset-0 flex items-center justify-center"
-      style={popupOverlayStyle({ pointerEvents: isPreflight ? 'none' : 'auto' })}
+      style={popupOverlayStyle({ pointerEvents: popupEnterInteractionPointerEvents(animState) })}
     >
       <div
         className="absolute transition-opacity duration-200"
@@ -326,7 +326,7 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
               animState,
               isEntering,
               isLeaving,
-              'settingsPopupEnter 250ms ease-out forwards',
+              `settingsPopupEnter ${POPUP_ENTER_MS}ms ease-out forwards`,
               `settingsPopupLeave ${POPUP_CLOSE_MS}ms ease-in forwards`,
             ),
           }}

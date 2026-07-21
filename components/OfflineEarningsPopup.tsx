@@ -4,7 +4,7 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
 import { getGardenCoinIconPath } from '../utils/gardenAssets';
-import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
+import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight, POPUP_ENTER_MS, popupEnterInteractionPointerEvents, isPopupEnterInteractionLocked } from '../hooks/usePopupPreflightEnter';
 import {
   POPUP_CREAM_DROP_SHADOW_FILTER,
   POPUP_CREAM_HIT_TARGET,
@@ -213,7 +213,7 @@ export const OfflineEarningsPopup: React.FC<OfflineEarningsPopupProps> = ({
       setLeafPositions([]);
     }
     setAnimState('entering');
-    setTimeout(() => setAnimState('visible'), 250);
+    setTimeout(() => setAnimState('visible'), POPUP_ENTER_MS);
   }, []);
 
   usePopupPreflightEnter(animState, beginEnterAfterPreflight, popupCardLayoutRef);
@@ -233,7 +233,7 @@ export const OfflineEarningsPopup: React.FC<OfflineEarningsPopupProps> = ({
   const [isClosing, setIsClosing] = useState(false);
 
   const handleCollect = () => {
-    if (isClosing || animState === 'preflight') return;
+    if (isClosing || isPopupEnterInteractionLocked(animState)) return;
     setIsClosing(true);
     if (rewardCoinRef.current) {
       const r = rewardCoinRef.current.getBoundingClientRect();
@@ -271,7 +271,7 @@ export const OfflineEarningsPopup: React.FC<OfflineEarningsPopupProps> = ({
   return (
     <div
       className="fixed inset-0 flex items-center justify-center"
-      style={popupOverlayStyle({ pointerEvents: isPreflight ? 'none' : 'auto' })}
+      style={popupOverlayStyle({ pointerEvents: popupEnterInteractionPointerEvents(animState) })}
     >
       <div
         className="absolute transition-opacity duration-200"
@@ -343,7 +343,7 @@ export const OfflineEarningsPopup: React.FC<OfflineEarningsPopupProps> = ({
               animState,
               isEntering,
               isLeaving,
-              'offlinePopupEnter 250ms ease-out forwards',
+              `offlinePopupEnter ${POPUP_ENTER_MS}ms ease-out forwards`,
               `offlinePopupLeave ${POPUP_CLOSE_MS}ms ease-in forwards`
             ),
           }}

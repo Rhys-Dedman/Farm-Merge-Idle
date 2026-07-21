@@ -7,7 +7,7 @@ import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { assetPath } from '../utils/assetPath';
 import type { GardenId } from '../constants/gardens';
 import { getGardenCoinIconPath } from '../utils/gardenAssets';
-import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
+import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight, POPUP_ENTER_MS, popupEnterInteractionPointerEvents, isPopupEnterInteractionLocked } from '../hooks/usePopupPreflightEnter';
 import {
   POPUP_CLOSE_HIT_TARGET,
   POPUP_CLOSE_TOP_PX,
@@ -294,7 +294,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
       setLeafPositions([]);
     }
     setAnimState('entering');
-    setTimeout(() => setAnimState('visible'), 250);
+    setTimeout(() => setAnimState('visible'), POPUP_ENTER_MS);
   }, []);
 
   usePopupPreflightEnter(animState, beginEnterAfterPreflight, popupCardLayoutRef);
@@ -316,7 +316,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
   const rewardCoinRef = useRef<HTMLImageElement>(null);
 
   const dismissWithoutCollect = () => {
-    if (isClosing || animState === 'leaving' || animState === 'preflight') return;
+    if (isClosing || animState === 'leaving' || isPopupEnterInteractionLocked(animState)) return;
     onUserDismiss?.();
     setIsClosing(true);
     setAnimState('leaving');
@@ -327,7 +327,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
   };
 
   const handleButtonClick = () => {
-    if (isClosing || animState === 'preflight') return;
+    if (isClosing || isPopupEnterInteractionLocked(animState)) return;
     setIsClosing(true);
     let startPoint: { x: number; y: number } | null = null;
     if (rewardCoinRef.current) {
@@ -366,7 +366,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
   return (
     <div 
       className="fixed inset-0 flex items-center justify-center"
-      style={popupOverlayStyle({ pointerEvents: isPreflight ? 'none' : 'auto' })}
+      style={popupOverlayStyle({ pointerEvents: popupEnterInteractionPointerEvents(animState) })}
     >
 {/* Backdrop - not scaled, covers full screen */}
       <div
@@ -448,7 +448,7 @@ export const DiscoveryPopup: React.FC<DiscoveryPopupProps> = ({
             animState,
             isEntering,
             isLeaving,
-            'popupEnter 250ms ease-out forwards',
+            `popupEnter ${POPUP_ENTER_MS}ms ease-out forwards`,
             `popupLeave ${POPUP_CLOSE_MS}ms ease-in forwards`
           ),
         }}

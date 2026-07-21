@@ -137,8 +137,8 @@ interface PageHeaderProps {
   playerLevelProgress?: number;
   /** Goals required to level up from current level (e.g. 2 for level 1, 4 for level 2) */
   playerLevelGoalsRequired?: number;
-  /** When this increments, triggers progress bar flash */
-  playerLevelFlashTrigger?: number;
+  /** When provided, tapping the player level progress bar opens Garden Level popup */
+  onPlayerLevelClick?: () => void;
   /** If true, hide the top bar background (e.g. for shed screen - keeps plant wallet + settings only) */
   hideTopBarBg?: boolean;
   /** If true, hide the small FPS button (e.g. Store). Ignored for layout when 4+ active boosts fill the bar. */
@@ -218,6 +218,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   playerLevelProgress = 0,
   playerLevelFlashTrigger = 0,
   playerLevelGoalsRequired = 2,
+  onPlayerLevelClick,
   hideTopBarBg = false,
   hideFps = true,
   collapsePlayerLevel = false,
@@ -525,7 +526,26 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                 />
               ) : (
                 <div
-                  className="relative inline-flex items-center rounded-full border flex-shrink-0 overflow-visible"
+                  role={onPlayerLevelClick && !hidePlayerLevel ? 'button' : undefined}
+                  tabIndex={onPlayerLevelClick && !hidePlayerLevel ? 0 : undefined}
+                  onClick={
+                    onPlayerLevelClick && !hidePlayerLevel
+                      ? () => onPlayerLevelClick()
+                      : undefined
+                  }
+                  onKeyDown={
+                    onPlayerLevelClick && !hidePlayerLevel
+                      ? (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            onPlayerLevelClick();
+                          }
+                        }
+                      : undefined
+                  }
+                  className={`relative inline-flex items-center rounded-full border flex-shrink-0 overflow-visible${
+                    onPlayerLevelClick && !hidePlayerLevel ? ' cursor-pointer' : ''
+                  }`}
                   style={{
                     width: PLAYER_LEVEL_SLOT_WIDTH_PX,
                     minWidth: PLAYER_LEVEL_SLOT_WIDTH_PX,
@@ -539,6 +559,11 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                     transition: 'opacity 400ms ease-out',
                     ...(hidePlayerLevel && { pointerEvents: 'none' as const }),
                   }}
+                  aria-label={
+                    onPlayerLevelClick && !hidePlayerLevel
+                      ? `Garden level ${playerLevel}`
+                      : undefined
+                  }
                 >
                   <span
                     className="absolute left-0 top-1/2 flex items-center justify-center leading-none -ml-3 pointer-events-none z-10 w-[30px] h-[30px]"

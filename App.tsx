@@ -43,7 +43,10 @@ import { DiscoveryPopup } from './components/DiscoveryPopup';
 import { GoldenPotBonusesPopup } from './components/GoldenPotBonusesPopup';
 import { PurchaseSuccessfulPopup, type PurchaseSuccessfulRewardRow } from './components/PurchaseSuccessfulPopup';
 import { IapOfferPopup } from './components/IapOfferPopup';
+import { FieldPackPopup } from './components/FieldPackPopup';
+import { StarterPackPopup } from './components/StarterPackPopup';
 import { LevelUpPopup } from './components/LevelUpPopup';
+import { GardenLevelPopup } from './components/GardenLevelPopup';
 import { PlantInfoPopup } from './components/PlantInfoPopup';
 import { PlantWithPot } from './components/PlantWithPot';
 import { LimitedOfferPopup } from './components/LimitedOfferPopup';
@@ -1867,6 +1870,7 @@ export default function App() {
 
   const prevPopupOpenRef = useRef({
     levelUp: false,
+    gardenLevel: false,
     discovery: false,
     limitedOffer: false,
     plantInfo: false,
@@ -3097,7 +3101,7 @@ export default function App() {
     };
     const v2ForUnlock = loadGameSaveV2();
     const v2Gardens = v2ForUnlock?.gardens;
-    // Active garden only (same scope as Shift+G golden pot cheat).
+    // Active garden only (same scope as pause-menu Golden Pot cheat).
     const activeOnly = [activeId] as const;
     if (!hasAnyDevUnlockPlantRemaining(activeId, activeSnap, v2Gardens, activeOnly)) return;
     const target = findNextDevUnlockPlantTarget(activeId, activeSnap, v2Gardens, activeOnly);
@@ -3260,8 +3264,11 @@ export default function App() {
     levelUp: handleDevLevelUpClick,
     goldenPot: handleDevGoldenPotClick,
     addMoney: handleDevAddMoneyClick,
+    addGoal: (() => {}) as () => void,
+    skipTutorial: (() => {}) as () => void,
   });
   devCheatHandlersRef.current = {
+    ...devCheatHandlersRef.current,
     unlockPlant: handleDevUnlockPlantClick,
     levelUp: handleDevLevelUpClick,
     goldenPot: handleDevGoldenPotClick,
@@ -3436,6 +3443,11 @@ export default function App() {
 
   const [playerLevelFlashTrigger, setPlayerLevelFlashTrigger] = useState(0);
   const [levelUpPopup, setLevelUpPopup] = useState<{ isVisible: boolean; level: number } | null>(null);
+  /** Dev Shift+T: bump to skip garden1 L2 level-up intro reveal. */
+  const [gardenLevelIntroSkipNonce, setGardenLevelIntroSkipNonce] = useState(0);
+  const levelUpPopupRef = useRef(levelUpPopup);
+  levelUpPopupRef.current = levelUpPopup;
+  const [gardenLevelPopupOpen, setGardenLevelPopupOpen] = useState(false);
   /** Queued level-up popups (e.g. from pause menu fast-level); shown one by one after pause menu closes. */
   const [levelUpPopupQueue, setLevelUpPopupQueue] = useState<number[]>([]);
   presentLevelUpPopupRef.current = (level: number) => {
@@ -3451,6 +3463,7 @@ export default function App() {
   useEffect(() => {
     const was = prevPopupOpenRef.current;
     const isLevelUpOpen = !!levelUpPopup?.isVisible;
+    const isGardenLevelOpen = gardenLevelPopupOpen;
     const isDiscoveryOpen = !!discoveryPopup?.isVisible;
     const isLimitedOfferOpen = !!limitedOfferPopup?.isVisible;
     const isPlantInfoOpen = !!plantInfoPopup?.isVisible;
@@ -3467,6 +3480,7 @@ export default function App() {
     const isPauseMenuOpen = pauseMenuOpen;
 
     if (!was.levelUp && isLevelUpOpen) playSfx(SFX_IDS.popupLevelUp);
+    if (!was.gardenLevel && isGardenLevelOpen) playSfx(SFX_IDS.popupLevelUp);
     if (!was.discovery && isDiscoveryOpen) playSfx(SFX_IDS.popupPlantDiscovery);
     if (!was.limitedOffer && isLimitedOfferOpen) playSfx(SFX_IDS.popupNormal);
     if (!was.plantInfo && isPlantInfoOpen) playSfx(SFX_IDS.popupNormal);
@@ -3492,6 +3506,7 @@ export default function App() {
     prevPopupOpenRef.current = {
       ...prevPopupOpenRef.current,
       levelUp: isLevelUpOpen,
+      gardenLevel: isGardenLevelOpen,
       discovery: isDiscoveryOpen,
       limitedOffer: isLimitedOfferOpen,
       plantInfo: isPlantInfoOpen,
@@ -3509,6 +3524,7 @@ export default function App() {
     };
   }, [
     levelUpPopup,
+    gardenLevelPopupOpen,
     discoveryPopup,
     limitedOfferPopup,
     plantInfoPopup,
@@ -3817,7 +3833,8 @@ export default function App() {
         lockedGardenPickerPopupOpen ||
         gardenPickerOpen ||
         plantInfoPopup?.isVisible === true ||
-        limitedOfferPopup?.isVisible === true,
+        limitedOfferPopup?.isVisible === true ||
+        gardenLevelPopupOpen,
       discoveryPopupOpen: discoveryPopup != null,
       levelUpPopupOpen: levelUpPopup != null,
       goldenPotBonusesPopupOpen,
@@ -3861,6 +3878,7 @@ export default function App() {
       limitedOfferPopup?.isVisible,
       discoveryPopup,
       levelUpPopup,
+      gardenLevelPopupOpen,
       goldenPotBonusesPopupOpen,
     ],
   );
@@ -3949,20 +3967,10 @@ export default function App() {
   }, []);
 
   const finishLevelUpPopupAfterAdBreak = useCallback(() => {
+    // Keep mounted with isVisible false so LevelUpPopup can play its leave animation;
+    // onClose then clears state / advances the queue (same as a normal Unlock Now dismiss).
     suppressLevelUpDeclineSfxRef.current = true;
-    lastOtherPopupClosedAtRef.current = Date.now();
-    setLevelUpPopup(null);
-    setLevelUpPopupQueue((q) => {
-      if (q.length > 0) {
-        presentLevelUpPopupRef.current(q[0]);
-        return q.slice(1);
-      }
-      return q;
-    });
-    queueMicrotask(() => {
-      tryStartAutoMergeRef.current();
-      scheduleAutoMergeRecheckRef.current(0);
-    });
+    setLevelUpPopup((prev) => (prev ? { ...prev, isVisible: false } : null));
   }, []);
 
   useEffect(() => {
@@ -4936,6 +4944,7 @@ export default function App() {
   const farmOverlayBlocksAmbientVfx =
     !!limitedOfferPopup?.isVisible ||
     !!levelUpPopup?.isVisible ||
+    gardenLevelPopupOpen ||
     !!discoveryPopup?.isVisible ||
     goldenPotBonusesPopupOpen ||
     !!purchaseSuccessfulUi ||
@@ -8923,6 +8932,94 @@ export default function App() {
     [syncNewGardenFtueToSave],
   );
 
+  /** Dev Shift+G: +1 goal on the player level bar (same as header XP boost). */
+  const handleDevAddGoalClick = useCallback(() => {
+    playSfx(SFX_IDS.uiConfirmNormal);
+    applyGoalCollectedProgress();
+    setPlayerLevelProgress((prev) => {
+      const next = prev + 1;
+      const goalsRequired = getGoalsRequiredForLevel(playerLevel);
+      if (next >= goalsRequired) {
+        if (!levelUpGuardRef.current) {
+          levelUpGuardRef.current = true;
+          const nextLevel = playerLevel + 1;
+          showLevelUpForNextLevel(nextLevel);
+          setTimeout(() => {
+            levelUpGuardRef.current = false;
+          }, 0);
+        }
+        return goalsRequired;
+      }
+      return next;
+    });
+    setPlayerLevelFlashTrigger((t) => t + 1);
+  }, [applyGoalCollectedProgress, playerLevel, showLevelUpForNextLevel]);
+
+  /**
+   * Dev Shift+T: skip the active tutorial to the next safe continue spot
+   * (garden-level intro → starter FTUE → collection / tasks / gardens / new-garden FTUE).
+   */
+  const handleDevSkipTutorial = useCallback(() => {
+    playSfx(SFX_IDS.uiConfirmNormal);
+    const lup = levelUpPopupRef.current;
+    if (
+      lup?.isVisible &&
+      lup.level === 2 &&
+      activeGardenIdRef.current === DEFAULT_GARDEN_ID
+    ) {
+      setGardenLevelIntroSkipNonce((n) => n + 1);
+      return;
+    }
+    if (activeFtueStageRef.current != null) {
+      skipStarterFtueAndLevelUpRef.current();
+      return;
+    }
+    if (collectionFtuePhase != null && !collectionFtueCompleted) {
+      setCollectionFtuePhase(null);
+      setCollectionFtueCompleted(true);
+      setCollectionFtueBonusesReached(true);
+      setCollectionFtuePanelChromeUnlocked(true);
+      setCollectionFtueOverlayFadingOut(false);
+      setCollectionFtueBonusesFading(false);
+      setCollectionFtueHoleRect(null);
+      return;
+    }
+    if (tasksFtueStarted && !tasksFtueCompleted) {
+      setTasksFtueUnlockRevealed(true);
+      setTasksFtueCompleted(true);
+      setTasksFtueHoleRect(null);
+      return;
+    }
+    if (gardensFtueStarted && !gardensFtueCompleted) {
+      setGardensFtueUnlockRevealed(true);
+      setGardensFtueCompleted(true);
+      setGardensFtueHoleRect(null);
+      return;
+    }
+    if (newGardenFtuePhase != null && !newGardenFtueCompleted) {
+      setNewGardenFtuePhasePersisted(null, true);
+    }
+  }, [
+    collectionFtuePhase,
+    collectionFtueCompleted,
+    tasksFtueStarted,
+    tasksFtueCompleted,
+    gardensFtueStarted,
+    gardensFtueCompleted,
+    newGardenFtuePhase,
+    newGardenFtueCompleted,
+    setNewGardenFtuePhasePersisted,
+  ]);
+
+  devCheatHandlersRef.current = {
+    unlockPlant: handleDevUnlockPlantClick,
+    levelUp: handleDevLevelUpClick,
+    goldenPot: handleDevGoldenPotClick,
+    addMoney: handleDevAddMoneyClick,
+    addGoal: handleDevAddGoalClick,
+    skipTutorial: handleDevSkipTutorial,
+  };
+
   const purchaseGardenFromPicker = useCallback(
     (gardenId: GardenId) => {
       if (gardenId === DEFAULT_GARDEN_ID) return;
@@ -9471,7 +9568,9 @@ export default function App() {
     };
   }, [isLoading]);
 
-  /** Dev keyboard shortcuts — work whenever the game tab is focused (not only when Dev Tools is open). */
+  /** Dev keyboard shortcuts — work whenever the game tab is focused (not only when Dev Tools is open).
+   * Shift+P unlock plant · Shift+L level up · Shift+G +1 goal · Shift+T skip tutorial · Shift+M money
+   */
   useEffect(() => {
     const isTypingTarget = (target: EventTarget | null): boolean => {
       if (!(target instanceof HTMLElement)) return false;
@@ -9494,7 +9593,10 @@ export default function App() {
         cheats.levelUp({ deferPopups: false });
       } else if (key === 'g') {
         e.preventDefault();
-        cheats.goldenPot();
+        cheats.addGoal();
+      } else if (key === 't') {
+        e.preventDefault();
+        cheats.skipTutorial();
       } else if (key === 'm') {
         e.preventDefault();
         cheats.addMoney();
@@ -9824,6 +9926,10 @@ export default function App() {
                     playerLevelProgress={playerLevelProgress}
                     playerLevelFlashTrigger={playerLevelFlashTrigger}
                     playerLevelGoalsRequired={getGoalsRequiredForLevel(playerLevel)}
+                    onPlayerLevelClick={() => {
+                      if (!ftuePlayerLevelVisible) return;
+                      setGardenLevelPopupOpen(true);
+                    }}
                     onXpBoostClick={() => {
                       applyGoalCollectedProgress();
                       setPlayerLevelProgress((prev) => {
@@ -12176,6 +12282,8 @@ export default function App() {
             {/* Level Up Popup */}
             {levelUpPopup && (() => {
               const unlockInfo = getLevelUnlockInfo(levelUpPopup.level, activeGardenId);
+              const gardenLevelIntroFtue =
+                activeGardenId === DEFAULT_GARDEN_ID && levelUpPopup.level === 2;
               return (
                 <LevelUpPopup
                   isVisible={levelUpPopup.isVisible}
@@ -12185,6 +12293,7 @@ export default function App() {
                     }
                     lastOtherPopupClosedAtRef.current = Date.now();
                     setLevelUpPopup(null);
+                    setGardenLevelIntroSkipNonce(0);
                     setLevelUpPopupQueue((q) => {
                       if (q.length > 0) {
                         presentLevelUpPopupRef.current(q[0]);
@@ -12207,9 +12316,13 @@ export default function App() {
                   level={levelUpPopup.level}
                   title={unlockInfo.title}
                   description={unlockInfo.description}
-                  icon={unlockInfo.icon}
+                  icon={
+                    gardenLevelIntroFtue
+                      ? assetPath('/assets/icons/upgrades/icon_levelup.png')
+                      : unlockInfo.icon
+                  }
                   headerIcon={
-                    unlockInfo.plantCollectionHeader ? (
+                    !gardenLevelIntroFtue && unlockInfo.plantCollectionHeader ? (
                       <PlantWithPot level={1} mastered wrapperClassName="h-full w-full scale-110" />
                     ) : undefined
                   }
@@ -12218,7 +12331,10 @@ export default function App() {
                   showGoldenPotAvailableRow={levelUpPopup.level === PLANT_COLLECTION_UI_UNLOCK_LEVEL}
                   rewardAmount={unlockInfo.rewardCoins}
                   gardenId={activeGardenId}
+                  gardenLevelIntroFtue={gardenLevelIntroFtue}
+                  introSkipNonce={gardenLevelIntroSkipNonce}
                   shouldDeferPrimaryClose={(startPoint) => {
+                    if (gardenLevelIntroFtue) return false;
                     if (
                       shouldSkipLevelUpAdBreak({
                         level: levelUpPopup.level,
@@ -12256,6 +12372,25 @@ export default function App() {
                 />
               );
             })()}
+
+            {gardenLevelPopupOpen && (
+              <GardenLevelPopup
+                isVisible
+                level={playerLevel}
+                levelProgressFraction={
+                  getGoalsRequiredForLevel(playerLevel) > 0
+                    ? playerLevelProgress / getGoalsRequiredForLevel(playerLevel)
+                    : 0
+                }
+                gardenId={activeGardenId}
+                appScale={appScale}
+                onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
+                onClose={() => {
+                  lastOtherPopupClosedAtRef.current = Date.now();
+                  setGardenLevelPopupOpen(false);
+                }}
+              />
+            )}
 
             {/* Discovery Popup */}
             {goldenPotBonusesPopupOpen && (
@@ -12357,87 +12492,83 @@ export default function App() {
                 : isFieldPackPopup
                   ? readFieldPackUnlocked()
                   : false;
+              const sharedOfferProps = {
+                isVisible: true as const,
+                title: config.title,
+                headerImageSrc: assetPath(config.headerIcon),
+                rewards: buildPurchaseSuccessRewards(config),
+                priceLabel: resolveStorePriceLabel(config.id, config.priceLabel),
+                originalPriceLabel:
+                  'originalPriceLabel' in config && typeof config.originalPriceLabel === 'string'
+                    ? resolveStorePriceLabel(`${config.id}_original`, config.originalPriceLabel)
+                    : undefined,
+                appScale,
+                description: isStarterPackPopup
+                  ? 'Everything you need to get started'
+                  : isFieldPackPopup
+                    ? 'A special boost for your new field'
+                    : isRemoveAdsPopup
+                      ? 'Remove all forced Ads'
+                      : undefined,
+                titleColor: isRemoveAdsPopup
+                  ? '#af233a'
+                  : usesPremiumIapOfferChrome
+                    ? '#764793'
+                    : undefined,
+                headerRingSrc: isRemoveAdsPopup
+                  ? assetPath('/assets/ui/popup_header_red.png')
+                  : usesPremiumIapOfferChrome
+                    ? assetPath('/assets/ui/popup_header_purple.png')
+                    : undefined,
+                titleOffsetYPx: usesPremiumIapOfferChrome ? -10 : undefined,
+                closeIconColor: isRemoveAdsPopup
+                  ? '#d33d57'
+                  : usesPremiumIapOfferChrome
+                    ? '#995fb7'
+                    : undefined,
+                premiumIapTopAccentFill: isRemoveAdsPopup ? '#eb5761' : undefined,
+                premiumIapTopAccentStrokeNarrow: isRemoveAdsPopup ? '#eb5761' : undefined,
+                premiumIapTopAccentStrokeWide: isRemoveAdsPopup ? '#d33d57' : undefined,
+                limitedOfferCountdownStorageKey:
+                  isStarterStyleBundlePopup && limitedBundleUnlocked
+                    ? (config as StoreBundleOfferConfig).limitedOfferCountdownStorageKey
+                    : undefined,
+                limitedOfferCountdownDurationMs:
+                  isStarterStyleBundlePopup && limitedBundleUnlocked
+                    ? (config as StoreBundleOfferConfig).limitedOfferCountdownDurationMs
+                    : undefined,
+                onUserDismiss: () => playSfx(SFX_IDS.uiDecline),
+                onClose: () => {
+                  lastOtherPopupClosedAtRef.current = Date.now();
+                  setIapOfferUi(null);
+                  const pendingLevel = pendingLevelUpAfterStarterPackRef.current;
+                  if (pendingLevel != null) {
+                    pendingLevelUpAfterStarterPackRef.current = null;
+                    setPlayerLevel(pendingLevel);
+                    pendingLevelUpBackupRef.current = {
+                      gardenId: activeGardenIdRef.current,
+                      level: pendingLevel,
+                    };
+                    recordDailyTaskPlayerLeveledUp();
+                    setPlayerLevelProgress(0);
+                    setPlayerLevelFlashTrigger((t) => t + 1);
+                    levelUpGuardRef.current = false;
+                  }
+                },
+                onPurchase: () => {
+                  completePremiumStorePurchase(iapOfferUi.offerId);
+                },
+              };
+              if (isFieldPackPopup) {
+                return <FieldPackPopup {...sharedOfferProps} />;
+              }
+              if (isStarterPackPopup) {
+                return <StarterPackPopup {...sharedOfferProps} />;
+              }
               return (
                 <IapOfferPopup
-                  isVisible
-                  title={config.title}
-                  headerImageSrc={assetPath(config.headerIcon)}
-                  rewards={buildPurchaseSuccessRewards(config)}
-                  priceLabel={resolveStorePriceLabel(config.id, config.priceLabel)}
-                  originalPriceLabel={
-                    'originalPriceLabel' in config && typeof config.originalPriceLabel === 'string'
-                      ? resolveStorePriceLabel(`${config.id}_original`, config.originalPriceLabel)
-                      : undefined
-                  }
-                  appScale={appScale}
-                  description={
-                    isStarterPackPopup
-                      ? 'Everything you need to get started'
-                      : isFieldPackPopup
-                        ? 'A special boost for your new field'
-                        : isRemoveAdsPopup
-                          ? 'Remove all forced Ads'
-                          : undefined
-                  }
-                  titleColor={
-                    isRemoveAdsPopup
-                      ? '#af233a'
-                      : usesPremiumIapOfferChrome
-                        ? '#764793'
-                        : undefined
-                  }
-                  headerRingSrc={
-                    isRemoveAdsPopup
-                      ? assetPath('/assets/ui/popup_header_red.png')
-                      : usesPremiumIapOfferChrome
-                        ? assetPath('/assets/ui/popup_header_purple.png')
-                        : undefined
-                  }
-                  titleOffsetYPx={usesPremiumIapOfferChrome ? -10 : undefined}
-                  closeIconColor={
-                    isRemoveAdsPopup
-                      ? '#d33d57'
-                      : usesPremiumIapOfferChrome
-                        ? '#995fb7'
-                        : undefined
-                  }
-                  premiumIapTopAccentFill={isRemoveAdsPopup ? '#eb5761' : undefined}
-                  premiumIapTopAccentStrokeNarrow={isRemoveAdsPopup ? '#eb5761' : undefined}
-                  premiumIapTopAccentStrokeWide={isRemoveAdsPopup ? '#d33d57' : undefined}
-                  leafBurstVariant={
-                    isStarterStyleBundlePopup ? 'starter' : isRemoveAdsPopup ? 'removeAds' : undefined
-                  }
-                  limitedOfferCountdownStorageKey={
-                    isStarterStyleBundlePopup && limitedBundleUnlocked
-                      ? (config as StoreBundleOfferConfig).limitedOfferCountdownStorageKey
-                      : undefined
-                  }
-                  limitedOfferCountdownDurationMs={
-                    isStarterStyleBundlePopup && limitedBundleUnlocked
-                      ? (config as StoreBundleOfferConfig).limitedOfferCountdownDurationMs
-                      : undefined
-                  }
-                  onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
-                  onClose={() => {
-                    lastOtherPopupClosedAtRef.current = Date.now();
-                    setIapOfferUi(null);
-                    const pendingLevel = pendingLevelUpAfterStarterPackRef.current;
-                    if (pendingLevel != null) {
-                      pendingLevelUpAfterStarterPackRef.current = null;
-                      setPlayerLevel(pendingLevel);
-                      pendingLevelUpBackupRef.current = {
-                        gardenId: activeGardenIdRef.current,
-                        level: pendingLevel,
-                      };
-                      recordDailyTaskPlayerLeveledUp();
-                      setPlayerLevelProgress(0);
-                      setPlayerLevelFlashTrigger((t) => t + 1);
-                      levelUpGuardRef.current = false;
-                    }
-                  }}
-                  onPurchase={() => {
-                    completePremiumStorePurchase(iapOfferUi.offerId);
-                  }}
+                  {...sharedOfferProps}
+                  leafBurstVariant={isRemoveAdsPopup ? 'removeAds' : undefined}
                 />
               );
             })()}

@@ -3,7 +3,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { assetPath } from '../utils/assetPath';
-import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
+import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight, POPUP_ENTER_MS, popupEnterInteractionPointerEvents, isPopupEnterInteractionLocked } from '../hooks/usePopupPreflightEnter';
 import { PopupVectorBackground } from './PopupVectorBackground';
 import { PopupPrescaleFrame } from './PopupPrescaleFrame';
 import {
@@ -97,7 +97,7 @@ export const DailyTasksPopup: React.FC<DailyTasksPopupProps> = ({
       setShowLeafBurst(true);
     }
     setAnimState('entering');
-    setTimeout(() => setAnimState('visible'), 250);
+    setTimeout(() => setAnimState('visible'), POPUP_ENTER_MS);
   }, []);
 
   usePopupPreflightEnter(animState, beginEnterAfterPreflight, popupCardLayoutRef);
@@ -119,7 +119,7 @@ export const DailyTasksPopup: React.FC<DailyTasksPopupProps> = ({
   }, [isVisible]);
 
   const dismiss = () => {
-    if (animState === 'leaving' || animState === 'hidden' || animState === 'preflight') return;
+    if (animState === 'leaving' || animState === 'hidden' || isPopupEnterInteractionLocked(animState)) return;
     onUserDismiss?.();
     setAnimState('leaving');
     setTimeout(() => {
@@ -137,7 +137,7 @@ export const DailyTasksPopup: React.FC<DailyTasksPopupProps> = ({
   return (
     <div
       className="fixed inset-0 flex items-center justify-center"
-      style={popupOverlayStyle({ pointerEvents: isPreflight ? 'none' : 'auto' })}
+      style={popupOverlayStyle({ pointerEvents: popupEnterInteractionPointerEvents(animState) })}
     >
       <div
         className="absolute transition-opacity duration-200"
@@ -177,7 +177,7 @@ export const DailyTasksPopup: React.FC<DailyTasksPopupProps> = ({
               animState,
               isEntering,
               isLeaving,
-              'popupEnter 250ms ease-out forwards',
+              `popupEnter ${POPUP_ENTER_MS}ms ease-out forwards`,
               `popupLeave ${POPUP_CLOSE_MS}ms ease-in forwards`,
             ),
           }}

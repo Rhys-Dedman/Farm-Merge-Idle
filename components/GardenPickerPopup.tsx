@@ -18,7 +18,7 @@ import {
   GARDEN_PICKER_PURCHASE_COIN_PRICE,
   getGardenPickerPurchaseCoinPrice,
 } from '../constants/gardenPicker';
-import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight } from '../hooks/usePopupPreflightEnter';
+import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight, POPUP_ENTER_MS, popupEnterInteractionPointerEvents, isPopupEnterInteractionLocked } from '../hooks/usePopupPreflightEnter';
 import {
   POPUP_CLOSE_HIT_TARGET,
   POPUP_CLOSE_TOP_PX,
@@ -164,7 +164,7 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
 
   const beginEnterAfterPreflight = useCallback(() => {
     setAnimState('entering');
-    setTimeout(() => setAnimState('visible'), 250);
+    setTimeout(() => setAnimState('visible'), POPUP_ENTER_MS);
   }, []);
 
   usePopupPreflightEnter(animState, beginEnterAfterPreflight, popupCardLayoutRef);
@@ -189,7 +189,7 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
   }, [isVisible]);
 
   const dismissToClose = () => {
-    if (animState === 'leaving' || animState === 'hidden' || animState === 'preflight') return;
+    if (animState === 'leaving' || animState === 'hidden' || isPopupEnterInteractionLocked(animState)) return;
     onUserDismiss?.();
     setAnimState('leaving');
     setTimeout(() => {
@@ -238,7 +238,7 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
   return (
     <div
       className="fixed inset-0 flex items-center justify-center"
-      style={popupOverlayStyle({ pointerEvents: isPreflight ? 'none' : 'auto' })}
+      style={popupOverlayStyle({ pointerEvents: popupEnterInteractionPointerEvents(animState) })}
     >
       {leafBursts.map((burst) => (
         <PopupRectLeafBurst
@@ -283,7 +283,7 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
               animState,
               isEntering,
               isLeaving,
-              'gardenPickerEnter 250ms ease-out forwards',
+              `gardenPickerEnter ${POPUP_ENTER_MS}ms ease-out forwards`,
               `gardenPickerLeave ${POPUP_CLOSE_MS}ms ease-in forwards`,
             ),
           }}
