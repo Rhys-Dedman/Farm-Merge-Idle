@@ -15,6 +15,10 @@ const FINGER_TAP_DOWN = 42 * FTUE_VISUAL_SCALE;
 const FINGER_OFFSET_UP_PX = 70 * FTUE_VISUAL_SCALE;
 /** Textbox vertical offset from goal center (scaled). Increase to move textbox down. */
 const TEXTBOX_OFFSET_UP_PX = 110 * FTUE_VISUAL_SCALE;
+/** Horizontal gap from goal right edge to textbox left. Smaller = further left. */
+const TEXTBOX_GAP_FROM_GOAL_PX = 18;
+/** Textbox width (design units × FTUE_VISUAL_SCALE). */
+const TEXTBOX_WIDTH = 410 * FTUE_VISUAL_SCALE;
 /** Blocker hole tuning (scaled): shrink tappable hole vs goal rect */
 const HOLE_PAD_X_PX = 10 * FTUE_VISUAL_SCALE; // move left/right blockers inward
 const HOLE_PAD_TOP_PX = 14 * FTUE_VISUAL_SCALE; // move top blocker down (hole starts lower)
@@ -46,7 +50,7 @@ export const Ftue6Overlay: React.FC<Ftue6OverlayProps> = ({ isActive, appScale }
     setGoalRect(gr);
     setTextboxStyle({
       position: 'absolute',
-      left: gr.left + gr.width + 34,
+      left: gr.left + gr.width + TEXTBOX_GAP_FROM_GOAL_PX,
       top: gr.top + gr.height / 2 - TEXTBOX_OFFSET_UP_PX,
       opacity: 1,
       zIndex: 100,
@@ -144,7 +148,7 @@ export const Ftue6Overlay: React.FC<Ftue6OverlayProps> = ({ isActive, appScale }
           style={{
             ...FTUE_TEXTBOX,
             ...textboxStyle,
-            width: `${380 * FTUE_VISUAL_SCALE}px`,
+            width: TEXTBOX_WIDTH,
           }}
         >
           <div className="w-full flex items-center justify-center" style={{ marginBottom: FTUE_TEXTBOX_DIVIDER_MARGIN_BOTTOM }}>

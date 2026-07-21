@@ -4,15 +4,10 @@
  */
 import React, { useEffect, useState, useCallback } from 'react';
 import { assetPath } from '../utils/assetPath';
-import { FTUE_BLOCKER_TINT, FTUE_TEXTBOX, FTUE_TEXTBOX_DIVIDER_MARGIN_BOTTOM, FTUE_TEXTBOX_TEXT, FTUE_VISUAL_SCALE } from '../ftue/ftueTextboxStyles';
+import { FTUE_BLOCKER_TINT, FTUE_TEXTBOX, FTUE_TEXTBOX_BUTTON_TEXT, FTUE_TEXTBOX_DIVIDER_MARGIN_BOTTOM, FTUE_TEXTBOX_TEXT, FTUE_VISUAL_SCALE, ftueTextboxButtonChrome } from '../ftue/ftueTextboxStyles';
 
 const FADE_OUT_MS = 400;
 const GOAL_SLOT_0_ID = 'goal-slot-0';
-
-const buttonBgColor = '#b8d458';
-const buttonBorderColor = '#8fb33a';
-const buttonTextColor = '#4a6b1e';
-const buttonPressedBg = '#9fc044';
 
 export interface Ftue4OverlayProps {
   isActive: boolean;
@@ -131,19 +126,13 @@ export const Ftue4Overlay: React.FC<Ftue4OverlayProps> = ({
             height: `${56 * FTUE_VISUAL_SCALE}px`,
             minWidth: `${180 * FTUE_VISUAL_SCALE}px`,
             maxWidth: `${220 * FTUE_VISUAL_SCALE}px`,
-            backgroundColor: buttonPressed ? buttonPressedBg : buttonBgColor,
-            border: `${4 * FTUE_VISUAL_SCALE}px solid ${buttonBorderColor}`,
-            borderRadius: `${16 * FTUE_VISUAL_SCALE}px`,
-            boxShadow: buttonPressed
-              ? 'inset 0 4px 8px rgba(0,0,0,0.15)'
-              : `0 6px 0 ${buttonBorderColor}, 0 8px 16px rgba(0,0,0,0.12)`,
-            transform: buttonPressed ? `translateY(${2 * FTUE_VISUAL_SCALE}px)` : 'translateY(0)',
+            ...ftueTextboxButtonChrome(buttonPressed),
           }}
         >
           <span
             className="font-bold tracking-tight"
             style={{
-              color: buttonTextColor,
+              color: FTUE_TEXTBOX_BUTTON_TEXT,
               fontFamily: 'Inter, sans-serif',
               fontSize: `${1.35 * FTUE_VISUAL_SCALE}rem`,
             }}

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { FTUE_BLOCKER_TINT, FTUE_TEXTBOX, FTUE_TEXTBOX_DIVIDER_MARGIN_BOTTOM, FTUE_TEXTBOX_TEXT, FTUE_VISUAL_SCALE } from '../ftue/ftueTextboxStyles';
+import { FTUE_BLOCKER_TINT, FTUE_TEXTBOX, FTUE_TEXTBOX_DIVIDER_MARGIN_BOTTOM, FTUE_TEXTBOX_TEXT, FTUE_VISUAL_SCALE, ftueTextboxButtonChrome, FTUE_TEXTBOX_BUTTON_TEXT } from '../ftue/ftueTextboxStyles';
 import { assetPath } from '../utils/assetPath';
 import { playSfx, SFX_IDS } from '../utils/sfx';
 
@@ -109,19 +109,13 @@ export const Ftue11Overlay: React.FC<Ftue11OverlayProps> = ({
               minWidth: 260 * FTUE_VISUAL_SCALE,
               maxWidth: 300 * FTUE_VISUAL_SCALE,
               pointerEvents: isFadingOut ? 'none' : 'auto',
-              backgroundColor: buttonPressed ? '#9fc044' : '#b8d458',
-              border: `${4 * FTUE_VISUAL_SCALE}px solid #8fb33a`,
-              borderRadius: 16 * FTUE_VISUAL_SCALE,
-              boxShadow: buttonPressed
-                ? 'inset 0 4px 8px rgba(0,0,0,0.15)'
-                : `0 6px 0 #8fb33a, 0 8px 16px rgba(0,0,0,0.12)`,
-              transform: buttonPressed ? `translateY(${2 * FTUE_VISUAL_SCALE}px)` : 'translateY(0)',
+              ...ftueTextboxButtonChrome(buttonPressed),
             }}
           >
             <span
               className="font-bold tracking-tight"
               style={{
-                color: '#4a6b1e',
+                color: FTUE_TEXTBOX_BUTTON_TEXT,
                 fontFamily: 'Inter, sans-serif',
                 fontSize: `${1.35 * FTUE_VISUAL_SCALE}rem`,
               }}

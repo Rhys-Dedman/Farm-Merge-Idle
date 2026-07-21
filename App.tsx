@@ -937,6 +937,8 @@ const GARDEN_BG_CLOSED_EXTRA_DOWN_PX = 10;
  * Open pose unchanged. Slightly less than prior 30px side lift = tiny bit lower.
  */
 const GARDEN_SIDE_CLOSED_LIFT_PX = 20;
+/** Extra upward nudge for `background_bottom` only (design px; sides/gradient unchanged). */
+const GARDEN_BOTTOM_SPRITE_EXTRA_LIFT_PX = 40;
 /** Nudge collection column right to clear subpixel seam bleed on garden (design px). */
 const BARN_CAROUSEL_SEAM_OFFSET_PX = 1;
 const COLLECTION_BACKGROUND_WIDTH_PX = 2000;
@@ -5599,6 +5601,7 @@ export default function App() {
     const yHalf = (1 - pp) * pcd;
     const closedT = 1 - pp;
     const yGarden = -pgl + closedT * pgd - closedT * GARDEN_SIDE_CLOSED_LIFT_PX;
+    const yBottom = yGarden - GARDEN_BOTTOM_SPRITE_EXTRA_LIFT_PX;
     const yGrass = -pp * pcd;
     const centerXf = `translate(${pcl}, ${pct + yHalf}px) translate(-50%, -50%) scale(0.75)`;
     const sideScale = GARDEN_SIDE_SPRITE_SCALE;
@@ -5622,7 +5625,7 @@ export default function App() {
       grass.style.transform = `translateY(${yGrass}px)`;
     }
     if (bottom) {
-      bottom.style.transform = `translate(-50%, ${yGarden}px) scale(${sideScale})`;
+      bottom.style.transform = `translate(-50%, ${yBottom}px) scale(${sideScale})`;
     }
     if (left) left.style.transform = `translateY(${yGarden}px) scale(${sideScale})`;
     if (right) right.style.transform = `translateY(${yGarden}px) scale(${sideScale})`;
@@ -5707,6 +5710,8 @@ export default function App() {
     const toHalf = (1 - target) * pcd;
     const fromGarden = -pgl + (1 - from) * pgd - (1 - from) * GARDEN_SIDE_CLOSED_LIFT_PX;
     const toGarden = -pgl + (1 - target) * pgd - (1 - target) * GARDEN_SIDE_CLOSED_LIFT_PX;
+    const fromBottom = fromGarden - GARDEN_BOTTOM_SPRITE_EXTRA_LIFT_PX;
+    const toBottom = toGarden - GARDEN_BOTTOM_SPRITE_EXTRA_LIFT_PX;
     const fromGrass = -from * pcd;
     const toGrass = -target * pcd;
     const fromCenter = `translate(${pcl}, ${pct + fromHalf}px) translate(-50%, -50%) scale(0.75)`;
@@ -5732,8 +5737,8 @@ export default function App() {
     tween(gardenGrassBgRef.current, `translateY(${fromGrass}px)`, `translateY(${toGrass}px)`);
     tween(
       gardenBottomBgRef.current,
-      `translate(-50%, ${fromGarden}px) scale(${sideScale})`,
-      `translate(-50%, ${toGarden}px) scale(${sideScale})`,
+      `translate(-50%, ${fromBottom}px) scale(${sideScale})`,
+      `translate(-50%, ${toBottom}px) scale(${sideScale})`,
     );
     tween(
       gardenLeftBgRef.current,

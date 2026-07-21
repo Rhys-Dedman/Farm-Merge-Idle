@@ -15,8 +15,12 @@ const LEAF_SPRITES_BLUE = [
   assetPath('/assets/vfx/particle_leaf_blue_1.png'),
   assetPath('/assets/vfx/particle_leaf_blue_2.png'),
 ];
+const LEAF_SPRITES_YELLOW = [
+  assetPath('/assets/vfx/particle_leaf_yellow_1.png'),
+  assetPath('/assets/vfx/particle_leaf_yellow_2.png'),
+];
 
-export type PopupRectLeafBurstVariant = 'green' | 'blue';
+export type PopupRectLeafBurstVariant = 'green' | 'blue' | 'yellow';
 
 export const POPUP_RECT_LEAF_COUNT = 40;
 export const POPUP_RECT_LEAF_MIN_LIFETIME_MS = 250;
@@ -39,6 +43,12 @@ interface LeafParticle {
   lifetime: number;
 }
 
+function spritesForVariant(spriteVariant: PopupRectLeafBurstVariant): readonly string[] {
+  if (spriteVariant === 'blue') return LEAF_SPRITES_BLUE;
+  if (spriteVariant === 'yellow') return LEAF_SPRITES_YELLOW;
+  return LEAF_SPRITES_GREEN;
+}
+
 export function createRectPerimeterPopupLeaves(
   width: number,
   height: number,
@@ -47,7 +57,7 @@ export function createRectPerimeterPopupLeaves(
   topEdgeInsetPx = 0,
   spriteVariant: PopupRectLeafBurstVariant = 'green',
 ): LeafParticle[] {
-  const sprites = spriteVariant === 'blue' ? LEAF_SPRITES_BLUE : LEAF_SPRITES_GREEN;
+  const sprites = spritesForVariant(spriteVariant);
   const halfW = width / 2;
   const halfH = height / 2;
   const topY = -halfH + Math.max(0, topEdgeInsetPx);
@@ -103,8 +113,10 @@ export interface PopupRectLeafBurstProps {
   centerY?: number;
   /** Inset top-edge spawn line downward (px). Left/right/bottom unchanged. */
   topEdgeInsetPx?: number;
-  /** Green (default) or blue leaves (level-up / garden chrome). */
+  /** Green (default), blue (level-up chrome), or yellow (level-up track celebrate). */
   spriteVariant?: PopupRectLeafBurstVariant;
+  /** Override default leaf count (e.g. 7 for a small track burst). */
+  leafCount?: number;
   zIndex?: number;
   onComplete?: () => void;
 }
@@ -116,6 +128,7 @@ export const PopupRectLeafBurst: React.FC<PopupRectLeafBurstProps> = ({
   centerY,
   topEdgeInsetPx = 0,
   spriteVariant = 'green',
+  leafCount = POPUP_RECT_LEAF_COUNT,
   zIndex = 101,
   onComplete,
 }) => {
@@ -126,7 +139,7 @@ export const PopupRectLeafBurst: React.FC<PopupRectLeafBurstProps> = ({
       : createRectPerimeterPopupLeaves(
           rectWidth,
           rectHeight,
-          POPUP_RECT_LEAF_COUNT,
+          leafCount,
           topEdgeInsetPx,
           spriteVariant,
         ),
@@ -288,7 +301,9 @@ export const PopupRectLeafBurst: React.FC<PopupRectLeafBurstProps> = ({
                 background:
                   spriteVariant === 'blue'
                     ? 'linear-gradient(135deg, #559dcf 0%, #89c8e1 100%)'
-                    : 'linear-gradient(135deg, #4a7c23 0%, #6b8e23 100%)',
+                    : spriteVariant === 'yellow'
+                      ? 'linear-gradient(135deg, #e8c84a 0%, #d4a017 100%)'
+                      : 'linear-gradient(135deg, #4a7c23 0%, #6b8e23 100%)',
                 boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
               }}
             />

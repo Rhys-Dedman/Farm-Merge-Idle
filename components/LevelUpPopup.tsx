@@ -594,6 +594,10 @@ export const LevelUpPopup: React.FC<LevelUpPopupProps> = ({
                     introReveal={gardenLevelIntroFtue}
                     introRevealPlay={gardenLevelIntroFtue && animState === 'visible'}
                     introSkipNonce={introSkipNonce}
+                    levelUpFillPlay={
+                      !gardenLevelIntroFtue &&
+                      (animState === 'entering' || animState === 'visible')
+                    }
                     onIntroRevealComplete={
                       gardenLevelIntroFtue
                         ? () => handleIntroRevealComplete()

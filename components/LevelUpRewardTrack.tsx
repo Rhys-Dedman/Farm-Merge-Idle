@@ -15,6 +15,8 @@ import {
 import { DEFAULT_GARDEN_ID, type GardenId } from '../constants/gardens';
 import { getGardenLevelRewardTrack, getLevelUpRewardTrack } from './UpgradeList';
 import { playSfx, SFX_IDS } from '../utils/sfx';
+import { PopupRectLeafBurst } from './PopupRectLeafBurst';
+import { shouldPlayPopupLeafBurst } from '../utils/performanceMode';
 
 const HEADER_PX = Math.round(120 * 1.15);
 const ICON_PX = Math.round(74 * 1.15);
@@ -103,6 +105,12 @@ function easeOutQuint(t: number): number {
   return 1 - Math.pow(1 - t, 5);
 }
 
+/** Level-up fill: slow start, accelerates into the end. */
+function easeInQuint(t: number): number {
+  const x = Math.max(0, Math.min(1, t));
+  return Math.pow(x, 5);
+}
+
 /** Garden-level intro: very slow start, accelerates, gentler ease-out than the start. */
 function easeIntroRevealScroll(t: number): number {
   const x = Math.max(0, Math.min(1, t));
@@ -119,6 +127,9 @@ const INTRO_REVEAL_SCROLL_MS = 3000;
 const INTRO_BOUNCE_MS = 320;
 /** After selected bounce finishes, wait before enabling/bouncing Lets go. */
 export const INTRO_BUTTON_DELAY_MS = 250;
+/** Level-up popup: blue fill from previous level → current. */
+const LEVEL_UP_FILL_MS = 600;
+const LEVEL_UP_FILL_BURST_LEAF_COUNT = 7;
 
 export interface LevelUpRewardTrackProps {
   currentLevel: number;
@@ -144,6 +155,11 @@ export interface LevelUpRewardTrackProps {
   onIntroRevealComplete?: () => void;
   /** Increment to instantly finish the intro reveal (dev Shift+T). */
   introSkipNonce?: number;
+  /**
+   * Level-up popup only: when true (popup entering/visible), animate fill from the
+   * previous level → current over 0.6s, then bounce + yellow leaf burst.
+   */
+  levelUpFillPlay?: boolean;
 }
 
 export const LevelUpRewardTrack: React.FC<LevelUpRewardTrackProps> = ({
@@ -155,10 +171,12 @@ export const LevelUpRewardTrack: React.FC<LevelUpRewardTrackProps> = ({
   introRevealPlay = false,
   onIntroRevealComplete,
   introSkipNonce = 0,
+  levelUpFillPlay = false,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const nodeRefs = useRef<(HTMLDivElement | null)[]>([]);
   const animRafRef = useRef(0);
+  const fillRafRef = useRef(0);
   const velocityRef = useRef(0); // scrollLeft units per ms
   const lastSampleRef = useRef<{ x: number; t: number } | null>(null);
   const dragRef = useRef<{
@@ -176,10 +194,20 @@ export const LevelUpRewardTrack: React.FC<LevelUpRewardTrackProps> = ({
   const toastIdRef = useRef(0);
   const toastTimeoutRef = useRef(0);
   const [introLockInput, setIntroLockInput] = useState(introReveal);
+  const [fillLockInput, setFillLockInput] = useState(
+    variant === 'levelUp' && !introReveal,
+  );
   const [selectedBounce, setSelectedBounce] = useState(false);
+  const [selectedLeafBurst, setSelectedLeafBurst] = useState<{
+    id: string;
+    rectWidth: number;
+    rectHeight: number;
+  } | null>(null);
   const introScrollActiveRef = useRef(false);
+  const fillAnimDoneRef = useRef(false);
   const onIntroRevealCompleteRef = useRef(onIntroRevealComplete);
   onIntroRevealCompleteRef.current = onIntroRevealComplete;
+  const trackInputLocked = introLockInput || fillLockInput;
 
   const items = useMemo(
     () =>
@@ -189,7 +217,14 @@ export const LevelUpRewardTrack: React.FC<LevelUpRewardTrackProps> = ({
     [gardenId, currentLevel, variant],
   );
   const levels = useMemo(() => items.map((i) => i.level), [items]);
-  const fillRatio = progressFillRatio(currentLevel, levels, levelProgressFraction);
+  const targetFillRatio = progressFillRatio(currentLevel, levels, levelProgressFraction);
+  const startFillRatio = useMemo(() => {
+    if (variant !== 'levelUp' || currentLevel <= 1) return targetFillRatio;
+    return progressFillRatio(currentLevel - 1, levels, 0);
+  }, [variant, currentLevel, levels, targetFillRatio]);
+  const [displayFillRatio, setDisplayFillRatio] = useState(() =>
+    variant === 'levelUp' ? startFillRatio : targetFillRatio,
+  );
   const levelBadgeSrc = getGardenLevelIconPath(gardenId);
   const levelCompleteBadgeSrc = getGenericUiAssetPath('ui_level_complete.png');
   const headerBlueSrc = assetPath('/assets/ui/popup_header_blue.png');
@@ -220,6 +255,95 @@ export const LevelUpRewardTrack: React.FC<LevelUpRewardTrackProps> = ({
       cancelAnimationFrame(animRafRef.current);
       animRafRef.current = 0;
     }
+  };
+
+  const stopFillAnim = () => {
+    if (fillRafRef.current) {
+      cancelAnimationFrame(fillRafRef.current);
+      fillRafRef.current = 0;
+    }
+  };
+
+  const celebrateCurrentNode = (opts?: {
+    notifyIntro?: boolean;
+    cancelled?: () => boolean;
+  }) => {
+    if (opts?.cancelled?.()) return;
+    playSfx(SFX_IDS.uiConfirmReward);
+    setSelectedBounce(true);
+    if (shouldPlayPopupLeafBurst()) {
+      setSelectedLeafBurst({
+        id: `level-up-fill-lb-${Date.now()}`,
+        rectWidth: HEADER_CURRENT_PX,
+        rectHeight: HEADER_CURRENT_PX,
+      });
+    }
+    return window.setTimeout(() => {
+      if (opts?.cancelled?.()) return;
+      setSelectedBounce(false);
+      setFillLockInput(false);
+      setIntroLockInput(false);
+      if (opts?.notifyIntro) onIntroRevealCompleteRef.current?.();
+    }, INTRO_BOUNCE_MS);
+  };
+
+  /**
+   * Animate blue fill from previous-level (0%) → current, then bounce + yellow burst.
+   * Returns a cleanup that cancels the RAF / bounce timer.
+   * `skipFill`: celebrate immediately at current fill (garden1 L2 intro after scroll).
+   */
+  const startLevelUpFillAnim = (opts?: {
+    notifyIntro?: boolean;
+    skipFill?: boolean;
+  }): (() => void) => {
+    stopFillAnim();
+    fillAnimDoneRef.current = false;
+    setFillLockInput(true);
+    const to = targetFillRatio;
+    let cancelled = false;
+    let bounceTimer = 0;
+    const isCancelled = () => cancelled;
+
+    const finish = () => {
+      if (cancelled) return;
+      setDisplayFillRatio(to);
+      fillAnimDoneRef.current = true;
+      bounceTimer =
+        celebrateCurrentNode({
+          notifyIntro: opts?.notifyIntro,
+          cancelled: isCancelled,
+        }) ?? 0;
+    };
+
+    if (opts?.skipFill || Math.abs(to - startFillRatio) < 0.0005) {
+      setDisplayFillRatio(to);
+      finish();
+      return () => {
+        cancelled = true;
+        if (bounceTimer) window.clearTimeout(bounceTimer);
+      };
+    }
+
+    setDisplayFillRatio(startFillRatio);
+    const from = startFillRatio;
+    const t0 = performance.now();
+    const tick = (now: number) => {
+      if (cancelled) return;
+      const u = Math.min(1, (now - t0) / LEVEL_UP_FILL_MS);
+      setDisplayFillRatio(from + (to - from) * easeInQuint(u));
+      if (u < 1) {
+        fillRafRef.current = requestAnimationFrame(tick);
+      } else {
+        fillRafRef.current = 0;
+        finish();
+      }
+    };
+    fillRafRef.current = requestAnimationFrame(tick);
+    return () => {
+      cancelled = true;
+      stopFillAnim();
+      if (bounceTimer) window.clearTimeout(bounceTimer);
+    };
   };
 
   /** Scroll range: first lockable node centered … last lockable node centered. */
@@ -363,24 +487,17 @@ export const LevelUpRewardTrack: React.FC<LevelUpRewardTrackProps> = ({
     // Dev skip already finished this intro — don't restart the scroll.
     if (introSkipNonce > 0) return;
     let cancelled = false;
-    let bounceTimer = 0;
-    let completeTimer = 0;
     let rafId = 0;
+    let cleanupFill: (() => void) | undefined;
     setIntroLockInput(true);
+    // Intro: fill already shows current level (no 0%→100% bar anim).
+    setDisplayFillRatio(targetFillRatio);
     // Keep at end until the delayed scroll-back starts (already set in layout).
     introScrollActiveRef.current = false;
 
-    const finishWithBounce = () => {
+    const finishWithCelebrate = () => {
       if (cancelled) return;
-      // Same SFX as collection FTUE plants 1–4 bounce.
-      playSfx(SFX_IDS.uiConfirmNormal);
-      setSelectedBounce(true);
-      bounceTimer = window.setTimeout(() => {
-        if (cancelled) return;
-        setSelectedBounce(false);
-        setIntroLockInput(false);
-        onIntroRevealCompleteRef.current?.();
-      }, INTRO_BOUNCE_MS);
+      cleanupFill = startLevelUpFillAnim({ notifyIntro: true, skipFill: true });
     };
 
     const delayTimer = window.setTimeout(() => {
@@ -388,6 +505,7 @@ export const LevelUpRewardTrack: React.FC<LevelUpRewardTrackProps> = ({
       const scroller = scrollRef.current;
       if (!scroller) {
         setIntroLockInput(false);
+        setFillLockInput(false);
         onIntroRevealCompleteRef.current?.();
         return;
       }
@@ -400,7 +518,7 @@ export const LevelUpRewardTrack: React.FC<LevelUpRewardTrackProps> = ({
       introScrollActiveRef.current = true;
 
       if (Math.abs(delta) < 1) {
-        finishWithBounce();
+        finishWithCelebrate();
         return;
       }
 
@@ -417,8 +535,7 @@ export const LevelUpRewardTrack: React.FC<LevelUpRewardTrackProps> = ({
         } else {
           animRafRef.current = 0;
           sc.scrollLeft = target;
-          // Bounce only after the scroll has fully settled.
-          finishWithBounce();
+          finishWithCelebrate();
         }
       };
       rafId = requestAnimationFrame(tick);
@@ -428,25 +545,54 @@ export const LevelUpRewardTrack: React.FC<LevelUpRewardTrackProps> = ({
     return () => {
       cancelled = true;
       window.clearTimeout(delayTimer);
-      if (bounceTimer) window.clearTimeout(bounceTimer);
-      if (completeTimer) window.clearTimeout(completeTimer);
       if (rafId) cancelAnimationFrame(rafId);
+      cleanupFill?.();
       stopAnim();
       introScrollActiveRef.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- restart when intro play arms
   }, [introReveal, introRevealPlay, focusIndex, lockMaxIndex, introSkipNonce]);
 
+  /** Garden Level popup: keep fill in sync (no celebrate anim). */
+  useEffect(() => {
+    if (variant !== 'gardenLevel') return;
+    setDisplayFillRatio(targetFillRatio);
+    setFillLockInput(false);
+  }, [variant, targetFillRatio]);
+
+  /** Non-intro level-ups: fill previous→current when the popup becomes visible. */
+  useEffect(() => {
+    if (variant !== 'levelUp' || introReveal) return;
+    if (!levelUpFillPlay) {
+      // Closing / leaving: keep fill at the current level (don't snap back to 0%).
+      setDisplayFillRatio(targetFillRatio);
+      setFillLockInput(false);
+      return;
+    }
+    if (fillAnimDoneRef.current) {
+      setDisplayFillRatio(targetFillRatio);
+      setFillLockInput(false);
+      return;
+    }
+    return startLevelUpFillAnim();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [variant, introReveal, levelUpFillPlay, currentLevel, startFillRatio, targetFillRatio]);
+
   useEffect(() => {
     if (!introReveal || introSkipNonce <= 0) return;
     stopAnim();
+    stopFillAnim();
     introScrollActiveRef.current = true;
     const scroller = scrollRef.current;
     if (scroller) {
       scroller.scrollLeft = scrollLeftToCenterNode(focusIndex);
     }
+    setDisplayFillRatio(targetFillRatio);
     setSelectedBounce(false);
+    setSelectedLeafBurst(null);
     setIntroLockInput(false);
+    setFillLockInput(false);
+    fillAnimDoneRef.current = true;
     // Parent handles enabling Lets go (immediate) via introSkipNonce.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [introSkipNonce]);
@@ -517,18 +663,16 @@ export const LevelUpRewardTrack: React.FC<LevelUpRewardTrackProps> = ({
   const barWidth = nodeSpan + BAR_OVERHANG_PX * 2;
   // Left overhang fills once at/ past garden start (level 1 is already reached);
   // node span follows milestone + in-level progress beyond that.
-  const levelValue =
-    currentLevel + Math.max(0, Math.min(1, levelProgressFraction));
   const fillWidth =
-    levelValue < levels[0]!
+    displayFillRatio <= 0 && currentLevel < (levels[0] ?? 1)
       ? 0
-      : BAR_OVERHANG_PX + nodeSpan * fillRatio;
+      : BAR_OVERHANG_PX + nodeSpan * displayFillRatio;
   const badgeTop = MASK_TOP_PAD_PX + HEADER_PX + 8;
   const contentHeight = badgeTop + BADGE_SPRITE_PX;
   const barTop = badgeTop + BADGE_SPRITE_PX / 2 - BAR_HEIGHT_PX / 2;
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (introLockInput) return;
+    if (trackInputLocked) return;
     const scroller = scrollRef.current;
     if (!scroller) return;
     stopAnim();
@@ -594,8 +738,8 @@ export const LevelUpRewardTrack: React.FC<LevelUpRewardTrackProps> = ({
         marginLeft: -BLEED_X_PX,
         marginRight: -BLEED_X_PX,
         width: `calc(100% + ${BLEED_X_PX * 2}px)`,
-        pointerEvents: introLockInput ? 'none' : 'auto',
-        touchAction: introLockInput ? 'none' : 'pan-x',
+        pointerEvents: trackInputLocked ? 'none' : 'auto',
+        touchAction: trackInputLocked ? 'none' : 'pan-x',
         position: 'relative',
         zIndex: 6,
       }}
@@ -604,12 +748,12 @@ export const LevelUpRewardTrack: React.FC<LevelUpRewardTrackProps> = ({
         ref={scrollRef}
         className="w-full no-scrollbar"
         style={{
-          overflowX: introLockInput ? 'hidden' : 'auto',
+          overflowX: trackInputLocked ? 'hidden' : 'auto',
           overflowY: 'hidden',
           touchAction: 'none',
           WebkitOverflowScrolling: 'touch',
-          cursor: introLockInput ? 'default' : 'grab',
-          pointerEvents: introLockInput ? 'none' : 'auto',
+          cursor: trackInputLocked ? 'default' : 'grab',
+          pointerEvents: trackInputLocked ? 'none' : 'auto',
         }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -636,6 +780,7 @@ export const LevelUpRewardTrack: React.FC<LevelUpRewardTrackProps> = ({
               borderRadius: BAR_HEIGHT_PX,
               backgroundColor: TRACK_BROWN,
               overflow: 'hidden',
+              zIndex: 0,
             }}
           >
             <div
@@ -691,7 +836,7 @@ export const LevelUpRewardTrack: React.FC<LevelUpRewardTrackProps> = ({
                   left,
                   top: MASK_TOP_PAD_PX,
                   width: HEADER_PX,
-                  zIndex: isCurrent ? 3 : 1,
+                  zIndex: isCurrent ? 4 : 2,
                 }}
               >
                 <div
@@ -699,6 +844,8 @@ export const LevelUpRewardTrack: React.FC<LevelUpRewardTrackProps> = ({
                   style={{
                     width: HEADER_PX,
                     height: HEADER_PX,
+                    // Header/icon above the level badge and progress bar.
+                    zIndex: 3,
                   }}
                 >
                   <div
@@ -711,10 +858,33 @@ export const LevelUpRewardTrack: React.FC<LevelUpRewardTrackProps> = ({
                       transform: 'translateX(-50%)',
                     }}
                   >
+                    {/* Burst outside bounce scale so leaves stay 1:1. */}
+                    {isCurrent && selectedLeafBurst && (
+                      <div
+                        className="absolute left-1/2 top-1/2 pointer-events-none"
+                        style={{
+                          width: selectedLeafBurst.rectWidth,
+                          height: selectedLeafBurst.rectHeight,
+                          transform: 'translate(-50%, -50%)',
+                          zIndex: 0,
+                        }}
+                      >
+                        <PopupRectLeafBurst
+                          key={selectedLeafBurst.id}
+                          rectWidth={selectedLeafBurst.rectWidth}
+                          rectHeight={selectedLeafBurst.rectHeight}
+                          spriteVariant="yellow"
+                          leafCount={LEVEL_UP_FILL_BURST_LEAF_COUNT}
+                          zIndex={0}
+                          onComplete={() => setSelectedLeafBurst(null)}
+                        />
+                      </div>
+                    )}
                     <div
                       className={`relative flex items-center justify-center w-full h-full${
                         isCurrent && selectedBounce ? ' level-up-track-selected-bounce' : ''
                       }`}
+                      style={{ zIndex: 1 }}
                     >
                     <img
                       src={headerSrc}
@@ -747,7 +917,8 @@ export const LevelUpRewardTrack: React.FC<LevelUpRewardTrackProps> = ({
                     width: BADGE_SPRITE_PX,
                     height: BADGE_SPRITE_PX,
                     marginTop: 8,
-                    zIndex: 2,
+                    // Below header/icon; still above the progress bar (zIndex 0).
+                    zIndex: 1,
                   }}
                 >
                   <img

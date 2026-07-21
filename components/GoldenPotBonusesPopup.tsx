@@ -22,6 +22,7 @@ import { getCollectionBonusesIconPath, getCollectionBonusIconPath } from '../uti
 import {
   getGoldenPotBonusIconSlugForPotCount,
   getGoldenPotBonusTiersForDisplay,
+  GOLDEN_POT_BONUS_TIERS,
 } from '../constants/goldenPotBonuses';
 import { COLLECTION_PLANT_COUNT } from '../constants/barnShelves';
 import { shouldPlayPopupLeafBurst } from '../utils/performanceMode';
@@ -212,6 +213,21 @@ const BONUS_ENABLED_TITLE_COLOR = '#62863b';
 const BONUS_ENABLED_SUBTITLE_COLOR = '#8aa038';
 const BONUS_LOCKED_TITLE_COLOR = '#765041';
 const BONUS_LOCKED_SUBTITLE_COLOR = '#c6b280';
+/** In-progress row: pots toward this tier (e.g. 2/4), far right. */
+const BONUS_ROW_PROGRESS_RIGHT_PX = 34;
+const BONUS_ROW_PROGRESS_FONT_REM = 1.45;
+
+/** Pots completed toward an in-progress bonus tier (segment is always 4). */
+function getInProgressTierFraction(
+  tierPotCount: number,
+  goldenPotCount: number,
+): { numerator: number; denominator: number } {
+  const idx = GOLDEN_POT_BONUS_TIERS.findIndex((t) => t.potCount === tierPotCount);
+  const segmentStart = idx <= 0 ? 0 : GOLDEN_POT_BONUS_TIERS[idx - 1]!.potCount;
+  const denominator = Math.max(1, tierPotCount - segmentStart);
+  const numerator = Math.min(denominator, Math.max(0, goldenPotCount - segmentStart));
+  return { numerator, denominator };
+}
 
 
 /** Bonus row sprite is 606×86; full row width in prescale coords (panel frame can be wider). */
@@ -890,6 +906,30 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
                             </span>
                           </div>
                         </div>
+                        {isInProgress && (() => {
+                          const { numerator, denominator } = getInProgressTierFraction(
+                            tier.potCount,
+                            goldenPotCount,
+                          );
+                          return (
+                            <div
+                              className="pointer-events-none absolute flex items-center justify-center"
+                              style={{
+                                right: BONUS_ROW_PROGRESS_RIGHT_PX,
+                                top: '50%',
+                                transform: 'translateY(-50%)',
+                                fontFamily: 'Inter, sans-serif',
+                                fontSize: `${BONUS_ROW_PROGRESS_FONT_REM}rem`,
+                                fontWeight: 900,
+                                lineHeight: 1,
+                                color: BONUS_ENABLED_SUBTITLE_COLOR,
+                              }}
+                              aria-label={`${numerator} of ${denominator} golden pots`}
+                            >
+                              {`${numerator}/${denominator}`}
+                            </div>
+                          );
+                        })()}
                       </div>
                     );
                   })}

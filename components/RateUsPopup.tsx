@@ -248,12 +248,18 @@ export const RateUsPopup: React.FC<RateUsPopupProps> = ({
   useEffect(() => {
     if (!isVisible) {
       setAssetsReady(false);
-      resetStarSelection();
       setRateNowPressed(false);
       return;
     }
     setAssetsReady(true);
-  }, [isVisible, resetStarSelection]);
+  }, [isVisible]);
+
+  // Keep gold stars visible through the leave animation; clear only once fully closed.
+  useEffect(() => {
+    if (animState === 'hidden') {
+      resetStarSelection();
+    }
+  }, [animState, resetStarSelection]);
 
   useEffect(() => () => clearRevealTimers(), [clearRevealTimers]);
 
