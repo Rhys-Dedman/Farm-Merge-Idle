@@ -56,12 +56,15 @@ export function createRectPerimeterPopupLeaves(
   /** Pull top-edge spawns down so leaves erupt from lower on the top side. */
   topEdgeInsetPx = 0,
   spriteVariant: PopupRectLeafBurstVariant = 'green',
+  /** Multiplier on leaf sprite size (1 = default). */
+  leafSizeScale = 1,
 ): LeafParticle[] {
   const sprites = spritesForVariant(spriteVariant);
   const halfW = width / 2;
   const halfH = height / 2;
   const topY = -halfH + Math.max(0, topEdgeInsetPx);
   const perimeter = 2 * (width + height);
+  const sizeScale = Math.max(0.1, leafSizeScale);
   return Array.from({ length: leafCount }, (_, i) => {
     const pos = (i / leafCount) * perimeter + Math.random() * 40;
 
@@ -94,7 +97,7 @@ export function createRectPerimeterPopupLeaves(
       speed: Math.random() * 337.5,
       rotationSpeed: (Math.random() - 0.5) * 540,
       initialRotation: Math.random() * 360,
-      size: 15 + Math.random() * 15,
+      size: (15 + Math.random() * 15) * sizeScale,
       lifetime:
         POPUP_RECT_LEAF_MIN_LIFETIME_MS +
         Math.random() * (POPUP_RECT_LEAF_MAX_LIFETIME_MS - POPUP_RECT_LEAF_MIN_LIFETIME_MS),
@@ -117,6 +120,8 @@ export interface PopupRectLeafBurstProps {
   spriteVariant?: PopupRectLeafBurstVariant;
   /** Override default leaf count (e.g. 7 for a small track burst). */
   leafCount?: number;
+  /** Multiplier on leaf sprite size (1 = default). */
+  leafSizeScale?: number;
   zIndex?: number;
   onComplete?: () => void;
 }
@@ -129,6 +134,7 @@ export const PopupRectLeafBurst: React.FC<PopupRectLeafBurstProps> = ({
   topEdgeInsetPx = 0,
   spriteVariant = 'green',
   leafCount = POPUP_RECT_LEAF_COUNT,
+  leafSizeScale = 1,
   zIndex = 101,
   onComplete,
 }) => {
@@ -142,6 +148,7 @@ export const PopupRectLeafBurst: React.FC<PopupRectLeafBurstProps> = ({
           leafCount,
           topEdgeInsetPx,
           spriteVariant,
+          leafSizeScale,
         ),
   );
   const [leafPositions, setLeafPositions] = useState<

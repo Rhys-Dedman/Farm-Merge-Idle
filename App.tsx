@@ -28,13 +28,14 @@ import { FloatingButtonStack } from './components/FloatingButtonStack';
 import { FarmLeftFloatingButtonStack } from './components/FarmLeftFloatingButtonStack';
 import { Projectile } from './components/Projectile';
 import { LeafBurst, LEAF_BURST_BASELINE_COUNT, LEAF_BURST_SMALL_COUNT } from './components/LeafBurst';
-import { PopupRectLeafBurst } from './components/PopupRectLeafBurst';
+import { PopupRectLeafBurst, type PopupRectLeafBurstVariant } from './components/PopupRectLeafBurst';
 import { AmbientFallingLeaves } from './components/AmbientFallingLeaves';
 import { FarmVfxLayer } from './components/FarmVfxLayer';
 import { CellHighlightBeam } from './components/CellHighlightBeam';
 import { CoinPanel, CoinPanelData } from './components/CoinPanel';
 import { PlantPanel, PlantPanelData } from './components/PlantPanel';
 import { GoalCoinParticle, GoalCoinParticleData } from './components/GoalCoinParticle';
+import { buildCoinBurstParticles } from './utils/coinBurst';
 import { UpgradeParticle, type UpgradeParticleData } from './components/UpgradeParticle';
 import { GoldenPotProgressParticle, type GoldenPotProgressParticleData } from './components/GoldenPotProgressParticle';
 import { WalletImpactBurst } from './components/WalletImpactBurst';
@@ -1802,7 +1803,16 @@ export default function App() {
   const lastAdBreakPlaytimeTickRef = useRef<number | null>(null);
   const [dailyTaskClaimBounceIds, setDailyTaskClaimBounceIds] = useState<string[]>([]);
   const [dailyTaskLeafBursts, setDailyTaskLeafBursts] = useState<
-    { id: string; x: number; y: number; rectWidth: number; rectHeight: number }[]
+    {
+      id: string;
+      x: number;
+      y: number;
+      rectWidth: number;
+      rectHeight: number;
+      spriteVariant?: PopupRectLeafBurstVariant;
+      leafCount?: number;
+      leafSizeScale?: number;
+    }[]
   >([]);
   const pendingDailyTaskClaimRef = useRef<{
     taskId: string;
@@ -2528,6 +2538,57 @@ export default function App() {
     setDailyTasksCountdownRefreshKey((k) => k + 1);
   }, []);
 
+  const spawnViewportRewardCoinBurst = useCallback(
+    (
+      startPoint: { x: number; y: number },
+      rewardValue: number,
+      options?: {
+        idPrefix?: string;
+        yellowLeaves?: boolean;
+        suckPath?: 'popup' | 'goal';
+        particleExtras?: Partial<
+          Pick<GoalCoinParticleData, 'skipHappyCustomerRoll' | 'skipDoubleCoinsMultiplier'>
+        >;
+      },
+    ) => {
+      if (rewardValue <= 0) return false;
+      const layer = discoveryRewardFxLayerRef.current;
+      if (!layer) return false;
+      const lr = layer.getBoundingClientRect();
+      const startX = startPoint.x - lr.left;
+      const startY = startPoint.y - lr.top;
+      if (options?.yellowLeaves !== false && !getPerformanceMode()) {
+        const leafRect = 88 * appScaleRef.current;
+        setDailyTaskLeafBursts((prev) => [
+          ...prev,
+          {
+            id: `reward-coin-burst-leaves-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            x: startPoint.x,
+            y: startPoint.y,
+            rectWidth: leafRect,
+            rectHeight: leafRect,
+            spriteVariant: 'yellow',
+            leafCount: 18,
+            leafSizeScale: 1.3,
+          },
+        ]);
+      }
+      setActiveDiscoveryCoinParticles((prev) => [
+        ...prev,
+        ...buildCoinBurstParticles({
+          startX,
+          startY,
+          rewardValue,
+          idPrefix: options?.idPrefix ?? 'reward-coin',
+          suckPath: options?.suckPath ?? 'popup',
+          particleExtras: options?.particleExtras,
+        }),
+      ]);
+      return true;
+    },
+    [],
+  );
+
   const playDailyTaskClaimPresentation = useCallback(
     (
       taskId: string,
@@ -2554,21 +2615,12 @@ export default function App() {
         ]);
       }
 
-      const layer = discoveryRewardFxLayerRef.current;
-      if (layer) {
-        const lr = layer.getBoundingClientRect();
-        setActiveDiscoveryCoinParticles((prev) => [
-          ...prev,
-          {
-            id: `daily-task-reward-${taskId}-${Date.now()}`,
-            startX: fx.rewardCenter.x - lr.left,
-            startY: fx.rewardCenter.y - lr.top,
-            value: payout,
-          },
-        ]);
-      }
+      spawnViewportRewardCoinBurst(fx.rewardCenter, payout, {
+        idPrefix: `daily-task-reward-${taskId}`,
+        yellowLeaves: true,
+      });
     },
-    [triggerDailyTaskClaimBounce],
+    [triggerDailyTaskClaimBounce, spawnViewportRewardCoinBurst],
   );
 
   const autoClaimCompleteTasksInPopup = useCallback(() => {
@@ -3913,20 +3965,8 @@ export default function App() {
         getCoinValueForLevel(level) * PLANT_DISCOVERY_COIN_MULTIPLIER,
         activeBoostsRef.current,
       );
-      const layer = discoveryRewardFxLayerRef.current;
-      if (layer) {
-        const lr = layer.getBoundingClientRect();
-        const startX = startPoint.x - lr.left;
-        const startY = startPoint.y - lr.top;
-        setActiveDiscoveryCoinParticles((prev) => [
-          ...prev,
-          {
-            id: `discovery-reward-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-            startX,
-            startY,
-            value: rewardValue,
-          },
-        ]);
+      if (!spawnViewportRewardCoinBurst(startPoint, rewardValue, { idPrefix: 'discovery-reward' })) {
+        setMoney((prev) => prev + rewardValue);
       }
       // FTUE plant-2 "Excellent!": skip collection-nav particle so attention stays on the farm/goals.
       const skipCollectionParticle = level === 2 && ftue4Pending;
@@ -3955,7 +3995,7 @@ export default function App() {
         setGoalDisplayOrder([0]);
       }
     },
-    [ftue4Pending],
+    [ftue4Pending, spawnViewportRewardCoinBurst],
   );
 
   const finishDiscoveryPopupAfterAdBreak = useCallback(() => {
@@ -4100,23 +4140,12 @@ export default function App() {
   const applyLevelUpCoinReward = useCallback(
     (amount: number, startPoint?: { x: number; y: number }) => {
       if (amount <= 0) return;
-      const layer = discoveryRewardFxLayerRef.current;
-      if (layer && startPoint) {
-        const lr = layer.getBoundingClientRect();
-        setActiveDiscoveryCoinParticles((prev) => [
-          ...prev,
-          {
-            id: `levelup-reward-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-            startX: startPoint.x - lr.left,
-            startY: startPoint.y - lr.top,
-            value: amount,
-          },
-        ]);
+      if (startPoint && spawnViewportRewardCoinBurst(startPoint, amount, { idPrefix: 'levelup-reward' })) {
         return;
       }
       setMoney((m) => m + amount);
     },
-    [],
+    [spawnViewportRewardCoinBurst],
   );
 
   const applyLevelUpPopupUnlock = useCallback((level: number, rewardStartPoint?: { x: number; y: number }) => {
@@ -10287,31 +10316,27 @@ export default function App() {
                         const happiestActive = activeBoostsRef.current.some(b => b.offerId === 'happiest_customers');
                         const effectiveValue = coinGoalValue * (happiestActive ? 2 : 1);
                         const iconEl = coinGoalIconRef.current;
-                        const container = containerRef.current;
-                        if (iconEl && container) {
+                        if (iconEl) {
                           const r = iconEl.getBoundingClientRect();
-                          const cr = container.getBoundingClientRect();
-                          const startX = (r.left + r.width / 2 - cr.left) / appScale;
-                          const startY = (r.top + r.height / 2 - cr.top) / appScale;
-                          if (!getPerformanceMode()) {
-                            spawnGoalCoinLeafBurst({
-                              id: `goal-coin-lb-${nextGoalCoinBurstIdRef.current++}`,
-                              x: r.left + r.width / 2,
-                              y: r.top + r.height / 2 + 30,
-                              startTime: Date.now(),
-                            });
+                          const startPoint = {
+                            x: r.left + r.width / 2,
+                            y: r.top + r.height / 2,
+                          };
+                          // Burst on the high z-index viewport layer (above top bar), trough suck path.
+                          if (
+                            !spawnViewportRewardCoinBurst(startPoint, effectiveValue, {
+                              idPrefix: 'coin-goal',
+                              suckPath: 'goal',
+                              particleExtras: {
+                                skipHappyCustomerRoll: true,
+                                skipDoubleCoinsMultiplier: true,
+                              },
+                            })
+                          ) {
+                            setMoney((m) => m + effectiveValue);
                           }
-                          setActiveGoalCoinParticles((prev) => [
-                            ...prev,
-                            {
-                              id: `coin-goal-${Date.now()}`,
-                              startX,
-                              startY,
-                              value: effectiveValue,
-                              skipHappyCustomerRoll: true,
-                              skipDoubleCoinsMultiplier: true,
-                            },
-                          ]);
+                        } else {
+                          setMoney((m) => m + effectiveValue);
                         }
                         applyDailyTaskRowsUpdate(recordDailyTaskCoinOrder(getDailyTasksCtx()));
                         lastCoinGoalHiddenAtRef.current = Date.now();
@@ -12280,6 +12305,9 @@ export default function App() {
                 centerY={b.y}
                 rectWidth={b.rectWidth}
                 rectHeight={b.rectHeight}
+                spriteVariant={b.spriteVariant}
+                leafCount={b.leafCount}
+                leafSizeScale={b.leafSizeScale}
                 zIndex={221}
                 onComplete={() => setDailyTaskLeafBursts((prev) => prev.filter((x) => x.id !== b.id))}
               />
@@ -13235,18 +13263,8 @@ export default function App() {
                     pendingSwitchGardenAdBreakRef.current = false;
                     queueMicrotask(() => tryShowAdBreakRef.current('switch_garden'));
                   }
-                  const layer = discoveryRewardFxLayerRef.current;
-                  if (layer) {
-                    const lr = layer.getBoundingClientRect();
-                    setActiveDiscoveryCoinParticles((prev) => [
-                      ...prev,
-                      {
-                        id: `offline-earnings-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-                        startX: startPoint.x - lr.left,
-                        startY: startPoint.y - lr.top,
-                        value: payout,
-                      },
-                    ]);
+                  if (!spawnViewportRewardCoinBurst(startPoint, payout, { idPrefix: 'offline-earnings' })) {
+                    setMoney((m) => m + payout);
                   }
                 }}
                 appScale={appScale}
@@ -13270,10 +13288,12 @@ export default function App() {
                   variant="popupReward"
                   popupVisualScale={appScale}
                   activeCount={activeDiscoveryCoinParticles.length}
-                  onImpact={(value) => {
+                  onImpact={(value, meta) => {
                     setMoney((prev) => prev + value);
                     setWalletFlashActive(true);
-                    playSfx(SFX_IDS.coinImpact);
+                    if (meta?.playSfx !== false) {
+                      playSfx(SFX_IDS.coinImpact);
+                    }
                     setWalletBounceTrigger((t) => t + 1);
                     if (walletFlashTimeoutRef.current) clearTimeout(walletFlashTimeoutRef.current);
                     walletFlashTimeoutRef.current = setTimeout(() => setWalletFlashActive(false), 120);

@@ -236,17 +236,19 @@ export function preloadSfxAssets(onStepDone?: () => void): Promise<void> {
   return preloadPromise;
 }
 
-export function playSfx(id: SfxId, volume = 1): void {
+export function playSfx(id: SfxId, volume = 1, pitch = 1): void {
   if (isAppAudioSuspended()) return;
   if (id !== SFX_IDS.music && !sfxEnabled) return;
   tryResumeAudioContext();
   const ctx = getAudioContext();
   const gainVolume = Math.max(0, Math.min(1, volume * MASTER_AUDIO_VOLUME));
+  const playbackRate = Math.max(0.25, Math.min(4, pitch));
   const decoded = ctx ? audioBufferById.get(id) : undefined;
   if (ctx && decoded) {
     try {
       const source = ctx.createBufferSource();
       source.buffer = decoded;
+      source.playbackRate.value = playbackRate;
       const gain = ctx.createGain();
       gain.gain.value = gainVolume;
       source.connect(gain);
@@ -264,6 +266,7 @@ export function playSfx(id: SfxId, volume = 1): void {
   }
   const playback = template.cloneNode(true) as HTMLAudioElement;
   playback.volume = gainVolume;
+  playback.playbackRate = playbackRate;
   playback.currentTime = 0;
   void playback.play().catch(() => {});
 }

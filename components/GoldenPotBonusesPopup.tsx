@@ -714,7 +714,7 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
             <div
               style={{
                 position: 'relative',
-                padding: '150px 40px 63px 40px',
+                padding: '150px 40px 36px 40px',
                 ...POPUP_CREAM_HIT_TARGET,
               }}
             >
@@ -753,7 +753,7 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
                     fontSize: '2rem',
                   }}
                 >
-                  Bonuses you unlock are shared across all gardens.
+                  Upgrading a whole shelf will unlock its bonus reward
                 </p>
 
                 <div
@@ -935,6 +935,20 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
                   })}
                   </div>
                 </div>
+
+                <p
+                  className="font-medium text-center leading-relaxed italic w-full whitespace-nowrap"
+                  style={{
+                    color: '#c2b280',
+                    fontFamily: 'Inter, sans-serif',
+                    marginTop: '24px',
+                    paddingLeft: '24px',
+                    paddingRight: '24px',
+                    fontSize: '1.55rem',
+                  }}
+                >
+                  Bonuses shared across all gardens
+                </p>
               </div>
             </div>
           </PopupPrescaleFrame>
