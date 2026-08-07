@@ -46,7 +46,7 @@ export const ALL_PURCHASABLE_UPGRADE_IDS = [
 
 const UNLOCK_LEVEL_BY_ID: Record<string, number> = {
   seed_production: 1,
-  double_seeds: 6,
+  double_seeds: 5,
   bonus_seeds: 9,
   harvest_speed: 1,
   plot_expansion: 2,
@@ -83,6 +83,31 @@ export interface UpgradeGateContext {
   cropsState: Record<string, UpgradeState>;
   /** Active garden — Crop Yield / Happy Customers unlock earlier on garden 2+. */
   gardenId?: GardenId;
+}
+
+/** Build an upgrade gate context from a saved garden snapshot (other gardens on Collection). */
+export function buildUpgradeGateContextFromGardenState(
+  gardenId: GardenId,
+  garden: {
+    playerLevel: number;
+    seedsState: SeedsState;
+    harvestState: HarvestState;
+    cropsState: Record<string, UpgradeState>;
+    grid?: { locked?: boolean }[];
+    trophyLevels?: readonly number[];
+  },
+  overrides?: Partial<UpgradeGateContext>,
+): UpgradeGateContext {
+  return {
+    playerLevel: Math.max(1, Math.floor(garden.playerLevel)),
+    lockedCellCount: (garden.grid ?? []).filter((cell) => cell.locked).length,
+    goldenPotCount: (garden.trophyLevels ?? []).length,
+    seedsState: garden.seedsState,
+    harvestState: garden.harvestState,
+    cropsState: garden.cropsState,
+    gardenId,
+    ...overrides,
+  };
 }
 
 function getUpgradeLevel(upgradeId: string, ctx: UpgradeGateContext): number {

@@ -35,6 +35,7 @@ import {
   DAILY_TASKS_UNLOCKED_KEY,
 } from './dailyTasksCountdown';
 import { clearAllDailyTasksDayStorage } from './dailyTasksGardenScope';
+import { clearAllSpecialDeliveryBoardStorage } from './specialDeliveryBoardSave';
 import { DEFAULT_GARDEN_ID, type GardenId } from '../constants/gardens';
 import { MAX_PLANT_TIER } from '../constants/plants';
 import {
@@ -74,6 +75,19 @@ function normalizePlantMasteryUnlockedLevels(raw: unknown): number[] {
   return [...set].sort((a, b) => a - b);
 }
 
+export function normalizeTrophyLevels(raw: unknown): number[] {
+  if (!Array.isArray(raw)) return [];
+  const set = new Set<number>();
+  for (const x of raw) {
+    const n = typeof x === 'number' ? x : Number.parseInt(String(x), 10);
+    if (Number.isFinite(n)) {
+      const k = Math.floor(n);
+      if (k >= 1 && k <= MAX_PLANT_TIER) set.add(k);
+    }
+  }
+  return [...set].sort((a, b) => a - b);
+}
+
 export const GAME_SAVE_STORAGE_KEY = 'pocket-garden-save-v1';
 
 export const GAME_SAVE_VERSION = 1 as const;
@@ -98,6 +112,8 @@ export interface GameSaveV1 {
   /** Uncollected offline surplus total (shown in Offline Earnings popup + new sim on load) */
   pendingOfflineEarnings: number;
   money: number;
+  /** Account-wide Special Delivery keys. Missing on old saves → 0. */
+  keyCount?: number;
   grid: BoardCell[];
   seedProgress: number;
   harvestProgress: number;
@@ -124,6 +140,11 @@ export interface GameSaveV1 {
    * Next collected goal clears this; bar then mirrors player level progress; golden-pot queue advances on player level-up.
    */
   plantMasteryIntroBarComplete?: boolean;
+  /**
+   * Plant levels (1–20) whose collection trophy was won from Special Deliveries.
+   * Missing on old saves → [].
+   */
+  trophyLevels?: number[];
   /** After collection FTUE fully finished (tapped Garden at end). */
   collectionFtueCompleted?: boolean;
   /** Resumable step for collection FTUE; cleared when completed. */
@@ -132,12 +153,20 @@ export interface GameSaveV1 {
   collectionFtueBonusesReached?: boolean;
   /** Set when a mid-FTUE save is reset; triggers collection level-up popup on next load. */
   collectionFtueRestartPending?: boolean;
-  /** Daily tasks FTUE started (level 5 unlock now tapped); cleared when completed. */
+  /** Daily tasks FTUE started (level 6 unlock now tapped); cleared when completed. */
   tasksFtueStarted?: boolean;
   /** Tasks floating button swapped from locked to normal (bounce played). */
   tasksFtueUnlockRevealed?: boolean;
-  /** Daily tasks FTUE finished (player opened tasks popup). */
+  /** Daily tasks FTUE finished (player claimed the intro task). */
   tasksFtueCompleted?: boolean;
+  /** Daily tasks FTUE: popup open, waiting for intro claim. */
+  tasksFtueClaimStep?: boolean;
+  /** Special Delivery FTUE started (garden 1 level 7). */
+  specialDeliveryFtueStarted?: boolean;
+  /** Special Delivery FTUE finished (vine lock knocked off). */
+  specialDeliveryFtueCompleted?: boolean;
+  /** Resumable step for Special Delivery FTUE; cleared when completed. */
+  specialDeliveryFtuePhase?: string | null;
   /** Gardens floating button FTUE started (level 10 unlock now tapped). */
   gardensFtueStarted?: boolean;
   /** Gardens floating button swapped from locked to normal (bounce played). */
@@ -212,6 +241,11 @@ export interface GameSaveV1 {
   musicEnabled: boolean;
   sfxEnabled: boolean;
   pendingUnlockUpgradeId: string | null;
+  /**
+   * Special Delivery free upgrade credits per upgrade id (stackable).
+   * Missing on old saves → {}.
+   */
+  freeUpgradeCounts?: Record<string, number>;
   levelUpPopupQueue: number[];
   /**
    * Wild Growth: ms accumulated toward next auto-duplicate (0 when upgrade inactive).
@@ -288,6 +322,11 @@ export function normalizeGameSaveV1(data: GameSaveV1): GameSaveV1 {
     if (typeof data.money !== 'number' || !Number.isFinite(data.money)) {
       data.money = 0;
     }
+    if (typeof data.keyCount !== 'number' || !Number.isFinite(data.keyCount)) {
+      data.keyCount = 0;
+    } else {
+      data.keyCount = Math.max(0, Math.floor(data.keyCount));
+    }
     if (!Array.isArray(data.activeBoosts)) data.activeBoosts = [];
     if (typeof data.musicEnabled !== 'boolean') data.musicEnabled = true;
     if (typeof data.sfxEnabled !== 'boolean') data.sfxEnabled = true;
@@ -310,6 +349,9 @@ export function normalizeGameSaveV1(data: GameSaveV1): GameSaveV1 {
     data.plantMasteryUnlockPending = normalizePlantMasteryUnlockPending(data.plantMasteryUnlockPending);
     data.plantMasteryUnlockedLevels = normalizePlantMasteryUnlockedLevels(
       (data as GameSaveV1 & { plantMasteryUnlockedLevels?: unknown }).plantMasteryUnlockedLevels
+    );
+    data.trophyLevels = normalizeTrophyLevels(
+      (data as GameSaveV1 & { trophyLevels?: unknown }).trophyLevels
     );
     if (typeof data.plantMasteryIntroBarComplete !== 'boolean') {
       data.plantMasteryIntroBarComplete = false;
@@ -378,6 +420,19 @@ export function normalizeGameSaveV1(data: GameSaveV1): GameSaveV1 {
       (data as GameSaveV1).wildGrowthAccumulatorMs = 0;
     } else {
       (data as GameSaveV1).wildGrowthAccumulatorMs = Math.max(0, wg);
+    }
+    const fuc = (data as GameSaveV1).freeUpgradeCounts;
+    if (!fuc || typeof fuc !== 'object' || Array.isArray(fuc)) {
+      (data as GameSaveV1).freeUpgradeCounts = undefined;
+    } else {
+      const cleaned: Record<string, number> = {};
+      for (const [k, v] of Object.entries(fuc)) {
+        if (typeof v === 'number' && Number.isFinite(v) && v > 0) {
+          cleaned[k] = Math.floor(v);
+        }
+      }
+      (data as GameSaveV1).freeUpgradeCounts =
+        Object.keys(cleaned).length > 0 ? cleaned : undefined;
     }
     const gdl = data.goalDiscoveryLightGreenActive;
     if (!Array.isArray(gdl) || gdl.length !== 5) {
@@ -539,6 +594,7 @@ export function clearGameSave(): void {
     /* ignore */
   }
   clearAllDailyTasksDayStorage();
+  clearAllSpecialDeliveryBoardStorage();
   try {
     localStorage.removeItem(DAILY_TASKS_COUNTDOWN_END_MS_KEY);
   } catch {

@@ -24,7 +24,9 @@ export type FarmGoalCoinLeafBurst = FarmLeafBurst & {
 };
 
 export type FarmUnlockBurst = FarmLeafBurst;
-export type FarmConeBurst = FarmLeafBurst;
+export type FarmConeBurst = FarmLeafBurst & {
+  spriteVariant?: 'default' | 'gold';
+};
 
 export interface FarmVfxSnapshot {
   leafBursts: FarmLeafBurst[];

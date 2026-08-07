@@ -29,6 +29,8 @@ const CLOSE_TOP_PX = POPUP_CLOSE_TOP_PX;
 const CLOSE_RIGHT_PX = (SHELL_WIDTH_PX - VISUAL_CARD_WIDTH_PX) / 2 + 24;
 
 const SETTINGS_TITLE_COLOR = '#5c4a32';
+/** Matches the gold emphasis used in the Collection screen description. */
+const DESCRIPTION_GOLD_COLOR = '#bc8006';
 const DIVIDER_ROW_MIN_HEIGHT_PX = 40;
 /** Prescale rem — reads as 2rem on screen after 0.5× (matches Discovery / Golden Pot popups). */
 const DESCRIPTION_FONT_SIZE_REM = '2rem';
@@ -51,12 +53,17 @@ export interface LockedFloatingFeaturePopupProps {
   title: string;
   headerIconSrc: string;
   headerIconPx: number;
-  description: string;
+  description: React.ReactNode;
   unlockLevel: number;
 }
 
-export const LOCKED_DAILY_TASKS_POPUP_DESCRIPTION =
-  'Complete task to earn coins! Tasks are refreshed daily.';
+export const LOCKED_DAILY_TASKS_POPUP_DESCRIPTION = (
+  <>
+    Complete tasks to earn{' '}
+    <span style={{ color: DESCRIPTION_GOLD_COLOR, fontWeight: 700 }}>Keys!</span> Tasks are
+    refreshed daily.
+  </>
+);
 
 export const LOCKED_GARDENS_POPUP_DESCRIPTION =
   'Unlock new gardens and discover new plants & rewards';

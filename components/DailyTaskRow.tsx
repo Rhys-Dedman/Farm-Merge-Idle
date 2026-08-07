@@ -4,7 +4,12 @@
  */
 import React, { useRef, useState } from 'react';
 import { assetPath } from '../utils/assetPath';
-import { getGardenCoinSmallIconPath } from '../utils/gardenAssets';
+import {
+  getTasksFtueClaim2xButtonId,
+  getTasksFtueClaimButtonId,
+  TASKS_FTUE_CLAIM_2X_BUTTON_ID,
+  TASKS_FTUE_CLAIM_BUTTON_ID,
+} from '../constants/tasksFtue';
 export type DailyTaskRowState = 'in_progress' | 'complete' | 'claimed';
 
 export interface DailyTaskClaimFx {
@@ -24,9 +29,11 @@ export interface DailyTaskRowProps {
   descriptionValues?: Record<string, number | string>;
   progressCurrent: number;
   progressTotal: number;
-  rewardCoins: number;
+  rewardKeys: number;
   iconSrc?: string;
   claimBounceActive?: boolean;
+  /** When true, claim buttons get FTUE measurement ids. */
+  ftueClaimTarget?: boolean;
   onClaim?: (fx: DailyTaskClaimFx) => void;
   onClaim2x?: (fx: DailyTaskClaimFx) => void;
 }
@@ -37,6 +44,8 @@ export interface DailyTaskDefinition extends DailyTaskRowProps {
 
 /** ~40% smaller than initial layout — change here to rescale all task rows. */
 const TASK_ROW_SCALE = 0.6;
+/** Uniform visual scale: approximately 10px wider at the popup's task-list width. */
+const TASK_ROW_VISUAL_SCALE = 1.032;
 const s = (px: number) => Math.round(px * TASK_ROW_SCALE);
 
 const CARD_OUTLINE_PX = s(7);
@@ -125,7 +134,7 @@ function getRowTheme(state: DailyTaskRowState) {
 }
 
 const GREEN_CLAIM = {
-  bg: '#b8d458',
+  bg: '#c7dc61',
   border: '#8fb33a',
   text: PROGRESS_GREEN,
   pressedBg: '#9fc044',
@@ -147,9 +156,15 @@ const CLAIM_DISABLED = {
 } as const;
 
 const ICON_WATCH_AD = assetPath('/assets/icons/generic_buttons/icon_watchad.png');
+const ICON_KEY_SMALL = assetPath('/assets/icons/coins/icon_key_small.png');
 const ICON_TICK = assetPath('/assets/ui/icon_tick.png');
 const ICON_TICK_BROWN = assetPath('/assets/ui/icon_tick_brown.png');
 const TASKS_COMPLETE_TICK = assetPath('/assets/ui/tasks_complete_tick.png');
+const DAILY_TASK_IN_PROGRESS_BACKGROUND = assetPath(
+  '/assets/ui/generic/dailytask_inprogress.png',
+);
+const DAILY_TASK_COMPLETE_BACKGROUND = assetPath('/assets/ui/generic/dailytask_complete.png');
+const DAILY_TASK_CLAIMED_BACKGROUND = assetPath('/assets/ui/generic/dailytask_claimed.png');
 
 const ICON_BOX_SCALE = 1.1 * 0.95 * 1.12;
 const ICON_BOX_PX = s(Math.round(128 * ICON_BOX_SCALE));
@@ -167,7 +182,7 @@ const BUTTON_RADIUS_PX = s(26);
 const PILL_MIN_H_PX = s(76);
 const PILL_BORDER_PX = s(5);
 const PILL_ICON_PX = s(44);
-const REWARD_COIN_ICON_PX = s(Math.round(44 * 1.18));
+const REWARD_KEY_ICON_PX = s(Math.round(44 * 1.18));
 const PILL_TICK_PX = s(Math.round(22 * 1.3 * 1.35 * 1.1));
 /** Claimed-state large tick — 10% smaller than default slot, nudged right. */
 const CLAIMED_TICK_SIZE_SCALE = 0.8 * 0.9;
@@ -209,7 +224,7 @@ function bevelButtonStyle(
     borderRadius: `${BUTTON_RADIUS_PX}px`,
     boxShadow: pressed
       ? `inset 0 ${s(5)}px ${s(10)}px rgba(0,0,0,0.15)`
-      : `0 ${BUTTON_BEVEL_DEPTH_PX}px 0 ${palette.border}, 0 ${s(10)}px ${s(18)}px rgba(0,0,0,0.12)`,
+      : `0 ${BUTTON_BEVEL_DEPTH_PX}px 0 ${palette.border}`,
     transform: pressed ? `translateY(${BUTTON_BEVEL_DEPTH_PX}px)` : 'translateY(0)',
   };
 }
@@ -233,9 +248,10 @@ export const DailyTaskRow: React.FC<DailyTaskRowProps> = ({
   descriptionValues,
   progressCurrent,
   progressTotal,
-  rewardCoins,
+  rewardKeys,
   iconSrc,
   claimBounceActive = false,
+  ftueClaimTarget = false,
   onClaim,
   onClaim2x,
 }) => {
@@ -247,17 +263,23 @@ export const DailyTaskRow: React.FC<DailyTaskRowProps> = ({
   const theme = getRowTheme(state);
   const isClaimed = state === 'claimed';
   const isComplete = state === 'complete';
+  const isInProgress = state === 'in_progress';
   const canClaim = isComplete;
+  const taskBackground =
+    state === 'claimed'
+      ? DAILY_TASK_CLAIMED_BACKGROUND
+      : state === 'complete'
+        ? DAILY_TASK_COMPLETE_BACKGROUND
+        : DAILY_TASK_IN_PROGRESS_BACKGROUND;
   const showCompleteProgressTick = isComplete || isClaimed;
   const displayCurrent = showCompleteProgressTick ? progressTotal : progressCurrent;
   const progressLabel = `${displayCurrent}/${progressTotal}`;
+  const progressPercent =
+    progressTotal > 0 ? Math.max(0, Math.min(100, (displayCurrent / progressTotal) * 100)) : 0;
 
   const claimPalette = canClaim ? GREEN_CLAIM : CLAIM_DISABLED;
   const claim2xPalette = canClaim ? ORANGE_CLAIM_2X : CLAIM_DISABLED;
-
-  const progressPillBg = theme.progressFill;
-  const progressPillBorder = theme.progressBorder;
-  const progressPillText = theme.progressText;
+  const completeClaimButtonHeightPx = Math.round(BUTTON_H_PX * 1.08);
 
   const buttonColHeightPx = BUTTON_H_PX * 2 + BUTTON_GAP_PX;
   const rowMinHeightPx = Math.max(
@@ -266,7 +288,8 @@ export const DailyTaskRow: React.FC<DailyTaskRowProps> = ({
   ) + s(20) * 2;
 
   const cardPadPx = s(20);
-  const contentRightPadPx = BUTTON_W_PX + TOP_ROW_GAP_PX;
+  const contentRightPadPx =
+    isInProgress || isClaimed ? s(160) : BUTTON_W_PX + TOP_ROW_GAP_PX;
   const contentBodyMinHeightPx = rowMinHeightPx - cardPadPx * 2;
 
   const buildClaimFx = (): DailyTaskClaimFx | null => {
@@ -303,9 +326,15 @@ export const DailyTaskRow: React.FC<DailyTaskRowProps> = ({
       style={{
         padding: `${cardPadPx}px`,
         borderRadius: `${CARD_BORDER_RADIUS_PX}px`,
-        backgroundColor: theme.cardFill,
-        border: `${CARD_OUTLINE_PX}px solid ${theme.cardBorder}`,
+        backgroundColor: 'transparent',
+        backgroundImage: `url(${taskBackground})`,
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundSize: '100% auto',
+        border: 'none',
         minHeight: rowMinHeightPx,
+        transform: `scale(${TASK_ROW_VISUAL_SCALE})`,
+        transformOrigin: 'center',
       }}
     >
       <div
@@ -326,9 +355,9 @@ export const DailyTaskRow: React.FC<DailyTaskRowProps> = ({
               width: ICON_BOX_PX,
               height: ICON_BOX_PX,
               borderRadius: `${ICON_BOX_BORDER_RADIUS_PX}px`,
-              backgroundColor: theme.iconBg,
-              border: `${s(3)}px solid ${theme.iconBorder}`,
-              boxShadow: `inset 0 ${s(2)}px ${s(6)}px rgba(0,0,0,0.2)`,
+              backgroundColor: 'transparent',
+              border: 'none',
+              boxShadow: 'none',
             }}
           >
             {iconSrc ? (
@@ -337,137 +366,173 @@ export const DailyTaskRow: React.FC<DailyTaskRowProps> = ({
                 alt=""
                 className="object-contain"
                 draggable={false}
-                style={{ width: ICON_IMG_PX, height: ICON_IMG_PX }}
+                style={{
+                  width: Math.round(ICON_IMG_PX * 0.9),
+                  height: Math.round(ICON_IMG_PX * 0.9),
+                  transform: `translate(1px, ${isClaimed ? 2 : 7}px)`,
+                }}
               />
             ) : null}
           </div>
 
-          <div className="flex flex-1 flex-col min-w-0 justify-start">
-            <h3
-              className="font-black tracking-tight truncate"
-              style={{
-                color: theme.title,
-                fontFamily: 'Inter, sans-serif',
-                fontSize: '30px',
-                lineHeight: 1.05,
-              }}
+          {!isComplete ? (
+            <div
+              className="flex flex-1 flex-col min-w-0 justify-start"
+              style={{ transform: `translateY(${isClaimed ? 0 : 15}px)` }}
             >
-              {title}
-            </h3>
-            <p
-              className="font-semibold tracking-tight leading-[1.1]"
-              style={{
-                color: theme.description,
-                fontSize: '24px',
-                marginTop: 8,
-              }}
-            >
-              {renderTaskDescription(description, descriptionValues)}
-            </p>
-          </div>
+              <h3
+                className="font-black tracking-tight truncate"
+                style={{
+                  color: theme.title,
+                  fontFamily: 'Inter, sans-serif',
+                  fontSize: '34px',
+                  lineHeight: 1.05,
+                  transform: 'translate(-4px, 2px)',
+                }}
+              >
+                {title}
+              </h3>
+              <p
+                className="font-semibold tracking-tight leading-[1.1] truncate"
+                style={{
+                  color: isClaimed ? '#7f9b3f' : theme.description,
+                  fontSize: '24px',
+                  marginTop: 8,
+                  maxWidth: '94%',
+                  whiteSpace: 'nowrap',
+                  transform: 'translateX(-3px)',
+                }}
+              >
+                {renderTaskDescription(description, descriptionValues)}
+              </p>
+            </div>
+          ) : null}
         </div>
 
-        {!isClaimed ? (
-        <div
-          className="flex flex-row items-stretch justify-start w-full shrink-0"
-          style={{
-            gap: `${PILL_ROW_GAP_PX}px`,
-            marginTop: `${TOP_TO_PILLS_GAP_PX}px`,
-          }}
-        >
-        <div
-          style={{
-            ...sharedPillStyle,
-            backgroundColor: progressPillBg,
-            border: `${PILL_BORDER_PX}px solid ${progressPillBorder}`,
-          }}
-        >
-          {showCompleteProgressTick ? (
-            <span
-              className="inline-flex items-center justify-center rounded-full shrink-0"
-              style={{
-                width: PILL_ICON_PX,
-                height: PILL_ICON_PX,
-                backgroundColor: PROGRESS_PILL.iconBg,
-                border: `${s(2)}px solid ${PROGRESS_PILL.iconCircleBorder}`,
-              }}
-              aria-hidden
-            >
-              <img
-                src={ICON_TICK}
-                alt=""
-                className="object-contain"
-                draggable={false}
-                style={{ width: PILL_TICK_PX, height: PILL_TICK_PX }}
-              />
-            </span>
-          ) : (
-            <img
-              src={ICON_TICK_BROWN}
-              alt=""
-              className="shrink-0 object-contain"
-              draggable={false}
-              aria-hidden
-              style={{ width: PILL_ICON_PX, height: PILL_ICON_PX }}
-            />
-          )}
-          <span className="font-black tabular-nums" style={labelStyle(progressPillText, PILL_FONT_PX)}>
-            {progressLabel}
-          </span>
-        </div>
-
-        <div
-          ref={rewardPillRef}
-          data-daily-task-reward
-          style={{
-            ...sharedPillStyle,
-            backgroundColor: theme.rewardFill,
-            border: `${PILL_BORDER_PX}px solid ${theme.rewardBorder}`,
-          }}
-        >
-          <img
-            src={getGardenCoinSmallIconPath()}
-            alt=""
-            className="shrink-0 object-contain"
-            style={{ width: REWARD_COIN_ICON_PX, height: REWARD_COIN_ICON_PX }}
-          />
-          <span className="font-black tabular-nums" style={labelStyle(theme.rewardText, PILL_FONT_PX)}>
-            {rewardCoins.toLocaleString()}
-          </span>
-        </div>
-        </div>
-        ) : null}
       </div>
 
+      {!isClaimed ? (
+        <>
+          {/* Sprite-matched progress track. */}
+          <div
+            className="absolute overflow-hidden"
+            style={{
+              left: 'calc(4.1% - 4px)',
+              top: '70.6%',
+              width: 'calc(75% + 6px)',
+              height: '18%',
+              borderRadius: 9999,
+              border: isComplete ? '3.5px solid #9eb643' : 'none',
+              boxShadow: isComplete
+                ? '0 0 0 4px #f8f1c8'
+                : '0 0 0 4px #fff6dc, inset 0 0 0 3.5px rgba(118, 80, 65, 0.3)',
+              backgroundColor: '#c6b280',
+              boxSizing: 'border-box',
+              transform: 'translate(-2px, -6px)',
+            }}
+            aria-label={`${progressLabel} complete`}
+          >
+            <div
+              className="absolute inset-y-0 left-0"
+              style={{
+                top: 0,
+                bottom: 0,
+                left: 0,
+                width: `${progressPercent}%`,
+                backgroundColor: '#c7dc61',
+                border:
+                  !isComplete && progressPercent > 0 ? '3.5px solid #9eb643' : 'none',
+                borderRadius: 9999,
+                boxSizing: 'border-box',
+                boxShadow: 'none',
+                zIndex: 1,
+              }}
+            />
+            <span
+              className="absolute inset-0 flex items-center justify-center font-black tabular-nums"
+              style={{
+                color: isComplete ? PROGRESS_GREEN : BROWN_ACCENT,
+                fontFamily: 'Inter, sans-serif',
+                fontSize: '20px',
+                lineHeight: 1,
+                zIndex: 2,
+              }}
+            >
+              {progressLabel}
+            </span>
+          </div>
+
+          {/* Dynamic reward laid directly over the guide art's right-hand reward section. */}
+          <div
+            ref={rewardPillRef}
+            data-daily-task-reward
+            className="absolute flex flex-col items-center pointer-events-none"
+            style={{
+              right: '3.3%',
+              top: '17%',
+              width: '15.5%',
+              height: '70%',
+            }}
+          >
+            <img
+              src={assetPath('/assets/icons/coins/icon_key_dailytask.png')}
+              alt=""
+              className="absolute object-contain"
+              draggable={false}
+              style={{
+                top: 1,
+                width: '79.2%',
+                height: '68.2%',
+                transform: 'rotate(0deg)',
+              }}
+            />
+            <span
+              className="absolute flex items-center justify-center font-black tabular-nums"
+              style={{
+                left: '10%',
+                right: '10%',
+                bottom: 4,
+                height: '34%',
+                color: '#fff6dc',
+                fontFamily: 'Inter, sans-serif',
+                fontSize: '26px',
+                lineHeight: 1,
+                WebkitTextStroke: '2px #9f895d',
+                paintOrder: 'stroke fill',
+                textShadow:
+                  '1px 0 #9f895d, -1px 0 #9f895d, 0 1px #9f895d, 0 -1px #9f895d',
+              }}
+            >
+              {rewardKeys.toLocaleString()}
+            </span>
+          </div>
+        </>
+      ) : null}
+
       <div
-        className="absolute flex flex-col items-center justify-center pointer-events-none"
+        className="absolute flex items-center justify-center pointer-events-none"
         style={{
-          right: cardPadPx,
-          top: '50%',
-          transform: 'translateY(calc(-50% - 1px))',
-          width: BUTTON_W_PX,
+          left: isComplete ? '17%' : undefined,
+          right: isComplete ? undefined : cardPadPx,
+          top: isComplete ? '17%' : '50%',
+          transform: isComplete ? 'none' : 'translateY(calc(-50% - 1px))',
+          width: isComplete ? '62%' : BUTTON_W_PX,
+          flexDirection: isComplete ? 'row' : 'column',
           gap: `${BUTTON_GAP_PX}px`,
-          height: buttonColHeightPx,
+          height: isComplete ? completeClaimButtonHeightPx : buttonColHeightPx,
         }}
       >
-        {isClaimed ? (
-          <img
-            src={TASKS_COMPLETE_TICK}
-            alt=""
-            className="object-contain shrink-0"
-            draggable={false}
-            aria-hidden
-            style={{
-              width: Math.round(BUTTON_W_PX * CLAIMED_TICK_SIZE_SCALE),
-              height: Math.round(buttonColHeightPx * CLAIMED_TICK_SIZE_SCALE),
-              maxHeight: '100%',
-              transform: `translateX(${CLAIMED_TICK_NUDGE_X_PX}px)`,
-            }}
-          />
-        ) : (
+        {isInProgress || isClaimed ? null : (
           <>
             <button
               type="button"
+              id={
+                ftueClaimTarget
+                  ? id
+                    ? getTasksFtueClaim2xButtonId(id)
+                    : TASKS_FTUE_CLAIM_2X_BUTTON_ID
+                  : undefined
+              }
               disabled={!canClaim}
               onClick={() => {
                 if (!canClaim || !onClaim2x) return;
@@ -480,7 +545,12 @@ export const DailyTaskRow: React.FC<DailyTaskRowProps> = ({
               onMouseLeave={() => setClaim2xPressed(false)}
               className={`relative flex items-center justify-center transition-all ${canClaim ? 'pointer-events-auto cursor-pointer' : 'pointer-events-none cursor-default'}`}
               style={{
-                ...bevelButtonStyle(claim2xPalette, claim2xPressed && canClaim, BUTTON_W_PX, BUTTON_H_PX),
+                ...bevelButtonStyle(
+                  claim2xPalette,
+                  claim2xPressed && canClaim,
+                  BUTTON_W_PX,
+                  completeClaimButtonHeightPx,
+                ),
                 gap: `${s(8)}px`,
               }}
               aria-disabled={!canClaim}
@@ -506,6 +576,13 @@ export const DailyTaskRow: React.FC<DailyTaskRowProps> = ({
             </button>
             <button
               type="button"
+              id={
+                ftueClaimTarget
+                  ? id
+                    ? getTasksFtueClaimButtonId(id)
+                    : TASKS_FTUE_CLAIM_BUTTON_ID
+                  : undefined
+              }
               disabled={!canClaim}
               onClick={fireClaim}
               aria-label="Claim reward"
@@ -513,7 +590,12 @@ export const DailyTaskRow: React.FC<DailyTaskRowProps> = ({
               onMouseUp={() => setClaimPressed(false)}
               onMouseLeave={() => setClaimPressed(false)}
               className={`relative flex items-center justify-center transition-all ${canClaim ? 'pointer-events-auto cursor-pointer' : 'pointer-events-none cursor-default'}`}
-              style={bevelButtonStyle(claimPalette, claimPressed && canClaim, BUTTON_W_PX, BUTTON_H_PX)}
+              style={bevelButtonStyle(
+                claimPalette,
+                claimPressed && canClaim,
+                BUTTON_W_PX,
+                completeClaimButtonHeightPx,
+              )}
               aria-disabled={!canClaim}
             >
               <span style={labelStyle(claimPalette.text, BUTTON_LABEL_PX)}>Claim</span>
@@ -531,33 +613,30 @@ export const DAILY_TASK_ROW_PREVIEW: DailyTaskDefinition[] = [
     id: 'preview-starter-pack',
     state: 'claimed',
     title: 'Starter Pack',
-    description: 'Collect {n} thorny rose crops in 1 round.',
-    descriptionValues: { n: 5 },
+    description: 'Collect thorny rose crops in 1 round.',
     progressCurrent: 5,
     progressTotal: 5,
-    rewardCoins: 1000,
+    rewardKeys: 5,
     iconSrc: assetPath('/assets/icons/store/icon_starterpack.png'),
   },
   {
     id: 'preview-harvest-boost',
     state: 'complete',
     title: 'Harvest Boost',
-    description: 'Harvest {n} crops from your garden.',
-    descriptionValues: { n: 10 },
+    description: 'Harvest crops from your garden.',
     progressCurrent: 10,
     progressTotal: 10,
-    rewardCoins: 500,
+    rewardKeys: 10,
     iconSrc: assetPath('/assets/icons/upgrades/icon_harvest.png'),
   },
   {
     id: 'preview-lucky-seed',
     state: 'in_progress',
     title: 'Lucky Seed',
-    description: 'Merge {n} seeds in a single session.',
-    descriptionValues: { n: 3 },
+    description: 'Merge seeds in a single session.',
     progressCurrent: 1,
     progressTotal: 3,
-    rewardCoins: 250,
+    rewardKeys: 15,
     iconSrc: assetPath('/assets/icons/upgrades/icon_luckyseed.png'),
   },
 ];

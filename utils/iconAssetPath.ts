@@ -1,4 +1,4 @@
-﻿import { assetPath } from './assetPath';
+import { assetPath } from './assetPath';
 
 const ICON_PATH_BY_FILENAME: Record<string, string> = {
   'emoji_coin.png': '/assets/icons/generic_buttons/emoji_coin.png',
@@ -27,6 +27,9 @@ const ICON_PATH_BY_FILENAME: Record<string, string> = {
   'icon_farmerpack.png': '/assets/icons/store/icon_farmerpack.png',
   'icon_fb_gardens.png': '/assets/icons/floating_buttons/icon_fb_gardens.png',
   'icon_fb_gardens_locked.png': '/assets/icons/floating_buttons/icon_fb_gardens_locked.png',
+  'icon_fb_garden_1.png': '/assets/icons/floating_buttons/icon_fb_garden_1.png',
+  'icon_fb_garden_2.png': '/assets/icons/floating_buttons/icon_fb_garden_2.png',
+  'icon_fb_notificationdot.png': '/assets/icons/floating_buttons/icon_fb_notificationdot.png',
   'icon_fb_noads.png': '/assets/icons/floating_buttons/icon_fb_noads.png',
   'icon_fb_fieldpack.png': '/assets/icons/floating_buttons/icon_fb_fieldpack.png',
   'icon_fb_starterpack.png': '/assets/icons/floating_buttons/icon_fb_starterpack.png',
@@ -63,9 +66,11 @@ const ICON_PATH_BY_FILENAME: Record<string, string> = {
   'icon_collection_goldenpot.png': '/assets/icons/collection/icon_collection_goldenpot.png',
   'icon_goldenpot.png': '/assets/icons/collection/icon_goldenpot.png',
   'icon_happycustomer.png': '/assets/icons/upgrades/icon_happycustomer.png',
+  'icon_happiestcustomers.png': '/assets/icons/upgrades/icon_happiestcustomers.png',
   'icon_harvest.png': '/assets/icons/upgrades/icon_harvest.png',
   'icon_harvestboost.png': '/assets/icons/upgrades/icon_harvestboost.png',
   'icon_harvestspeed.png': '/assets/icons/upgrades/icon_harvestspeed.png',
+  'icon_doubleharvest.png': '/assets/icons/upgrades/icon_doubleharvest.png',
   'icon_level.png': '/assets/ui/generic/ui_level_garden_1.png',
   'icon_lock.png': '/assets/icons/generic_buttons/icon_lock.png',
   'icon_lock_collection.png': '/assets/icons/collection/icon_lock_collection.png',
@@ -80,6 +85,9 @@ const ICON_PATH_BY_FILENAME: Record<string, string> = {
   'icon_plantmastery.png': '/assets/icons/collection/icon_plantmastery.png',
   'icon_plotexpansion.png': '/assets/icons/upgrades/icon_plotexpansion.png',
   'icon_premiumorders.png': '/assets/icons/upgrades/icon_premiumorders.png',
+  'icon_rapidharvest.png': '/assets/icons/upgrades/icon_rapidharvest.png',
+  'icon_rapidseeds.png': '/assets/icons/upgrades/icon_rapidseeds.png',
+  'icon_rushorders.png': '/assets/icons/upgrades/icon_rushorders.png',
   'icon_seedproduction.png': '/assets/icons/upgrades/icon_seedproduction.png',
   'icon_seedquality.png': '/assets/icons/upgrades/icon_seedquality.png',
   'icon_seedstorage.png': '/assets/icons/upgrades/icon_seedstorage.png',
@@ -91,6 +99,7 @@ const ICON_PATH_BY_FILENAME: Record<string, string> = {
   'icon_starterpack.png': '/assets/icons/store/icon_starterpack.png',
   'icon_fieldpack.png': '/assets/icons/store/icon_fieldpack.png',
   'icon_surplussales.png': '/assets/icons/upgrades/icon_surplussales.png',
+  'icon_tasks.png': '/assets/icons/floating_buttons/icon_tasks.png',
   'icon_watchad.png': '/assets/icons/generic_buttons/icon_watchad.png',
   'icon_watchad_large.png': '/assets/icons/generic_buttons/icon_watchad_large.png',
 };

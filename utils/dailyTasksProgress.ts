@@ -3,8 +3,13 @@ import { assetPath } from './assetPath';
 import {
   clearDailyTasksDayStorage,
   ensureDailyTasksDay,
+  forceCompleteGarden1IntroTasksForLevel7,
+  resetGarden1IntroMidTasksForSpecialDeliveryFtueResume,
   getDailyTaskRollContext,
+  getGarden1IntroClaimedKeyTotal,
   getGardenPlotStats,
+  isGarden1DailyTasksFtueIntroClaimed,
+  isGarden1IntroDailyTasksDay,
   markDailyTaskClaimed,
   markDailyTasksClaimed,
   completeNextDailyTaskForDev,
@@ -29,11 +34,20 @@ import {
 } from './dailyTasksDay';
 
 export type { DailyTaskRollContext, GardenPlotStats } from './dailyTasksDay';
-export { getDailyTaskSlotRewardCoins, getDailyTaskRewardCoins } from './dailyTaskRewards';
+export {
+  getDailyTaskSlotRewardCoins,
+  getDailyTaskRewardCoins,
+  GARDEN_1_INTRO_DAILY_TASKS_KEY_GOAL,
+} from './dailyTaskRewards';
 export {
   ensureDailyTasksDay,
+  forceCompleteGarden1IntroTasksForLevel7,
+  resetGarden1IntroMidTasksForSpecialDeliveryFtueResume,
   getDailyTaskRollContext,
+  getGarden1IntroClaimedKeyTotal,
   getGardenPlotStats,
+  isGarden1DailyTasksFtueIntroClaimed,
+  isGarden1IntroDailyTasksDay,
   markDailyTaskClaimed,
   markDailyTasksClaimed,
   completeNextDailyTaskForDev,

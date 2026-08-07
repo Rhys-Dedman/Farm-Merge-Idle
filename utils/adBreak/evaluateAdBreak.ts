@@ -32,6 +32,8 @@ export interface AdBreakBlockerContext {
   returnGraceUntil: number;
   /** Player is on the Store screen - never show interstitial ads here. */
   inStore: boolean;
+  /** Player is on Collection / shed (BARN) - never show interstitial ads here. */
+  inCollection: boolean;
   pauseMenuOpen: boolean;
   devToolsOpen: boolean;
   blockingPopupOpen: boolean;
@@ -45,10 +47,19 @@ export function getAdBreakMaxIntervalMs(): number {
   return getRemoteConfig().ads.interstitialMaxIntervalMs;
 }
 
+/** Start / extend an ad-break grace window for `durationMs` (not persisted). */
+export function bumpAdBreakGrace(
+  state: AdBreakRuntimeState,
+  now: number,
+  durationMs: number,
+): void {
+  state.graceUntil = Math.max(state.graceUntil, now + Math.max(0, durationMs));
+  state.fallbackPending = false;
+}
+
 /** Start / extend the post-return grace window (short same-session breaks only). */
 export function bumpAdBreakReturnGrace(state: AdBreakRuntimeState, now: number): void {
-  state.graceUntil = Math.max(state.graceUntil, now + AD_BREAK_SETTINGS.returnGraceMs);
-  state.fallbackPending = false;
+  bumpAdBreakGrace(state, now, AD_BREAK_SETTINGS.returnGraceMs);
 }
 
 export type AdBreakReturnKind = 'new_session' | 'short_break' | 'within_cooldown';
@@ -113,6 +124,7 @@ export function getAdBreakBlockers(
   if (ctx.offlineEarningsOpen) blockers.push('offline_earnings');
   if (ctx.now < ctx.returnGraceUntil) blockers.push('return_grace');
   if (ctx.inStore) blockers.push('in_store');
+  if (ctx.inCollection) blockers.push('in_collection');
   if (ctx.pauseMenuOpen) blockers.push('pause_menu');
   if (ctx.devToolsOpen) blockers.push('dev_tools');
   if (ctx.blockingPopupOpen) blockers.push('blocking_popup');

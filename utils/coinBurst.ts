@@ -49,9 +49,14 @@ export interface BuildCoinBurstParticlesArgs {
   idPrefix?: string;
   /** Wallet flight path after explode. Default popup left→up. */
   suckPath?: GoalCoinBurstSuckPath;
+  /** Force an exact particle count (daily keys use one particle per key). */
+  particleCount?: number;
   /** Extra fields copied onto every particle (e.g. skipHappyCustomerRoll). */
   particleExtras?: Partial<
-    Pick<GoalCoinParticleData, 'skipHappyCustomerRoll' | 'skipDoubleCoinsMultiplier'>
+    Pick<
+      GoalCoinParticleData,
+      'skipHappyCustomerRoll' | 'skipDoubleCoinsMultiplier' | 'iconSrc' | 'trailColor'
+    >
   >;
 }
 
@@ -62,9 +67,10 @@ export function buildCoinBurstParticles({
   rewardValue,
   idPrefix = 'coin-burst',
   suckPath = 'popup',
+  particleCount,
   particleExtras,
 }: BuildCoinBurstParticlesArgs): GoalCoinParticleData[] {
-  const count = coinBurstParticleCount(rewardValue);
+  const count = Math.max(1, Math.floor(particleCount ?? coinBurstParticleCount(rewardValue)));
   const values = splitRewardValues(rewardValue, count);
   const stamp = Date.now();
   const angleOffset = Math.random() * Math.PI * 2;

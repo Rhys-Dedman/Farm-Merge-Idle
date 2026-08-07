@@ -62,7 +62,7 @@ export function simulateGardenIdleAbsence(
 
   const cropsNorm = normalizeCropsState(garden.cropsState);
   const goldenPotN = getGlobalGoldenPotCount(
-    garden.plantMasteryUnlockedLevels,
+    garden.trophyLevels ?? [],
     allGardens,
     gardenId,
   );

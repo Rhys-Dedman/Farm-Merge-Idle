@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState, type 
 import { MAX_PLANT_TIER } from '../constants/plants';
 import { assetPath } from '../utils/assetPath';
 import { type GardenId } from '../constants/gardens';
-import { getGardenCoinIconPath, getGardenLevelIconPath, getGoldenPotWalletIconPath, getTopUiAssetPath } from '../utils/gardenAssets';
+import { getGardenCoinIconPath, getGardenLevelIconPath, getKeyWalletIconPath, getTopUiAssetPath } from '../utils/gardenAssets';
 import { ActiveBoostIndicator, ActiveBoostData, ACTIVE_BOOST_INDICATOR_SIZE_PX } from './ActiveBoostIndicator';
 
 /** How often to refresh the on-screen FPS readout (ms). */
@@ -80,10 +80,10 @@ const HEADER_UI_SIZE_SCALE = TOP_BAR_ROW_HEIGHT_PX / TOP_BAR_ROW_HEIGHT_REF_PX;
 const PLAYER_LEVEL_SLOT_WIDTH_PX = 120;
 /** Coin wallet button width. */
 const WALLET_WIDTH_PX = 74;
-/** Golden pot wallet (right dock) — auto width; reserve ≈ max label after cluster scale. */
-const GOLDEN_POT_WALLET_RESERVE_PX = 78;
+/** Key wallet (right dock), matching the normal coin wallet's dimensions. */
+const GOLDEN_POT_WALLET_RESERVE_PX = WALLET_WIDTH_PX;
 const GOLDEN_POT_WALLET_GAP_PX = 10;
-const GOLDEN_POT_WALLET_ICON_PX = 36;
+const GOLDEN_POT_WALLET_ICON_PX = 30;
 /** Match coin cluster scale in `headerLeftWrapperRef`. */
 const GOLDEN_POT_WALLET_SCALE = HEADER_CLUSTER_SCALE;
 /** Gap between wallet, level, and boost strip inside the scaled cluster (`gap: 18`). */
@@ -111,12 +111,13 @@ interface PageHeaderProps {
   walletRef?: React.RefObject<HTMLButtonElement | null>;
   walletIconRef?: React.RefObject<HTMLElement | null>;
   walletFlashActive?: boolean;
-  /** When this increments, triggers coin bounce animation */
+  /** When this increments, triggers coin icon + text bounce */
   walletBurstCount?: number;
-  /** Golden pots owned / total collection plants; when set with refs, shows a right-docked wallet left of settings. */
-  goldenPotWallet?: {
+  /** When this increments, triggers only the wallet amount text bounce (no icon / flash) */
+  walletTextBurstCount?: number;
+  /** Global keys; when set with refs, shows a right-docked wallet left of settings. */
+  keyWallet?: {
     count: number;
-    totalCount: number;
     walletRef: React.RefObject<HTMLButtonElement | null>;
     walletIconRef: React.RefObject<HTMLElement | null>;
     flashActive?: boolean;
@@ -209,7 +210,8 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   walletIconRef, 
   walletFlashActive = false,
   walletBurstCount = 0,
-  goldenPotWallet,
+  walletTextBurstCount = 0,
+  keyWallet,
   onWalletClick,
   plantWallet,
   onGiftClick,
@@ -248,9 +250,11 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   const [afterCenterTitleBoostLeftPx, setAfterCenterTitleBoostLeftPx] = useState<number | null>(null);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const prevBurstRef = useRef(walletBurstCount);
-  const prevGoldenPotBurstRef = useRef(goldenPotWallet?.burstCount ?? 0);
+  const prevTextBurstRef = useRef(walletTextBurstCount);
+  const prevGoldenPotBurstRef = useRef(keyWallet?.burstCount ?? 0);
   const prevFlashRef = useRef(playerLevelFlashTrigger);
   const [bounceKey, setBounceKey] = useState(0);
+  const [textBounceKey, setTextBounceKey] = useState(0);
   const [goldenPotBounceKey, setGoldenPotBounceKey] = useState(0);
   const [progressBarFlash, setProgressBarFlash] = useState(false);
   const [debugLastGoalLevel, setDebugLastGoalLevel] = useState(0);
@@ -281,17 +285,25 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   useEffect(() => {
     if (walletBurstCount > prevBurstRef.current) {
       setBounceKey((k) => k + 1);
+      setTextBounceKey((k) => k + 1);
     }
     prevBurstRef.current = walletBurstCount;
   }, [walletBurstCount]);
 
   useEffect(() => {
-    const burst = goldenPotWallet?.burstCount ?? 0;
+    if (walletTextBurstCount > prevTextBurstRef.current) {
+      setTextBounceKey((k) => k + 1);
+    }
+    prevTextBurstRef.current = walletTextBurstCount;
+  }, [walletTextBurstCount]);
+
+  useEffect(() => {
+    const burst = keyWallet?.burstCount ?? 0;
     if (burst > prevGoldenPotBurstRef.current) {
       setGoldenPotBounceKey((k) => k + 1);
     }
     prevGoldenPotBurstRef.current = burst;
-  }, [goldenPotWallet?.burstCount]);
+  }, [keyWallet?.burstCount]);
   useEffect(() => {
     if (playerLevelFlashTrigger > prevFlashRef.current) {
       setProgressBarFlash(true);
@@ -324,7 +336,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   // Left/right cap width when scaled to fit bar height (184 * height / 180)
   const capWidthPx = Math.round((LEFT_CAP_PX * TOP_BAR_ROW_HEIGHT_PX) / SPRITE_H);
   /** Golden pot right dock is collection-only; farm/store keep the locked fec7f0a dock layout. */
-  const showGoldenPotWallet = goldenPotWallet != null;
+  const showGoldenPotWallet = keyWallet != null;
   const goldenPotWalletReservePx = showGoldenPotWallet
     ? Math.round(GOLDEN_POT_WALLET_RESERVE_PX * GOLDEN_POT_WALLET_SCALE) + GOLDEN_POT_WALLET_GAP_PX
     : 0;
@@ -504,8 +516,8 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
               </span>
               {/* Text centered in fixed wallet width */}
               <span
-                key={bounceKey}
-                className={`relative font-black text-xs tracking-tight text-[#fcf0c7] whitespace-nowrap truncate pl-[12px] pr-2 py-1 max-w-full ${bounceKey > 0 ? 'coin-text-bounce' : ''}`}
+                key={textBounceKey}
+                className={`relative font-black text-xs tracking-tight text-[#fcf0c7] whitespace-nowrap truncate pl-[12px] pr-2 py-1 max-w-full ${textBounceKey > 0 ? 'coin-text-bounce' : ''}`}
                 style={{ transformOrigin: 'center center' }}
               >
                 {formatMoney(money)}
@@ -692,15 +704,15 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
               aria-hidden
             />
             <span
-              className="absolute left-0 top-1/2 flex items-center justify-center leading-none -ml-3 pointer-events-none"
-              style={{ transform: 'translateY(calc(-50% - 0.5px))' }}
+              className="absolute left-0 top-1/2 flex items-center justify-center leading-none pointer-events-none"
+              style={{ marginLeft: -7, transform: 'translateY(calc(-50% - 0.5px))' }}
               aria-hidden
             >
               <img key={bounceKey} src={getGardenCoinIconPath()} alt="" className={`w-[30px] h-[30px] object-contain object-left outline-none border-0 ${bounceKey > 0 ? 'coin-bounce' : ''}`} style={{ outline: 'none', border: 'none' }} />
             </span>
             <span
-              key={bounceKey}
-              className={`relative font-black text-xs tracking-tight text-[#fcf0c7] whitespace-nowrap pl-[20px] pr-3 py-1 ${bounceKey > 0 ? 'coin-text-bounce' : ''}`}
+              key={textBounceKey}
+              className={`relative font-black text-xs tracking-tight text-[#fcf0c7] whitespace-nowrap pl-[20px] pr-3 py-1 ${textBounceKey > 0 ? 'coin-text-bounce' : ''}`}
               style={{ transformOrigin: 'center center' }}
             >
               {formatMoney(money)}
@@ -746,40 +758,58 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
           ...(showGoldenPotWallet ? { gap: GOLDEN_POT_WALLET_GAP_PX } : {}),
         }}
       >
-        {showGoldenPotWallet && (
+        {showGoldenPotWallet && keyWallet && (
           <button
-            ref={goldenPotWallet.walletRef}
+            ref={keyWallet.walletRef}
             type="button"
-            className="relative inline-flex items-center justify-center rounded-full border outline-none shadow-2xl overflow-visible flex-shrink-0"
+            className="relative inline-flex items-center justify-center outline-none overflow-visible flex-shrink-0"
             style={{
+              width: WALLET_WIDTH_PX,
+              minWidth: WALLET_WIDTH_PX,
+              maxWidth: WALLET_WIDTH_PX,
               height: 22,
-              minWidth: 78,
-              marginLeft: 6,
-              backgroundColor: '#775041',
-              borderWidth: 1,
-              borderColor: '#e9dcaf',
+              backgroundColor: 'transparent',
+              border: 'none',
               transform: `scale(${GOLDEN_POT_WALLET_SCALE})`,
               transformOrigin: 'right center',
             }}
-            aria-label={`${goldenPotWallet.count} of ${goldenPotWallet.totalCount} golden pots`}
+            aria-label={`${keyWallet.count} keys`}
           >
-            <div
-              className="absolute inset-0 rounded-full pointer-events-none transition-opacity duration-75 ease-out"
-              style={{
-                background: '#d2af7b',
-                opacity: goldenPotWallet.flashActive ? 1 : 0,
-              }}
+            {/* Angled left edge follows the diagonal key; right edge keeps the standard pill cap. */}
+            <svg
+              className="absolute inset-0 pointer-events-none overflow-visible"
+              width={WALLET_WIDTH_PX}
+              height="22"
+              viewBox={`0 0 ${WALLET_WIDTH_PX} 22`}
+              preserveAspectRatio="none"
               aria-hidden
-            />
+              style={{ filter: 'drop-shadow(0 2px 5px rgba(0,0,0,0.28))' }}
+            >
+              <path
+                d="M 15 0.5 H 63 A 10.5 10.5 0 0 1 73.5 11 A 10.5 10.5 0 0 1 63 21.5 H 1.5 Z"
+                fill="#775041"
+                stroke="#e9dcaf"
+                strokeWidth="1"
+              />
+              <path
+                d="M 15 0.5 H 63 A 10.5 10.5 0 0 1 73.5 11 A 10.5 10.5 0 0 1 63 21.5 H 1.5 Z"
+                fill="#d2af7b"
+                opacity={keyWallet.flashActive ? 1 : 0}
+                className="transition-opacity duration-75 ease-out"
+              />
+            </svg>
             <span
-              ref={goldenPotWallet.walletIconRef}
-              className="absolute left-0 top-1/2 flex items-center justify-center leading-none -ml-3 pointer-events-none"
-              style={{ transform: 'translateY(calc(-50% + 1px))' }}
+              ref={keyWallet.walletIconRef}
+              className="absolute top-1/2 flex items-center justify-center leading-none pointer-events-none"
+              style={{
+                left: '-7px',
+                transform: 'translateY(calc(-50% - 0.5px))',
+              }}
               aria-hidden
             >
               <img
                 key={goldenPotBounceKey}
-                src={getGoldenPotWalletIconPath()}
+                src={getKeyWalletIconPath()}
                 alt=""
                 className={`object-contain object-left outline-none border-0 ${goldenPotBounceKey > 0 ? 'coin-bounce' : ''}`}
                 style={{
@@ -793,10 +823,10 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
             </span>
             <span
               key={goldenPotBounceKey}
-              className={`relative font-black text-xs tracking-tight text-[#fcf0c7] whitespace-nowrap pl-[22px] pr-2 py-1 ${goldenPotBounceKey > 0 ? 'coin-text-bounce' : ''}`}
+              className={`relative font-black text-xs tracking-tight text-[#fcf0c7] whitespace-nowrap truncate pl-[12px] pr-2 py-1 max-w-full ${goldenPotBounceKey > 0 ? 'coin-text-bounce' : ''}`}
               style={{ transformOrigin: 'center center' }}
             >
-              {goldenPotWallet.count}/{goldenPotWallet.totalCount}
+              {formatMoney(keyWallet.count)}
             </span>
           </button>
         )}

@@ -19,7 +19,7 @@ import {
   type DailyTaskCatalogCategory,
   type DailyTaskPoolId,
 } from '../constants/dailyTaskCatalog';
-import { getPlantDisplayName } from '../constants/plantData';
+import { getPlantShortDisplayName } from '../constants/plantData';
 import { MAX_PLANT_TIER } from '../constants/plants';
 import { SHIPPED_GARDEN_IDS, DEFAULT_GARDEN_ID, type GardenId } from '../constants/gardens';
 import {
@@ -44,6 +44,7 @@ import {
   getEligibleGrowPlantsDailyTaskLevels,
 } from './dailyTaskPlantTargets';
 import { canRollGoldenPotDailyTask } from './dailyTaskGoldenPotGate';
+import { TASKS_FLOATING_BUTTON_UNLOCK_LEVEL } from '../constants/playerLevelUnlocks';
 import {
   readDailyTasksCountdownEndMs,
   startDailyTasksCountdown,
@@ -51,7 +52,7 @@ import {
 import { getCropYieldPerHarvest } from '../components/UpgradeList';
 import { getLevelUpTaskSlot } from './playerLevelGoals';
 import { getGoalIconForPlantLevel } from './plantGoalIcons';
-import { getDailyTaskRewardCoins } from './dailyTaskRewards';
+import { getDailyTaskSlotRewardKeys } from './dailyTaskRewards';
 import { hasGoldenPotExtraTasks } from '../constants/goldenPotBonuses';
 
 export type DailyTaskSlot = 1 | 2 | 3 | 4;
@@ -108,8 +109,14 @@ const SINGLE_COUNT_TASKS: ReadonlySet<DailyTaskPoolId> = new Set([
   'ftue_open_daily_tasks',
 ]);
 
-/** One-shot garden-1 intro task for Daily Tasks unlock (not re-rolled on later periods). */
+/** One-shot garden-1 intro day for Daily Tasks unlock (not re-rolled on later periods). */
 export const DAILY_TASKS_FTUE_INTRO_SEEDED_KEY = 'daily_tasks_ftue_intro_seeded_v1';
+
+/** Guaranteed mid-grind task between Daily Tasks unlock and the next level. */
+const GARDEN_1_INTRO_ORDERS_TARGET = 10;
+
+/** Intro slot 3 completes on reaching this level, not on the unlock level-up itself. */
+const GARDEN_1_INTRO_LEVEL_UP_TARGET_LEVEL = TASKS_FLOATING_BUTTON_UNLOCK_LEVEL + 1;
 
 export function readDailyTasksFtueIntroSeeded(): boolean {
   try {
@@ -127,17 +134,20 @@ export function markDailyTasksFtueIntroSeeded(): void {
   }
 }
 
-function shouldSeedFtueOpenDailyTask(gardenId: GardenId = getDailyTasksActiveGarden()): boolean {
+function shouldSeedGarden1IntroDailyTasks(gardenId: GardenId = getDailyTasksActiveGarden()): boolean {
   return gardenId === DEFAULT_GARDEN_ID && !readDailyTasksFtueIntroSeeded();
 }
 
-function createFtueOpenDailyTaskInstance(): DailyTaskInstanceState {
+function createEmptyDailyTaskFields(): Pick<
+  DailyTaskInstanceState,
+  | 'claimed'
+  | 'fillGardenLocked'
+  | 'seedRushWindowStartMs'
+  | 'seedRushWindowCount'
+  | 'orderRushWindowStartMs'
+  | 'orderRushWindowCount'
+> {
   return {
-    instanceId: 'daily-slot-1',
-    templateId: 'ftue_open_daily_tasks',
-    slot: 1,
-    progress: 1,
-    target: 1,
     claimed: false,
     fillGardenLocked: false,
     seedRushWindowStartMs: null,
@@ -147,17 +157,46 @@ function createFtueOpenDailyTaskInstance(): DailyTaskInstanceState {
   };
 }
 
-/** Replace slot 1 with the FTUE intro task when garden 1 has not seeded yet. */
-function maybeSeedFtueOpenDailyTaskIntoState(state: DailyTasksDayState): boolean {
-  if (!shouldSeedFtueOpenDailyTask()) return false;
+/** Predesigned garden-1 first-day trio (claim intro → fill orders → reach level 7). */
+function createGarden1IntroDailyTasks(): DailyTaskInstanceState[] {
+  return [
+    {
+      instanceId: 'daily-slot-1',
+      templateId: 'ftue_open_daily_tasks',
+      slot: 1,
+      progress: 1,
+      target: 1,
+      ...createEmptyDailyTaskFields(),
+    },
+    {
+      instanceId: 'daily-slot-2',
+      templateId: 'complete_orders',
+      slot: 2,
+      progress: 0,
+      target: GARDEN_1_INTRO_ORDERS_TARGET,
+      ...createEmptyDailyTaskFields(),
+    },
+    {
+      instanceId: 'daily-slot-3',
+      templateId: 'level_up',
+      slot: 3,
+      progress: 0,
+      target: 1,
+      targetPlayerLevel: GARDEN_1_INTRO_LEVEL_UP_TARGET_LEVEL,
+      descriptionOverride: `Reach level ${GARDEN_1_INTRO_LEVEL_UP_TARGET_LEVEL}`,
+      ...createEmptyDailyTaskFields(),
+    },
+  ];
+}
+
+/** Replace the day with the garden-1 intro trio when it has not seeded yet. */
+function maybeSeedGarden1IntroDailyTasksIntoState(state: DailyTasksDayState): boolean {
+  if (!shouldSeedGarden1IntroDailyTasks()) return false;
   if (state.tasks.some((t) => t.templateId === 'ftue_open_daily_tasks')) {
     markDailyTasksFtueIntroSeeded();
     return false;
   }
-  const intro = createFtueOpenDailyTaskInstance();
-  const idx = state.tasks.findIndex((t) => t.slot === 1);
-  if (idx >= 0) state.tasks[idx] = intro;
-  else state.tasks.push(intro);
+  state.tasks = createGarden1IntroDailyTasks();
   markDailyTasksFtueIntroSeeded();
   return true;
 }
@@ -292,73 +331,68 @@ const TEMPLATE_META: Record<
 > = {
   plant_seeds: {
     title: 'Plant Seeds',
-    description: 'Plant {n} seeds in your garden.',
+    description: 'Plant seeds in your garden.',
     icon: assetPath('/assets/icons/upgrades/icon_plantseed.png'),
   },
   fill_garden_seeds: {
     title: 'Fill Garden',
-    description: 'Fill all {n} plots in your garden.',
+    description: 'Fill every unlocked garden plot.',
     icon: assetPath('/assets/icons/upgrades/icon_fillgarden.png'),
   },
   seed_rush: {
     title: 'Seed Rush',
-    description: 'Plant {n} seeds within {s} seconds.',
+    description: 'Plant seeds within {s} seconds.',
     icon: assetPath('/assets/icons/upgrades/icon_seedproduction.png'),
   },
   merge_plants: {
     title: 'Merge Plants',
-    description: 'Merge {n} plants in your garden.',
+    description: 'Merge plants in your garden.',
     icon: assetPath('/assets/icons/upgrades/icon_luckymerge.png'),
   },
   merge_specific_plant: {
     title: 'Plant Merge',
-    description: 'Merge {p} together {n} times.',
+    description: 'Merge {p} together.',
     icon: assetPath('/assets/icons/upgrades/icon_luckymerge.png'),
   },
   create_specific_plant: {
     title: 'Grow Plants',
-    description: 'Produce {n} unique {x} plants.',
+    description: 'Produce unique {x} plants.',
     icon: assetPath('/assets/icons/upgrades/icon_luckymerge.png'),
   },
   merge_coins: {
     title: 'Merge Coins',
-    description: 'Earn {n} coins from merging plants.',
+    description: 'Earn coins from merging plants.',
     icon: assetPath('/assets/icons/coins/icon_coin_garden_1.png'),
   },
   harvest_crops: {
     title: 'Harvest Crops',
-    description: 'Harvest {n} crops from your garden.',
+    description: 'Harvest crops from your garden.',
     icon: assetPath('/assets/icons/upgrades/icon_harvest.png'),
   },
   harvest_from_merge: {
     title: 'Merge Harvest',
-    description: 'Harvest {n} crops from merging.',
+    description: 'Harvest crops from merging.',
     icon: assetPath('/assets/icons/upgrades/icon_mergeharvest.png'),
   },
   complete_orders: {
     title: 'Fill Orders',
-    description: 'Complete {n} customer orders.',
+    description: 'Complete customer orders.',
     icon: assetPath('/assets/icons/upgrades/icon_customerspeed.png'),
   },
   playtime_minutes: {
     title: 'Play Today',
-    description: 'Play for {n} minutes today.',
+    description: 'Play in your garden today.',
     icon: assetPath('/assets/icons/upgrades/icon_timer_large.png'),
   },
   harvest_three_cells: {
     title: 'Multi Harvest',
-    description: 'Harvest from 3 garden cells in a single harvest.',
+    description: 'Harvest 3 garden cells at once.',
     icon: assetPath('/assets/icons/upgrades/icon_harvest.png'),
   },
   order_rush: {
     title: 'Order Rush',
-    description: 'Complete {n} orders in under {s} seconds.',
+    description: 'Complete orders in under {s} seconds.',
     icon: assetPath('/assets/icons/upgrades/icon_customerspeed.png'),
-  },
-  merge_only_order: {
-    title: 'Merge Order',
-    description: 'Complete {n} orders using only merged plants.',
-    icon: assetPath('/assets/icons/upgrades/icon_luckymerge.png'),
   },
   coin_order: {
     title: 'Coin Order',
@@ -367,12 +401,12 @@ const TEMPLATE_META: Record<
   },
   discover_plant: {
     title: 'Discover Plant',
-    description: 'Discover a new plant in your garden.',
+    description: 'Discover a new plant.',
     icon: assetPath('/assets/icons/upgrades/icon_discoverplant.png'),
   },
   purchase_upgrade: {
     title: 'Buy Upgrade',
-    description: 'Purchase {n} upgrades from any upgrade tab.',
+    description: 'Buy upgrades from any tab.',
     icon: assetPath('/assets/icons/upgrades/icon_marketvalue.png'),
   },
   expand_garden_slot: {
@@ -382,27 +416,27 @@ const TEMPLATE_META: Record<
   },
   upgrade_harvest_tab: {
     title: 'Market Upgrade',
-    description: 'Buy {n} upgrades in the Market tab.',
+    description: 'Buy upgrades in the Market tab.',
     icon: assetPath('/assets/icons/coins/icon_coin_garden_1.png'),
   },
   upgrade_crops_tab: {
     title: 'Garden Upgrade',
-    description: 'Buy {n} upgrades in the Garden tab.',
+    description: 'Buy upgrades in the Garden tab.',
     icon: assetPath('/assets/icons/goals/garden_1/icon_goal_14.png'),
   },
   upgrade_seeds_tab: {
     title: 'Seeds Upgrade',
-    description: 'Buy {n} upgrades in the Seeds tab.',
+    description: 'Buy upgrades in the Seeds tab.',
     icon: assetPath('/assets/icons/upgrades/icon_plantseed.png'),
   },
   level_up: {
     title: 'Level Up',
-    description: 'Level up your garden level.',
+    description: 'Level up your garden.',
     icon: assetPath('/assets/icons/upgrades/icon_levelup.png'),
   },
   collection_upgrade: {
     title: 'Golden Pot',
-    description: 'Upgrade {n} plant in the collection screen to unlock a golden pot.',
+    description: 'Unlock a golden pot in the collection.',
     icon: assetPath('/assets/icons/collection/icon_goldenpot.png'),
   },
   activate_any_booster: {
@@ -416,9 +450,9 @@ const TEMPLATE_META: Record<
     icon: assetPath('/assets/icons/upgrades/icon_freeoffer.png'),
   },
   ftue_open_daily_tasks: {
-    title: 'Task Complete',
-    description: 'Open up the daily task menu.',
-    icon: assetPath('/assets/icons/floating_buttons/icon_fb_tasks_normal.png'),
+    title: 'Daily Tasks',
+    description: 'Complete a daily task',
+    icon: assetPath('/assets/icons/floating_buttons/icon_tasks.png'),
   },
 };
 
@@ -492,6 +526,10 @@ export interface DailyTaskInstanceState {
   orderRushWindowCount?: number;
   /** Plant level for Plant Merge / Grow Plants (goal icon + name at roll). */
   targetPlantLevel?: number;
+  /** Optional copy override for scripted intro tasks. */
+  descriptionOverride?: string;
+  /** Scripted level task: completes only once the player reaches this level. */
+  targetPlayerLevel?: number;
 }
 
 export interface DailyTasksDayState {
@@ -505,6 +543,20 @@ export interface DailyTasksDayState {
   playtimeMs: number;
 }
 
+/**
+ * Intro days saved before the level task tracked an absolute level had it completed by the
+ * unlock level-up itself; re-key it so it resolves against the live level again.
+ */
+function backfillIntroLevelUpTargetLevel(state: DailyTasksDayState): void {
+  if (!state.tasks.some((t) => t.templateId === 'ftue_open_daily_tasks')) return;
+  for (const task of state.tasks) {
+    if (task.templateId !== 'level_up' || task.claimed) continue;
+    if (task.targetPlayerLevel != null) continue;
+    task.targetPlayerLevel = GARDEN_1_INTRO_LEVEL_UP_TARGET_LEVEL;
+    task.descriptionOverride = `Reach level ${GARDEN_1_INTRO_LEVEL_UP_TARGET_LEVEL}`;
+  }
+}
+
 function parseDayStateRaw(raw: string | null): DailyTasksDayState | null {
   if (!raw) return null;
   try {
@@ -515,6 +567,7 @@ function parseDayStateRaw(raw: string | null): DailyTasksDayState | null {
         ?.targetPlantLevel;
       if (fromTask != null) data.lastGrowPlantLevel = fromTask;
     }
+    backfillIntroLevelUpTargetLevel(data);
     return data;
   } catch {
     return null;
@@ -540,6 +593,84 @@ function readDayStateForGarden(gardenId: GardenId): DailyTasksDayState | null {
 
 function readDayState(): DailyTasksDayState | null {
   return readDayStateForGarden(getDailyTasksActiveGarden());
+}
+
+/** True when garden-1 FTUE intro task has already been claimed (keys granted). */
+export function isGarden1DailyTasksFtueIntroClaimed(): boolean {
+  const state = readDayStateForGarden(DEFAULT_GARDEN_ID);
+  if (!state) return false;
+  const intro = state.tasks.find((t) => t.templateId === 'ftue_open_daily_tasks');
+  return intro?.claimed === true;
+}
+
+/** True while garden 1 is still on the scripted first-day daily trio. */
+export function isGarden1IntroDailyTasksDay(): boolean {
+  const state = readDayStateForGarden(DEFAULT_GARDEN_ID);
+  return state?.tasks.some((t) => t.templateId === 'ftue_open_daily_tasks') === true;
+}
+
+/**
+ * Keys already granted by claimed garden-1 intro tasks (slots 1–3). The Collection badge
+ * counts `n/30` against this trio, so the wallet must never read below what the player
+ * has already claimed from it.
+ */
+export function getGarden1IntroClaimedKeyTotal(): number {
+  const state = readDayStateForGarden(DEFAULT_GARDEN_ID);
+  if (!state) return 0;
+  if (!state.tasks.some((t) => t.templateId === 'ftue_open_daily_tasks')) return 0;
+  let total = 0;
+  for (const task of state.tasks) {
+    if (!task.claimed) continue;
+    if (task.slot !== 1 && task.slot !== 2 && task.slot !== 3) continue;
+    total += getDailyTaskSlotRewardKeys(getDailyTaskSlotTier(task.slot));
+  }
+  return total;
+}
+
+function isGarden1IntroMidTask(task: DailyTaskInstanceState): boolean {
+  return (
+    task.slot === 2 ||
+    task.slot === 3 ||
+    task.templateId === 'complete_orders' ||
+    (task.templateId === 'level_up' && task.targetPlayerLevel != null)
+  );
+}
+
+/**
+ * At Special Delivery FTUE start (level 7): ensure intro slots 2 (orders) and 3 (reach L7)
+ * are progress-complete so they are claimable. Does not claim rewards.
+ */
+export function forceCompleteGarden1IntroTasksForLevel7(
+  ctx: DailyTaskRollContext,
+): DailyTaskDefinition[] {
+  return mutateDayState((state) => {
+    for (const task of state.tasks) {
+      if (task.claimed) continue;
+      if (!isGarden1IntroMidTask(task)) continue;
+      task.progress = task.target;
+    }
+  }, ctx);
+}
+
+/**
+ * Crash/reload mid Special Delivery FTUE: unclaim intro slots 2+3 (so they must claim again),
+ * force them complete, and report keys to revoke from prior claims this session.
+ */
+export function resetGarden1IntroMidTasksForSpecialDeliveryFtueResume(
+  ctx: DailyTaskRollContext,
+): { rows: DailyTaskDefinition[]; keysToRevoke: number } {
+  let keysToRevoke = 0;
+  const rows = mutateDayState((state) => {
+    for (const task of state.tasks) {
+      if (!isGarden1IntroMidTask(task)) continue;
+      if (task.claimed) {
+        keysToRevoke += getDailyTaskSlotRewardKeys(getDailyTaskSlotTier(task.slot));
+        task.claimed = false;
+      }
+      task.progress = task.target;
+    }
+  }, ctx);
+  return { rows, keysToRevoke };
 }
 
 /** Template ids already assigned to other gardens for the same daily period. */
@@ -604,13 +735,13 @@ function getDescriptionValues(
   if (task.templateId === 'create_specific_plant' && task.targetPlantLevel != null) {
     return {
       n: task.target,
-      x: getPlantDisplayName(task.targetPlantLevel, gardenId),
+      x: getPlantShortDisplayName(task.targetPlantLevel, gardenId),
     };
   }
   if (task.targetPlantLevel != null && isPlantTargetTask(task.templateId)) {
     return {
       n: task.target,
-      p: getPlantDisplayName(task.targetPlantLevel, gardenId),
+      p: getPlantShortDisplayName(task.targetPlantLevel, gardenId),
     };
   }
   return { n: task.target };
@@ -631,7 +762,6 @@ function resolveTarget(
   if (SINGLE_COUNT_TASKS.has(templateId)) return 1;
   if (templateId === 'seed_rush') return SEED_RUSH_TARGET;
   if (templateId === 'order_rush') return ORDER_RUSH_TARGET;
-  if (templateId === 'merge_only_order') return slotTier;
   if (templateId === 'fill_garden_seeds') return Math.max(1, ctx.stats.unlockedPlotCount);
   if (templateId === 'harvest_crops') {
     const cropYield = getCropYieldPerHarvest(ctx.cropsState);
@@ -890,6 +1020,18 @@ export function rollDailyTasksDay(
     getDailyTasksActiveGarden(),
   ),
 ): DailyTasksDayState {
+  if (shouldSeedGarden1IntroDailyTasks()) {
+    markDailyTasksFtueIntroSeeded();
+    return {
+      v: 1,
+      periodEndMs,
+      tasks: createGarden1IntroDailyTasks(),
+      excludeTemplateIds: [],
+      lastGrowPlantLevel,
+      playtimeMs: 0,
+    };
+  }
+
   const picked = new Set<string>();
   const pickedCategories = new Set<DailyTaskCatalogCategory>();
   const pickedIcons = new Set<string>();
@@ -897,15 +1039,6 @@ export function rollDailyTasksDay(
   const tasks: DailyTaskInstanceState[] = [];
 
   for (const slot of buildRollSlots(ctx)) {
-    if (slot === 1 && shouldSeedFtueOpenDailyTask()) {
-      const task = createFtueOpenDailyTaskInstance();
-      markDailyTasksFtueIntroSeeded();
-      picked.add(task.templateId);
-      pickedCategories.add(getTemplateCategory(task.templateId));
-      pickedIcons.add(getTaskIconForInstance(task));
-      tasks.push(task);
-      continue;
-    }
     const task = rollTaskForSlot(
       slot,
       picked,
@@ -992,23 +1125,28 @@ function instanceToRow(
   }
   progressCurrent = Math.min(progressCurrent, task.target);
   const state = rowState({ ...task, progress: Math.max(task.progress, progressCurrent) });
-  const globalGoldenPotCount = ctx.globalGoldenPotCount ?? ctx.goldenPotCount;
-  const unlockedTiers = ctx.globalGoldenPotUnlockedTiers ?? globalGoldenPotCount;
   return {
     id: task.instanceId,
     state,
     title: meta.title,
-    description: meta.description,
+    description: task.descriptionOverride ?? meta.description,
     descriptionValues: getDescriptionValues(task),
     progressCurrent,
     progressTotal: task.target,
-    rewardCoins: getDailyTaskRewardCoins(
-      getDailyTaskSlotTier(task.slot),
-      ctx.playerLevel,
-      unlockedTiers,
-    ),
+    rewardKeys: getDailyTaskSlotRewardKeys(getDailyTaskSlotTier(task.slot)),
     iconSrc: getTaskIconForInstance(task),
   };
+}
+
+/**
+ * Scripted level tasks track an absolute level, so the level-up that unlocked Daily Tasks
+ * cannot complete them. Garden-1 intro tasks always read the garden-1 level.
+ */
+function syncTargetPlayerLevelTask(task: DailyTaskInstanceState, ctx: DailyTaskRollContext): void {
+  const targetLevel = task.targetPlayerLevel;
+  if (targetLevel == null || task.claimed) return;
+  const level = ctx.garden1PlayerLevel ?? ctx.playerLevel;
+  task.progress = level >= targetLevel ? task.target : 0;
 }
 
 export function buildDailyTaskRowsFromState(
@@ -1023,6 +1161,7 @@ export function buildDailyTaskRowsFromState(
     if (task.templateId === 'playtime_minutes' && !task.claimed) {
       task.progress = Math.min(Math.floor(state.playtimeMs / 60000), task.target);
     }
+    syncTargetPlayerLevelTask(task, ctx);
   }
   writeDayState(state);
   return sortTasksForDisplay(state.tasks).map((t) => instanceToRow(t, ctx, now));
@@ -1063,7 +1202,7 @@ export function ensureDailyTasksDay(
     writeDayState(state);
   }
 
-  if (maybeSeedFtueOpenDailyTaskIntoState(state)) {
+  if (maybeSeedGarden1IntroDailyTasksIntoState(state)) {
     writeDayState(state);
   }
 
@@ -1257,8 +1396,6 @@ export function recordDailyTaskHarvestThreeCells(
 }
 
 export interface DailyTaskOrderFulfilledOptions {
-  /** Order fulfilled entirely from merge-sourced crops (no manual harvest). */
-  mergeOnly?: boolean;
   now?: number;
 }
 
@@ -1267,7 +1404,6 @@ export function recordDailyTaskOrderComplete(
   options: DailyTaskOrderFulfilledOptions = {},
 ): DailyTaskDefinition[] {
   const now = options.now ?? Date.now();
-  const mergeOnly = options.mergeOnly ?? false;
   return mutateDayState((state) => {
     for (const task of state.tasks) {
       if (task.claimed) continue;
@@ -1288,9 +1424,6 @@ export function recordDailyTaskOrderComplete(
         ) {
           task.progress = ORDER_RUSH_TARGET;
         }
-      }
-      if (mergeOnly && task.templateId === 'merge_only_order' && task.progress < task.target) {
-        task.progress += 1;
       }
     }
   }, ctx);
@@ -1349,6 +1482,9 @@ export function recordDailyTaskLevelUp(ctx: DailyTaskRollContext): DailyTaskDefi
   return mutateDayState((state) => {
     for (const task of state.tasks) {
       if (task.claimed || task.templateId !== 'level_up') continue;
+      // Level-target tasks are resolved from the live level in `syncTargetPlayerLevelTask`;
+      // `ctx` is still the pre-level-up value when this fires.
+      if (task.targetPlayerLevel != null) continue;
       if (task.progress < task.target) task.progress = task.target;
     }
   }, ctx);
@@ -1467,10 +1603,31 @@ export function completeNextDailyTaskForDev(
   }, ctx, atTimeMs);
 }
 
-export function resetDailyTasksForDev(ctx: DailyTaskRollContext): DailyTaskDefinition[] {
-  return rollDailyTasksNextPeriod(ctx);
+/** Dev: roll 3 new tasks for the current period. Keeps `periodEndMs` (timezone countdown unchanged). */
+export function resetDailyTasksForDev(
+  ctx: DailyTaskRollContext,
+  atTimeMs = Date.now(),
+): DailyTaskDefinition[] {
+  const prev = readDayState();
+  if (!prev) {
+    return ensureDailyTasksDay(ctx, atTimeMs);
+  }
+  const state = rollDailyTasksDay(
+    ctx,
+    prev.periodEndMs,
+    prev.tasks,
+    prev.lastGrowPlantLevel,
+    getOtherGardensActiveTemplateIds(prev.periodEndMs),
+  );
+  writeDayState(state);
+  return buildDailyTaskRowsFromState(state, ctx, atTimeMs);
 }
 
 export function clearDailyTasksDayStorage(): void {
   clearAllDailyTasksDayStorage();
+  try {
+    localStorage.removeItem(DAILY_TASKS_FTUE_INTRO_SEEDED_KEY);
+  } catch {
+    /* ignore */
+  }
 }

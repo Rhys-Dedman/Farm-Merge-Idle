@@ -28,6 +28,12 @@ export const SCREEN_NAV_TRANSITION_MS = 700;
 /** When to start ad-break after store/collection → garden (halfway through slide). */
 export const SCREEN_NAV_AD_BREAK_DELAY_MS = SCREEN_NAV_TRANSITION_MS / 2;
 
+/**
+ * After claiming a Special Delivery upgrade/boost, block interstitial ads long enough
+ * for garden return FX (nav slide + boost particle / upgrade green blink).
+ */
+export const SPECIAL_DELIVERY_REWARD_AD_GRACE_MS = 15000;
+
 /** Leaf burst particle count when the ad-break icon appears. */
 export const AD_BREAK_ICON_LEAF_BURST_COUNT = 10;
 

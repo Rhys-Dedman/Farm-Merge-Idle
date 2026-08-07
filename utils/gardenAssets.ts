@@ -191,8 +191,8 @@ export function getPlantPotGoldPath(): string {
   return assetPath(PLANT_POT_GOLD_PATH);
 }
 
-export function getGoldenPotWalletIconPath(): string {
-  return assetPath('/assets/icons/collection/icon_goldenpot.png');
+export function getKeyWalletIconPath(): string {
+  return assetPath('/assets/icons/coins/icon_key.png');
 }
 
 /** Golden pot icon on collection shelf progress bars (active upgrade shelf). */

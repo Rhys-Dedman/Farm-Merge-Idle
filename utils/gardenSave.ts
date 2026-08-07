@@ -33,6 +33,8 @@ export const GAME_SAVE_V2_VERSION = 2 as const;
 
 /** Account-wide save fields (not tied to a single garden's board/economy). */
 export interface GameSaveGlobals {
+  /** Account-wide Special Delivery keys. */
+  keyCount?: number;
   collectionFtueCompleted?: boolean;
   collectionFtuePhase?: string | null;
   collectionFtueBonusesReached?: boolean;
@@ -40,6 +42,10 @@ export interface GameSaveGlobals {
   tasksFtueStarted?: boolean;
   tasksFtueUnlockRevealed?: boolean;
   tasksFtueCompleted?: boolean;
+  tasksFtueClaimStep?: boolean;
+  specialDeliveryFtueStarted?: boolean;
+  specialDeliveryFtueCompleted?: boolean;
+  specialDeliveryFtuePhase?: string | null;
   gardensFtueStarted?: boolean;
   gardensFtueUnlockRevealed?: boolean;
   gardensFtueCompleted?: boolean;
@@ -117,6 +123,7 @@ export function extractGardenStateFromV1(save: GameSaveV1): GardenState {
     plantMasteryUnlockPending: [...save.plantMasteryUnlockPending],
     plantMasteryUnlockedLevels: [...save.plantMasteryUnlockedLevels],
     plantMasteryIntroBarComplete: save.plantMasteryIntroBarComplete,
+    trophyLevels: [...(save.trophyLevels ?? [])],
     goalSlots: [...save.goalSlots],
     goalPlantTypes: [...save.goalPlantTypes],
     goalLoadingSeconds: save.goalLoadingSeconds,
@@ -135,6 +142,9 @@ export function extractGardenStateFromV1(save: GameSaveV1): GardenState {
     lastMergeDiscoveryLevel: save.lastMergeDiscoveryLevel,
     lastSpawnedGoalLevels: [...save.lastSpawnedGoalLevels] as [number, number],
     pendingUnlockUpgradeId: save.pendingUnlockUpgradeId,
+    freeUpgradeCounts: save.freeUpgradeCounts
+      ? { ...save.freeUpgradeCounts }
+      : undefined,
     levelUpPopupQueue: [...save.levelUpPopupQueue],
     wildGrowthAccumulatorMs: save.wildGrowthAccumulatorMs,
     barnShelvesUnlocked: [...save.barnShelvesUnlocked],
@@ -150,6 +160,7 @@ export function extractGardenStateFromV1(save: GameSaveV1): GardenState {
 
 export function extractGlobalsFromV1(save: GameSaveV1): GameSaveGlobals {
   return {
+    keyCount: Math.max(0, Math.floor(save.keyCount ?? 0)),
     collectionFtueCompleted: save.collectionFtueCompleted,
     collectionFtuePhase: save.collectionFtuePhase,
     collectionFtueBonusesReached: save.collectionFtueBonusesReached,
@@ -157,6 +168,10 @@ export function extractGlobalsFromV1(save: GameSaveV1): GameSaveGlobals {
     tasksFtueStarted: save.tasksFtueStarted,
     tasksFtueUnlockRevealed: save.tasksFtueUnlockRevealed,
     tasksFtueCompleted: save.tasksFtueCompleted,
+    tasksFtueClaimStep: save.tasksFtueClaimStep,
+    specialDeliveryFtueStarted: save.specialDeliveryFtueStarted,
+    specialDeliveryFtueCompleted: save.specialDeliveryFtueCompleted,
+    specialDeliveryFtuePhase: save.specialDeliveryFtuePhase,
     gardensFtueStarted: save.gardensFtueStarted,
     gardensFtueUnlockRevealed: save.gardensFtueUnlockRevealed,
     gardensFtueCompleted: save.gardensFtueCompleted,
@@ -212,6 +227,7 @@ export function flattenV2ToV1(v2: GameSaveV2): GameSaveV1 {
     savedAt: v2.savedAt,
     pendingOfflineEarnings: garden.pendingOfflineEarnings,
     money: garden.money,
+    keyCount: Math.max(0, Math.floor(g.keyCount ?? 0)),
     grid: garden.grid,
     seedProgress: garden.seedProgress,
     harvestProgress: garden.harvestProgress,
@@ -229,6 +245,7 @@ export function flattenV2ToV1(v2: GameSaveV2): GameSaveV1 {
     plantMasteryUnlockPending: [...garden.plantMasteryUnlockPending],
     plantMasteryUnlockedLevels: [...garden.plantMasteryUnlockedLevels],
     plantMasteryIntroBarComplete: garden.plantMasteryIntroBarComplete,
+    trophyLevels: [...(garden.trophyLevels ?? [])],
     collectionFtueCompleted: g.collectionFtueCompleted,
     collectionFtuePhase: g.collectionFtuePhase,
     collectionFtueBonusesReached: g.collectionFtueBonusesReached,
@@ -236,6 +253,10 @@ export function flattenV2ToV1(v2: GameSaveV2): GameSaveV1 {
     tasksFtueStarted: g.tasksFtueStarted,
     tasksFtueUnlockRevealed: g.tasksFtueUnlockRevealed,
     tasksFtueCompleted: g.tasksFtueCompleted,
+    tasksFtueClaimStep: g.tasksFtueClaimStep,
+    specialDeliveryFtueStarted: g.specialDeliveryFtueStarted,
+    specialDeliveryFtueCompleted: g.specialDeliveryFtueCompleted,
+    specialDeliveryFtuePhase: g.specialDeliveryFtuePhase,
     gardensFtueStarted: g.gardensFtueStarted,
     gardensFtueUnlockRevealed: g.gardensFtueUnlockRevealed,
     gardensFtueCompleted: g.gardensFtueCompleted,
@@ -303,6 +324,9 @@ export function flattenV2ToV1(v2: GameSaveV2): GameSaveV1 {
     musicEnabled: g.musicEnabled,
     sfxEnabled: g.sfxEnabled,
     pendingUnlockUpgradeId: garden.pendingUnlockUpgradeId,
+    freeUpgradeCounts: garden.freeUpgradeCounts
+      ? { ...garden.freeUpgradeCounts }
+      : undefined,
     levelUpPopupQueue: [...garden.levelUpPopupQueue],
     wildGrowthAccumulatorMs: garden.wildGrowthAccumulatorMs,
   };
@@ -416,6 +440,7 @@ export function createFreshGardenState(globalGoldenPotCount = 0): GardenState {
     plantMasteryUnlockPending: [],
     plantMasteryUnlockedLevels: [],
     plantMasteryIntroBarComplete: false,
+    trophyLevels: [],
     goalSlots,
     goalPlantTypes,
     goalLoadingSeconds: 15,
@@ -436,6 +461,7 @@ export function createFreshGardenState(globalGoldenPotCount = 0): GardenState {
     lastMergeDiscoveryLevel: 1,
     lastSpawnedGoalLevels: [2, 3],
     pendingUnlockUpgradeId: null,
+    freeUpgradeCounts: undefined,
     levelUpPopupQueue: [],
     wildGrowthAccumulatorMs: 0,
     barnShelvesUnlocked: normalizeBarnShelvesUnlocked(),
@@ -462,7 +488,7 @@ export function activateGardenInSave(v2: GameSaveV2, targetId: GardenId): GameSa
   if (!gardens[targetId]) {
     const activeId = v2.activeGardenId;
     const globalGoldenPotCount = getGlobalGoldenPotCount(
-      v2.gardens[activeId]?.plantMasteryUnlockedLevels ?? [],
+      v2.gardens[activeId]?.trophyLevels ?? [],
       v2.gardens,
       activeId,
     );

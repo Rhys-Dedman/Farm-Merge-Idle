@@ -16,6 +16,18 @@ import {
   STARTER_PACK_FORCE_POPUP_LEVEL,
 } from './constants/playerLevelUnlocks';
 import { TASKS_FTUE_FLOATING_BUTTON_ID } from './constants/tasksFtue';
+import {
+  SPECIAL_DELIVERY_FTUE_COLLECTION_NAV_HIT_ID,
+  SPECIAL_DELIVERY_FTUE_DOOR_HIT_ID_PREFIX,
+  SPECIAL_DELIVERY_FTUE_TROPHY_GARDEN_ID,
+  SPECIAL_DELIVERY_FTUE_TROPHY_PLANT_LEVEL,
+  SPECIAL_DELIVERY_FTUE_UNLOCK_LEVEL,
+  getSdFtueOrderedClaimTaskIds,
+  isSpecialDeliveryDoorGuidePhase,
+  parseSpecialDeliveryFtuePhase,
+  shouldStartSpecialDeliveryFtue,
+  type SpecialDeliveryFtuePhase,
+} from './constants/specialDeliveryFtue';
 import { GARDENS_FTUE_FLOATING_BUTTON_ID } from './constants/gardensFtue';
 import { getFloatingButtonStackTopPx } from './constants/floatingButtonLayout';
 import { FAKE_SAFE_AREA_TOP_PX } from './constants/debugSafeArea';
@@ -23,7 +35,7 @@ import { FakeNotchOverlay } from './components/FakeNotchOverlay';
 import { Navbar } from './components/Navbar';
 import { StoreScreen } from './components/StoreScreen';
 import { SideAction } from './components/SideAction';
-import { FloatingButton } from './components/FloatingButton';
+import { FloatingButton, FLOATING_BUTTON_ICON_SIZE_PX } from './components/FloatingButton';
 import { FloatingButtonStack } from './components/FloatingButtonStack';
 import { FarmLeftFloatingButtonStack } from './components/FarmLeftFloatingButtonStack';
 import { Projectile } from './components/Projectile';
@@ -33,6 +45,7 @@ import { AmbientFallingLeaves } from './components/AmbientFallingLeaves';
 import { FarmVfxLayer } from './components/FarmVfxLayer';
 import { CellHighlightBeam } from './components/CellHighlightBeam';
 import { CoinPanel, CoinPanelData } from './components/CoinPanel';
+import { CollectionKeyBadge } from './components/CollectionKeyBadge';
 import { PlantPanel, PlantPanelData } from './components/PlantPanel';
 import { GoalCoinParticle, GoalCoinParticleData } from './components/GoalCoinParticle';
 import { buildCoinBurstParticles } from './utils/coinBurst';
@@ -69,12 +82,15 @@ import {
   AD_REWARDED_FADE_IN_MS,
   AD_REWARDED_FADE_OUT_MS,
   SCREEN_NAV_AD_BREAK_DELAY_MS,
+  SCREEN_NAV_TRANSITION_MS,
+  SPECIAL_DELIVERY_REWARD_AD_GRACE_MS,
 } from './constants/adPresentation';
 import type { FakeAdVariant } from './constants/adPresentation';
 import type { AdBreakTriggerId } from './constants/adBreakSettings';
 import { AD_BREAK_SETTINGS } from './constants/adBreakSettings';
 import {
   applyAdBreakReturnPolicy,
+  bumpAdBreakGrace,
   canShowAdBreakNow,
   shouldFlagAdBreakFallback,
   interstitialAdBridge,
@@ -101,14 +117,19 @@ import {
   clearDailyTasksProgressStorage,
   ensureDailyTasksDay,
   findNewlyCompletedDailyTasks,
+  forceCompleteGarden1IntroTasksForLevel7,
+  resetGarden1IntroMidTasksForSpecialDeliveryFtueResume,
   getDailyTaskRollContext,
+  getGarden1IntroClaimedKeyTotal,
+  isGarden1DailyTasksFtueIntroClaimed,
+  isGarden1IntroDailyTasksDay,
+  GARDEN_1_INTRO_DAILY_TASKS_KEY_GOAL,
   markDailyTaskClaimed,
   markDailyTasksClaimed,
   completeNextDailyTaskForDev,
   recordDailyTaskBoosterActivated,
   recordDailyTaskCoinOrder,
   recordDailyTaskFreeOfferClaimed,
-  recordDailyTaskGoldenPot,
   recordDailyTaskHarvestCrops,
   recordDailyTaskHarvestThreeCells,
   recordDailyTaskLevelUp,
@@ -232,8 +253,8 @@ import { writeLevelUpBackupSave } from './utils/saveBackup';
 import {
   DEFAULT_GARDEN_ID,
   GARDEN_IDS,
+  getCollectionGardenDisplayName,
   getGardenDisplayLabel,
-  getCollectionPanelTitle,
   SHIPPED_GARDEN_IDS,
   type GardenId,
 } from './constants/gardens';
@@ -244,10 +265,9 @@ import {
   getGardenPlantSpritePath,
   getGardenPickerGardenIconPath,
   getCollectionBonusIconPath,
+  getCollectionGardenLockedIconPath,
   getCollectionShelfGoldenPotIconPath,
   getCollectionShelfGoldenPotCompleteIconPath,
-  getCollectionGardenIconPath,
-  getCollectionLockGardenIconPath,
   getCollectionShelfLockedIconPath,
   getPlantPotGoldPath,
   getSpecialDeliveryPlantLevel,
@@ -260,6 +280,11 @@ import {
 import { getGardenGoalTextColors } from './constants/gardenGoalTheme';
 import { setDailyTasksActiveGarden } from './utils/dailyTasksGardenScope';
 import {
+  buildUpgradeGateContextFromGardenState,
+  UPGRADE_TAB_BY_ID,
+  type UpgradeGateContext,
+} from './utils/dailyTaskUpgradeGates';
+import {
   activateGardenInSave,
   applyCollectionScrollYToV2,
   clearDailyAllowanceClaimedForAllGardens,
@@ -269,7 +294,7 @@ import {
 } from './utils/gardenSave';
 import {
   ensureGardenStartedInSave,
-  findNextDevGoldenPotTarget,
+  findNextDevTrophyTarget,
   findNextDevUnlockPlantTarget,
   getCollectionPlantKey,
   getGardenCollectionSnapshot,
@@ -280,17 +305,18 @@ import {
   getGlobalBonusProgressPotCount,
   getGlobalCompletedShelfCount,
   getUnlockedGoldenPotBonusTierPotCounts,
-  getNextUpgradeablePlantOnShelf,
   getShelfIndexForGarden,
-  getShelfMasteredCount,
   getShelfRewardBarStateForSnapshot,
-  isShelfActiveUpgradeTarget,
+  getWinnableTrophyTargetsAcrossGardens,
   isShelfRewardBarLocked,
-  isShelfFullyDiscovered,
-  isShelfFullyMastered,
-  shouldShowShelfUpgradeUi,
+  isShelfTrophyComplete,
   getInProgressBonusTierPotCounts,
+  getInProgressBonusTierTrophyCounts,
 } from './utils/collectionShelfMastery';
+import {
+  getTrophyEmptyIconSrc,
+  getTrophyIconSrc,
+} from './constants/trophies';
 import { createPostFtueCleanSaveV2 } from './utils/postFtueCleanSave';
 import {
   getLimitedOfferAutoPopupPool,
@@ -324,17 +350,18 @@ import {
   WILD_GROWTH_UNLOCK_PLAYER_LEVEL,
 } from './utils/wildGrowth';
 import { OfflineEarningsPopup } from './components/OfflineEarningsPopup';
-import { BARN_SHELF_COUNT, BARN_SHELVES_PER_GARDEN, COLLECTION_PANEL_GARDEN_ICON_PX, COLLECTION_PANEL_GARDEN_ICON_UNLOCKED_SCALE, COLLECTION_PANEL_LOCKED_CREST_SCALE, COLLECTION_PANEL_LOCKED_CREST_TOP_PX, COLLECTION_PANEL_LOCKED_LEVEL_BUTTON_HEIGHT_PX, COLLECTION_PANEL_LOCKED_LEVEL_BUTTON_PADDING_X_PX, COLLECTION_PANEL_UNLOCKED_CREST_TOP_PX, COLLECTION_PHONE_PLANT_PANEL_SCALE, COLLECTION_PHONE_PLANT_PANEL_TOP_PX, COLLECTION_PHONE_ROOF_LAYOUT_SCALE, COLLECTION_PHONE_ROOF_SCALE, COLLECTION_PHONE_SHELF_WIDTH_SCALE, COLLECTION_PHONE_SHELVES_EXTRA_MARGIN_TOP_UNLOCKED_PX, COLLECTION_PHONE_SHELVES_MARGIN_TOP_PX, COLLECTION_PLANT_COUNT, COLLECTION_PLANT_PANEL_TOP_PX, COLLECTION_SCROLL_BOTTOM_PAD_PX, COLLECTION_SHELF_STACK_MARGIN_TOP_PX, COLLECTION_SHELF_UPGRADE_BUTTON_BORDER_PX, COLLECTION_SHELF_UPGRADE_BUTTON_COIN_PX, COLLECTION_SHELF_UPGRADE_BUTTON_DARK_COLOR, COLLECTION_SHELF_UPGRADE_BUTTON_FONT_PX, COLLECTION_SHELF_UPGRADE_BUTTON_HEIGHT_PX, COLLECTION_SHELF_UPGRADE_BUTTON_RING_COLOR, COLLECTION_SHELF_UPGRADE_BUTTON_TOP_PX, COLLECTION_SHELF_UPGRADE_BUTTON_WIDTH_PX, COLLECTION_SHELF_UPGRADE_SPRITE_SCALE, COLLECTION_SHELF_UPGRADE_SPRITE_TOP_PX, COLLECTION_SHELVES_EXTRA_MARGIN_TOP_UNLOCKED_PX, COLLECTION_SHELVES_MARGIN_TOP_PX, getCollectionShelfMeta, normalizeBarnShelvesUnlocked } from './constants/barnShelves';
+import { BARN_SHELF_COUNT, BARN_SHELVES_PER_GARDEN, COLLECTION_COMING_SOON_LABEL, COLLECTION_GARDEN_IDS, COLLECTION_GARDEN_LABEL_AFTER_SHELVES_MARGIN_TOP_PX, COLLECTION_GARDEN_LABEL_MARGIN_BOTTOM_PX, COLLECTION_PANEL_LOCKED_LEVEL_BUTTON_HEIGHT_PX, COLLECTION_PANEL_LOCKED_LEVEL_BUTTON_PADDING_X_PX, COLLECTION_PHONE_GARDEN_LABEL_AFTER_SHELVES_MARGIN_TOP_PX, COLLECTION_PHONE_GARDEN_LABEL_SCALE, COLLECTION_PHONE_PLANT_PANEL_TOP_PX, COLLECTION_PHONE_ROOF_LAYOUT_SCALE, COLLECTION_PHONE_ROOF_SCALE, COLLECTION_PHONE_SHELF_WIDTH_SCALE, COLLECTION_PHONE_SHELVES_EXTRA_MARGIN_TOP_UNLOCKED_PX, COLLECTION_PHONE_SHELVES_MARGIN_TOP_PX, COLLECTION_PLANT_COUNT, COLLECTION_PLANT_PANEL_TOP_PX, COLLECTION_PLANTS_PER_SHELF, COLLECTION_SCROLL_BOTTOM_PAD_PX, COLLECTION_SHELF_STACK_MARGIN_TOP_PX, COLLECTION_SHELVES_EXTRA_MARGIN_TOP_UNLOCKED_PX, COLLECTION_SHELVES_MARGIN_TOP_PX, COLLECTION_SPECIAL_DELIVERY_CTA_MARGIN_TOP_PX, COLLECTION_SPECIAL_DELIVERY_DESC_FONT_PX, COLLECTION_SPECIAL_DELIVERY_DESC_GAP_PX, COLLECTION_SPECIAL_DELIVERY_DESC_INSET_X_PX, COLLECTION_SPECIAL_DELIVERY_DESC_LINE_HEIGHT, COLLECTION_SPECIAL_DELIVERY_DIVIDER_NUDGE_UP_PX, COLLECTION_SPECIAL_DELIVERY_DIVIDER_WIDTH_PX, COLLECTION_SPECIAL_DELIVERY_PANEL_LAYOUT_WIDTH_PX, COLLECTION_SPECIAL_DELIVERY_PANEL_WIDTH_PX, COLLECTION_SPECIAL_DELIVERY_TITLE_BASE_TOP_PX, COLLECTION_SPECIAL_DELIVERY_TITLE_BOX_HEIGHT_PX, COLLECTION_SPECIAL_DELIVERY_TITLE_NUDGE_DOWN_PX, COLLECTION_UNDISCOVERED_GARDEN_LABEL, getCollectionShelfMeta, normalizeBarnShelvesUnlocked } from './constants/barnShelves';
 import { getGardenPickerPurchaseCoinPrice } from './constants/gardenPicker';
 import { areAdsEnabled, getRemoteConfig, isStoreIapEnabled } from './utils/remoteConfig';
-import { canAffordNextGardenPurchase, isGardensFloatingButtonUnlocked } from './utils/gardenPickerFloatingButton';
+import {
+  canAffordNextGardenPurchase,
+  getGardenNumberedFloatingButtonIconSrc,
+  isGardensFloatingButtonUnlocked,
+} from './utils/gardenPickerFloatingButton';
 import { MAX_PLANT_TIER } from './constants/plants';
 import {
-  PLANT_MASTERY_GLOW_MS,
-  canPurchaseGoldenPotForLevel,
   countGoldenPotUpgradeablePlants,
   getGoldenPotUpgradeableLevels,
-  getPlantMasteryUnlockCost,
 } from './constants/plantMastery';
 import {
   getHarvestRechargePerMinute,
@@ -353,9 +380,51 @@ import {
 import { CollectionFtueOverlay } from './components/CollectionFtueOverlay';
 import { CollectionBonusesFtueOverlay } from './components/CollectionBonusesFtueOverlay';
 import { CollectionRewardProgressBar } from './components/CollectionRewardProgressBar';
+import { GardenLabel } from './components/GardenLabel';
 import { NewGardenGardensFbFtueOverlay } from './components/NewGardenGardensFbFtueOverlay';
 import type { CollectionFtuePhase } from './constants/collectionFtue';
-import { COLLECTION_FTUE_BLOCKER_TINT, COLLECTION_FTUE_BONUSES_MESSAGE, COLLECTION_FTUE_PANEL_COPY_ID, COLLECTION_FTUE_SHELF0_REWARD_ICON_ID, parseCollectionFtuePhase } from './constants/collectionFtue';
+import { COLLECTION_FTUE_BLOCKER_TINT, COLLECTION_FTUE_BONUSES_BLOCKER_TINT, COLLECTION_FTUE_BONUSES_MESSAGE, COLLECTION_FTUE_PANEL_COPY_ID, COLLECTION_FTUE_SHELF0_REWARD_ICON_ID } from './constants/collectionFtue';
+import { SpecialDeliveryDoors } from './components/SpecialDeliveryDoors';
+import { SpecialDeliveryClosedDoorsPreview } from './components/SpecialDeliveryClosedDoorsPreview';
+import { SpecialDeliveryExplainFtue } from './components/SpecialDeliveryExplainFtue';
+import { SpecialDeliveryLockedPanelLock } from './components/SpecialDeliveryLockedPanelLock';
+import { SpecialDeliveryPostTrophyFtue } from './components/SpecialDeliveryPostTrophyFtue';
+import { SpecialDeliveryTitle } from './components/SpecialDeliveryTitle';
+import { SpecialDeliveryUnlockKnockoff } from './components/SpecialDeliveryUnlockKnockoff';
+import { SpecialDeliveryVineLeafBurst, preloadSpecialDeliveryVineLeafBurst } from './components/SpecialDeliveryVineLeafBurst';
+import type {
+  SpecialDeliveryClaimPresentation,
+  SpecialDeliveryGardenRewardContext,
+  SpecialDeliveryReward,
+} from './utils/specialDeliveryRewards';
+import {
+  buildSpecialDeliveryFtueCoinPickSequence,
+  buildSpecialDeliveryFtueTrophyPickSequence,
+  specialDeliveryRewardOverlayIconSrc,
+} from './utils/specialDeliveryRewards';
+import { clearAllSpecialDeliveryBoardStorage } from './utils/specialDeliveryBoardSave';
+import {
+  SPECIAL_DELIVERY_LARGE_UNLOCK_SRC,
+  SPECIAL_DELIVERY_LOCKED_FTUE_DOORS_FADE_MS,
+  SPECIAL_DELIVERY_LOCKED_FTUE_PANEL_FADE_IN_MS,
+  SPECIAL_DELIVERY_LOCKED_FTUE_LEVEL_BUTTON_ID,
+  SPECIAL_DELIVERY_LOCKED_FTUE_LOCK_ID,
+  SPECIAL_DELIVERY_LOCKED_PANEL_CROSSFADE_MS,
+  SPECIAL_DELIVERY_LOCKED_PANEL_FADE_DELAY_MS,
+  SPECIAL_DELIVERY_MATCH3_REVEAL_SCALE_END,
+  SPECIAL_DELIVERY_TROPHY_FLIGHT_END_SCALE_OF_SLOT,
+  SPECIAL_DELIVERY_TROPHY_FLIGHT_LAUNCH_BIAS_BY_SLOT,
+  SPECIAL_DELIVERY_TROPHY_FLIGHT_LEAD_MS,
+  SPECIAL_DELIVERY_TROPHY_FLIGHT_MS,
+  SPECIAL_DELIVERY_TROPHY_FLIGHT_PEAK_RISE_SCALE,
+  SPECIAL_DELIVERY_TROPHY_OVERLAY_FADE_MS,
+  SPECIAL_DELIVERY_TROPHY_SCROLL_FOCUS_RATIO,
+  SPECIAL_DELIVERY_TROPHY_SCROLL_MS,
+} from './constants/specialDeliveries';
+import {
+  SpecialDeliveryRewardFly,
+  type SpecialDeliveryRewardFlyData,
+} from './components/SpecialDeliveryRewardFly';
 import type { NewGardenFtuePhase } from './constants/newGardenFtue';
 import {
   NEW_GARDEN_FTUE_GARDENS_BUTTON_ID,
@@ -380,6 +449,15 @@ export function getCoinValueForLevel(level: number): number {
 
 /** Dev cheat: coins added per "+1Mil Coins" tap / Shift+M. */
 const DEV_CHEAT_ADD_MONEY_AMOUNT = 1_000_000;
+const DEV_CHEAT_ADD_KEYS_AMOUNT = 10;
+/** Other-garden SD claim: hold the Collection garden FB after the last particle lands. */
+const COLLECTION_GARDEN_HANDOFF_HOLD_MS = 1000;
+/** Scale + fade out duration for the Collection garden FB handoff. */
+const COLLECTION_GARDEN_HANDOFF_EXIT_MS = 180;
+/** Black overlay fade after other-garden reward impacts the handoff FB. */
+const COLLECTION_GARDEN_HANDOFF_OVERLAY_FADE_MS = 1000;
+/** Match match-3 z (520) so the handoff FB sits above the dim overlay. */
+const COLLECTION_GARDEN_HANDOFF_FB_Z = 530;
 
 type DevCheatOptions = {
   /** When true (default), discovery / level-up popups wait until settings closes. */
@@ -420,7 +498,32 @@ const COLLECTION_FTUE_BONUSES_OVERLAY_DELAY_MS = 500;
 /** Fade-in for View Bonuses handoff. */
 const COLLECTION_FTUE_UI_FADE_MS = 320;
 /** Panel copy cream color; highlight green lives in `.collection-ftue-copy-color-settle` (#587e26). */
-const COLLECTION_PANEL_COPY_COLOR = '#c2b280';
+/** Panel copy color; highlight green lives in `.collection-ftue-copy-color-settle` (#587e26). */
+const COLLECTION_PANEL_COPY_COLOR = '#c5a171';
+/** Special Deliveries description body. */
+const SPECIAL_DELIVERY_DESC_COLOR = '#c5a171';
+/** Emphasized words in Special Deliveries description. */
+const SPECIAL_DELIVERY_DESC_GOLD = '#bc8006';
+
+function SpecialDeliveryDescriptionCopy() {
+  return (
+    <>
+      <span className="block">
+        Use{' '}
+        <span style={{ color: SPECIAL_DELIVERY_DESC_GOLD, fontWeight: 700 }}>
+          Keys
+        </span>{' '}
+        to unlock deliveries.
+      </span>
+      <span className="block">
+        <span style={{ color: SPECIAL_DELIVERY_DESC_GOLD, fontWeight: 700 }}>
+          Match 3
+        </span>{' '}
+        to win that prize
+      </span>
+    </>
+  );
+}
 
 /** Merge with no matching goal: coin panel uses seed-surplus scale (default cream panel bg). */
 const MERGE_COIN_HARVEST_PANEL_SCALE = 1.5;
@@ -997,9 +1100,6 @@ function preloadGoalOrderIcon(plantLevel: number): Promise<void> {
   });
 }
 
-/** Negative animation-delay so every barn plant mastery glow shares the same phase. */
-const PLANT_MASTERY_GLOW_ANIM_DELAY_SEC = -((Date.now() % PLANT_MASTERY_GLOW_MS) / 1000);
-
 type PlantMasterySlice = {
   ordersProgress: number;
   targetLevel: number;
@@ -1180,194 +1280,38 @@ function autoMergeSeedGraceRemainMsForPair(
   return remain;
 }
 
-type BarnShelfPlantSlotProps = {
+/** Trophy sprite scale inside its 95×95 shelf cell (claim flights match this on impact). */
+const BARN_SHELF_TROPHY_SPRITE_SCALE = 1.1;
+
+type BarnShelfTrophySlotProps = {
   gardenId: GardenId;
   plantLevel: number;
-  isPlantDiscovered: boolean;
-  showMasteryUnlock: boolean;
-  isMasteryPurchaseBounce: boolean;
+  /** Won from Special Deliveries — otherwise the slot shows the empty trophy sprite. */
+  hasTrophy: boolean;
+  /**
+   * Trophy art for this slot. `null` when the plant is undiscovered — the shelf cell stays empty
+   * (no empty-trophy placeholder) until the plant is discovered.
+   */
+  trophySrc: string | null;
+  /** Extra horizontal nudge for trophy art (shelf spread). */
+  trophyOffsetXPx?: number;
+  isTrophyRevealBounce: boolean;
   barnCellStackZ: number;
-  mastered: boolean;
-  masteryAdditiveGlow: boolean;
-  masteryGlowDelaySec: number;
   onOpenPlantInfo: () => void;
 };
 
-type BarnShelfUpgradeButtonProps = {
-  gardenId: GardenId;
-  coinCost?: number;
-  canAfford?: boolean;
-  ftueUnlockTarget?: boolean;
-  /** FTUE: bounce + brown→green color settle when FREE reveals. */
-  ftueRevealBounce?: boolean;
-  /** Disabled CTA when the active shelf has no discovered plants left to upgrade. */
-  discoverMorePlants?: boolean;
-  leafBurst?: { id: string; rectWidth: number; rectHeight: number } | null;
-  onLeafBurstComplete?: () => void;
-  buttonRootRef?: React.RefObject<HTMLDivElement | null>;
-  onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
-};
-
-/** One upgrade CTA per shelf — centered on the upgrade sprite strip. */
-function BarnShelfUpgradeButton({
-  gardenId,
-  coinCost = 0,
-  canAfford = true,
-  ftueUnlockTarget = false,
-  ftueRevealBounce = false,
-  discoverMorePlants = false,
-  leafBurst = null,
-  onLeafBurstComplete,
-  buttonRootRef,
-  onClick,
-}: BarnShelfUpgradeButtonProps) {
-  const [pressed, setPressed] = useState(false);
-  const disabledBrown = discoverMorePlants || !canAfford;
-  const buttonBg = disabledBrown ? '#e3c28c' : '#b8d458';
-  const buttonBorder = disabledBrown ? '#c7a36e' : COLLECTION_SHELF_UPGRADE_BUTTON_DARK_COLOR;
-  const buttonText = disabledBrown ? '#a68e64' : COLLECTION_SHELF_UPGRADE_BUTTON_DARK_COLOR;
-  const buttonShadow = disabledBrown
-    ? 'none'
-    : '0 3px 0 #6e8d2d, 0 5px 10px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.35)';
-  const colorTransition = ftueRevealBounce
-    ? `background-color ${COLLECTION_FTUE_SHELF_FREE_BOUNCE_MS}ms ease-out, border-color ${COLLECTION_FTUE_SHELF_FREE_BOUNCE_MS}ms ease-out, color ${COLLECTION_FTUE_SHELF_FREE_BOUNCE_MS}ms ease-out, box-shadow ${COLLECTION_FTUE_SHELF_FREE_BOUNCE_MS}ms ease-out`
-    : undefined;
-
-  useEffect(() => {
-    if (!pressed) return;
-    const clear = () => setPressed(false);
-    window.addEventListener('pointerup', clear);
-    window.addEventListener('pointercancel', clear);
-    return () => {
-      window.removeEventListener('pointerup', clear);
-      window.removeEventListener('pointercancel', clear);
-    };
-  }, [pressed]);
-
-  return (
-    <div
-      ref={buttonRootRef}
-      className="absolute left-1/2 pointer-events-auto"
-      style={{
-        top: COLLECTION_SHELF_UPGRADE_BUTTON_TOP_PX,
-        transform: 'translate(-50%, -50%)',
-        zIndex: 8,
-      }}
-    >
-      {leafBurst && (
-        <div
-          className="absolute left-1/2 top-1/2 pointer-events-none"
-          style={{
-            width: leafBurst.rectWidth,
-            height: leafBurst.rectHeight,
-            transform: 'translate(-50%, -50%)',
-            zIndex: 0,
-          }}
-        >
-          <PopupRectLeafBurst
-            key={leafBurst.id}
-            rectWidth={leafBurst.rectWidth}
-            rectHeight={leafBurst.rectHeight}
-            zIndex={0}
-            onComplete={onLeafBurstComplete}
-          />
-        </div>
-      )}
-      <div
-        className={`relative inline-flex rounded-full${ftueRevealBounce ? ' collection-ftue-free-button-bounce' : ''}`}
-        style={{
-          backgroundColor: COLLECTION_SHELF_UPGRADE_BUTTON_RING_COLOR,
-          boxSizing: 'border-box',
-          padding: 2,
-          zIndex: 1,
-        }}
-      >
-        <button
-            type="button"
-            id={ftueUnlockTarget ? 'collection-ftue-unlock-1' : undefined}
-            disabled={disabledBrown}
-            className={`flex select-none items-center justify-center rounded-full font-bold whitespace-nowrap ${
-              disabledBrown
-                ? 'cursor-default'
-                : 'shadow-[0_3px_0_#6e8d2d,0_5px_10px_rgba(0,0,0,0.15),inset_0_1px_0_rgba(255,255,255,0.35)] active:translate-y-[1px] active:shadow-[inset_0_2px_4px_rgba(0,0,0,0.15)]'
-            }`}
-            style={{
-              boxSizing: 'border-box',
-              width: COLLECTION_SHELF_UPGRADE_BUTTON_WIDTH_PX,
-              height: COLLECTION_SHELF_UPGRADE_BUTTON_HEIGHT_PX,
-              paddingLeft: discoverMorePlants ? 0 : 10,
-              paddingRight: discoverMorePlants ? 0 : 10,
-              gap: 6,
-              backgroundColor: buttonBg,
-              border: `${COLLECTION_SHELF_UPGRADE_BUTTON_BORDER_PX}px solid ${buttonBorder}`,
-              color: buttonText,
-              fontFamily: 'Inter, sans-serif',
-              fontSize: COLLECTION_SHELF_UPGRADE_BUTTON_FONT_PX,
-              letterSpacing: discoverMorePlants ? '-0.045em' : undefined,
-              lineHeight: 1,
-              textShadow: disabledBrown ? 'none' : '0 1px 0 rgba(255,255,255,0.3)',
-              boxShadow: buttonShadow,
-              WebkitTapHighlightColor: 'transparent',
-              touchAction: 'manipulation',
-              transition: colorTransition,
-            }}
-            onPointerDown={(e) => {
-              if (e.button !== 0 || disabledBrown) return;
-              setPressed(true);
-            }}
-            onKeyDown={(e) => {
-              if (disabledBrown) return;
-              if (e.key === 'Enter' || e.key === ' ') setPressed(true);
-            }}
-            onKeyUp={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') setPressed(false);
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              setPressed(false);
-              if (disabledBrown || discoverMorePlants) return;
-              onClick?.(e);
-            }}
-          >
-            {discoverMorePlants ? (
-              'Discover More Plants'
-            ) : (
-              <>
-                Upgrade
-                <img
-                  src={getGardenCoinIconPath(gardenId)}
-                  alt=""
-                  className="shrink-0 object-contain"
-                  style={{
-                    width: COLLECTION_SHELF_UPGRADE_BUTTON_COIN_PX,
-                    height: COLLECTION_SHELF_UPGRADE_BUTTON_COIN_PX,
-                  }}
-                  draggable={false}
-                />
-                {coinCost === 0 ? 'FREE' : formatCompactNumber(coinCost)}
-              </>
-            )}
-          </button>
-      </div>
-    </div>
-  );
-}
-
-/** Shelf cell: plant sprite + tap hitbox; shared sprite press feedback (CDN Tailwind :has() was unreliable). */
-function BarnShelfPlantSlot({
+/** Shelf cell: trophy sprite + tap hitbox; shared sprite press feedback (CDN Tailwind :has() was unreliable). */
+function BarnShelfTrophySlot({
   gardenId,
   plantLevel,
-  isPlantDiscovered,
-  showMasteryUnlock,
-  isMasteryPurchaseBounce,
+  hasTrophy,
+  trophySrc,
+  trophyOffsetXPx = 0,
+  isTrophyRevealBounce,
   barnCellStackZ,
-  mastered,
-  masteryAdditiveGlow,
-  masteryGlowDelaySec,
   onOpenPlantInfo,
-}: BarnShelfPlantSlotProps) {
+}: BarnShelfTrophySlotProps) {
   const [spritePressed, setSpritePressed] = useState(false);
-  const isAnyShelfBounceActive = isMasteryPurchaseBounce;
   const barnPlantHitboxW = 72;
   const barnPlantHitboxH = Math.round(barnPlantHitboxW * 1.2);
 
@@ -1391,41 +1335,42 @@ function BarnShelfPlantSlot({
     <div
       data-barn-plant-key={getCollectionPlantKey(gardenId, plantLevel)}
       className={`relative flex items-center justify-center shrink-0 pointer-events-none ${
-        isMasteryPurchaseBounce ? 'mastery-unlock-purchase-bounce' : ''
+        isTrophyRevealBounce ? 'mastery-unlock-purchase-bounce' : ''
       }`}
       style={{
         width: '95px',
         height: '95px',
-        // Bounce above neighbors even when the pot is empty (undiscovered).
-        zIndex: isMasteryPurchaseBounce ? 40 + plantLevel : barnCellStackZ,
+        // Bounce above neighbors even when the slot is still empty.
+        zIndex: isTrophyRevealBounce ? 40 + plantLevel : barnCellStackZ,
       }}
     >
       <div
         className={`relative z-10 flex h-full w-full items-center justify-center pointer-events-none ${
-          isPlantDiscovered
-            ? isAnyShelfBounceActive
-              ? ''
-              : 'transition-transform duration-75'
-            : ''
+          hasTrophy && !isTrophyRevealBounce ? 'transition-transform duration-75' : ''
         } ${spritePressed ? 'scale-95' : ''}`}
       >
-        <PlantWithPot
-          level={isPlantDiscovered ? plantLevel : 0}
-          gardenId={gardenId}
-          mastered={mastered}
-          className={isMasteryPurchaseBounce ? 'mastery-unlock-white-flash' : ''}
-          wrapperClassName="h-full w-full"
-          masteryAdditiveGlow={masteryAdditiveGlow}
-          masteryGlowDelaySec={masteryGlowDelaySec}
-        />
+        {trophySrc ? (
+          <img
+            src={assetPath(trophySrc)}
+            alt=""
+            className={`h-full w-full object-contain select-none ${
+              isTrophyRevealBounce ? 'mastery-unlock-white-flash' : ''
+            }`}
+            style={{
+              transform: `translate(${trophyOffsetXPx}px, -10px) scale(${BARN_SHELF_TROPHY_SPRITE_SCALE})`,
+              transformOrigin: '50% 50%',
+            }}
+            draggable={false}
+          />
+        ) : null}
       </div>
       <button
         type="button"
         aria-label={
-          isPlantDiscovered ? `Open plant ${plantLevel} details` : `Plant ${plantLevel} locked`
+          hasTrophy ? `Open plant ${plantLevel} details` : `Plant ${plantLevel} trophy not won`
         }
-        tabIndex={isPlantDiscovered ? 0 : -1}
-        className={`absolute rounded-md p-0 outline-none ${isPlantDiscovered ? 'cursor-pointer' : 'cursor-default'}`}
+        tabIndex={hasTrophy ? 0 : -1}
+        className={`absolute rounded-md p-0 outline-none ${hasTrophy ? 'cursor-pointer' : 'cursor-default'}`}
         style={{
           left: '50%',
           top: '50%',
@@ -1435,18 +1380,18 @@ function BarnShelfPlantSlot({
           zIndex: 25,
           backgroundColor: 'transparent',
           border: 'none',
-          pointerEvents: isPlantDiscovered ? 'auto' : 'none',
+          pointerEvents: hasTrophy ? 'auto' : 'none',
           touchAction: 'manipulation',
           WebkitTapHighlightColor: 'transparent',
         }}
         onPointerDown={onSpritePressPointerDown}
         onClick={(e) => {
           e.stopPropagation();
-          if (!isPlantDiscovered) return;
+          if (!hasTrophy) return;
           onOpenPlantInfo();
         }}
         onKeyDown={(e) => {
-          if (!isPlantDiscovered) return;
+          if (!hasTrophy) return;
           if (e.key === 'Enter' || e.key === ' ') {
             setSpritePressed(true);
             e.preventDefault();
@@ -1499,6 +1444,91 @@ export default function App() {
   
   const [activeTab, setActiveTab] = useState<TabType>('SEEDS');
   const [activeScreen, setActiveScreen] = useState<ScreenType>('FARM');
+  const [lockedSpecialDeliveryLevelBounceGen, setLockedSpecialDeliveryLevelBounceGen] =
+    useState(0);
+  /** Manual debug / Special Delivery FTUE for locked Special Deliveries vine lock. */
+  const [specialDeliveryLockedFtueActive, setSpecialDeliveryLockedFtueActive] = useState(false);
+  const [specialDeliveryLockedFtueGen, setSpecialDeliveryLockedFtueGen] = useState(0);
+  /** True once the Collection carousel slide finished, so the lock can be measured. */
+  const [specialDeliveryLockedFtueSettled, setSpecialDeliveryLockedFtueSettled] = useState(false);
+  const [specialDeliveryLockedFtueLockGone, setSpecialDeliveryLockedFtueLockGone] =
+    useState(false);
+  /** After FTUE lock tap: unlocked panel art fades in behind while locked art fades out. */
+  const [specialDeliveryLockedFtuePanelReveal, setSpecialDeliveryLockedFtuePanelReveal] =
+    useState(false);
+  const [specialDeliveryLockedFtueHoleRect, setSpecialDeliveryLockedFtueHoleRect] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const [specialDeliveryLockedFtueLevelHoleRect, setSpecialDeliveryLockedFtueLevelHoleRect] =
+    useState<{
+      left: number;
+      top: number;
+      width: number;
+      height: number;
+    } | null>(null);
+  const [specialDeliveryLockedFtueFlyingUnlock, setSpecialDeliveryLockedFtueFlyingUnlock] =
+    useState<{ id: string; x: number; y: number; sizePx: number } | null>(null);
+  const [specialDeliveryLockedFtueLeafBurst, setSpecialDeliveryLockedFtueLeafBurst] = useState<{
+    id: string;
+    x: number;
+    y: number;
+    startTime: number;
+  } | null>(null);
+  const [specialDeliveryLockedFtueVineBurstId, setSpecialDeliveryLockedFtueVineBurstId] =
+    useState<string | null>(null);
+  /** Special Delivery level-7 FTUE (claim dailies → Collection nav → vine lock). */
+  const [specialDeliveryFtueStarted, setSpecialDeliveryFtueStarted] = useState(false);
+  const [specialDeliveryFtueCompleted, setSpecialDeliveryFtueCompleted] = useState(false);
+  const [specialDeliveryFtuePhase, setSpecialDeliveryFtuePhase] =
+    useState<SpecialDeliveryFtuePhase | null>(null);
+  const specialDeliveryFtuePhaseRef = useRef<SpecialDeliveryFtuePhase | null>(null);
+  specialDeliveryFtuePhaseRef.current = specialDeliveryFtuePhase;
+  const specialDeliveryFtueCompletedRef = useRef(false);
+  specialDeliveryFtueCompletedRef.current = specialDeliveryFtueCompleted;
+  const [sdFtueFingerTaskIds, setSdFtueFingerTaskIds] = useState<string[]>([]);
+  const sdFtueFingerTaskIdsRef = useRef<string[]>([]);
+  sdFtueFingerTaskIdsRef.current = sdFtueFingerTaskIds;
+  const [sdFtueClaimFadingOut, setSdFtueClaimFadingOut] = useState(false);
+  const sdFtueClaimFadeTimeoutRef = useRef<number | null>(null);
+  const [specialDeliveryCollectionNavHoleRect, setSpecialDeliveryCollectionNavHoleRect] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const [specialDeliveryCollectionFtueFadingOut, setSpecialDeliveryCollectionFtueFadingOut] =
+    useState(false);
+  const specialDeliveryCollectionFtueFadeTimeoutRef = useRef<number | null>(null);
+  const [sdFtueExplainFadingOut, setSdFtueExplainFadingOut] = useState(false);
+  const sdFtueExplainFadeTimeoutRef = useRef<number | null>(null);
+  const [sdFtueDoorFingerIndices, setSdFtueDoorFingerIndices] = useState<number[]>([]);
+  const [sdFtueDoorHoleRects, setSdFtueDoorHoleRects] = useState<
+    { left: number; top: number; width: number; height: number }[]
+  >([]);
+  /**
+   * Door-guide input gate: `holes` = only the 9 doors, `full` = nothing (match locked
+   * in, Claim Reward not ready), `off` = Match-3 owns input so Claim Reward is tappable.
+   */
+  const [sdFtueDoorGuideBlockMode, setSdFtueDoorGuideBlockMode] = useState<
+    'holes' | 'full' | 'off'
+  >('holes');
+  const [sdFtueDoorFingersFadingOut, setSdFtueDoorFingersFadingOut] = useState(false);
+  const sdFtueDoorFingerFadeTimeoutRef = useRef<number | null>(null);
+  const sdFtueDoorTapCountRef = useRef(0);
+  const [sdFtuePickSequence, setSdFtuePickSequence] = useState<SpecialDeliveryReward[] | null>(
+    null,
+  );
+  const [sdFtuePostTrophyFadingOut, setSdFtuePostTrophyFadingOut] = useState(false);
+  const sdFtuePostTrophyFadeTimeoutRef = useRef<number | null>(null);
+  const sdFtueAwaitingCoinLandRef = useRef(false);
+  const sdFtueCoinBurstSeenRef = useRef(false);
+  const beginSdFtueCoinDoorGuideRef = useRef<() => void>(() => {});
+  const beginSdFtueTrophyDoorGuideRef = useRef<() => void>(() => {});
+  const sdFtueResumePendingRef = useRef(false);
+  const beginSpecialDeliveryLevel7FtueRef = useRef<() => void>(() => {});
   const activeScreenRef = useRef<ScreenType>(activeScreen);
   activeScreenRef.current = activeScreen;
   const [storeScrollToCoinSectionRequest, setStoreScrollToCoinSectionRequest] = useState(0);
@@ -1530,6 +1560,9 @@ export default function App() {
   useEffect(() => {
     moneyRef.current = money;
   }, [money]);
+  const [keyCount, setKeyCount] = useState(0);
+  const keyCountRef = useRef(0);
+  keyCountRef.current = keyCount;
 
   const [grid, setGrid] = useState<BoardCell[]>(generateInitialGrid());
   const [seedProgress, setSeedProgress] = useState(0);
@@ -1585,6 +1618,10 @@ export default function App() {
   const [tasksFtueStarted, setTasksFtueStarted] = useState(false);
   const [tasksFtueUnlockRevealed, setTasksFtueUnlockRevealed] = useState(false);
   const [tasksFtueCompleted, setTasksFtueCompleted] = useState(false);
+  /** After opening Daily Tasks during FTUE: force claim before the FTUE ends. */
+  const [tasksFtueClaimStep, setTasksFtueClaimStep] = useState(false);
+  const [tasksFtueClaimFadingOut, setTasksFtueClaimFadingOut] = useState(false);
+  const tasksFtueClaimFadeTimeoutRef = useRef<number | null>(null);
   const [gardensFtueStarted, setGardensFtueStarted] = useState(false);
   const [gardensFtueUnlockRevealed, setGardensFtueUnlockRevealed] = useState(false);
   const [gardensFtueCompleted, setGardensFtueCompleted] = useState(false);
@@ -1648,6 +1685,8 @@ export default function App() {
   } | null>(null);
   const [iapOfferUi, setIapOfferUi] = useState<{ offerId: string } | null>(null);
   const pendingPurchaseBoostsRef = useRef<{ offerId: string; durationMs: number; icon: string }[]>([]);
+  /** Special Delivery booster claims — activate with BoostParticle when player returns to FARM. */
+  const pendingSpecialDeliveryBoostsRef = useRef<{ offerId: string; durationMs: number; icon: string }[]>([]);
   // Plant info popup state (for barn)
   const [plantInfoPopup, setPlantInfoPopup] = useState<{ isVisible: boolean; level: number; gardenId: GardenId } | null>(null);
   /** Bumps when inactive-garden collection data is patched in v2 save (re-read shelves / popup wallet). */
@@ -1692,6 +1731,21 @@ export default function App() {
   rewardedOffersRef.current = rewardedOffers;
   // Discovery reward particles: fly from discovery popup reward icon to wallet.
   const [activeDiscoveryCoinParticles, setActiveDiscoveryCoinParticles] = useState<GoalCoinParticleData[]>([]);
+  /** Daily-task key burst: one key particle per key, flying to Collection nav. */
+  const [activeDailyTaskKeyParticles, setActiveDailyTaskKeyParticles] = useState<
+    GoalCoinParticleData[]
+  >([]);
+  const [dailyTaskCollectionIconOverlay, setDailyTaskCollectionIconOverlay] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+    filter: string;
+  } | null>(null);
+  const [dailyTaskCollectionIconOverlayVisible, setDailyTaskCollectionIconOverlayVisible] =
+    useState(false);
+  const [dailyTaskKeyImpactVersion, setDailyTaskKeyImpactVersion] = useState(0);
+  const dailyTaskKeyBurstWasActiveRef = useRef(false);
   const [activeGoldenPotProgressParticles, setActiveGoldenPotProgressParticles] = useState<
     GoldenPotProgressParticleData[]
   >([]);
@@ -1814,6 +1868,44 @@ export default function App() {
       leafSizeScale?: number;
     }[]
   >([]);
+  const [specialDeliveryFlyRewards, setSpecialDeliveryFlyRewards] = useState<
+    (SpecialDeliveryRewardFlyData & {
+      targetKind: 'farmNav' | 'collectionGardenFb';
+    })[]
+  >([]);
+  /**
+   * Temporary Gardens floating button on Collection while an other-garden upgrade/coin
+   * claim flies into it.
+   */
+  const [collectionGardenHandoff, setCollectionGardenHandoff] = useState<{
+    gardenId: GardenId;
+    phase: 'entering' | 'active' | 'exiting';
+    bounceNonce: number;
+    /** Ready-bounce when a reward particle impacts the FB. */
+    impactBounceNonce: number;
+    /** Notification dot after first impact — stays until the FB exits. */
+    showNotificationDot: boolean;
+  } | null>(null);
+  const collectionGardenHandoffFbRef = useRef<HTMLDivElement | null>(null);
+  const collectionGardenHandoffPendingFlightsRef = useRef(0);
+  const collectionGardenHandoffDismissTimeoutRef = useRef<number | null>(null);
+  const collectionGardenHandoffExitTimeoutRef = useRef<number | null>(null);
+  const collectionGardenHandoffOverlayReleaseRef = useRef<(() => void) | null>(null);
+  /** Farm Gardens FB notification after an other-garden SD claim (cleared when picker opens). */
+  const [gardensFbHandoffNotification, setGardensFbHandoffNotification] = useState(false);
+  const pendingCollectionGardenHandoffFliesRef = useRef<
+    {
+      iconSrc: string;
+      overlayIconSrc?: string;
+      startX: number;
+      startY: number;
+      sizePx: number;
+    }[]
+  >([]);
+  /** Claimed trophies in flight from the match-3 reveal to their collection shelf slot. */
+  const [trophyFlyRewards, setTrophyFlyRewards] = useState<
+    (SpecialDeliveryRewardFlyData & { plantLevel: number; gardenId: GardenId })[]
+  >([]);
   const pendingDailyTaskClaimRef = useRef<{
     taskId: string;
     fx: DailyTaskClaimFx;
@@ -1825,6 +1917,9 @@ export default function App() {
   const [activeGardenId, setActiveGardenId] = useState<GardenId>(DEFAULT_GARDEN_ID);
   const activeGardenIdRef = useRef<GardenId>(DEFAULT_GARDEN_ID);
   const [garden1PlayerLevel, setGarden1PlayerLevel] = useState(1);
+  /** Live mirror: daily-task contexts are built inside intervals with stale closures. */
+  const garden1PlayerLevelRef = useRef(1);
+  garden1PlayerLevelRef.current = garden1PlayerLevel;
   const [gardenPickerOpen, setGardenPickerOpen] = useState(false);
   const [lockedGardenPickerPopupOpen, setLockedGardenPickerPopupOpen] = useState(false);
   const [gardenSwitchOverlayActive, setGardenSwitchOverlayActive] = useState(false);
@@ -1998,6 +2093,8 @@ export default function App() {
   const upgradeTabsRef = useRef<UpgradeTabsRef>(null);
   // Barn notification: unread mastery unlocks waiting in Shed.
   const [barnNotification, setBarnNotification] = useState(false);
+  /** Green nav dot on Garden tab after special-delivery upgrade/booster claim. */
+  const [farmNotification, setFarmNotification] = useState(false);
   const [seenMasteryUnlockLevels, setSeenMasteryUnlockLevels] = useState<number[]>([]);
   const [unlockingCellIndices, setUnlockingCellIndices] = useState<number[]>([]); // Cells currently playing unlock animation
   // Goals: 3 plant slots until 4 golden pots; then 4. Slot index 4 is coin goal only.
@@ -2120,11 +2217,23 @@ export default function App() {
   const [activeCoinPanels, setActiveCoinPanels] = useState<CoinPanelData[]>([]);
   const [coinPanelPortalRect, setCoinPanelPortalRect] = useState<{ left: number; top: number; width: number; height: number; scale: number } | null>(null);
   const [harvestBounceCellIndices, setHarvestBounceCellIndices] = useState<number[]>([]);
-  const [maxPlantToasts, setMaxPlantToasts] = useState<{ id: string; x: number; y: number; startTime: number }[]>([]);
+  const [maxPlantToasts, setMaxPlantToasts] = useState<
+    {
+      id: string;
+      x: number;
+      y: number;
+      startTime: number;
+      message?: string;
+      textColor?: string;
+      outlineColor?: string;
+    }[]
+  >([]);
   const [walletFlashActive, setWalletFlashActive] = useState(false);
   const [walletBursts, setWalletBursts] = useState<{ id: number; trigger: number }[]>([]);
   /** Increments on coin impact to trigger wallet icon bounce (sparkles removed, bounce kept). */
   const [walletBounceTrigger, setWalletBounceTrigger] = useState(0);
+  /** Text-only bounce for quiet wallet credits (e.g. surplus while on Collection). */
+  const [walletTextBounceTrigger, setWalletTextBounceTrigger] = useState(0);
   const [goldenPotWalletFlashActive, setGoldenPotWalletFlashActive] = useState(false);
   const [goldenPotWalletBounceTrigger, setGoldenPotWalletBounceTrigger] = useState(0);
   const [playerLevel, setPlayerLevel] = useState(1);
@@ -2137,22 +2246,112 @@ export default function App() {
     unlockedLevels: [],
     plantMasteryIntroBarComplete: false,
   });
-  const goldenPotCount = plantMastery.unlockedLevels.length;
+  /** Plant tiers with a Special Delivery trophy won in the active garden (collection shelves). */
+  const [trophyLevels, setTrophyLevels] = useState<number[]>([]);
+  const trophyLevelsRef = useRef(trophyLevels);
+  trophyLevelsRef.current = trophyLevels;
+  /** Claimed trophies not yet on the shelf (flying) — keys are `gardenId:plantLevel`. */
+  const [pendingTrophyLevels, setPendingTrophyLevels] = useState<string[]>([]);
+  const goldenPotCount = trophyLevels.length;
   const goldenPotCountRef = useRef(goldenPotCount);
   goldenPotCountRef.current = goldenPotCount;
+  /**
+   * Plant tiers that render on a gold pot everywhere (seed button, hex grid, panels).
+   * Trophies are the live source; legacy saves may also carry purchased mastery levels.
+   */
+  const goldenPotPlantLevels = useMemo(() => {
+    if (plantMastery.unlockedLevels.length === 0) return trophyLevels;
+    return [...new Set([...trophyLevels, ...plantMastery.unlockedLevels])];
+  }, [trophyLevels, plantMastery.unlockedLevels]);
 
   const collectionV2Gardens = useMemo(
     () => loadGameSaveV2()?.gardens,
-    [collectionSaveRevision, activeGardenId, plantMastery.unlockedLevels, highestPlantEver, money],
+    [collectionSaveRevision, activeGardenId, trophyLevels, highestPlantEver, money],
   );
   const activeCollectionSnapshot = useMemo(
     (): GardenCollectionSnapshot => ({
       highestPlantEver,
       unlockedLevels: plantMastery.unlockedLevels,
       money,
+      trophyLevels,
     }),
-    [highestPlantEver, plantMastery.unlockedLevels, money],
+    [highestPlantEver, plantMastery.unlockedLevels, money, trophyLevels],
   );
+  /**
+   * Trophies Special Deliveries may still deal: discovered plants (any started garden) without
+   * their trophy, minus any claimed trophy still flying to its shelf.
+   */
+  const winnableTrophies = useMemo(() => {
+    const gardensStarted = loadGameSaveV2()?.gardensStarted ?? [DEFAULT_GARDEN_ID];
+    const winnable = getWinnableTrophyTargetsAcrossGardens(
+      activeGardenId,
+      activeCollectionSnapshot,
+      collectionV2Gardens,
+      gardensStarted,
+    );
+    if (pendingTrophyLevels.length === 0) return winnable;
+    const pending = new Set(pendingTrophyLevels);
+    return winnable.filter((t) => !pending.has(`${t.gardenId}:${t.plantLevel}`));
+  }, [
+    activeGardenId,
+    activeCollectionSnapshot,
+    collectionV2Gardens,
+    pendingTrophyLevels,
+    collectionSaveRevision,
+  ]);
+  const specialDeliveryUpgradeGateCtx = useMemo<UpgradeGateContext>(
+    () => ({
+      playerLevel,
+      lockedCellCount,
+      goldenPotCount,
+      seedsState,
+      harvestState,
+      cropsState,
+      gardenId: activeGardenId,
+    }),
+    [
+      playerLevel,
+      lockedCellCount,
+      goldenPotCount,
+      seedsState,
+      harvestState,
+      cropsState,
+      activeGardenId,
+    ],
+  );
+  /** Started gardens that can receive SD upgrades / coins (unlocked + not maxed). */
+  const specialDeliveryGardenContexts = useMemo((): SpecialDeliveryGardenRewardContext[] => {
+    const v2 = loadGameSaveV2();
+    const started = v2?.gardensStarted?.length ? v2.gardensStarted : [activeGardenId];
+    const startedSet = new Set(started);
+    startedSet.add(activeGardenId);
+    const out: SpecialDeliveryGardenRewardContext[] = [];
+    for (const gardenId of SHIPPED_GARDEN_IDS) {
+      if (!startedSet.has(gardenId)) continue;
+      if (gardenId === activeGardenId) {
+        out.push({
+          gardenId,
+          playerLevel,
+          upgradeGateCtx: specialDeliveryUpgradeGateCtx,
+        });
+        continue;
+      }
+      const snap = collectionV2Gardens?.[gardenId];
+      if (!snap) continue;
+      out.push({
+        gardenId,
+        playerLevel: snap.playerLevel,
+        upgradeGateCtx: buildUpgradeGateContextFromGardenState(gardenId, snap),
+      });
+    }
+    return out;
+  }, [
+    activeGardenId,
+    playerLevel,
+    specialDeliveryUpgradeGateCtx,
+    collectionV2Gardens,
+    collectionSaveRevision,
+  ]);
   const globalBonusPotCount = useMemo(
     () =>
       getGlobalBonusProgressPotCount(activeGardenId, activeCollectionSnapshot, collectionV2Gardens),
@@ -2353,7 +2552,7 @@ export default function App() {
     ),
     globalGoldenPotCount: globalBonusPotCountRef.current,
     globalGoldenPotUnlockedTiers: unlockedBonusTierSetRef.current,
-    garden1PlayerLevel,
+    garden1PlayerLevel: garden1PlayerLevelRef.current,
   });
   /** Defer starting loading in plant goal slot 3 until player returns to FARM (see fourth-slot unlock flow). */
   const pendingFourthPlantGoalSlotRef = useRef(false);
@@ -2589,6 +2788,579 @@ export default function App() {
     [],
   );
 
+  const spawnViewportRewardKeyBurst = useCallback(
+    (startPoint: { x: number; y: number }, rewardKeys: number, idPrefix: string) => {
+      const count = Math.max(0, Math.floor(rewardKeys));
+      if (count <= 0) return false;
+      const layer = discoveryRewardFxLayerRef.current;
+      if (!layer) return false;
+      const collectionIcon = barnButtonRef.current?.querySelector('img');
+      if (collectionIcon) {
+        const rect = collectionIcon.getBoundingClientRect();
+        setDailyTaskCollectionIconOverlay({
+          left: rect.left,
+          top: rect.top,
+          width: rect.width,
+          height: rect.height,
+          filter: window.getComputedStyle(collectionIcon).filter,
+        });
+        setDailyTaskCollectionIconOverlayVisible(true);
+      }
+      const lr = layer.getBoundingClientRect();
+      setActiveDailyTaskKeyParticles((prev) => [
+        ...prev,
+        ...buildCoinBurstParticles({
+          startX: startPoint.x - lr.left,
+          startY: startPoint.y - lr.top,
+          rewardValue: count,
+          particleCount: count,
+          idPrefix,
+          suckPath: 'collection',
+          particleExtras: {
+            iconSrc: '/assets/icons/coins/icon_key.png',
+            trailColor: '#f4c84a',
+            skipHappyCustomerRoll: true,
+            skipDoubleCoinsMultiplier: true,
+          },
+        }),
+      ]);
+      return true;
+    },
+    [],
+  );
+
+  /**
+   * Win a collection trophy for a discovered plant. Active garden updates live state; other
+   * gardens patch V2 save so Collection shelves refresh immediately.
+   */
+  const grantTrophyForLevel = useCallback(
+    (gardenId: GardenId, level: number) => {
+      const key = `${gardenId}:${level}`;
+      setPendingTrophyLevels((prev) => (prev.includes(key) ? prev.filter((x) => x !== key) : prev));
+      if (!Number.isFinite(level) || level < 1) return;
+      const plantLevel = Math.floor(level);
+
+      if (gardenId === activeGardenId) {
+        if (plantLevel > highestPlantEverRef.current) return;
+        setTrophyLevels((prev) =>
+          prev.includes(plantLevel) ? prev : [...prev, plantLevel].sort((a, b) => a - b),
+        );
+        return;
+      }
+
+      const v2 = loadGameSaveV2();
+      const snap = v2?.gardens?.[gardenId];
+      if (!snap) return;
+      const discovered = Math.max(0, Math.floor(snap.highestPlantEver ?? 0));
+      if (plantLevel > discovered) return;
+      const current = snap.trophyLevels ?? [];
+      if (current.includes(plantLevel)) {
+        setCollectionSaveRevision((n) => n + 1);
+        return;
+      }
+      persistGameSaveV2({
+        ...v2,
+        gardens: {
+          ...v2.gardens,
+          [gardenId]: {
+            ...snap,
+            trophyLevels: [...current, plantLevel].sort((a, b) => a - b),
+          },
+        },
+        savedAt: Date.now(),
+      });
+      setCollectionSaveRevision((n) => n + 1);
+    },
+    [activeGardenId],
+  );
+
+  /** Shelf slot flash + bounce when a plant's trophy arrives. */
+  const triggerTrophyRevealOnShelf = useCallback((level: number, gardenId: GardenId) => {
+    if (masteryPurchaseRevealTimeoutRef.current) {
+      window.clearTimeout(masteryPurchaseRevealTimeoutRef.current);
+    }
+    const el = barnScrollRef.current;
+    const plantKey = getCollectionPlantKey(gardenId, level);
+    const plantEl = el?.querySelector(`[data-barn-plant-key="${plantKey}"]`) as HTMLElement | null;
+    const r = plantEl?.getBoundingClientRect();
+    if (r) {
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const startTime = Date.now();
+      spawnMasteryConeBurst({ id: `trophy-win-cone-${level}-${startTime}-${Math.random().toString(36).slice(2)}`, x: cx, y: cy, startTime, spriteVariant: 'gold' });
+      setCellHighlightBeams((prev) => [
+        ...prev,
+        {
+          id: `trophy-win-beam-${level}-${startTime}-${Math.random().toString(36).slice(2)}`,
+          x: cx,
+          y: cy,
+          cellWidth: r.width,
+          cellHeight: r.height,
+          startTime,
+          showHexSprite: false,
+          sparkleCount: 20,
+          sparkleSizeScale: 2,
+          sparkleHeightScale: 1.9,
+        },
+      ]);
+    }
+    setMasteryPurchaseRevealLevels((prev) => (prev.includes(plantKey) ? prev : [...prev, plantKey]));
+    masteryPurchaseRevealTimeoutRef.current = window.setTimeout(() => {
+      setMasteryPurchaseRevealLevels((prev) => prev.filter((x) => x !== plantKey));
+      masteryPurchaseRevealTimeoutRef.current = null;
+    }, 650);
+  }, []);
+
+  /**
+   * Trophy claim: assigned below (needs the barn scroll helper). Returns the overlay/icon hold
+   * the match-3 must respect, or null when the shelf slot isn't on screen to fly to.
+   */
+  const clearCollectionGardenHandoffTimers = useCallback(() => {
+    if (collectionGardenHandoffDismissTimeoutRef.current != null) {
+      window.clearTimeout(collectionGardenHandoffDismissTimeoutRef.current);
+      collectionGardenHandoffDismissTimeoutRef.current = null;
+    }
+    if (collectionGardenHandoffExitTimeoutRef.current != null) {
+      window.clearTimeout(collectionGardenHandoffExitTimeoutRef.current);
+      collectionGardenHandoffExitTimeoutRef.current = null;
+    }
+  }, []);
+
+  const scheduleCollectionGardenHandoffDismiss = useCallback(() => {
+    clearCollectionGardenHandoffTimers();
+    collectionGardenHandoffDismissTimeoutRef.current = window.setTimeout(() => {
+      collectionGardenHandoffDismissTimeoutRef.current = null;
+      // Overlay release is tied to impact; if somehow still held, free it before exit.
+      collectionGardenHandoffOverlayReleaseRef.current?.();
+      collectionGardenHandoffOverlayReleaseRef.current = null;
+      setCollectionGardenHandoff((prev) => (prev ? { ...prev, phase: 'exiting' } : null));
+      collectionGardenHandoffExitTimeoutRef.current = window.setTimeout(() => {
+        collectionGardenHandoffExitTimeoutRef.current = null;
+        setCollectionGardenHandoff(null);
+        collectionGardenHandoffPendingFlightsRef.current = 0;
+      }, COLLECTION_GARDEN_HANDOFF_EXIT_MS);
+    }, COLLECTION_GARDEN_HANDOFF_HOLD_MS);
+  }, [clearCollectionGardenHandoffTimers]);
+
+  const noteCollectionGardenHandoffImpact = useCallback(() => {
+    collectionGardenHandoffOverlayReleaseRef.current?.();
+    collectionGardenHandoffOverlayReleaseRef.current = null;
+    setGardensFbHandoffNotification(true);
+    setCollectionGardenHandoff((prev) =>
+      prev
+        ? {
+            ...prev,
+            showNotificationDot: true,
+            impactBounceNonce: prev.impactBounceNonce + 1,
+          }
+        : null,
+    );
+    collectionGardenHandoffPendingFlightsRef.current = Math.max(
+      0,
+      collectionGardenHandoffPendingFlightsRef.current - 1,
+    );
+    if (collectionGardenHandoffPendingFlightsRef.current === 0) {
+      scheduleCollectionGardenHandoffDismiss();
+    }
+  }, [scheduleCollectionGardenHandoffDismiss]);
+
+  const creditGardenMoney = useCallback(
+    (gardenId: GardenId, amount: number) => {
+      if (amount <= 0) return;
+      if (gardenId === activeGardenIdRef.current) {
+        setMoney((m) => m + amount);
+        return;
+      }
+      const v2 = loadGameSaveV2();
+      const snap = v2?.gardens?.[gardenId];
+      if (!v2 || !snap) return;
+      persistGameSaveV2({
+        ...v2,
+        gardens: {
+          ...v2.gardens,
+          [gardenId]: { ...snap, money: (snap.money ?? 0) + amount },
+        },
+        savedAt: Date.now(),
+      });
+      setCollectionSaveRevision((n) => n + 1);
+    },
+    [],
+  );
+
+  const creditGardenFreeUpgrade = useCallback((gardenId: GardenId, upgradeId: string) => {
+    if (gardenId === activeGardenIdRef.current) {
+      setFreeUpgradeCounts((prev) => ({
+        ...prev,
+        [upgradeId]: (prev[upgradeId] ?? 0) + 1,
+      }));
+      return;
+    }
+    const v2 = loadGameSaveV2();
+    const snap = v2?.gardens?.[gardenId];
+    if (!v2 || !snap) return;
+    const current = snap.freeUpgradeCounts ?? {};
+    persistGameSaveV2({
+      ...v2,
+      gardens: {
+        ...v2.gardens,
+        [gardenId]: {
+          ...snap,
+          freeUpgradeCounts: {
+            ...current,
+            [upgradeId]: (current[upgradeId] ?? 0) + 1,
+          },
+        },
+      },
+      savedAt: Date.now(),
+    });
+    setCollectionSaveRevision((n) => n + 1);
+  }, []);
+
+  const beginCollectionGardenHandoff = useCallback(
+    (gardenId: GardenId) => {
+      clearCollectionGardenHandoffTimers();
+      setCollectionGardenHandoff((prev) => {
+        if (prev && prev.gardenId === gardenId && prev.phase !== 'exiting') {
+          return prev;
+        }
+        return {
+          gardenId,
+          phase: 'entering',
+          bounceNonce: Date.now(),
+          impactBounceNonce: 0,
+          showNotificationDot: false,
+        };
+      });
+    },
+    [clearCollectionGardenHandoffTimers],
+  );
+
+  const buildCollectionGardenHandoffPresentation = useCallback(
+    (): SpecialDeliveryClaimPresentation => ({
+      iconHoldMs: 40,
+      overlayHoldMs: 0,
+      overlayFadeMs: COLLECTION_GARDEN_HANDOFF_OVERLAY_FADE_MS,
+      holdOverlayUntilReleased: true,
+      attachOverlayRelease: (release) => {
+        collectionGardenHandoffOverlayReleaseRef.current = release;
+      },
+    }),
+    [],
+  );
+
+  const queueCollectionGardenHandoffFly = useCallback(
+    (
+      gardenId: GardenId,
+      startPoint: { x: number; y: number },
+      reward: Extract<SpecialDeliveryReward, { kind: 'upgrade' | 'coins' }>,
+      sizePx: number,
+    ) => {
+      beginCollectionGardenHandoff(gardenId);
+      const layer = discoveryRewardFxLayerRef.current;
+      if (!layer) return false;
+      const lr = layer.getBoundingClientRect();
+      collectionGardenHandoffPendingFlightsRef.current += 1;
+      pendingCollectionGardenHandoffFliesRef.current.push({
+        iconSrc: reward.iconSrc,
+        overlayIconSrc: specialDeliveryRewardOverlayIconSrc(reward) ?? undefined,
+        startX: startPoint.x - lr.left,
+        startY: startPoint.y - lr.top,
+        sizePx,
+      });
+      // Retrigger flush when the FB is already up (subsequent claims).
+      setCollectionGardenHandoff((prev) =>
+        prev && prev.gardenId === gardenId && prev.phase !== 'entering'
+          ? { ...prev, bounceNonce: prev.bounceNonce + 1 }
+          : prev,
+      );
+      return true;
+    },
+    [beginCollectionGardenHandoff],
+  );
+
+  // Bounce + leaf burst when the Collection garden handoff FB appears.
+  useEffect(() => {
+    if (!collectionGardenHandoff || collectionGardenHandoff.phase !== 'entering') return;
+    if (!getPerformanceMode()) {
+      const el = collectionGardenHandoffFbRef.current;
+      if (el) {
+        const r = el.getBoundingClientRect();
+        // Use the high FX portal burst so leaves sit above the match-3 black overlay.
+        const leafRect = 88 * appScaleRef.current;
+        setDailyTaskLeafBursts((prev) => [
+          ...prev,
+          {
+            id: `collection-garden-handoff-lb-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            x: r.left + r.width / 2,
+            y: r.top + r.height / 2 + 30,
+            rectWidth: leafRect,
+            rectHeight: leafRect,
+            spriteVariant: 'green',
+            leafCount: LEAF_BURST_BASELINE_COUNT,
+            leafSizeScale: 1.25,
+          },
+        ]);
+      }
+    }
+    const t = window.setTimeout(() => {
+      setCollectionGardenHandoff((prev) =>
+        prev && prev.phase === 'entering' ? { ...prev, phase: 'active' } : prev,
+      );
+    }, 200);
+    return () => window.clearTimeout(t);
+  }, [collectionGardenHandoff?.bounceNonce, collectionGardenHandoff?.phase]);
+
+  const [collectionGardenHandoffImpactBounce, setCollectionGardenHandoffImpactBounce] =
+    useState(false);
+  useEffect(() => {
+    if (!collectionGardenHandoff || collectionGardenHandoff.impactBounceNonce <= 0) return;
+    setCollectionGardenHandoffImpactBounce(true);
+    const t = window.setTimeout(() => setCollectionGardenHandoffImpactBounce(false), 200);
+    return () => window.clearTimeout(t);
+  }, [collectionGardenHandoff?.impactBounceNonce]);
+
+  // Flush queued reward flies once the handoff FB is measurable.
+  useEffect(() => {
+    if (!collectionGardenHandoff || collectionGardenHandoff.phase === 'exiting') return;
+    if (pendingCollectionGardenHandoffFliesRef.current.length === 0) return;
+    let cancelled = false;
+    const flush = () => {
+      if (cancelled) return;
+      const el = collectionGardenHandoffFbRef.current;
+      const layer = discoveryRewardFxLayerRef.current;
+      if (!el || !layer) {
+        window.requestAnimationFrame(flush);
+        return;
+      }
+      const pending = pendingCollectionGardenHandoffFliesRef.current.splice(0);
+      if (pending.length === 0) return;
+      const lr = layer.getBoundingClientRect();
+      const tr = el.getBoundingClientRect();
+      const targetX = tr.left + tr.width / 2 - lr.left;
+      const targetY = tr.top + tr.height / 2 - lr.top;
+      setSpecialDeliveryFlyRewards((prev) => [
+        ...prev,
+        ...pending.map((fly) => ({
+          id: `sd-handoff-fly-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          ...fly,
+          targetX,
+          targetY,
+          targetKind: 'collectionGardenFb' as const,
+        })),
+      ]);
+    };
+    const t = window.setTimeout(flush, 40);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [collectionGardenHandoff?.gardenId, collectionGardenHandoff?.bounceNonce]);
+
+  useEffect(
+    () => () => {
+      clearCollectionGardenHandoffTimers();
+    },
+    [clearCollectionGardenHandoffTimers],
+  );
+
+  const runTrophyClaimPresentationRef = useRef<
+    (
+      reward: Extract<SpecialDeliveryReward, { kind: 'trophy' }>,
+      startPoint: { x: number; y: number },
+      sizePx: number,
+    ) => SpecialDeliveryClaimPresentation | null
+  >(() => null);
+
+  const handleSpecialDeliveryClaimReward = useCallback(
+    (
+      reward: SpecialDeliveryReward,
+      startPoint: { x: number; y: number },
+      meta?: { sizePx: number },
+    ): SpecialDeliveryClaimPresentation | void => {
+      const sizePx = Math.max(24, meta?.sizePx ?? 72);
+      const activeId = activeGardenIdRef.current;
+
+      if (reward.kind === 'coins') {
+        playSfx(SFX_IDS.uiConfirmReward);
+        if (specialDeliveryFtuePhaseRef.current === 'guide_doors_coins') {
+          sdFtueAwaitingCoinLandRef.current = true;
+          sdFtueCoinBurstSeenRef.current = false;
+          setSpecialDeliveryFtuePhase('await_coins_land');
+          specialDeliveryFtuePhaseRef.current = 'await_coins_land';
+          setSdFtueDoorFingerIndices([]);
+          setSdFtueDoorGuideBlockMode('off');
+          setSdFtueDoorFingersFadingOut(false);
+          if (sdFtueDoorFingerFadeTimeoutRef.current != null) {
+            window.clearTimeout(sdFtueDoorFingerFadeTimeoutRef.current);
+            sdFtueDoorFingerFadeTimeoutRef.current = null;
+          }
+          // Empty array keeps FTUE placeholder dealing until the trophy round replaces it.
+          setSdFtuePickSequence([]);
+        }
+        if (reward.gardenId !== activeId) {
+          creditGardenMoney(reward.gardenId, reward.amount);
+          if (!queueCollectionGardenHandoffFly(reward.gardenId, startPoint, reward, sizePx)) {
+            return {
+              iconHoldMs: 0,
+              overlayHoldMs: 0,
+              overlayFadeMs: COLLECTION_GARDEN_HANDOFF_OVERLAY_FADE_MS,
+            };
+          }
+          return buildCollectionGardenHandoffPresentation();
+        }
+        if (
+          !spawnViewportRewardCoinBurst(startPoint, reward.amount, {
+            idPrefix: 'special-delivery-coins',
+            yellowLeaves: true,
+            particleExtras: {
+              skipHappyCustomerRoll: true,
+              skipDoubleCoinsMultiplier: true,
+            },
+          })
+        ) {
+          setMoney((m) => m + reward.amount);
+          if (sdFtueAwaitingCoinLandRef.current) {
+            // No particles — advance immediately.
+            sdFtueAwaitingCoinLandRef.current = false;
+            queueMicrotask(() => beginSdFtueTrophyDoorGuideRef.current());
+          }
+        }
+        return;
+      }
+
+      if (reward.kind === 'keys') {
+        playSfx(SFX_IDS.uiConfirmReward);
+        const layer = discoveryRewardFxLayerRef.current;
+        if (!layer) {
+          setKeyCount((prev) => prev + reward.amount);
+          return;
+        }
+        const lr = layer.getBoundingClientRect();
+        // Already on Collection — fly into the key wallet (not the Collection tab icon).
+        setActiveDailyTaskKeyParticles((prev) => [
+          ...prev,
+          ...buildCoinBurstParticles({
+            startX: startPoint.x - lr.left,
+            startY: startPoint.y - lr.top,
+            rewardValue: reward.amount,
+            particleCount: reward.amount,
+            idPrefix: 'special-delivery-keys',
+            suckPath: 'popup',
+            particleExtras: {
+              iconSrc: '/assets/icons/coins/icon_key.png',
+              trailColor: '#f4c84a',
+              skipHappyCustomerRoll: true,
+              skipDoubleCoinsMultiplier: true,
+            },
+          }),
+        ]);
+        return;
+      }
+
+      // Trophies scroll the collection to their shelf, then fly into the slot behind the overlay.
+      if (reward.kind === 'trophy') {
+        playSfx(SFX_IDS.uiConfirmReward);
+        const presentation = runTrophyClaimPresentationRef.current(
+          reward,
+          startPoint,
+          sizePx,
+        );
+        if (presentation) return presentation;
+        // No slot on screen to fly to — award it straight away.
+        grantTrophyForLevel(reward.gardenId, reward.plantLevel);
+        triggerTrophyRevealOnShelf(reward.plantLevel, reward.gardenId);
+        if (specialDeliveryFtuePhaseRef.current === 'guide_doors_trophy') {
+          setSdFtueDoorFingerIndices([]);
+          setSdFtueDoorGuideBlockMode('off');
+          setSdFtueDoorFingersFadingOut(false);
+          setSdFtuePickSequence(null);
+          setSpecialDeliveryFtuePhase('post_trophy');
+          specialDeliveryFtuePhaseRef.current = 'post_trophy';
+        }
+        return;
+      }
+
+      // Queue booster activation for when the player reaches the garden (timer starts on particle impact).
+      if (reward.kind === 'booster') {
+        const offer = getOfferById(reward.offerId);
+        if (offer) {
+          const durationMs =
+            offer.durationSeconds != null
+              ? offer.durationSeconds * 1000
+              : offer.durationMinutes != null
+                ? offer.durationMinutes * 60 * 1000
+                : 60000;
+          pendingSpecialDeliveryBoostsRef.current.push({
+            offerId: reward.offerId,
+            durationMs,
+            icon: offer.headerIcon ?? reward.iconSrc,
+          });
+          bumpAdBreakGrace(
+            adBreakRuntimeRef.current,
+            Date.now(),
+            SPECIAL_DELIVERY_REWARD_AD_GRACE_MS,
+          );
+        }
+      }
+
+      // Free upgrade credit — other gardens use Collection handoff FB; active opens panel on return.
+      if (reward.kind === 'upgrade') {
+        creditGardenFreeUpgrade(reward.gardenId, reward.upgradeId);
+        if (reward.gardenId === activeId) {
+          pendingSpecialDeliveryUpgradePresentRef.current = reward.upgradeId;
+          bumpAdBreakGrace(
+            adBreakRuntimeRef.current,
+            Date.now(),
+            SPECIAL_DELIVERY_REWARD_AD_GRACE_MS,
+          );
+        }
+      }
+
+      if (reward.kind === 'upgrade' && reward.gardenId !== activeId) {
+        playSfx(SFX_IDS.uiConfirmReward);
+        if (!queueCollectionGardenHandoffFly(reward.gardenId, startPoint, reward, sizePx)) {
+          return {
+            iconHoldMs: 0,
+            overlayHoldMs: 0,
+            overlayFadeMs: COLLECTION_GARDEN_HANDOFF_OVERLAY_FADE_MS,
+          };
+        }
+        return buildCollectionGardenHandoffPresentation();
+      }
+
+      if (reward.kind === 'upgrade' || reward.kind === 'booster') {
+        playSfx(SFX_IDS.uiConfirmReward);
+        const layer = discoveryRewardFxLayerRef.current;
+        if (!layer) {
+          if (reward.kind === 'booster' || reward.kind === 'upgrade') setFarmNotification(true);
+          return;
+        }
+        const lr = layer.getBoundingClientRect();
+        setSpecialDeliveryFlyRewards((prev) => [
+          ...prev,
+          {
+            id: `sd-fly-${reward.kind}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            iconSrc: reward.iconSrc,
+            overlayIconSrc: specialDeliveryRewardOverlayIconSrc(reward) ?? undefined,
+            startX: startPoint.x - lr.left,
+            startY: startPoint.y - lr.top,
+            sizePx,
+            targetKind: 'farmNav',
+          },
+        ]);
+      }
+    },
+    [
+      spawnViewportRewardCoinBurst,
+      grantTrophyForLevel,
+      triggerTrophyRevealOnShelf,
+      creditGardenMoney,
+      creditGardenFreeUpgrade,
+      queueCollectionGardenHandoffFly,
+      buildCollectionGardenHandoffPresentation,
+    ],
+  );
+
   const playDailyTaskClaimPresentation = useCallback(
     (
       taskId: string,
@@ -2615,12 +3387,14 @@ export default function App() {
         ]);
       }
 
-      spawnViewportRewardCoinBurst(fx.rewardCenter, payout, {
-        idPrefix: `daily-task-reward-${taskId}`,
-        yellowLeaves: true,
-      });
+      if (!spawnViewportRewardKeyBurst(fx.rewardCenter, payout, `daily-task-key-${taskId}`)) {
+        setKeyCount((prev) => prev + payout);
+        if (activeScreenRef.current !== 'BARN') {
+          setBarnNotification(true);
+        }
+      }
     },
-    [triggerDailyTaskClaimBounce, spawnViewportRewardCoinBurst],
+    [triggerDailyTaskClaimBounce, spawnViewportRewardKeyBurst],
   );
 
   const autoClaimCompleteTasksInPopup = useCallback(() => {
@@ -2646,15 +3420,18 @@ export default function App() {
       playSfx(SFX_IDS.uiConfirmReward);
     }
     for (const { task, fx } of claimSnapshots) {
-      playDailyTaskClaimPresentation(task.id, task.rewardCoins, fx, { playSfx: false });
+      playDailyTaskClaimPresentation(task.id, task.rewardKeys, fx, { playSfx: false });
     }
 
     const fxTaskIds = new Set(claimSnapshots.map(({ task }) => task.id));
     const missingPayout = unclaimedComplete
       .filter((task) => !fxTaskIds.has(task.id))
-      .reduce((sum, task) => sum + task.rewardCoins, 0);
+      .reduce((sum, task) => sum + task.rewardKeys, 0);
     if (missingPayout > 0) {
-      setMoney((m) => m + missingPayout);
+      setKeyCount((count) => count + missingPayout);
+      if (activeScreenRef.current !== 'BARN') {
+        setBarnNotification(true);
+      }
     }
   }, [playDailyTaskClaimPresentation]);
 
@@ -2680,7 +3457,7 @@ export default function App() {
       const ctx = getDailyTasksCtx();
       const rows = dailyTaskRowsRef.current;
       const unclaimedComplete = rows.filter((t) => t.state === 'complete');
-      const totalPayout = unclaimedComplete.reduce((sum, t) => sum + t.rewardCoins, 0);
+      const totalPayout = unclaimedComplete.reduce((sum, t) => sum + t.rewardKeys, 0);
 
       if (popupOpen) {
         if (unclaimedComplete.length > 0) {
@@ -2700,7 +3477,10 @@ export default function App() {
 
         triggerTasksFloatingButtonReadyFx();
         if (totalPayout > 0) {
-          spawnTasksFbCoinToWallet(totalPayout);
+          setKeyCount((count) => count + totalPayout);
+          if (activeScreenRef.current !== 'BARN') {
+            setBarnNotification(true);
+          }
         }
       }
 
@@ -2710,7 +3490,6 @@ export default function App() {
       autoClaimCompleteTasksInPopup,
       finishDailyTasksPeriodRoll,
       globalBonusPotCount,
-      spawnTasksFbCoinToWallet,
       triggerTasksFloatingButtonReadyFx,
     ],
   );
@@ -2943,20 +3722,75 @@ export default function App() {
     };
   }, []);
 
+  const finishTasksFtueAfterClaimTap = useCallback(() => {
+    if (tasksFtueClaimFadeTimeoutRef.current != null) return;
+    setTasksFtueClaimFadingOut(true);
+    tasksFtueClaimFadeTimeoutRef.current = window.setTimeout(() => {
+      tasksFtueClaimFadeTimeoutRef.current = null;
+      setTasksFtueCompleted(true);
+      setTasksFtueClaimStep(false);
+      setTasksFtueClaimFadingOut(false);
+      setTasksFtueHoleRect(null);
+    }, 200);
+  }, []);
+
+  /** SD L7 claim FTUE: one finger at a time — fade out, then advance queue (task 2 → task 3). */
+  const advanceSdFtueClaimFinger = useCallback((taskId: string) => {
+    if (specialDeliveryFtuePhaseRef.current !== 'claim_tasks') return;
+    if (!sdFtueFingerTaskIdsRef.current.includes(taskId)) return;
+    if (sdFtueClaimFadeTimeoutRef.current != null) return;
+    setSdFtueClaimFadingOut(true);
+    sdFtueClaimFadeTimeoutRef.current = window.setTimeout(() => {
+      sdFtueClaimFadeTimeoutRef.current = null;
+      setSdFtueFingerTaskIds((prev) => {
+        const next = prev.filter((id) => id !== taskId);
+        sdFtueFingerTaskIdsRef.current = next;
+        return next;
+      });
+      setSdFtueClaimFadingOut(false);
+    }, 200);
+  }, []);
+
   const handleDailyTaskClaim2x = useCallback((taskId: string, fx: DailyTaskClaimFx) => {
     const task = dailyTaskRows.find((t) => t.id === taskId);
     if (!task || task.state !== 'complete') return;
+    if (
+      specialDeliveryFtuePhaseRef.current === 'claim_tasks' &&
+      sdFtueFingerTaskIdsRef.current[0] !== taskId
+    ) {
+      return;
+    }
     playSfx(SFX_IDS.uiConfirmNormal);
+    if (specialDeliveryFtuePhaseRef.current === 'claim_tasks') {
+      advanceSdFtueClaimFinger(taskId);
+    } else if (tasksFtueClaimStep || (tasksFtueStarted && !tasksFtueCompleted)) {
+      finishTasksFtueAfterClaimTap();
+    }
     pendingDailyTaskClaimRef.current = { taskId, fx, coinMultiplier: 2 };
     pendingAdSourceRef.current = 'dailyTaskClaim2x';
     setPendingAdComplete(null);
     openRewardedFakeAd();
-  }, [dailyTaskRows, openRewardedFakeAd]);
+  }, [
+    dailyTaskRows,
+    openRewardedFakeAd,
+    tasksFtueClaimStep,
+    tasksFtueStarted,
+    tasksFtueCompleted,
+    finishTasksFtueAfterClaimTap,
+    advanceSdFtueClaimFinger,
+  ]);
 
   const performDailyTaskClaim = useCallback(
     (taskId: string, fx: DailyTaskClaimFx, coinMultiplier = 1) => {
       const task = dailyTaskRowsRef.current.find((t) => t.id === taskId);
       if (!task || task.state !== 'complete') return;
+      if (
+        specialDeliveryFtuePhaseRef.current === 'claim_tasks' &&
+        coinMultiplier === 1 &&
+        sdFtueFingerTaskIdsRef.current[0] !== taskId
+      ) {
+        return;
+      }
 
       setShowFakeAd(false);
       pendingAdSourceRef.current = null;
@@ -2966,9 +3800,29 @@ export default function App() {
       const next = markDailyTaskClaimed(taskId, getDailyTasksCtx());
       dailyTaskRowsRef.current = next;
       setDailyTaskRows(next);
-      playDailyTaskClaimPresentation(taskId, task.rewardCoins * coinMultiplier, fx);
+      playDailyTaskClaimPresentation(taskId, task.rewardKeys * coinMultiplier, fx);
+
+      if (specialDeliveryFtuePhaseRef.current === 'claim_tasks') {
+        // 2× already advanced the finger on tap; normal claim advances here.
+        if (coinMultiplier === 1) {
+          advanceSdFtueClaimFinger(taskId);
+        }
+      } else if (
+        coinMultiplier === 1 &&
+        (tasksFtueClaimStep || (tasksFtueStarted && !tasksFtueCompleted))
+      ) {
+        // Green claim ends L6 FTUE here; Claim 2x already ended it on tap (before the ad).
+        finishTasksFtueAfterClaimTap();
+      }
     },
-    [playDailyTaskClaimPresentation],
+    [
+      playDailyTaskClaimPresentation,
+      tasksFtueClaimStep,
+      tasksFtueStarted,
+      tasksFtueCompleted,
+      finishTasksFtueAfterClaimTap,
+      advanceSdFtueClaimFinger,
+    ],
   );
 
   const handleDailyTaskClaim = useCallback(
@@ -3024,30 +3878,23 @@ export default function App() {
     [applyPendingRewardedAdCompletion, beginRewardedOutro],
   );
 
-  // Testing cheat: grant the next purchasable golden pot on the active garden only.
+  // Testing cheat: grant the next winnable collection trophy on the active garden only.
   const completeMasterySegmentCheat = useCallback(() => {
     const activeId = activeGardenIdRef.current;
     const activeSnap: GardenCollectionSnapshot = {
       highestPlantEver: highestPlantEverRef.current,
       unlockedLevels: plantMastery.unlockedLevels,
       money: moneyRef.current,
+      trophyLevels: trophyLevelsRef.current,
     };
     const v2 = loadGameSaveV2();
-    const target = findNextDevGoldenPotTarget(
-      activeId,
-      activeSnap,
-      v2?.gardens,
-      [activeId],
-    );
+    const target = findNextDevTrophyTarget(activeId, activeSnap, v2?.gardens, [activeId]);
     if (!target) return;
 
     if (target.gardenId === activeId) {
-      setPlantMastery((m) => ({
-        ...m,
-        unlockedLevels: m.unlockedLevels.includes(target.level)
-          ? m.unlockedLevels
-          : [...m.unlockedLevels, target.level].sort((a, b) => a - b),
-      }));
+      setTrophyLevels((prev) =>
+        prev.includes(target.level) ? prev : [...prev, target.level].sort((a, b) => a - b),
+      );
       return;
     }
 
@@ -3055,16 +3902,16 @@ export default function App() {
     let nextV2 = ensureGardenStartedInSave(v2, target.gardenId);
     const g = nextV2.gardens[target.gardenId];
     if (!g) return;
-    const updatedLevels = g.plantMasteryUnlockedLevels.includes(target.level)
-      ? g.plantMasteryUnlockedLevels
-      : [...g.plantMasteryUnlockedLevels, target.level].sort((a, b) => a - b);
+    const owned = g.trophyLevels ?? [];
     nextV2 = {
       ...nextV2,
       gardens: {
         ...nextV2.gardens,
         [target.gardenId]: {
           ...g,
-          plantMasteryUnlockedLevels: updatedLevels,
+          trophyLevels: owned.includes(target.level)
+            ? owned
+            : [...owned, target.level].sort((a, b) => a - b),
         },
       },
       savedAt: Date.now(),
@@ -3152,13 +3999,16 @@ export default function App() {
       highestPlantEver: highestPlantEverRef.current,
       unlockedLevels: plantMastery.unlockedLevels,
       money: moneyRef.current,
+      trophyLevels: trophyLevelsRef.current,
     };
     const v2ForUnlock = loadGameSaveV2();
     const v2Gardens = v2ForUnlock?.gardens;
-    // Active garden only (same scope as pause-menu Golden Pot cheat).
-    const activeOnly = [activeId] as const;
-    if (!hasAnyDevUnlockPlantRemaining(activeId, activeSnap, v2Gardens, activeOnly)) return;
-    const target = findNextDevUnlockPlantTarget(activeId, activeSnap, v2Gardens, activeOnly);
+    // On Collection, spill into the next garden once the current one is fully discovered.
+    // Elsewhere (farm / pause menu), stay on the active garden only.
+    const onCollection = activeScreenRef.current === 'BARN';
+    const scope = onCollection ? undefined : ([activeId] as const);
+    if (!hasAnyDevUnlockPlantRemaining(activeId, activeSnap, v2Gardens, scope)) return;
+    const target = findNextDevUnlockPlantTarget(activeId, activeSnap, v2Gardens, scope);
     if (!target) return;
     const { gardenId: targetGardenId, newLevel } = target;
 
@@ -3207,6 +4057,13 @@ export default function App() {
     setMoney((prev) => prev + DEV_CHEAT_ADD_MONEY_AMOUNT);
   }, []);
 
+  const handleDevAddKeysClick = useCallback(() => {
+    playSfx(SFX_IDS.uiConfirmNormal);
+    const next = keyCountRef.current + DEV_CHEAT_ADD_KEYS_AMOUNT;
+    keyCountRef.current = next;
+    setKeyCount(next);
+  }, []);
+
   const handleDevClearCoinsClick = useCallback(() => {
     playSfx(SFX_IDS.uiConfirmNormal);
     setMoney(0);
@@ -3238,9 +4095,16 @@ export default function App() {
     try { localStorage.removeItem(DAILY_TASKS_COUNTDOWN_END_MS_KEY); } catch { /* ignore */ }
     try { localStorage.removeItem(DAILY_TASKS_UNLOCKED_KEY); } catch { /* ignore */ }
     clearDailyTasksProgressStorage();
+    clearAllSpecialDeliveryBoardStorage();
     setTasksFtueStarted(false);
     setTasksFtueUnlockRevealed(false);
     setTasksFtueCompleted(false);
+    setTasksFtueClaimStep(false);
+    setTasksFtueClaimFadingOut(false);
+    if (tasksFtueClaimFadeTimeoutRef.current != null) {
+      window.clearTimeout(tasksFtueClaimFadeTimeoutRef.current);
+      tasksFtueClaimFadeTimeoutRef.current = null;
+    }
     tasksFtueRevealPlayedRef.current = false;
     pendingTasksFtueRevealRef.current = false;
     setGardensFtueStarted(false);
@@ -3280,6 +4144,7 @@ export default function App() {
     try { localStorage.removeItem(DAILY_TASKS_COUNTDOWN_END_MS_KEY); } catch { /* ignore */ }
     try { localStorage.removeItem(DAILY_TASKS_UNLOCKED_KEY); } catch { /* ignore */ }
     clearDailyTasksProgressStorage();
+    clearAllSpecialDeliveryBoardStorage();
     try {
       sessionStorage.setItem(DEV_SKIP_STARTER_FTUE_LEVEL_UP_KEY, '2');
     } catch { /* ignore */ }
@@ -3313,13 +4178,28 @@ export default function App() {
     });
   }, []);
 
+  const handleDevShiftDDailyTasks = useCallback(() => {
+    if (playerLevel >= TASKS_FLOATING_BUTTON_UNLOCK_LEVEL) {
+      markDailyTasksUnlocked();
+    }
+    const hasIncomplete = dailyTaskRowsRef.current.some((row) => row.state === 'in_progress');
+    if (hasIncomplete) {
+      applyDailyTaskRowsUpdate(completeNextDailyTaskForDev(getDailyTasksCtx()));
+      return;
+    }
+    applyDailyTaskRowsUpdate(resetDailyTasksForDev(getDailyTasksCtx()));
+    setDailyTaskClaimBounceIds([]);
+  }, [applyDailyTaskRowsUpdate, playerLevel]);
+
   const devCheatHandlersRef = useRef({
     unlockPlant: handleDevUnlockPlantClick,
     levelUp: handleDevLevelUpClick,
     goldenPot: handleDevGoldenPotClick,
     addMoney: handleDevAddMoneyClick,
+    addKeys: handleDevAddKeysClick,
     addGoal: (() => {}) as () => void,
     skipTutorial: (() => {}) as () => void,
+    completeOrRerollDaily: (() => {}) as () => void,
   });
   devCheatHandlersRef.current = {
     ...devCheatHandlersRef.current,
@@ -3327,173 +4207,9 @@ export default function App() {
     levelUp: handleDevLevelUpClick,
     goldenPot: handleDevGoldenPotClick,
     addMoney: handleDevAddMoneyClick,
+    addKeys: handleDevAddKeysClick,
+    completeOrRerollDaily: handleDevShiftDDailyTasks,
   };
-
-  const purchasePlantMasteryForLevel = useCallback(
-    (level: number, gardenId: GardenId) => {
-      const cost = getPlantMasteryUnlockCost(level);
-      const isActiveGarden = gardenId === activeGardenIdRef.current;
-
-      if (isActiveGarden) {
-        // Side effects (money deduction, daily-task record) must live OUTSIDE the
-        // setState updater: React double-invokes updaters, which would otherwise
-        // deduct `cost` twice and push the wallet negative.
-        if (
-          !canPurchaseGoldenPotForLevel(
-            level,
-            highestPlantEverRef.current,
-            plantMastery.unlockedLevels,
-          )
-        ) {
-          return;
-        }
-        if (moneyRef.current < cost) return;
-        moneyRef.current -= cost;
-        setMoney((m) => m - cost);
-        setPlantMastery((prev) => ({
-          ...prev,
-          unlockPending: prev.unlockPending.filter((x) => x !== level),
-          unlockedLevels: prev.unlockedLevels.includes(level)
-            ? prev.unlockedLevels
-            : [...prev.unlockedLevels, level].sort((a, b) => a - b),
-        }));
-        queueMicrotask(() => {
-          applyDailyTaskRowsUpdate(recordDailyTaskGoldenPot(getDailyTasksCtx()));
-        });
-        return;
-      }
-
-      const v2 = loadGameSaveV2();
-      if (!v2) return;
-      let nextV2 = ensureGardenStartedInSave(v2, gardenId);
-      const g = nextV2.gardens[gardenId];
-      if (!g) return;
-      if (!canPurchaseGoldenPotForLevel(level, g.highestPlantEver, g.plantMasteryUnlockedLevels)) return;
-      if (g.money < cost) return;
-
-      const updatedLevels = g.plantMasteryUnlockedLevels.includes(level)
-        ? g.plantMasteryUnlockedLevels
-        : [...g.plantMasteryUnlockedLevels, level].sort((a, b) => a - b);
-      nextV2 = {
-        ...nextV2,
-        gardens: {
-          ...nextV2.gardens,
-          [gardenId]: {
-            ...g,
-            money: g.money - cost,
-            plantMasteryUnlockPending: g.plantMasteryUnlockPending.filter((x) => x !== level),
-            plantMasteryUnlockedLevels: updatedLevels,
-          },
-        },
-        savedAt: Date.now(),
-      };
-      persistGameSaveV2(nextV2);
-      setCollectionSaveRevision((r) => r + 1);
-      queueMicrotask(() => {
-        applyDailyTaskRowsUpdate(recordDailyTaskGoldenPot(getDailyTasksCtx()));
-      });
-    },
-    [applyDailyTaskRowsUpdate, getDailyTasksCtx, plantMastery.unlockedLevels],
-  );
-
-  const triggerMasteryPurchaseReveal = useCallback((level: number, gardenId: GardenId) => {
-    if (masteryPurchaseRevealTimeoutRef.current) {
-      window.clearTimeout(masteryPurchaseRevealTimeoutRef.current);
-    }
-    const el = barnScrollRef.current;
-    const plantKey = getCollectionPlantKey(gardenId, level);
-    const plantEl = el?.querySelector(`[data-barn-plant-key="${plantKey}"]`) as HTMLElement | null;
-    const r = plantEl?.getBoundingClientRect();
-    if (r) {
-      const cx = r.left + r.width / 2;
-      const cy = r.top + r.height / 2;
-      const startTime = Date.now();
-      spawnMasteryConeBurst({ id: `mastery-buy-cone-${level}-${startTime}-${Math.random().toString(36).slice(2)}`, x: cx, y: cy, startTime });
-      setCellHighlightBeams((prev) => [
-        ...prev,
-        {
-          id: `mastery-buy-beam-${level}-${startTime}-${Math.random().toString(36).slice(2)}`,
-          x: cx,
-          y: cy,
-          cellWidth: r.width,
-          cellHeight: r.height,
-          startTime,
-          showHexSprite: false,
-          sparkleCount: 20,
-          sparkleSizeScale: 2,
-          sparkleHeightScale: 1.9,
-        },
-      ]);
-    }
-    setMasteryPurchaseRevealLevels((prev) => (prev.includes(plantKey) ? prev : [...prev, plantKey]));
-    masteryPurchaseRevealTimeoutRef.current = window.setTimeout(() => {
-      setMasteryPurchaseRevealLevels((prev) => prev.filter((x) => x !== plantKey));
-      masteryPurchaseRevealTimeoutRef.current = null;
-    }, 650);
-  }, []);
-
-  const handleShelfUpgradeClick = useCallback(
-    (shelfIndex: number, gardenId: GardenId, event: React.MouseEvent<HTMLButtonElement>) => {
-      const gardenSnap = getGardenCollectionSnapshot(
-        gardenId,
-        activeGardenId,
-        activeCollectionSnapshot,
-        collectionV2Gardens,
-      );
-      const nextLevel = getNextUpgradeablePlantOnShelf(gardenSnap, shelfIndex);
-      if (nextLevel == null) return;
-      const cost = getPlantMasteryUnlockCost(nextLevel);
-      if (gardenSnap.money < cost) return;
-
-      playSfx(SFX_IDS.uiConfirmReward);
-      const isFtueShelfPurchase =
-        collectionFtuePhase === 'point_unlock' &&
-        gardenId === DEFAULT_GARDEN_ID &&
-        nextLevel === 1 &&
-        !collectionFtueCompleted;
-
-      const prevBonusPotCount = globalBonusPotCountRef.current;
-      purchasePlantMasteryForLevel(nextLevel, gardenId);
-
-      const btnRect = event.currentTarget.getBoundingClientRect();
-      setActiveGoldenPotProgressParticles((prev) => [
-        ...prev,
-        {
-          id: `golden-pot-bar-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          startX: btnRect.left + btnRect.width / 2,
-          startY: btnRect.top + btnRect.height / 2,
-        },
-      ]);
-      setCollectionBarHeldNumeratorCount(prevBonusPotCount);
-
-      if (isFtueShelfPurchase) {
-        if (collectionFtueOverlayFadeTimeoutRef.current != null) {
-          window.clearTimeout(collectionFtueOverlayFadeTimeoutRef.current);
-        }
-        setCollectionFtueOverlayFadingOut(true);
-        collectionFtueOverlayFadeTimeoutRef.current = window.setTimeout(() => {
-          collectionFtueOverlayFadeTimeoutRef.current = null;
-          setCollectionFtueOverlayFadingOut(false);
-          setCollectionFtuePhase('wait_reveal');
-          window.setTimeout(() => {
-            setCollectionFtuePhase('point_bonuses');
-          }, 720);
-        }, 200);
-      }
-
-      triggerMasteryPurchaseReveal(nextLevel, gardenId);
-    },
-    [
-      activeGardenId,
-      activeCollectionSnapshot,
-      collectionV2Gardens,
-      collectionFtuePhase,
-      collectionFtueCompleted,
-      purchasePlantMasteryForLevel,
-      triggerMasteryPurchaseReveal,
-      playSfx,
-    ],
-  );
 
   const [playerLevelFlashTrigger, setPlayerLevelFlashTrigger] = useState(0);
   const [levelUpPopup, setLevelUpPopup] = useState<{ isVisible: boolean; level: number } | null>(null);
@@ -3505,6 +4221,16 @@ export default function App() {
   /** Queued level-up popups (e.g. from pause menu fast-level); shown one by one after pause menu closes. */
   const [levelUpPopupQueue, setLevelUpPopupQueue] = useState<number[]>([]);
   presentLevelUpPopupRef.current = (level: number) => {
+    if (
+      shouldStartSpecialDeliveryFtue(
+        activeGardenIdRef.current,
+        level,
+        specialDeliveryFtueCompletedRef.current,
+      )
+    ) {
+      beginSpecialDeliveryLevel7FtueRef.current();
+      return;
+    }
     if (
       level === PLANT_COLLECTION_UI_UNLOCK_LEVEL &&
       !collectionFtueCompleted &&
@@ -3874,6 +4600,7 @@ export default function App() {
       offlineEarningsOpen: offlineEarningsUi?.open === true,
       returnGraceUntil: adBreakRuntimeRef.current.graceUntil,
       inStore: activeScreen === 'STORE',
+      inCollection: activeScreen === 'BARN',
       pauseMenuOpen,
       devToolsOpen,
       blockingPopupOpen:
@@ -3939,6 +4666,8 @@ export default function App() {
 
   const tryShowAdBreak = useCallback(
     (trigger: AdBreakTriggerId, onComplete?: () => void): boolean => {
+      // Hard lock: never start an interstitial while on Collection / shed.
+      if (activeScreenRef.current === 'BARN') return false;
       const now = Date.now();
       const state = adBreakRuntimeRef.current;
       if (shouldFlagAdBreakFallback(state, now)) {
@@ -4072,7 +4801,20 @@ export default function App() {
     if (activeScreen === 'FARM' && prev === 'STORE') {
       trigger = 'leave_store';
     } else if (activeScreen === 'FARM' && prev === 'BARN') {
-      trigger = 'leave_collection';
+      // Special Delivery upgrade/boost FX need the garden screen clear — grant grace and
+      // skip this leave_collection shot so the particle / green blink aren't covered.
+      const hasPendingSdReward =
+        pendingSpecialDeliveryBoostsRef.current.length > 0 ||
+        pendingSpecialDeliveryUpgradePresentRef.current != null;
+      if (hasPendingSdReward) {
+        bumpAdBreakGrace(
+          adBreakRuntimeRef.current,
+          Date.now(),
+          SPECIAL_DELIVERY_REWARD_AD_GRACE_MS,
+        );
+      } else {
+        trigger = 'leave_collection';
+      }
     }
     if (!trigger) return;
 
@@ -4177,13 +4919,16 @@ export default function App() {
       applyLevelUpCoinReward(unlockInfo.rewardCoins, rewardStartPoint);
     }
     if (unlockInfo.navigateToBarnOnUnlock) {
-      // Collection FTUE needs the shelf at the top; clear any remembered scroll first.
+      // Show the shelves from the top on first visit. The old collection FTUE taught the
+      // shelf Upgrade button, which trophies replaced — skip it until a trophy tutorial exists.
       if (!collectionFtueCompleted) {
         barnScrollYByGardenRef.current[gardenId] = 0;
         barnScrollYRef.current = 0;
         setBarnScrollY(0);
         setCollectionFtueRestartPending(false);
-        setCollectionFtuePhase('intro_cta');
+        setCollectionFtuePhase(null);
+        setCollectionFtueCompleted(true);
+        setCollectionFtueBonusesReached(true);
       }
       setActiveScreen('BARN');
       skipNextBarnPendingBounceRef.current = true;
@@ -4250,6 +4995,14 @@ export default function App() {
     activeFtueStage !== 'first_goal' &&
     !ftue10ButtonsNormalEarly;
   const [pendingUnlockUpgradeId, setPendingUnlockUpgradeId] = useState<string | null>(null);
+  /** Special Delivery free upgrade credits (stackable per upgrade id). */
+  const [freeUpgradeCounts, setFreeUpgradeCounts] = useState<Record<string, number>>({});
+  /** One-shot green scroll/flash for the last SD upgrade claimed before returning to FARM. */
+  const [pendingFreeUpgradeHighlightId, setPendingFreeUpgradeHighlightId] = useState<string | null>(null);
+  const pendingFreeUpgradeHighlightIdRef = useRef<string | null>(null);
+  pendingFreeUpgradeHighlightIdRef.current = pendingFreeUpgradeHighlightId;
+  /** Last SD upgrade claimed this session — present panel/tab/blink when returning to FARM. */
+  const pendingSpecialDeliveryUpgradePresentRef = useRef<string | null>(null);
   const nextWalletBurstIdRef = useRef(0);
   const nextGoalCoinBurstIdRef = useRef(0);
   const levelUpGuardRef = useRef(false);
@@ -4352,6 +5105,7 @@ export default function App() {
       tasksFtueStarted &&
       tasksFtueUnlockRevealed &&
       !tasksFtueCompleted &&
+      !tasksFtueClaimStep &&
       activeScreen === 'FARM';
     if (!tasksFtueOverlayActive) {
       setTasksFtueHoleRect(null);
@@ -4382,7 +5136,76 @@ export default function App() {
       window.removeEventListener('resize', onResize);
       window.clearTimeout(t);
     };
-  }, [tasksFtueStarted, tasksFtueUnlockRevealed, tasksFtueCompleted, activeScreen]);
+  }, [
+    tasksFtueStarted,
+    tasksFtueUnlockRevealed,
+    tasksFtueCompleted,
+    tasksFtueClaimStep,
+    activeScreen,
+  ]);
+
+  /** Vine-lock finger waits for the 700ms carousel slide, else it measures mid-transition. */
+  useEffect(() => {
+    if (!specialDeliveryLockedFtueActive || activeScreen !== 'BARN') {
+      setSpecialDeliveryLockedFtueSettled(false);
+      return;
+    }
+    setSpecialDeliveryLockedFtueSettled(false);
+    const t = window.setTimeout(
+      () => setSpecialDeliveryLockedFtueSettled(true),
+      SCREEN_NAV_TRANSITION_MS + 60,
+    );
+    return () => window.clearTimeout(t);
+  }, [specialDeliveryLockedFtueActive, specialDeliveryLockedFtueGen, activeScreen]);
+
+  useLayoutEffect(() => {
+    const ftuePointing =
+      specialDeliveryLockedFtueActive &&
+      !specialDeliveryLockedFtueLockGone &&
+      specialDeliveryLockedFtueSettled &&
+      activeScreen === 'BARN';
+    if (!specialDeliveryLockedFtueActive || activeScreen !== 'BARN') {
+      setSpecialDeliveryLockedFtueHoleRect(null);
+      setSpecialDeliveryLockedFtueLevelHoleRect(null);
+      return;
+    }
+    const container = document.getElementById('game-container');
+    const scale = appScaleRef.current || 1;
+    const measureEl = (id: string) => {
+      const el = document.getElementById(id);
+      if (!el || !container) return null;
+      const cr = container.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
+      return {
+        left: (r.left - cr.left) / scale,
+        top: (r.top - cr.top) / scale,
+        width: r.width / scale,
+        height: r.height / scale,
+      };
+    };
+    const apply = () => {
+      setSpecialDeliveryLockedFtueHoleRect(
+        ftuePointing ? measureEl(SPECIAL_DELIVERY_LOCKED_FTUE_LOCK_ID) : null,
+      );
+      // Level badge is non-interactive during SD FTUE — finger only on the vine lock.
+      setSpecialDeliveryLockedFtueLevelHoleRect(null);
+    };
+    apply();
+    const t = window.setTimeout(apply, 120);
+    const onResize = () => apply();
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.clearTimeout(t);
+    };
+  }, [
+    specialDeliveryLockedFtueActive,
+    specialDeliveryLockedFtueLockGone,
+    specialDeliveryLockedFtueGen,
+    specialDeliveryLockedFtueSettled,
+    activeScreen,
+    barnScrollY,
+  ]);
 
   useLayoutEffect(() => {
     const gardensFtueOverlayActive =
@@ -4491,17 +5314,40 @@ export default function App() {
   const goldenPotWalletRef = useRef<HTMLButtonElement>(null);
   const goldenPotWalletIconRef = useRef<HTMLSpanElement>(null);
   const barnButtonRef = useRef<HTMLButtonElement>(null);
+  const farmButtonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (activeDailyTaskKeyParticles.length > 0) {
+      dailyTaskKeyBurstWasActiveRef.current = true;
+      return;
+    }
+    if (dailyTaskKeyBurstWasActiveRef.current) {
+      // Hold collection icon overlay during SD FTUE claim→nav handoff.
+      if (
+        specialDeliveryFtuePhaseRef.current === 'point_collection' ||
+        (specialDeliveryFtuePhaseRef.current === 'claim_tasks' &&
+          sdFtueFingerTaskIdsRef.current.length === 0 &&
+          !dailyTaskRowsRef.current.some((t) => t.state === 'complete'))
+      ) {
+        return;
+      }
+      dailyTaskKeyBurstWasActiveRef.current = false;
+      setDailyTaskCollectionIconOverlayVisible(false);
+    }
+  }, [activeDailyTaskKeyParticles.length]);
   const barnScrollRef = useRef<HTMLDivElement>(null);
   const barnScrollYRef = useRef(0);
   const barnScrollYByGardenRef = useRef<Partial<Record<GardenId, number>>>({});
   const barnScrollGardenIdRef = useRef<GardenId>(DEFAULT_GARDEN_ID);
+  const barnAutoScrollRafRef = useRef(0);
+  const trophyClaimFlightTimeoutRef = useRef<number | null>(null);
+  const trophyClaimGrantFailsafeTimeoutRef = useRef<number | null>(null);
   const prevActiveScreenForBarnScrollRef = useRef<ScreenType>(activeScreen);
   const barnEnterFocusTimeoutRef = useRef<number | null>(null);
   // Slots with in-flight crops that will complete the goal; exclude from routing so follow-up harvests go to next goal
   const goalsPendingCompletionRef = useRef<Set<number>>(new Set());
   /** Crop amount already flying to each goal slot (mid-air panels); subtract on impact so rapid harvest taps can't over-commit */
   const goalInFlightHarvestBySlotRef = useRef<Record<number, number>>({});
-  /** Per open order: manual vs merge-sourced crops contributed (for Merge Order daily task). */
+  /** Per open order: manual vs merge-sourced crops contributed. */
   const goalOrderHarvestSourcesRef = useRef<Record<number, { manual: number; merge: number }>>({});
   const nextRewardedAdOfferIndexRef = useRef(0);
   activeBoostsRef.current = activeBoosts;
@@ -4873,6 +5719,16 @@ export default function App() {
   }, [farmFloatingButtonsVisible]);
 
   const showLevelUpForNextLevel = useCallback((nextLevel: number) => {
+    if (
+      shouldStartSpecialDeliveryFtue(
+        activeGardenIdRef.current,
+        nextLevel,
+        specialDeliveryFtueCompletedRef.current,
+      )
+    ) {
+      beginSpecialDeliveryLevel7FtueRef.current();
+      return;
+    }
     if (nextLevel === STARTER_PACK_FORCE_POPUP_LEVEL) {
       const useStarter =
         activeGardenIdRef.current === DEFAULT_GARDEN_ID &&
@@ -4897,6 +5753,137 @@ export default function App() {
     }
     presentLevelUpPopupRef.current(nextLevel);
   }, [recordDailyTaskPlayerLeveledUp]);
+
+  const beginSpecialDeliveryLevel7Ftue = useCallback(() => {
+    const targetLevel = SPECIAL_DELIVERY_FTUE_UNLOCK_LEVEL;
+    const gardenId = activeGardenIdRef.current;
+
+    // Retire collection FTUE (trophy flow replaced its shelf Upgrade teaching).
+    setCollectionFtuePhase(null);
+    setCollectionFtueCompleted(true);
+    setCollectionFtueBonusesReached(true);
+    setCollectionFtueRestartPending(false);
+
+    setLevelUpPopup(null);
+    setLevelUpPopupQueue((q) => q.filter((l) => l !== targetLevel));
+
+    setPlayerLevel((l) => {
+      if (l < targetLevel) {
+        recordDailyTaskPlayerLeveledUp();
+        pendingLevelUpBackupRef.current = { gardenId, level: targetLevel };
+        return targetLevel;
+      }
+      return l;
+    });
+    setPlayerLevelProgress(0);
+    setPlayerLevelFlashTrigger((t) => t + 1);
+    if (gardenId === DEFAULT_GARDEN_ID) {
+      setGarden1PlayerLevel((l) => Math.max(l, targetLevel));
+      // Eager so the 1s daily-task tick can't re-sync "Reach level 7" against the old level.
+      garden1PlayerLevelRef.current = Math.max(garden1PlayerLevelRef.current, targetLevel);
+    }
+    dailyTaskUpgradeCtxRef.current = {
+      ...dailyTaskUpgradeCtxRef.current,
+      playerLevel: Math.max(dailyTaskUpgradeCtxRef.current.playerLevel, targetLevel),
+      playerLevelProgress: 0,
+    };
+
+    const baseCtx = getDailyTasksCtx();
+    const rows = forceCompleteGarden1IntroTasksForLevel7({
+      ...baseCtx,
+      playerLevel: Math.max(baseCtx.playerLevel, targetLevel),
+      garden1PlayerLevel: Math.max(baseCtx.garden1PlayerLevel ?? baseCtx.playerLevel, targetLevel),
+      playerLevelProgress: 0,
+    });
+    dailyTaskRowsRef.current = rows;
+    setDailyTaskRows(rows);
+    const fingerIds = getSdFtueOrderedClaimTaskIds(rows);
+    sdFtueFingerTaskIdsRef.current = fingerIds;
+    setSdFtueFingerTaskIds(fingerIds);
+
+    // Task 1 was claimed before L7, so the `n/30` badge must open from those keys.
+    const introClaimedKeys = getGarden1IntroClaimedKeyTotal();
+    if (introClaimedKeys > keyCountRef.current) {
+      keyCountRef.current = introClaimedKeys;
+      setKeyCount(introClaimedKeys);
+    }
+
+    setSpecialDeliveryFtueStarted(true);
+    setSpecialDeliveryFtueCompleted(false);
+    specialDeliveryFtueCompletedRef.current = false;
+    setSpecialDeliveryFtuePhase('claim_tasks');
+    specialDeliveryFtuePhaseRef.current = 'claim_tasks';
+    if (sdFtueClaimFadeTimeoutRef.current != null) {
+      window.clearTimeout(sdFtueClaimFadeTimeoutRef.current);
+      sdFtueClaimFadeTimeoutRef.current = null;
+    }
+    setSdFtueClaimFadingOut(false);
+    setSpecialDeliveryCollectionFtueFadingOut(false);
+    setSpecialDeliveryCollectionNavHoleRect(null);
+
+    setSpecialDeliveryLockedFtueActive(false);
+    setSpecialDeliveryLockedFtueLockGone(false);
+    setSpecialDeliveryLockedFtuePanelReveal(false);
+    setSpecialDeliveryLockedFtueFlyingUnlock(null);
+    setSpecialDeliveryLockedFtueLeafBurst(null);
+    setSpecialDeliveryLockedFtueVineBurstId(null);
+    setSpecialDeliveryLockedFtueHoleRect(null);
+    setSpecialDeliveryLockedFtueLevelHoleRect(null);
+
+    setActiveScreen('FARM');
+    setDailyTasksPopupOpen(true);
+    preloadSpecialDeliveryVineLeafBurst();
+  }, [recordDailyTaskPlayerLeveledUp]);
+  beginSpecialDeliveryLevel7FtueRef.current = beginSpecialDeliveryLevel7Ftue;
+
+  const beginSdFtueCoinDoorGuide = useCallback(() => {
+    const gardenId = activeGardenIdRef.current;
+    const seq = buildSpecialDeliveryFtueCoinPickSequence(gardenId, playerLevel, {
+      gardenContexts: specialDeliveryGardenContexts,
+      upgradeGateCtx: specialDeliveryUpgradeGateCtx,
+    });
+    if (sdFtueDoorFingerFadeTimeoutRef.current != null) {
+      window.clearTimeout(sdFtueDoorFingerFadeTimeoutRef.current);
+      sdFtueDoorFingerFadeTimeoutRef.current = null;
+    }
+    sdFtueDoorTapCountRef.current = 0;
+    setSdFtueDoorGuideBlockMode('holes');
+    setSdFtueDoorFingersFadingOut(false);
+    setSdFtuePickSequence(seq);
+    setSdFtueDoorFingerIndices([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+    setSdFtueExplainFadingOut(false);
+    setSpecialDeliveryFtuePhase('guide_doors_coins');
+    specialDeliveryFtuePhaseRef.current = 'guide_doors_coins';
+  }, [playerLevel, specialDeliveryGardenContexts, specialDeliveryUpgradeGateCtx]);
+  beginSdFtueCoinDoorGuideRef.current = beginSdFtueCoinDoorGuide;
+
+  const beginSdFtueTrophyDoorGuide = useCallback(() => {
+    const gardenId = activeGardenIdRef.current;
+    const seq = buildSpecialDeliveryFtueTrophyPickSequence(
+      gardenId,
+      playerLevel,
+      {
+        gardenId: SPECIAL_DELIVERY_FTUE_TROPHY_GARDEN_ID,
+        plantLevel: SPECIAL_DELIVERY_FTUE_TROPHY_PLANT_LEVEL,
+      },
+      {
+        gardenContexts: specialDeliveryGardenContexts,
+        upgradeGateCtx: specialDeliveryUpgradeGateCtx,
+      },
+    );
+    if (sdFtueDoorFingerFadeTimeoutRef.current != null) {
+      window.clearTimeout(sdFtueDoorFingerFadeTimeoutRef.current);
+      sdFtueDoorFingerFadeTimeoutRef.current = null;
+    }
+    sdFtueDoorTapCountRef.current = 0;
+    setSdFtueDoorGuideBlockMode('holes');
+    setSdFtueDoorFingersFadingOut(false);
+    setSdFtuePickSequence(seq);
+    setSdFtueDoorFingerIndices([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+    setSpecialDeliveryFtuePhase('guide_doors_trophy');
+    specialDeliveryFtuePhaseRef.current = 'guide_doors_trophy';
+  }, [playerLevel, specialDeliveryGardenContexts, specialDeliveryUpgradeGateCtx]);
+  beginSdFtueTrophyDoorGuideRef.current = beginSdFtueTrophyDoorGuide;
 
   const canOpenLimitedOfferRewardPopup = useCallback(() => {
     if (offlineEarningsUi?.open) return false;
@@ -4961,12 +5948,18 @@ export default function App() {
         if (active.some((o) => o.id === offerId)) return active;
         return [createRewardedOfferPanelEntry(offerConfig, now)];
       });
-      if (ftueUpgradePanelVisible) {
+      // Don't yank the upgrade list away during Special Delivery free-upgrade green flash.
+      // Offer still lands in the list; auto-scroll only when the player is already on Farm
+      // and not mid free-upgrade presentation.
+      const suppressOfferPanelNav =
+        pendingSpecialDeliveryUpgradePresentRef.current != null ||
+        pendingFreeUpgradeHighlightIdRef.current != null;
+      if (ftueUpgradePanelVisible && !suppressOfferPanelNav) {
         setIsExpanded(true);
         setActiveTab(offerConfig.upgradeTab);
         setPendingOfferHighlightId(offerId);
+        window.setTimeout(() => setPendingOfferHighlightId(null), 2500);
       }
-      window.setTimeout(() => setPendingOfferHighlightId(null), 2500);
     },
     [ftueUpgradePanelVisible],
   );
@@ -5148,9 +6141,32 @@ export default function App() {
   const collectionPlantPanelTopPx = isCollectionPhoneLayout
     ? COLLECTION_PHONE_PLANT_PANEL_TOP_PX
     : COLLECTION_PLANT_PANEL_TOP_PX;
+  /**
+   * Fixed barn-space panel size. The shared `barnScale` on data-barn-content handles
+   * phones exactly as it does for the 490px shelves; never stack a second phone scale.
+   */
+  const collectionSpecialDeliveryPanelDisplayWidthPx =
+    COLLECTION_SPECIAL_DELIVERY_PANEL_LAYOUT_WIDTH_PX;
+  const collectionSpecialDeliveryArtToLayoutScale =
+    collectionSpecialDeliveryPanelDisplayWidthPx /
+    COLLECTION_SPECIAL_DELIVERY_PANEL_WIDTH_PX;
+  const collectionSpecialDeliveryTitleTopPx =
+    COLLECTION_SPECIAL_DELIVERY_TITLE_BASE_TOP_PX *
+      collectionSpecialDeliveryArtToLayoutScale +
+    COLLECTION_SPECIAL_DELIVERY_TITLE_NUDGE_DOWN_PX;
+  const collectionSpecialDeliveryDescTopPx =
+    collectionSpecialDeliveryTitleTopPx +
+    COLLECTION_SPECIAL_DELIVERY_TITLE_BOX_HEIGHT_PX +
+    COLLECTION_SPECIAL_DELIVERY_DESC_GAP_PX;
   const collectionShelvesMarginTopPx = isCollectionPhoneLayout
     ? COLLECTION_PHONE_SHELVES_MARGIN_TOP_PX
     : COLLECTION_SHELVES_MARGIN_TOP_PX;
+  const collectionGardenLabelAfterShelvesMarginTopPx = isCollectionPhoneLayout
+    ? COLLECTION_PHONE_GARDEN_LABEL_AFTER_SHELVES_MARGIN_TOP_PX
+    : COLLECTION_GARDEN_LABEL_AFTER_SHELVES_MARGIN_TOP_PX;
+  const collectionGardenLabelScale = isCollectionPhoneLayout
+    ? COLLECTION_PHONE_GARDEN_LABEL_SCALE
+    : 1;
   const collectionRoofVisualWidthPx =
     COLLECTION_ROOF_WIDTH_PX * (isCollectionPhoneLayout ? COLLECTION_PHONE_ROOF_SCALE : 1);
   const collectionRoofLayoutWidthPx = isCollectionPhoneLayout
@@ -5178,19 +6194,19 @@ export default function App() {
     );
   }, [plantInfoPopup, activeGardenId, activeCollectionSnapshot, collectionV2Gardens]);
 
-  /** Barn Plant Collection header wallet: golden pots toward collection rewards. */
-  const displayNumeratorPotCount = collectionBarHeldNumeratorCount ?? globalBonusPotCount;
+  /** Collection header wallet: account-wide Special Delivery keys. */
   const isPlantCollectionUiUnlocked = isPlantCollectionUiUnlockedForGarden(playerLevel);
+  /** While SD FTUE vine_lock runs, keep locked chrome even though level ≥ 7. */
+  const specialDeliveryFtueForceLockedChrome = specialDeliveryFtuePhase === 'vine_lock';
   /** Panel crest/divider/copy/button look unlocked (shelves use `isPlantCollectionUiUnlocked` separately). */
   const collectionPanelChromeUnlocked =
+    !specialDeliveryFtueForceLockedChrome &&
     isPlantCollectionUiUnlocked &&
     (collectionFtuePhase !== 'intro_cta' || collectionFtuePanelChromeUnlocked);
-  const collectionPanelTitle = getCollectionPanelTitle(activeGardenId);
-  const goldenPotWalletHeaderProps =
+  const keyWalletHeaderProps =
     activeScreen === 'BARN' && isPlantCollectionUiUnlocked
     ? {
-        count: displayNumeratorPotCount,
-        totalCount: COLLECTION_PLANT_COUNT,
+        count: keyCount,
         walletRef: goldenPotWalletRef,
         walletIconRef: goldenPotWalletIconRef,
         flashActive: goldenPotWalletFlashActive,
@@ -5225,52 +6241,24 @@ export default function App() {
         collectionV2Gardens,
       );
       const shelfRewardBar = getShelfRewardBarStateForSnapshot(shelfIndex, gardenSnap);
-      const shelfFullyDiscovered = isShelfFullyDiscovered(gardenSnap, shelfIndex);
-      const shelfFullyMastered = isShelfFullyMastered(gardenSnap, shelfIndex);
-      const isActiveUpgradeShelf = isShelfActiveUpgradeTarget(gardenSnap, shelfIndex, shelfGardenId);
-      const shelfProgressLeftIconSrc = shelfFullyMastered
-        ? getCollectionShelfGoldenPotCompleteIconPath()
-        : isActiveUpgradeShelf
-          ? getCollectionShelfGoldenPotIconPath()
-          : getCollectionShelfLockedIconPath();
-      const shelfUsesLockedLeftIcon =
-        shelfFullyDiscovered && !shelfFullyMastered && !isActiveUpgradeShelf;
+      const shelfComplete = isShelfTrophyComplete(gardenSnap, shelfIndex);
+      /** Locked only while this shelf has no discovered plants yet. */
       const shelfRewardBarLocked = isShelfRewardBarLocked(gardenSnap, shelfIndex, shelfGardenId);
+      const shelfProgressLeftIconSrc = shelfComplete
+        ? getCollectionShelfGoldenPotCompleteIconPath()
+        : shelfRewardBarLocked
+          ? getCollectionShelfLockedIconPath()
+          : getCollectionShelfGoldenPotIconPath();
       const shelfProgressBarInteractive = !shelfRewardBarLocked;
-      const showUpgradeUi =
-        isPlantCollectionUiUnlocked &&
-        shouldShowShelfUpgradeUi(shelfIndex, shelfInGarden, shelfGardenId, gardenSnap, {
-          bonusPopupOpen: goldenPotBonusesPopupOpen,
-          bonusRevealShelfIndex: goldenPotBonusRevealShelfIndex,
-        });
-      const nextUpgradeLevel = showUpgradeUi
-        ? getNextUpgradeablePlantOnShelf(gardenSnap, shelfIndex)
-        : null;
-      const showDiscoverMorePlantsCta = showUpgradeUi && nextUpgradeLevel == null;
-      const upgradeCost = nextUpgradeLevel != null ? getPlantMasteryUnlockCost(nextUpgradeLevel) : 0;
-      const canAffordUpgrade = nextUpgradeLevel != null && gardenSnap.money >= upgradeCost;
-      const ftueUpgradeWaitingForIntroCta =
-        (collectionFtuePhase === 'intro_cta' ||
-          (collectionFtuePhase === 'shelf_plant_bounce' && !collectionFtueFreeButtonGreen)) &&
-        !collectionFtueCompleted &&
-        shelfGardenId === DEFAULT_GARDEN_ID &&
-        nextUpgradeLevel === 1;
-      const ftueFreeButtonTarget =
-        shelfGardenId === DEFAULT_GARDEN_ID &&
-        nextUpgradeLevel === 1 &&
-        (collectionFtuePhase === 'point_unlock' ||
-          (collectionFtuePhase === 'shelf_plant_bounce' && collectionFtueFreeButtonGreen));
-      const ftueFreeRevealBounce =
-        shelfGardenId === DEFAULT_GARDEN_ID &&
-        nextUpgradeLevel === 1 &&
-        collectionFtueFreeButtonBouncing;
-      const openShelfPlantInfo = (plantLevel: number) => {
+      const openShelfTrophyInfo = (plantLevel: number) => {
         playSfx(SFX_IDS.uiConfirmNormal);
         setPlantInfoPopup({ isVisible: true, level: plantLevel, gardenId: shelfGardenId });
       };
       return (
         <div
           key={`${shelfGardenId}-${shelfIndex}`}
+          data-collection-shelf-garden={shelfGardenId}
+          data-collection-shelf-in-garden={shelfInGarden}
           className="flex-shrink-0 relative"
           style={{
             marginTop: shelfInGarden === 0 ? 0 : COLLECTION_SHELF_STACK_MARGIN_TOP_PX,
@@ -5283,43 +6271,6 @@ export default function App() {
             className="pointer-events-none"
             style={{ width: '100%', height: 'auto' }}
           />
-          {showUpgradeUi && (
-            <img
-              src={assetPath('/assets/collection/collection_shelf_upgrade.png')}
-              alt=""
-              className="absolute left-1/2 pointer-events-none"
-              style={{
-                top: COLLECTION_SHELF_UPGRADE_SPRITE_TOP_PX,
-                width: '100%',
-                height: 'auto',
-                transform: `translateX(-50%) scale(${COLLECTION_SHELF_UPGRADE_SPRITE_SCALE})`,
-                transformOrigin: 'center top',
-                zIndex: 5,
-              }}
-            />
-          )}
-          {showUpgradeUi && (
-            <BarnShelfUpgradeButton
-              gardenId={shelfGardenId}
-              coinCost={upgradeCost}
-              canAfford={canAffordUpgrade && !ftueUpgradeWaitingForIntroCta}
-              ftueUnlockTarget={ftueFreeButtonTarget}
-              ftueRevealBounce={ftueFreeRevealBounce}
-              discoverMorePlants={showDiscoverMorePlantsCta}
-              leafBurst={
-                shelfGardenId === DEFAULT_GARDEN_ID && nextUpgradeLevel === 1
-                  ? collectionFtueFreeButtonLeafBurst
-                  : null
-              }
-              onLeafBurstComplete={() => setCollectionFtueFreeButtonLeafBurst(null)}
-              buttonRootRef={
-                shelfGardenId === DEFAULT_GARDEN_ID && nextUpgradeLevel === 1
-                  ? collectionFtueFreeButtonRef
-                  : undefined
-              }
-              onClick={(e) => handleShelfUpgradeClick(shelfIndex, shelfGardenId, e)}
-            />
-          )}
           {isPlantCollectionUiUnlocked && (
             <div
               className="absolute flex justify-center items-center"
@@ -5336,40 +6287,32 @@ export default function App() {
             >
               {[0, 1, 2, 3].map((plantOffset) => {
                 const plantLevel = startPlant + plantOffset;
-                const isPlantDiscovered = plantLevel <= gardenSnap.highestPlantEver;
-                const isGarden1FtuePlant =
-                  shelfGardenId === DEFAULT_GARDEN_ID && plantLevel === 1;
-                const hideFtueMasteryCue =
-                  isGarden1FtuePlant &&
-                  (collectionFtuePhase === 'intro_cta' ||
-                    collectionFtuePhase === 'shelf_plant_bounce');
-                /** Linear shelf progression: only the next left→right upgrade on the active shelf blinks. */
-                const isNextUpgradeablePlant =
-                  showUpgradeUi && nextUpgradeLevel === plantLevel && !hideFtueMasteryCue;
+                const hasTrophy = gardenSnap.trophyLevels.includes(plantLevel);
+                const discovered = plantLevel <= gardenSnap.highestPlantEver;
                 const plantKey = getCollectionPlantKey(shelfGardenId, plantLevel);
-                const isMasteryPurchaseBounce =
+                const isTrophyRevealBounce =
                   masteryPurchaseRevealLevels.includes(plantKey) ||
                   collectionFtuePlantBounceKeys.includes(plantKey);
-                const barnCellStackZ = isNextUpgradeablePlant
-                  ? 20 + plantOffset
-                  : isPlantDiscovered
-                    ? 2
-                    : 0;
                 return (
-                  <BarnShelfPlantSlot
+                  <BarnShelfTrophySlot
                     key={plantOffset}
                     gardenId={shelfGardenId}
                     plantLevel={plantLevel}
-                    isPlantDiscovered={isPlantDiscovered}
-                    showMasteryUnlock={isNextUpgradeablePlant}
-                    isMasteryPurchaseBounce={isMasteryPurchaseBounce}
-                    barnCellStackZ={barnCellStackZ}
-                    mastered={isPlantDiscovered && gardenSnap.unlockedLevels.includes(plantLevel)}
-                    masteryAdditiveGlow={
-                      activeScreen === 'BARN' && (isNextUpgradeablePlant || isMasteryPurchaseBounce)
+                    hasTrophy={hasTrophy}
+                    trophySrc={
+                      hasTrophy
+                        ? getTrophyIconSrc(shelfGardenId, plantLevel)
+                        : discovered
+                          ? getTrophyEmptyIconSrc(shelfGardenId)
+                          : null
                     }
-                    masteryGlowDelaySec={PLANT_MASTERY_GLOW_ANIM_DELAY_SEC}
-                    onOpenPlantInfo={() => openShelfPlantInfo(plantLevel)}
+                    trophyOffsetXPx={
+                      // Left −5px, right +5px, middle two evenly between (total +10px span).
+                      -5 + (plantOffset * 10) / 3
+                    }
+                    isTrophyRevealBounce={isTrophyRevealBounce}
+                    barnCellStackZ={hasTrophy ? 2 : 0}
+                    onOpenPlantInfo={() => openShelfTrophyInfo(plantLevel)}
                   />
                 );
               })}
@@ -5401,24 +6344,16 @@ export default function App() {
                     : undefined
                 }
                 leftIconSrc={shelfProgressLeftIconSrc}
-                showCenterLabel={isActiveUpgradeShelf || (shelfFullyDiscovered && !shelfUsesLockedLeftIcon)}
+                showCenterLabel={!shelfRewardBarLocked}
                 scale={0.8}
                 onBarClick={
                   shelfProgressBarInteractive
                     ? () => {
                         if (collectionFtuePhase != null && !collectionFtueCompleted) {
-                          if (collectionFtuePhase === 'wait_reveal') return;
-                          if (
-                            collectionFtuePhase === 'intro_cta' ||
-                            collectionFtuePhase === 'shelf_plant_bounce' ||
-                            collectionFtuePhase === 'point_unlock'
-                          ) {
-                            return;
-                          }
                           if (collectionFtuePhase === 'point_bonuses') {
                             openCollectionBonusesFromFtue();
-                            return;
                           }
+                          return;
                         }
                         const tierPotCount = shelfRewardBar?.rewardTierPotCount;
                         if (tierPotCount == null) return;
@@ -5444,13 +6379,6 @@ export default function App() {
       collectionFtueCompleted,
       masteryPurchaseRevealLevels,
       collectionFtuePlantBounceKeys,
-      collectionFtueFreeButtonGreen,
-      collectionFtueFreeButtonBouncing,
-      collectionFtueFreeButtonLeafBurst,
-      activeScreen,
-      goldenPotBonusesPopupOpen,
-      goldenPotBonusRevealShelfIndex,
-      handleShelfUpgradeClick,
       openCollectionBonusesFromFtue,
       setPlantInfoPopup,
       playSfx,
@@ -5523,11 +6451,12 @@ export default function App() {
       collectionFtuePhase === 'point_bonuses');
   const collectionFtueCtaDisabled =
     collectionFtuePhase !== 'intro_cta' || collectionFtueBonusesUiRevealed;
-  /** Mount View Bonuses early (opacity 0) so it can fade in on the bonuses bounce. */
+  /** Mount View Bonuses only during collection FTUE (normal play opens bonuses from shelf bars). */
   const showCollectionFtueViewBonusesMount =
     isPlantCollectionUiUnlocked &&
-    (!collectionFtueActive ||
-      collectionFtueBonusesUiRevealed ||
+    !collectionFtueCompleted &&
+    collectionFtueActive &&
+    (collectionFtueBonusesUiRevealed ||
       collectionFtuePhase === 'wait_reveal' ||
       collectionFtuePhase === 'point_bonuses');
   const collectionFtueViewBonusesVisible =
@@ -5543,11 +6472,17 @@ export default function App() {
   /** Collection FTUE: no barn pan/scroll while finger is on golden-pot CTA or plant 1 Unlock. */
   const collectionFtueBarnScrollLocked =
     activeScreen === 'BARN' &&
-    !collectionFtueCompleted &&
-    (collectionFtuePhase === 'intro_cta' ||
-      collectionFtuePhase === 'shelf_plant_bounce' ||
-      collectionFtuePhase === 'point_unlock' ||
-      collectionFtuePhase === 'point_bonuses');
+    ((!collectionFtueCompleted &&
+      (collectionFtuePhase === 'intro_cta' ||
+        collectionFtuePhase === 'shelf_plant_bounce' ||
+        collectionFtuePhase === 'point_unlock' ||
+        collectionFtuePhase === 'point_bonuses')) ||
+      // Special Delivery FTUE owns the panel until the trophy teach ends.
+      specialDeliveryFtuePhase === 'vine_lock' ||
+      specialDeliveryFtuePhase === 'explain_panel' ||
+      isSpecialDeliveryDoorGuidePhase(specialDeliveryFtuePhase) ||
+      specialDeliveryFtuePhase === 'await_coins_land' ||
+      specialDeliveryFtuePhase === 'post_trophy');
   const unreadMasteryUnlockLevels = goldenPotUpgradeableLevels.filter(
     (level) => !seenMasteryUnlockLevels.includes(level),
   );
@@ -5827,6 +6762,173 @@ export default function App() {
     setBarnScrollY(scrollY);
   }, [playerLevel, collectionFtueCompleted]);
 
+  /** Smooth (ease in / ease out) barn scroll — trophy claims focus the winning shelf. */
+  const animateBarnScrollTo = useCallback((targetY: number, durationMs: number) => {
+    if (barnAutoScrollRafRef.current) cancelAnimationFrame(barnAutoScrollRafRef.current);
+    const startY = barnScrollYRef.current;
+    const startMs = Date.now();
+    const apply = (value: number) => {
+      barnScrollYRef.current = value;
+      barnScrollYByGardenRef.current[barnScrollGardenIdRef.current] = value;
+      setBarnScrollY(value);
+    };
+    if (durationMs <= 0 || Math.abs(targetY - startY) < 0.5) {
+      apply(targetY);
+      return;
+    }
+    const step = () => {
+      const t = Math.min(1, (Date.now() - startMs) / durationMs);
+      const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      apply(startY + (targetY - startY) * eased);
+      if (t < 1) {
+        barnAutoScrollRafRef.current = requestAnimationFrame(step);
+        return;
+      }
+      barnAutoScrollRafRef.current = 0;
+    };
+    barnAutoScrollRafRef.current = requestAnimationFrame(step);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (barnAutoScrollRafRef.current) cancelAnimationFrame(barnAutoScrollRafRef.current);
+      if (trophyClaimFlightTimeoutRef.current != null) {
+        window.clearTimeout(trophyClaimFlightTimeoutRef.current);
+      }
+      if (trophyClaimGrantFailsafeTimeoutRef.current != null) {
+        window.clearTimeout(trophyClaimGrantFailsafeTimeoutRef.current);
+      }
+    },
+    [],
+  );
+
+  /**
+   * Claimed trophy: scroll the collection to the shelf that trophy belongs on (black overlay
+   * fades from scroll start; reveal icon stays until flight), then fly the trophy into its slot
+   * just before the scroll settles. Impact grants it and plays the shelf reveal bounce.
+   */
+  const runTrophyClaimPresentation = useCallback(
+    (
+      reward: Extract<SpecialDeliveryReward, { kind: 'trophy' }>,
+      startPoint: { x: number; y: number },
+      sizePx: number,
+    ): SpecialDeliveryClaimPresentation | null => {
+      const viewport = barnScrollRef.current;
+      const layer = discoveryRewardFxLayerRef.current;
+      const plantKey = getCollectionPlantKey(reward.gardenId, reward.plantLevel);
+      const slot = viewport?.querySelector(
+        `[data-barn-plant-key="${plantKey}"]`,
+      ) as HTMLElement | null;
+      if (!viewport || !layer || !slot) return null;
+
+      const viewportRect = viewport.getBoundingClientRect();
+      const slotRect = slot.getBoundingClientRect();
+      const layerRect = layer.getBoundingClientRect();
+      const scrollEnd = viewport.querySelector('[data-barn-scroll-end]') as HTMLElement | null;
+      const maxScroll = scrollEnd
+        ? Math.max(
+            0,
+            (scrollEnd.offsetTop + scrollEnd.offsetHeight) * barnScale - viewport.clientHeight,
+          )
+        : Number.POSITIVE_INFINITY;
+      const fromScrollY = barnScrollYRef.current;
+      const slotCenterInViewport = slotRect.top + slotRect.height / 2 - viewportRect.top;
+      const focusY = viewportRect.height * SPECIAL_DELIVERY_TROPHY_SCROLL_FOCUS_RATIO;
+      const toScrollY = Math.max(
+        0,
+        Math.min(maxScroll, fromScrollY + slotCenterInViewport - focusY),
+      );
+      animateBarnScrollTo(toScrollY, SPECIAL_DELIVERY_TROPHY_SCROLL_MS);
+      setPendingTrophyLevels((prev) => {
+        const key = `${reward.gardenId}:${reward.plantLevel}`;
+        return prev.includes(key) ? prev : [...prev, key];
+      });
+
+      // Slot art is the cell box × the shelf sprite scale.
+      const slotArtPx =
+        slotRect.width *
+        BARN_SHELF_TROPHY_SPRITE_SCALE *
+        SPECIAL_DELIVERY_TROPHY_FLIGHT_END_SCALE_OF_SLOT;
+      const startScale = SPECIAL_DELIVERY_MATCH3_REVEAL_SCALE_END;
+      const endScale = Math.max(0.1, slotArtPx / Math.max(1, sizePx));
+      // Slot position on its shelf (0 = leftmost) picks the launch angle.
+      const slotIndex = (reward.plantLevel - 1) % COLLECTION_PLANTS_PER_SHELF;
+      const launchBias = SPECIAL_DELIVERY_TROPHY_FLIGHT_LAUNCH_BIAS_BY_SLOT[slotIndex] ?? 0;
+      const flightDelayMs = Math.max(
+        0,
+        SPECIAL_DELIVERY_TROPHY_SCROLL_MS - SPECIAL_DELIVERY_TROPHY_FLIGHT_LEAD_MS,
+      );
+      const startX = startPoint.x - layerRect.left;
+      const startY = startPoint.y - layerRect.top;
+
+      if (trophyClaimFlightTimeoutRef.current != null) {
+        window.clearTimeout(trophyClaimFlightTimeoutRef.current);
+      }
+      trophyClaimFlightTimeoutRef.current = window.setTimeout(() => {
+        trophyClaimFlightTimeoutRef.current = null;
+        // Remeasure at launch: barn scroll is still easing, and scroll deltas are in
+        // design px while getBoundingClientRect is viewport px (× appScale).
+        const viewportNow = barnScrollRef.current;
+        const layerNow = discoveryRewardFxLayerRef.current;
+        const slotNow = viewportNow?.querySelector(
+          `[data-barn-plant-key="${plantKey}"]`,
+        ) as HTMLElement | null;
+        if (!layerNow || !slotNow) {
+          grantTrophyForLevel(reward.gardenId, reward.plantLevel);
+          return;
+        }
+        const slotRectNow = slotNow.getBoundingClientRect();
+        const layerRectNow = layerNow.getBoundingClientRect();
+        const remainingScrollDesign = toScrollY - barnScrollYRef.current;
+        const appScaleNow = appScaleRef.current || 1;
+        const targetX =
+          slotRectNow.left + slotRectNow.width / 2 - layerRectNow.left;
+        const targetY =
+          slotRectNow.top +
+          slotRectNow.height / 2 -
+          remainingScrollDesign * appScaleNow -
+          layerRectNow.top;
+        setTrophyFlyRewards((prev) => [
+          ...prev,
+          {
+            id: `sd-trophy-fly-${reward.plantLevel}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            iconSrc: reward.revealIconSrc,
+            startX,
+            startY,
+            sizePx,
+            targetX,
+            targetY,
+            // Holds near the revealed size, then settles into the slot (no nav-bar pulse).
+            scales: [startScale, startScale * 0.85, endScale],
+            durationMs: SPECIAL_DELIVERY_TROPHY_FLIGHT_MS,
+            peakRiseScale: SPECIAL_DELIVERY_TROPHY_FLIGHT_PEAK_RISE_SCALE,
+            launchBias,
+            plantLevel: reward.plantLevel,
+            gardenId: reward.gardenId,
+          },
+        ]);
+      }, flightDelayMs);
+
+      // Never lose the trophy if the flight is interrupted before it lands.
+      if (trophyClaimGrantFailsafeTimeoutRef.current != null) {
+        window.clearTimeout(trophyClaimGrantFailsafeTimeoutRef.current);
+      }
+      trophyClaimGrantFailsafeTimeoutRef.current = window.setTimeout(() => {
+        trophyClaimGrantFailsafeTimeoutRef.current = null;
+        grantTrophyForLevel(reward.gardenId, reward.plantLevel);
+      }, flightDelayMs + SPECIAL_DELIVERY_TROPHY_FLIGHT_MS + 400);
+
+      return {
+        iconHoldMs: flightDelayMs,
+        // Fade the black overlay as soon as the collection scroll starts (icon stays until flight).
+        overlayHoldMs: 0,
+        overlayFadeMs: SPECIAL_DELIVERY_TROPHY_OVERLAY_FADE_MS,
+      };
+    },
+    [animateBarnScrollTo, barnScale, grantTrophyForLevel],
+  );
+  runTrophyClaimPresentationRef.current = runTrophyClaimPresentation;
+
   const clampBarnScrollToContent = useCallback(() => {
     const el = barnScrollRef.current;
     if (!el) return;
@@ -5853,10 +6955,11 @@ export default function App() {
 
   useLayoutEffect(() => {
     if (activeScreen !== 'BARN') return;
-    restoreBarnScrollForGarden(activeGardenId);
+    // Collection is global (all gardens' shelves in one scroll) — one shared scroll position.
+    restoreBarnScrollForGarden(DEFAULT_GARDEN_ID);
     const raf = requestAnimationFrame(() => clampBarnScrollToContent());
     return () => cancelAnimationFrame(raf);
-  }, [activeScreen, activeGardenId, barnScale, restoreBarnScrollForGarden, clampBarnScrollToContent]);
+  }, [activeScreen, barnScale, restoreBarnScrollForGarden, clampBarnScrollToContent]);
 
   useEffect(() => {
     const el = barnScrollRef.current;
@@ -5981,6 +7084,7 @@ export default function App() {
   useEffect(() => {
     if (activeScreen === 'BARN') {
       setBarnNotification(false);
+      preloadSpecialDeliveryVineLeafBurst();
     }
   }, [activeScreen]);
 
@@ -6003,15 +7107,18 @@ export default function App() {
     }, 150);
   }, [activeScreen, barnScale, goldenPotUpgradeableLevels, isPlantCollectionUiUnlocked, collectionFtuePhase]);
 
-  /** Resume collection FTUE when re-entering barn on garden 1 (e.g. after save load). */
+  /**
+   * Retire the collection FTUE: it walked the player through buying a golden pot on the shelf,
+   * which trophies replaced. Clear it on any barn visit so mid-FTUE saves don't soft-lock.
+   */
   useEffect(() => {
     if (activeScreen !== 'BARN') return;
-    if (activeGardenId !== DEFAULT_GARDEN_ID) return;
     if (collectionFtueCompleted) return;
-    if (!isPlantCollectionUiUnlockedGlobally(garden1PlayerLevel)) return;
-    if (plantMastery.unlockedLevels.includes(1)) return;
-    setCollectionFtuePhase((p) => (p == null ? 'intro_cta' : p));
-  }, [activeScreen, activeGardenId, collectionFtueCompleted, garden1PlayerLevel, plantMastery.unlockedLevels]);
+    setCollectionFtuePhase(null);
+    setCollectionFtueCompleted(true);
+    setCollectionFtueBonusesReached(true);
+    setCollectionFtueRestartPending(false);
+  }, [activeScreen, collectionFtueCompleted]);
 
   useEffect(() => {
     if (goldenPotBonusesWasOpenRef.current && !goldenPotBonusesPopupOpen && collectionFtuePhase === 'point_bonuses') {
@@ -6176,13 +7283,192 @@ export default function App() {
     };
   }, [collectionFtuePhase, activeScreen, collectionFtueCompleted, triggerCollectionFtuePanelBounce]);
 
-  /** Fail-safe: collection level-up / mid-FTUE reload keeps forcing the popup until View Collection. */
+  /** Fail-safe: collection level-up / mid-FTUE reload starts Special Delivery FTUE instead of L7 popup. */
   useEffect(() => {
-    if (isLoading || collectionFtueCompleted || !collectionFtueRestartPending) return;
-    // Keep restartPending true until View Collection clears it — refresh while the popup is open must still restore it.
+    if (isLoading || !collectionFtueRestartPending) return;
+    if (specialDeliveryFtueCompletedRef.current) {
+      setCollectionFtueRestartPending(false);
+      return;
+    }
     setCollectionFtuePhase(null);
-    presentLevelUpPopupRef.current(PLANT_COLLECTION_UI_UNLOCK_LEVEL);
-  }, [isLoading, collectionFtueCompleted, collectionFtueRestartPending]);
+    setCollectionFtueRestartPending(false);
+    beginSpecialDeliveryLevel7FtueRef.current();
+  }, [isLoading, collectionFtueRestartPending]);
+
+  /** SD FTUE claim_tasks → point_collection once leftover claims + key flies finish. */
+  useEffect(() => {
+    if (specialDeliveryFtuePhase !== 'claim_tasks') return;
+    if (sdFtueResumePendingRef.current) return;
+    if (!dailyTasksPopupOpen) return;
+    if (sdFtueFingerTaskIds.length > 0) return;
+    if (activeDailyTaskKeyParticles.length > 0) return;
+    if (dailyTaskRows.some((t) => t.state === 'complete')) return;
+    setSpecialDeliveryFtuePhase('point_collection');
+    specialDeliveryFtuePhaseRef.current = 'point_collection';
+    setDailyTaskCollectionIconOverlayVisible(true);
+  }, [
+    specialDeliveryFtuePhase,
+    sdFtueFingerTaskIds.length,
+    activeDailyTaskKeyParticles.length,
+    dailyTaskRows,
+    dailyTasksPopupOpen,
+  ]);
+
+  /** Measure Collection-nav hit for SD FTUE point_collection (game-container / design coords). */
+  useLayoutEffect(() => {
+    if (specialDeliveryFtuePhase !== 'point_collection') {
+      setSpecialDeliveryCollectionNavHoleRect(null);
+      return;
+    }
+    const apply = () => {
+      const el = barnButtonRef.current;
+      const container = document.getElementById('game-container');
+      if (!el || !container) {
+        setSpecialDeliveryCollectionNavHoleRect(null);
+        return;
+      }
+      const r = el.getBoundingClientRect();
+      const cr = container.getBoundingClientRect();
+      const scale = appScaleRef.current || 1;
+      setSpecialDeliveryCollectionNavHoleRect({
+        left: (r.left - cr.left) / scale,
+        top: (r.top - cr.top) / scale,
+        width: r.width / scale,
+        height: Math.max(r.height / scale, 60),
+      });
+    };
+    apply();
+    const t = window.setTimeout(apply, 120);
+    const onResize = () => apply();
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.clearTimeout(t);
+    };
+  }, [specialDeliveryFtuePhase, dailyTasksPopupOpen, appScale]);
+
+  /** Measure 9 door hitboxes for SD FTUE guide fingers (game-container coords). */
+  useLayoutEffect(() => {
+    if (!isSpecialDeliveryDoorGuidePhase(specialDeliveryFtuePhase) || activeScreen !== 'BARN') {
+      setSdFtueDoorHoleRects([]);
+      return;
+    }
+    const container = document.getElementById('game-container');
+    const scale = appScaleRef.current || 1;
+    const apply = () => {
+      if (!container) {
+        setSdFtueDoorHoleRects([]);
+        return;
+      }
+      const cr = container.getBoundingClientRect();
+      const rects: { left: number; top: number; width: number; height: number }[] = [];
+      for (let i = 0; i < 9; i++) {
+        const el = document.getElementById(`${SPECIAL_DELIVERY_FTUE_DOOR_HIT_ID_PREFIX}${i}`);
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        rects.push({
+          left: (r.left - cr.left) / scale,
+          top: (r.top - cr.top) / scale,
+          width: r.width / scale,
+          height: r.height / scale,
+        });
+      }
+      setSdFtueDoorHoleRects(rects);
+    };
+    apply();
+    const t1 = window.setTimeout(apply, 120);
+    const t2 = window.setTimeout(apply, 400);
+    window.addEventListener('resize', apply);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.removeEventListener('resize', apply);
+    };
+  }, [specialDeliveryFtuePhase, activeScreen, appScale, sdFtuePickSequence]);
+
+  /** After FTUE coin burst lands in the wallet, start the trophy door guide. */
+  useEffect(() => {
+    if (specialDeliveryFtuePhase !== 'await_coins_land') return;
+    if (!sdFtueAwaitingCoinLandRef.current) return;
+    if (activeDiscoveryCoinParticles.length > 0) {
+      sdFtueCoinBurstSeenRef.current = true;
+      return;
+    }
+    // Wait until the burst has actually started, then finished.
+    if (!sdFtueCoinBurstSeenRef.current) return;
+    sdFtueAwaitingCoinLandRef.current = false;
+    sdFtueCoinBurstSeenRef.current = false;
+    beginSdFtueTrophyDoorGuideRef.current();
+  }, [specialDeliveryFtuePhase, activeDiscoveryCoinParticles.length]);
+
+  /** Crash/reload: resume incomplete SD FTUE from claim_tasks on the farm. */
+  useEffect(() => {
+    if (isLoading || !sdFtueResumePendingRef.current) return;
+    sdFtueResumePendingRef.current = false;
+
+    // The forced trophy is provisional until "Ooo, Shiny!" completes the FTUE.
+    // A crash/reload restarts from Daily Tasks, so revoke plant-1's trophy from
+    // both live state and V2 before the restarted flow can save again.
+    const provisionalGardenId = SPECIAL_DELIVERY_FTUE_TROPHY_GARDEN_ID;
+    const provisionalPlantLevel = SPECIAL_DELIVERY_FTUE_TROPHY_PLANT_LEVEL;
+    const provisionalKey = `${provisionalGardenId}:${provisionalPlantLevel}`;
+    setPendingTrophyLevels((prev) => prev.filter((key) => key !== provisionalKey));
+    setMasteryPurchaseRevealLevels((prev) =>
+      prev.filter((key) => key !== provisionalKey),
+    );
+    if (activeGardenIdRef.current === provisionalGardenId) {
+      const nextTrophyLevels = trophyLevelsRef.current.filter(
+        (level) => level !== provisionalPlantLevel,
+      );
+      trophyLevelsRef.current = nextTrophyLevels;
+      setTrophyLevels(nextTrophyLevels);
+    }
+    const v2 = loadGameSaveV2();
+    const provisionalGarden = v2?.gardens?.[provisionalGardenId];
+    if (v2 && provisionalGarden) {
+      persistGameSaveV2({
+        ...v2,
+        gardens: {
+          ...v2.gardens,
+          [provisionalGardenId]: {
+            ...provisionalGarden,
+            trophyLevels: (provisionalGarden.trophyLevels ?? []).filter(
+              (level) => level !== provisionalPlantLevel,
+            ),
+          },
+        },
+        savedAt: Date.now(),
+      });
+      setCollectionSaveRevision((revision) => revision + 1);
+    }
+
+    const baseCtx = getDailyTasksCtx();
+    const targetLevel = SPECIAL_DELIVERY_FTUE_UNLOCK_LEVEL;
+    const { rows, keysToRevoke } = resetGarden1IntroMidTasksForSpecialDeliveryFtueResume({
+      ...baseCtx,
+      playerLevel: Math.max(baseCtx.playerLevel, targetLevel),
+      garden1PlayerLevel: Math.max(baseCtx.garden1PlayerLevel ?? baseCtx.playerLevel, targetLevel),
+    });
+    // Revoke keys for the claims being replayed, but never drop below task 1's keys.
+    const introClaimedKeys = getGarden1IntroClaimedKeyTotal();
+    setKeyCount((c) => Math.max(0, c - keysToRevoke, introClaimedKeys));
+    keyCountRef.current = Math.max(0, keyCountRef.current - keysToRevoke, introClaimedKeys);
+    dailyTaskRowsRef.current = rows;
+    setDailyTaskRows(rows);
+    const fingerIds = getSdFtueOrderedClaimTaskIds(rows);
+    sdFtueFingerTaskIdsRef.current = fingerIds;
+    setSdFtueFingerTaskIds(fingerIds);
+    setSpecialDeliveryFtuePhase('claim_tasks');
+    specialDeliveryFtuePhaseRef.current = 'claim_tasks';
+    if (sdFtueClaimFadeTimeoutRef.current != null) {
+      window.clearTimeout(sdFtueClaimFadeTimeoutRef.current);
+      sdFtueClaimFadeTimeoutRef.current = null;
+    }
+    setSdFtueClaimFadingOut(false);
+    setActiveScreen('FARM');
+    setDailyTasksPopupOpen(true);
+    preloadSpecialDeliveryVineLeafBurst();
+  }, [isLoading]);
 
   useEffect(() => {
     return () => {
@@ -6681,6 +7967,126 @@ export default function App() {
     setGoalLoadingSeconds(getGoalLoadingSeconds(harvestState, goldenPotCount));
     setTimeout(() => setGoalSlotFadeInSlot(null), 500);
   }, [activeScreen, isLoading, goalSlots, harvestState, goldenPotCount]);
+
+  // Special Delivery booster: after garden slide settles, particle from Garden nav → farm boost bar.
+  useEffect(() => {
+    if (isLoading || activeScreen !== 'FARM') return;
+    if (pendingSpecialDeliveryBoostsRef.current.length === 0) return;
+
+    let cancelled = false;
+    /** Fire ~halfway through the 700ms carousel slide (full settle felt too slow). */
+    const settleMs = SCREEN_NAV_TRANSITION_MS / 2 + 20;
+
+    const spawnPending = () => {
+      if (cancelled || activeScreenRef.current !== 'FARM') return;
+      const pending = pendingSpecialDeliveryBoostsRef.current;
+      if (pending.length === 0) return;
+      const layer = discoveryRewardFxLayerRef.current;
+      const wrapper = headerLeftWrapperRef.current;
+      const boostArea = activeBoostAreaRef.current;
+      const farmBtn = farmButtonRef.current;
+      if (!layer || !wrapper || !boostArea || !farmBtn) {
+        requestAnimationFrame(spawnPending);
+        return;
+      }
+
+      // Farm header must be on-screen (slide finished) — otherwise we'd target the mid-slide position.
+      const boostRect = boostArea.getBoundingClientRect();
+      const gameEl = document.getElementById('game-container');
+      const gr = gameEl?.getBoundingClientRect();
+      if (gr) {
+        const cx = boostRect.left + boostRect.width / 2;
+        if (cx < gr.left + 8 || cx > gr.right - 8) {
+          requestAnimationFrame(spawnPending);
+          return;
+        }
+      }
+
+      pendingSpecialDeliveryBoostsRef.current = [];
+
+      const lr = layer.getBoundingClientRect();
+      const scaleL = lr.width / Math.max(1, layer.offsetWidth);
+      const br = farmBtn.getBoundingClientRect();
+      const startX = (br.left + br.width / 2 - lr.left) / scaleL;
+      const startY = (br.top + br.height / 2 - lr.top) / scaleL;
+
+      const wr = wrapper.getBoundingClientRect();
+      const scaleW = wr.width / Math.max(1, wrapper.offsetWidth);
+
+      const staggerMs = pending.length > 1 ? 560 : 0;
+      pending.forEach((b, i) => {
+        window.setTimeout(() => {
+          if (cancelled || activeScreenRef.current !== 'FARM') return;
+          const slot = predictBoostParticleTargetSlot(activeBoostsRef.current, b.offerId);
+          const tx = boostArea.offsetLeft + slot * 28 + 13;
+          const ty = boostArea.offsetTop + 11;
+          const targetX = (wr.left + tx * scaleW - lr.left) / scaleL;
+          const targetY = (wr.top + ty * scaleW - lr.top) / scaleL;
+          setBoostParticles((prev) => [
+            ...prev,
+            {
+              id: `boost-sd-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 9)}`,
+              startX,
+              startY,
+              targetX,
+              targetY,
+              targetSlotIndex: slot,
+              offerId: b.offerId,
+              durationMs: b.durationMs,
+              icon: b.icon,
+              sourceScreen: 'gardenNav' as const,
+            },
+          ]);
+        }, i * staggerMs);
+      });
+    };
+
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      requestAnimationFrame(() => requestAnimationFrame(spawnPending));
+    }, settleMs);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [activeScreen, isLoading]);
+
+  // Special Delivery free upgrade: open upgrade list on the right tab, scroll + green blink last claim.
+  useEffect(() => {
+    if (isLoading || activeScreen !== 'FARM') return;
+    const lastId = pendingSpecialDeliveryUpgradePresentRef.current;
+    if (!lastId) return;
+
+    let cancelled = false;
+    const settleMs = SCREEN_NAV_TRANSITION_MS / 2 + 20;
+
+    const present = () => {
+      if (cancelled || activeScreenRef.current !== 'FARM') return;
+      if (pendingSpecialDeliveryUpgradePresentRef.current !== lastId) return;
+      pendingSpecialDeliveryUpgradePresentRef.current = null;
+
+      const tab = UPGRADE_TAB_BY_ID[lastId];
+      if (tab) setActiveTab(tab);
+      setIsExpanded(true);
+      // Cancel any queued limited-offer auto-scroll so it can't steal focus mid green-flash.
+      setPendingOfferHighlightId(null);
+      setPendingFreeUpgradeHighlightId(lastId);
+      window.setTimeout(() => {
+        setPendingFreeUpgradeHighlightId((cur) => (cur === lastId ? null : cur));
+      }, 2100);
+    };
+
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      requestAnimationFrame(() => requestAnimationFrame(present));
+    }, settleMs);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [activeScreen, isLoading]);
 
   // Coin goal: show after 30–60s (random) since last hide; only from level 2; repeats forever
   useEffect(() => {
@@ -8023,6 +9429,42 @@ export default function App() {
     });
   }, []);
 
+  const trySpendSpecialDeliveryKey = useCallback(() => {
+    if (keyCountRef.current <= 0) return false;
+    const next = keyCountRef.current - 1;
+    keyCountRef.current = next;
+    setKeyCount(next);
+    return true;
+  }, []);
+
+  const refundSpecialDeliveryKey = useCallback(() => {
+    const next = keyCountRef.current + 1;
+    keyCountRef.current = next;
+    setKeyCount(next);
+  }, []);
+
+  const handleSpecialDeliveryOutOfKeys = useCallback((point: { x: number; y: number }) => {
+    playSfx(SFX_IDS.uiDecline);
+    setGoldenPotWalletBounceTrigger((t) => t + 1);
+    const id = `out-of-keys-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const startTime = Date.now();
+    setMaxPlantToasts((prev) => [
+      ...prev,
+      {
+        id,
+        x: point.x,
+        y: point.y - 10,
+        startTime,
+        message: 'Out of keys',
+        textColor: '#fffaea',
+        outlineColor: '#795c51',
+      },
+    ]);
+    window.setTimeout(() => {
+      setMaxPlantToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 1000);
+  }, []);
+
   const handleMerge = useCallback((sourceIdx: number, targetIdx: number) => {
     // Check if this will be a merge before updating state
     const source = grid[sourceIdx];
@@ -8584,6 +10026,8 @@ export default function App() {
     if (!cropsNorm.wild_growth) cropsNorm.wild_growth = { level: 0, progress: 0 };
 
     setMoney(save.money);
+    setKeyCount(Math.max(0, Math.floor(save.keyCount ?? 0)));
+    keyCountRef.current = Math.max(0, Math.floor(save.keyCount ?? 0));
     setSeedsState(save.seedsState);
     setHarvestState(save.harvestState);
     setCropsState(cropsNorm);
@@ -8601,36 +10045,81 @@ export default function App() {
       unlockedLevels: [...save.plantMasteryUnlockedLevels],
       plantMasteryIntroBarComplete: save.plantMasteryIntroBarComplete === true,
     });
-    setCollectionFtueCompleted(
-      save.collectionFtueCompleted === true || save.collectionFtueBonusesReached === true,
-    );
-    setCollectionFtueBonusesReached(save.collectionFtueBonusesReached === true);
-    setCollectionFtueRestartPending(
-      save.collectionFtueCompleted === true || save.collectionFtueBonusesReached === true
-        ? false
-        : save.collectionFtueRestartPending === true,
-    );
-    setCollectionFtuePhase(
-      (() => {
-        if (save.collectionFtueCompleted || save.collectionFtueBonusesReached) return null;
-        const phase = parseCollectionFtuePhase(save.collectionFtuePhase) ?? null;
-        if (phase === 'popup_free') return 'point_unlock';
-        if (phase === 'shelf_plant_bounce') return 'intro_cta';
-        if (phase === 'point_garden_nav') return null;
-        return phase;
-      })(),
-    );
+    setTrophyLevels([...(save.trophyLevels ?? [])]);
+    trophyLevelsRef.current = [...(save.trophyLevels ?? [])];
+    // Collection FTUE is retired (it taught the shelf Upgrade button that trophies replaced), so
+    // every save loads as finished — mid-FTUE saves would otherwise soft-lock on a missing button.
+    setCollectionFtueCompleted(true);
+    setCollectionFtueBonusesReached(true);
+    setCollectionFtueRestartPending(false);
+    setCollectionFtuePhase(null);
     const tasksFtueStartedLoaded = save.tasksFtueStarted === true;
     const tasksFtueCompletedLoaded = save.tasksFtueCompleted === true;
+    // Incomplete Daily Tasks FTUE (crash / reload before claiming): always restart on the farm
+    // with the finger on the tasks button — never resume mid-claim in the popup.
+    const tasksFtueIncomplete = tasksFtueStartedLoaded && !tasksFtueCompletedLoaded;
+    const tasksFtueIntroAlreadyClaimed =
+      tasksFtueIncomplete && isGarden1DailyTasksFtueIntroClaimed();
+    const tasksFtueCompletedNow = tasksFtueCompletedLoaded || tasksFtueIntroAlreadyClaimed;
     setTasksFtueStarted(tasksFtueStartedLoaded);
-    setTasksFtueCompleted(tasksFtueCompletedLoaded);
+    setTasksFtueCompleted(tasksFtueCompletedNow);
+    setTasksFtueClaimStep(false);
+    setTasksFtueClaimFadingOut(false);
+    if (tasksFtueClaimFadeTimeoutRef.current != null) {
+      window.clearTimeout(tasksFtueClaimFadeTimeoutRef.current);
+      tasksFtueClaimFadeTimeoutRef.current = null;
+    }
     const tasksFtueUnlockRevealedLoaded =
+      tasksFtueCompletedNow ||
       save.tasksFtueUnlockRevealed === true ||
-      tasksFtueCompletedLoaded ||
+      tasksFtueIncomplete ||
       (!tasksFtueStartedLoaded &&
         save.playerLevel >= TASKS_FLOATING_BUTTON_UNLOCK_LEVEL);
     setTasksFtueUnlockRevealed(tasksFtueUnlockRevealedLoaded);
     tasksFtueRevealPlayedRef.current = tasksFtueUnlockRevealedLoaded;
+    if (tasksFtueIncomplete && !tasksFtueCompletedNow) {
+      setDailyTasksPopupOpen(false);
+      pendingRateUsAfterDailyTasksCloseRef.current = false;
+      setActiveScreen('FARM');
+    }
+    const specialDeliveryFtueStartedLoaded = save.specialDeliveryFtueStarted === true;
+    const specialDeliveryFtueCompletedLoaded = save.specialDeliveryFtueCompleted === true;
+    const specialDeliveryFtueIncomplete =
+      specialDeliveryFtueStartedLoaded && !specialDeliveryFtueCompletedLoaded;
+    setSpecialDeliveryFtueStarted(specialDeliveryFtueStartedLoaded);
+    setSpecialDeliveryFtueCompleted(specialDeliveryFtueCompletedLoaded);
+    specialDeliveryFtueCompletedRef.current = specialDeliveryFtueCompletedLoaded;
+    // Always restart incomplete SD FTUE from claim_tasks (not mid vine_lock).
+    if (specialDeliveryFtueIncomplete) {
+      setSpecialDeliveryFtuePhase('claim_tasks');
+      specialDeliveryFtuePhaseRef.current = 'claim_tasks';
+      sdFtueResumePendingRef.current = true;
+      setSdFtueClaimFadingOut(false);
+      setSpecialDeliveryCollectionFtueFadingOut(false);
+      setSpecialDeliveryCollectionNavHoleRect(null);
+      setSpecialDeliveryLockedFtueActive(false);
+      setSpecialDeliveryLockedFtueLockGone(false);
+      setSpecialDeliveryLockedFtuePanelReveal(false);
+      setSpecialDeliveryLockedFtueFlyingUnlock(null);
+      setSpecialDeliveryLockedFtueLeafBurst(null);
+      setSpecialDeliveryLockedFtueVineBurstId(null);
+      setSpecialDeliveryLockedFtueHoleRect(null);
+      setSpecialDeliveryLockedFtueLevelHoleRect(null);
+      setDailyTasksPopupOpen(false);
+      setActiveScreen('FARM');
+    } else {
+      setSpecialDeliveryFtuePhase(
+        specialDeliveryFtueCompletedLoaded
+          ? null
+          : parseSpecialDeliveryFtuePhase(save.specialDeliveryFtuePhase),
+      );
+      specialDeliveryFtuePhaseRef.current = specialDeliveryFtueCompletedLoaded
+        ? null
+        : parseSpecialDeliveryFtuePhase(save.specialDeliveryFtuePhase);
+      sdFtueResumePendingRef.current = false;
+      sdFtueFingerTaskIdsRef.current = [];
+      setSdFtueFingerTaskIds([]);
+    }
     const gardensFtueStartedLoaded = save.gardensFtueStarted === true;
     const gardensFtueCompletedLoaded = save.gardensFtueCompleted === true;
     setGardensFtueStarted(gardensFtueStartedLoaded);
@@ -8672,6 +10161,7 @@ export default function App() {
       highestPlantEver: save.highestPlantEver,
       unlockedLevels: save.plantMasteryUnlockedLevels ?? [],
       money: save.money,
+      trophyLevels: save.trophyLevels ?? [],
     };
     const goldenPotN = getGlobalBonusProgressPotCount(activeIdForPots, activeSnap, v2ForPots?.gardens);
     const unlockedTiersHydrate = new Set(
@@ -8786,6 +10276,11 @@ export default function App() {
     setFakeNotchPreviewEnabled(userPrefs.fakeNotchPreviewEnabled);
     setPendingUnlockUpgradeId(
       save.pendingUnlockUpgradeId === 'fertile_soil' ? 'wild_growth' : save.pendingUnlockUpgradeId
+    );
+    setFreeUpgradeCounts(
+      save.freeUpgradeCounts && typeof save.freeUpgradeCounts === 'object'
+        ? { ...save.freeUpgradeCounts }
+        : {},
     );
     setLevelUpPopupQueue(save.levelUpPopupQueue);
     adBreakRuntimeRef.current = {
@@ -8943,6 +10438,17 @@ export default function App() {
     [activeGardenId, activeCollectionSnapshot, collectionV2Gardens, gardensStartedList],
   );
 
+  const inProgressBonusTierTrophyCounts = useMemo(
+    () =>
+      getInProgressBonusTierTrophyCounts(
+        activeGardenId,
+        activeCollectionSnapshot,
+        collectionV2Gardens,
+        gardensStartedList,
+      ),
+    [activeGardenId, activeCollectionSnapshot, collectionV2Gardens, gardensStartedList],
+  );
+
   const syncNewGardenFtueToSave = useCallback((phase: NewGardenFtuePhase | null, completed: boolean) => {
     const v2 = loadGameSaveV2();
     if (!v2) return;
@@ -8970,6 +10476,7 @@ export default function App() {
   const handleDevAddGoalClick = useCallback(() => {
     playSfx(SFX_IDS.uiConfirmNormal);
     applyGoalCollectedProgress();
+    applyDailyTaskRowsUpdate(recordDailyTaskOrderComplete(getDailyTasksCtx()));
     setPlayerLevelProgress((prev) => {
       const next = prev + 1;
       const goalsRequired = getGoalsRequiredForLevel(playerLevel);
@@ -8987,7 +10494,12 @@ export default function App() {
       return next;
     });
     setPlayerLevelFlashTrigger((t) => t + 1);
-  }, [applyGoalCollectedProgress, playerLevel, showLevelUpForNextLevel]);
+  }, [
+    applyDailyTaskRowsUpdate,
+    applyGoalCollectedProgress,
+    playerLevel,
+    showLevelUpForNextLevel,
+  ]);
 
   /**
    * Dev Shift+T: skip the active tutorial to the next safe continue spot
@@ -9020,8 +10532,49 @@ export default function App() {
     }
     if (tasksFtueStarted && !tasksFtueCompleted) {
       setTasksFtueUnlockRevealed(true);
+      setTasksFtueClaimStep(false);
+      setTasksFtueClaimFadingOut(false);
       setTasksFtueCompleted(true);
       setTasksFtueHoleRect(null);
+      return;
+    }
+    if (specialDeliveryFtueStarted && !specialDeliveryFtueCompleted) {
+      if (specialDeliveryCollectionFtueFadeTimeoutRef.current != null) {
+        window.clearTimeout(specialDeliveryCollectionFtueFadeTimeoutRef.current);
+        specialDeliveryCollectionFtueFadeTimeoutRef.current = null;
+      }
+      if (sdFtueClaimFadeTimeoutRef.current != null) {
+        window.clearTimeout(sdFtueClaimFadeTimeoutRef.current);
+        sdFtueClaimFadeTimeoutRef.current = null;
+      }
+      setSpecialDeliveryFtueCompleted(true);
+      specialDeliveryFtueCompletedRef.current = true;
+      setSpecialDeliveryFtuePhase(null);
+      specialDeliveryFtuePhaseRef.current = null;
+      setSdFtueClaimFadingOut(false);
+      setSpecialDeliveryCollectionFtueFadingOut(false);
+      setSpecialDeliveryCollectionNavHoleRect(null);
+      sdFtueFingerTaskIdsRef.current = [];
+      setSdFtueFingerTaskIds([]);
+      setSdFtueExplainFadingOut(false);
+      setSdFtuePostTrophyFadingOut(false);
+      setSdFtuePickSequence(null);
+      setSdFtueDoorFingerIndices([]);
+      setSdFtueDoorHoleRects([]);
+      setSdFtueDoorGuideBlockMode('holes');
+      setSdFtueDoorFingersFadingOut(false);
+      sdFtueDoorTapCountRef.current = 0;
+      sdFtueAwaitingCoinLandRef.current = false;
+      sdFtueCoinBurstSeenRef.current = false;
+      setSpecialDeliveryLockedFtueActive(false);
+      setSpecialDeliveryLockedFtueLockGone(true);
+      setSpecialDeliveryLockedFtuePanelReveal(true);
+      setSpecialDeliveryLockedFtueHoleRect(null);
+      setSpecialDeliveryLockedFtueLevelHoleRect(null);
+      setSpecialDeliveryLockedFtueFlyingUnlock(null);
+      setSpecialDeliveryLockedFtueLeafBurst(null);
+      setSpecialDeliveryLockedFtueVineBurstId(null);
+      setDailyTasksPopupOpen(false);
       return;
     }
     if (gardensFtueStarted && !gardensFtueCompleted) {
@@ -9038,6 +10591,8 @@ export default function App() {
     collectionFtueCompleted,
     tasksFtueStarted,
     tasksFtueCompleted,
+    specialDeliveryFtueStarted,
+    specialDeliveryFtueCompleted,
     gardensFtueStarted,
     gardensFtueCompleted,
     newGardenFtuePhase,
@@ -9050,8 +10605,10 @@ export default function App() {
     levelUp: handleDevLevelUpClick,
     goldenPot: handleDevGoldenPotClick,
     addMoney: handleDevAddMoneyClick,
+    addKeys: handleDevAddKeysClick,
     addGoal: handleDevAddGoalClick,
     skipTutorial: handleDevSkipTutorial,
+    completeOrRerollDaily: handleDevShiftDDailyTasks,
   };
 
   const purchaseGardenFromPicker = useCallback(
@@ -9373,6 +10930,7 @@ export default function App() {
       savedAt: Date.now(),
       pendingOfflineEarnings: pendingOfflineEarningsRef.current,
       money: moneyRef.current,
+      keyCount: keyCountRef.current,
       grid,
       seedProgress: seedProgressRef.current,
       harvestProgress: harvestProgressRef.current,
@@ -9390,6 +10948,7 @@ export default function App() {
       plantMasteryUnlockPending: [...plantMastery.unlockPending],
       plantMasteryUnlockedLevels: [...plantMastery.unlockedLevels],
       plantMasteryIntroBarComplete: plantMastery.plantMasteryIntroBarComplete,
+      trophyLevels: [...trophyLevels],
       collectionFtueCompleted,
       collectionFtuePhase: collectionFtueCompleted ? null : collectionFtuePhase,
       collectionFtueBonusesReached,
@@ -9397,6 +10956,10 @@ export default function App() {
       tasksFtueStarted,
       tasksFtueUnlockRevealed,
       tasksFtueCompleted,
+      tasksFtueClaimStep,
+      specialDeliveryFtueStarted,
+      specialDeliveryFtueCompleted,
+      specialDeliveryFtuePhase: specialDeliveryFtueCompleted ? null : specialDeliveryFtuePhase,
       gardensFtueStarted,
       gardensFtueUnlockRevealed,
       gardensFtueCompleted,
@@ -9455,6 +11018,7 @@ export default function App() {
       musicEnabled,
       sfxEnabled,
       pendingUnlockUpgradeId,
+      freeUpgradeCounts,
       levelUpPopupQueue,
       wildGrowthAccumulatorMs: wildGrowthAccumMsRef.current,
       dailyAllowanceClaimedDayKey,
@@ -9603,7 +11167,9 @@ export default function App() {
   }, [isLoading]);
 
   /** Dev keyboard shortcuts — work whenever the game tab is focused (not only when Dev Tools is open).
-   * Shift+P unlock plant · Shift+L level up · Shift+G +1 goal · Shift+T skip tutorial · Shift+M money
+   * Shift+P unlock plant (on Collection: continues into the next garden when the current one is maxed) ·
+   * Shift+L level up · Shift+G +1 goal · Shift+T skip tutorial · Shift+M money · Shift+K +10 keys ·
+   * Shift+D complete next daily (or reroll 3 keeping timer)
    */
   useEffect(() => {
     const isTypingTarget = (target: EventTarget | null): boolean => {
@@ -9634,6 +11200,12 @@ export default function App() {
       } else if (key === 'm') {
         e.preventDefault();
         cheats.addMoney();
+      } else if (key === 'k') {
+        e.preventDefault();
+        cheats.addKeys();
+      } else if (key === 'd') {
+        e.preventDefault();
+        cheats.completeOrRerollDaily();
       }
     };
 
@@ -9966,6 +11538,7 @@ export default function App() {
                     }}
                     onXpBoostClick={() => {
                       applyGoalCollectedProgress();
+                      applyDailyTaskRowsUpdate(recordDailyTaskOrderComplete(getDailyTasksCtx()));
                       setPlayerLevelProgress((prev) => {
                         const next = prev + 1;
                         const goalsRequired = getGoalsRequiredForLevel(playerLevel);
@@ -10435,9 +12008,12 @@ export default function App() {
                             return;
                           }
                           playSfx(SFX_IDS.uiConfirmNormal);
-                          const completingTasksFtue = !tasksFtueCompleted;
-                          if (completingTasksFtue) {
-                            setTasksFtueCompleted(true);
+                          const startingClaimFtue =
+                            tasksFtueStarted &&
+                            tasksFtueUnlockRevealed &&
+                            !tasksFtueCompleted;
+                          if (startingClaimFtue) {
+                            setTasksFtueClaimStep(true);
                             if (
                               activeGardenId === DEFAULT_GARDEN_ID &&
                               canEverShowRateUs()
@@ -10477,6 +12053,7 @@ export default function App() {
                           gardens={collectionV2Gardens}
                           readyBounceNonce={gardensFbReadyBounceNonce}
                           forceLockedVisual={gardensFtueHoldLockedVisual}
+                          forceShowNotificationDot={gardensFbHandoffNotification}
                           onClick={() => {
                             playSfx(SFX_IDS.uiConfirmNormal);
                             if (
@@ -10492,6 +12069,7 @@ export default function App() {
                             if (!gardensFtueCompleted) {
                               setGardensFtueCompleted(true);
                             }
+                            setGardensFbHandoffNotification(false);
                             setGardenPickerOpen(true);
                           }}
                         />
@@ -10556,7 +12134,7 @@ export default function App() {
                         gardenId={activeGardenId}
                         label="Plant"
                         icon={getGardenPlantSpritePath(seedLevel)}
-                        iconNode={<PlantWithPot level={seedLevel} mastered={plantMastery.unlockedLevels.includes(seedLevel)} wrapperClassName="h-full w-full" />}
+                        iconNode={<PlantWithPot level={seedLevel} mastered={goldenPotPlantLevels.includes(seedLevel)} wrapperClassName="h-full w-full" />}
                         iconScale={58 / 46}
                         iconOffsetY={-1}
                         progress={seedsFreeMode ? 0 : Math.max(0, Math.min(1, seedProgress / 100))}
@@ -10659,7 +12237,7 @@ export default function App() {
                     fertilizingCellIndices={fertilizingCellIndices}
                     appScale={appScale}
                     ftue3OnlyMerge4To13={activeFtueStage === 'merge_drag'}
-                    masteredPlantLevels={plantMastery.unlockedLevels}
+                    masteredPlantLevels={goldenPotPlantLevels}
                     onMaxTierMergeAttempt={handleHexMaxTierMergeAttempt}
                     onProgrammaticMergeSettled={onProgrammaticMergeSettled}
                     gardenId={activeGardenId}
@@ -10776,11 +12354,22 @@ export default function App() {
                     fertilizableCellCount={fertilizableCellCount}
                     onFertilizeCell={handleFertilizeCell}
                     highestPlantEver={highestPlantEver}
-                    masteredPlantLevels={plantMastery.unlockedLevels}
+                    masteredPlantLevels={goldenPotPlantLevels}
                     rewardedOffers={rewardedOffers}
                     playerLevel={playerLevel}
                     gardenId={activeGardenId}
                     pendingUnlockUpgradeId={pendingUnlockUpgradeId}
+                    pendingFreeUpgradeHighlightId={pendingFreeUpgradeHighlightId}
+                    freeUpgradeCounts={freeUpgradeCounts}
+                    onConsumeFreeUpgrade={(upgradeId) => {
+                      setFreeUpgradeCounts((prev) => {
+                        const next = { ...prev };
+                        const remaining = (next[upgradeId] ?? 0) - 1;
+                        if (remaining <= 0) delete next[upgradeId];
+                        else next[upgradeId] = remaining;
+                        return next;
+                      });
+                    }}
                     pendingOfferHighlightId={pendingOfferHighlightId}
                     isExpanded={isExpanded}
                     protectedOfferId={limitedOfferPopup?.isVisible && limitedOfferPopup?.offerId ? limitedOfferPopup.offerId : null}
@@ -11321,9 +12910,7 @@ export default function App() {
                         style={{
                           width: collectionFtuePanelLeafBurst.rectWidth,
                           height: collectionFtuePanelLeafBurst.rectHeight,
-                          transform: isCollectionPhoneLayout
-                            ? `translateX(-50%) scale(${COLLECTION_PHONE_PLANT_PANEL_SCALE})`
-                            : 'translateX(-50%)',
+                          transform: 'translateX(-50%)',
                           transformOrigin: 'top center',
                           zIndex: 0,
                         }}
@@ -11340,208 +12927,330 @@ export default function App() {
                     )}
                     <div
                       ref={collectionFtuePanelRef}
-                      className={`relative${collectionFtuePanelBouncing ? ' collection-ftue-panel-bounce' : ''}`}
+                      className="relative flex flex-col items-center"
                       style={{
-                        width: '320px',
+                        width: collectionSpecialDeliveryPanelDisplayWidthPx,
                         zIndex: 1,
-                        ['--panel-s' as string]: isCollectionPhoneLayout
-                          ? COLLECTION_PHONE_PLANT_PANEL_SCALE
-                          : 1,
-                        transform: collectionFtuePanelBouncing
-                          ? undefined
-                          : isCollectionPhoneLayout
-                            ? `scale(${COLLECTION_PHONE_PLANT_PANEL_SCALE})`
-                            : undefined,
-                        transformOrigin: collectionFtuePanelBouncing
-                          ? '50% 40%'
-                          : 'top center',
                       }}
                     >
-                      <img
-                        src={assetPath('/assets/ui/ui_plantmastery.png')}
-                        alt={collectionPanelTitle}
-                        style={{
-                          width: '320px',
-                          height: 'auto',
-                          maxWidth: 'none',
-                        }}
-                      />
-                      {/* Crest: lock ↔ garden crossfade (FTUE intro bounce). */}
-                      <img
-                        src={getCollectionLockGardenIconPath(activeGardenId)}
-                        alt=""
-                        className="absolute left-1/2 pointer-events-none object-contain"
-                        style={{
-                          top: COLLECTION_PANEL_LOCKED_CREST_TOP_PX,
-                          width:
-                            COLLECTION_PANEL_GARDEN_ICON_PX *
-                            COLLECTION_PANEL_GARDEN_ICON_UNLOCKED_SCALE *
-                            COLLECTION_PANEL_LOCKED_CREST_SCALE,
-                          height: 'auto',
-                          transform: 'translateX(-50%)',
-                          opacity: collectionPanelChromeUnlocked ? 0 : 1,
-                          transition: `opacity ${COLLECTION_FTUE_PANEL_BOUNCE_MS}ms ease-out`,
-                        }}
-                        draggable={false}
-                      />
-                      <img
-                        src={getCollectionGardenIconPath(activeGardenId)}
-                        alt=""
-                        className="absolute left-1/2 pointer-events-none object-contain"
-                        style={{
-                          top: COLLECTION_PANEL_UNLOCKED_CREST_TOP_PX,
-                          width:
-                            COLLECTION_PANEL_GARDEN_ICON_PX * COLLECTION_PANEL_GARDEN_ICON_UNLOCKED_SCALE,
-                          height: 'auto',
-                          transform: 'translateX(-50%)',
-                          opacity: collectionPanelChromeUnlocked ? 1 : 0,
-                          transition: `opacity ${COLLECTION_FTUE_PANEL_BOUNCE_MS}ms ease-out`,
-                        }}
-                        draggable={false}
-                      />
                       <div
-                        className="absolute inset-0 flex flex-col items-center"
+                        data-sd-explain-ftue-panel
+                        className={`relative w-full${collectionFtuePanelBouncing ? ' collection-ftue-panel-bounce' : ''}`}
                         style={{
-                          paddingTop: 126,
-                          paddingLeft: 14,
-                          paddingRight: 14,
+                          ['--panel-s' as string]: 1,
+                          transformOrigin: collectionFtuePanelBouncing
+                            ? '50% 40%'
+                            : 'top center',
                         }}
                       >
-                        <h2
-                          className="font-black tracking-tight text-center"
+                        <img
+                          src={assetPath('/assets/collection/specialdelivery_panel.png')}
+                          alt="Special Deliveries"
                           style={{
-                            color: '#5c4a32',
-                            fontFamily: 'Inter, sans-serif',
-                            fontSize: '28px',
-                            lineHeight: 1,
+                            width: '100%',
+                            height: 'auto',
+                            maxWidth: 'none',
+                            display: 'block',
+                            opacity:
+                              collectionPanelChromeUnlocked || specialDeliveryLockedFtuePanelReveal
+                                ? 1
+                                : 0,
+                            transition: `opacity ${SPECIAL_DELIVERY_LOCKED_FTUE_PANEL_FADE_IN_MS}ms linear`,
                           }}
-                        >
-                          {collectionPanelTitle}
-                        </h2>
-                        <div
-                          className="relative w-full flex items-center justify-center"
-                          style={{ marginTop: 4, marginBottom: 6, height: 14 }}
-                        >
+                          draggable={false}
+                        />
+                        {!collectionPanelChromeUnlocked && (
                           <img
-                            src={assetPath('/assets/ui/popup_divider_blue.png')}
+                            src={assetPath('/assets/collection/specialdelivery_panel_locked.png')}
                             alt=""
-                            className="absolute h-auto object-contain pointer-events-none"
+                            className="absolute left-0 top-0 pointer-events-none"
                             style={{
-                              width: '220px',
-                              opacity: collectionPanelChromeUnlocked ? 0 : 1,
-                              transition: `opacity ${COLLECTION_FTUE_PANEL_BOUNCE_MS}ms ease-out`,
+                              width: '100%',
+                              height: 'auto',
+                              maxWidth: 'none',
+                              display: 'block',
+                              opacity: specialDeliveryLockedFtuePanelReveal ? 0 : 1,
+                              transition: `opacity ${SPECIAL_DELIVERY_LOCKED_PANEL_CROSSFADE_MS}ms linear`,
+                              transitionDelay: specialDeliveryLockedFtuePanelReveal
+                                ? `${SPECIAL_DELIVERY_LOCKED_PANEL_FADE_DELAY_MS}ms`
+                                : '0ms',
+                              zIndex: 2,
                             }}
+                            draggable={false}
+                            aria-hidden
                           />
-                          <img
-                            src={assetPath('/assets/ui/popup_divider.png')}
-                            alt=""
-                            className="absolute h-auto object-contain pointer-events-none"
-                            style={{
-                              width: '220px',
-                              opacity: collectionPanelChromeUnlocked ? 1 : 0,
-                              transition: `opacity ${COLLECTION_FTUE_PANEL_BOUNCE_MS}ms ease-out`,
-                            }}
-                          />
-                        </div>
-                        <div className="relative w-full">
-                          {/* Locked chrome (description + Level button) */}
-                          <div
-                            className="w-full flex flex-col items-center"
-                            style={{
-                              opacity: collectionPanelChromeUnlocked ? 0 : 1,
-                              transition: `opacity ${COLLECTION_FTUE_PANEL_BOUNCE_MS}ms ease-out`,
-                              pointerEvents: collectionPanelChromeUnlocked ? 'none' : 'auto',
-                            }}
-                            aria-hidden={collectionPanelChromeUnlocked}
-                          >
-                            <div className="relative w-full" style={{ minHeight: '2.75rem', marginBottom: 8 }}>
-                              <p
-                                className="font-medium text-center leading-relaxed italic w-full absolute inset-x-0 top-0"
-                                style={{
-                                  color: '#c2b280',
-                                  fontFamily: 'Inter, sans-serif',
-                                  fontSize: '0.875rem',
-                                  paddingLeft: 4,
-                                  paddingRight: 4,
-                                }}
-                              >
-                                Collect and upgrade plants here
-                              </p>
-                            </div>
-                            <button
-                              type="button"
-                              disabled
-                              aria-disabled
-                              className="relative mx-auto flex items-center justify-center gap-1 whitespace-nowrap border outline outline-1 rounded-[8px] shadow-[inset_0_1px_1px_rgba(255,255,255,0.4)]"
+                        )}
+                        {!collectionPanelChromeUnlocked &&
+                          specialDeliveryLockedFtueActive && (
+                            <div
+                              className="absolute inset-0 pointer-events-none"
                               style={{
-                                height: COLLECTION_PANEL_LOCKED_LEVEL_BUTTON_HEIGHT_PX,
-                                width: 'fit-content',
-                                marginTop: 3,
-                                paddingLeft: COLLECTION_PANEL_LOCKED_LEVEL_BUTTON_PADDING_X_PX,
-                                paddingRight: COLLECTION_PANEL_LOCKED_LEVEL_BUTTON_PADDING_X_PX,
-                                boxSizing: 'border-box',
-                                backgroundColor: '#9cccdb',
-                                borderColor: '#6aa3b7',
-                                borderBottomWidth: '4px',
-                                outlineColor: '#6aa3b7',
-                                cursor: 'default',
+                                opacity: specialDeliveryLockedFtuePanelReveal ? 1 : 0,
+                                transition: `opacity ${SPECIAL_DELIVERY_LOCKED_FTUE_DOORS_FADE_MS}ms linear`,
+                                zIndex: 1,
                               }}
+                              aria-hidden
                             >
-                              <span className="flex items-center gap-0.5 -translate-x-0.5">
-                                <span
-                                  aria-hidden
-                                  className="w-4 h-4 shrink-0"
-                                  style={{
-                                    backgroundColor: '#3d7493',
-                                    maskImage: `url(${assetPath('/assets/icons/generic_buttons/icon_lock.png')})`,
-                                    maskSize: 'contain',
-                                    maskRepeat: 'no-repeat',
-                                    maskPosition: 'center',
-                                    WebkitMaskImage: `url(${assetPath('/assets/icons/generic_buttons/icon_lock.png')})`,
-                                    WebkitMaskSize: 'contain',
-                                    WebkitMaskRepeat: 'no-repeat',
-                                    WebkitMaskPosition: 'center',
-                                  }}
-                                />
-                                <span
-                                  className="font-black tracking-tighter"
-                                  style={{ color: '#3d7493', fontSize: 15.6 }}
-                                >
-                                  Level  {PLANT_COLLECTION_UI_UNLOCK_LEVEL}
-                                </span>
-                              </span>
-                            </button>
-                          </div>
-                          {/* Unlocked chrome — stacked for FTUE crossfade; also used when already unlocked */}
-                          <div
-                            className="w-full flex flex-col items-center"
-                            style={{
-                              ...(isPlantCollectionUiUnlocked
-                                ? {
-                                    position: 'absolute' as const,
-                                    left: 0,
-                                    right: 0,
-                                    top: 0,
+                              <SpecialDeliveryClosedDoorsPreview
+                                animateLocks={specialDeliveryLockedFtuePanelReveal}
+                              />
+                            </div>
+                          )}
+                        {specialDeliveryLockedFtueVineBurstId && (
+                          <SpecialDeliveryVineLeafBurst
+                            key={specialDeliveryLockedFtueVineBurstId}
+                            id={specialDeliveryLockedFtueVineBurstId}
+                            onComplete={() => setSpecialDeliveryLockedFtueVineBurstId(null)}
+                          />
+                        )}
+                        {!collectionPanelChromeUnlocked && (
+                          <SpecialDeliveryLockedPanelLock
+                            active={activeScreen === 'BARN'}
+                            visible={!specialDeliveryLockedFtueLockGone}
+                            ftueUnlockMode={
+                              specialDeliveryLockedFtueActive &&
+                              !specialDeliveryLockedFtueLockGone
+                            }
+                            onTap={() => {
+                              if (
+                                specialDeliveryLockedFtueActive &&
+                                !specialDeliveryLockedFtueLockGone
+                              ) {
+                                setSpecialDeliveryLockedFtueVineBurstId(
+                                  `sd-vine-burst-${Date.now()}`,
+                                );
+                                const container = document.getElementById('game-container');
+                                const lockEl = document.getElementById(
+                                  SPECIAL_DELIVERY_LOCKED_FTUE_LOCK_ID,
+                                );
+                                if (container && lockEl) {
+                                  const cr = container.getBoundingClientRect();
+                                  const lr = lockEl.getBoundingClientRect();
+                                  const scale = appScaleRef.current || 1;
+                                  const x = (lr.left + lr.width / 2 - cr.left) / scale;
+                                  const y = (lr.top + lr.height / 2 - cr.top) / scale;
+                                  const sizePx = Math.max(lr.width, lr.height) / scale;
+                                  const id = `sd-locked-ftue-unlock-${Date.now()}`;
+                                  setSpecialDeliveryLockedFtueLockGone(true);
+                                  setSpecialDeliveryLockedFtuePanelReveal(true);
+                                  setSpecialDeliveryLockedFtueFlyingUnlock({
+                                    id,
+                                    x,
+                                    y,
+                                    sizePx,
+                                  });
+                                  if (!getPerformanceMode()) {
+                                    setSpecialDeliveryLockedFtueLeafBurst({
+                                      id: `sd-locked-ftue-lb-${Date.now()}`,
+                                      x,
+                                      y,
+                                      startTime: Date.now(),
+                                    });
                                   }
-                                : { display: 'none' as const }),
-                              opacity: collectionPanelChromeUnlocked ? 1 : 0,
-                              transition: `opacity ${COLLECTION_FTUE_PANEL_BOUNCE_MS}ms ease-out`,
-                              pointerEvents: collectionPanelChromeUnlocked ? 'auto' : 'none',
+                                } else {
+                                  setSpecialDeliveryLockedFtueLockGone(true);
+                                  setSpecialDeliveryLockedFtuePanelReveal(true);
+                                  if (specialDeliveryFtuePhaseRef.current === 'vine_lock') {
+                                    setSpecialDeliveryLockedFtueActive(false);
+                                    setSpecialDeliveryFtuePhase('explain_panel');
+                                    specialDeliveryFtuePhaseRef.current = 'explain_panel';
+                                  }
+                                }
+                                // Keep vine_lock phase until knockoff onComplete so locked chrome stays.
+                                return;
+                              }
+                              setLockedSpecialDeliveryLevelBounceGen((gen) => gen + 1);
                             }}
-                            aria-hidden={!collectionPanelChromeUnlocked}
+                          />
+                        )}
+                        {/* Locked art has no doors or lock overlays. */}
+                        {collectionPanelChromeUnlocked && (
+                          <SpecialDeliveryDoors
+                            containerRef={containerRef}
+                            keySourceIconRef={goldenPotWalletIconRef}
+                            appScale={appScale}
+                            gardenId={activeGardenId}
+                            playerLevel={playerLevel}
+                            winnableTrophies={winnableTrophies}
+                            gardenContexts={specialDeliveryGardenContexts}
+                            upgradeGateCtx={specialDeliveryUpgradeGateCtx}
+                            onTrySpendKey={trySpendSpecialDeliveryKey}
+                            onRefundKey={refundSpecialDeliveryKey}
+                            onOutOfKeys={handleSpecialDeliveryOutOfKeys}
+                            onClaimReward={handleSpecialDeliveryClaimReward}
+                            ftuePickSequence={
+                              isSpecialDeliveryDoorGuidePhase(specialDeliveryFtuePhase) ||
+                              specialDeliveryFtuePhase === 'await_coins_land'
+                                ? sdFtuePickSequence
+                                : null
+                            }
+                            suppressBoardSave={
+                              isSpecialDeliveryDoorGuidePhase(specialDeliveryFtuePhase) ||
+                              specialDeliveryFtuePhase === 'await_coins_land' ||
+                              specialDeliveryFtuePhase === 'explain_panel' ||
+                              specialDeliveryFtuePhase === 'post_trophy'
+                            }
+                            onFtueDoorTap={(doorIndex) => {
+                              setSdFtueDoorFingerIndices((prev) =>
+                                prev.filter((i) => i !== doorIndex),
+                              );
+                              sdFtueDoorTapCountRef.current += 1;
+                              // Last pick of the forced sequence completes the match: fade
+                              // any leftover fingers and block everything until the
+                              // Match-3 Claim Reward button is live.
+                              const picksInRound = sdFtuePickSequence?.length ?? 0;
+                              if (picksInRound > 0 && sdFtueDoorTapCountRef.current >= picksInRound) {
+                                setSdFtueDoorGuideBlockMode('full');
+                                setSdFtueDoorFingersFadingOut(true);
+                                if (sdFtueDoorFingerFadeTimeoutRef.current != null) {
+                                  window.clearTimeout(sdFtueDoorFingerFadeTimeoutRef.current);
+                                }
+                                sdFtueDoorFingerFadeTimeoutRef.current = window.setTimeout(() => {
+                                  sdFtueDoorFingerFadeTimeoutRef.current = null;
+                                  setSdFtueDoorFingerIndices([]);
+                                  setSdFtueDoorFingersFadingOut(false);
+                                }, 200);
+                              }
+                            }}
+                            onMatch3ClaimReady={() => {
+                              // Match-3 blocks the board itself; stand down so Claim is tappable.
+                              setSdFtueDoorGuideBlockMode('off');
+                            }}
+                          />
+                        )}
+                        {(specialDeliveryFtuePhase === 'explain_panel' ||
+                          sdFtueExplainFadingOut) && (
+                          <SpecialDeliveryExplainFtue
+                            boxTopPx={Math.max(0, collectionSpecialDeliveryTitleTopPx - 8)}
+                            boxMinHeightPx={
+                              collectionSpecialDeliveryDescTopPx -
+                              collectionSpecialDeliveryTitleTopPx +
+                              120
+                            }
+                            isFadingOut={sdFtueExplainFadingOut}
+                            onConfirm={() => {
+                              if (sdFtueExplainFadeTimeoutRef.current != null) return;
+                              setSdFtueExplainFadingOut(true);
+                              sdFtueExplainFadeTimeoutRef.current = window.setTimeout(() => {
+                                sdFtueExplainFadeTimeoutRef.current = null;
+                                setSdFtueExplainFadingOut(false);
+                                beginSdFtueCoinDoorGuideRef.current();
+                              }, 220);
+                            }}
+                          />
+                        )}
+                        <div
+                          className="absolute inset-0 pointer-events-none"
+                          style={{ zIndex: 2 }}
+                        >
+                          <SpecialDeliveryTitle topPx={collectionSpecialDeliveryTitleTopPx} />
+                          <img
+                            src={assetPath(
+                              collectionPanelChromeUnlocked
+                                ? '/assets/ui/popup_divider.png'
+                                : '/assets/ui/popup_divider_blue.png',
+                            )}
+                            alt=""
+                            className="absolute object-contain pointer-events-none"
+                            style={{
+                              left: '50%',
+                              top:
+                                collectionSpecialDeliveryTitleTopPx +
+                                COLLECTION_SPECIAL_DELIVERY_TITLE_BOX_HEIGHT_PX -
+                                COLLECTION_SPECIAL_DELIVERY_DIVIDER_NUDGE_UP_PX,
+                              width: COLLECTION_SPECIAL_DELIVERY_DIVIDER_WIDTH_PX,
+                              height: 'auto',
+                              transform: 'translateX(-50%)',
+                            }}
+                            draggable={false}
+                          />
+                          <div
+                            className="absolute"
+                            style={{
+                              left: COLLECTION_SPECIAL_DELIVERY_DESC_INSET_X_PX,
+                              right: COLLECTION_SPECIAL_DELIVERY_DESC_INSET_X_PX,
+                              top: collectionSpecialDeliveryDescTopPx,
+                              minHeight: '2.75rem',
+                            }}
                           >
+                            {/* Locked level replaces the description until Special Deliveries unlocks. */}
+                            <div
+                              className="absolute inset-x-0 flex justify-center"
+                              style={{
+                                top: 2,
+                                opacity: collectionPanelChromeUnlocked ? 0 : 1,
+                                transition: `opacity ${COLLECTION_FTUE_PANEL_BOUNCE_MS}ms ease-out`,
+                              }}
+                              aria-hidden={collectionPanelChromeUnlocked}
+                            >
+                              <div
+                                id={SPECIAL_DELIVERY_LOCKED_FTUE_LEVEL_BUTTON_ID}
+                                key={`special-delivery-level-lock-${lockedSpecialDeliveryLevelBounceGen}`}
+                                className={`relative flex items-center justify-center gap-1 whitespace-nowrap border outline outline-1 rounded-[8px] shadow-[inset_0_1px_1px_rgba(255,255,255,0.4)]${
+                                  lockedSpecialDeliveryLevelBounceGen > 0
+                                    ? ' collection-ftue-panel-bounce'
+                                    : ''
+                                }`}
+                                style={{
+                                  ['--panel-s' as string]: 1,
+                                  height: COLLECTION_PANEL_LOCKED_LEVEL_BUTTON_HEIGHT_PX,
+                                  width: 'fit-content',
+                                  paddingLeft: COLLECTION_PANEL_LOCKED_LEVEL_BUTTON_PADDING_X_PX,
+                                  paddingRight: COLLECTION_PANEL_LOCKED_LEVEL_BUTTON_PADDING_X_PX,
+                                  boxSizing: 'border-box',
+                                  backgroundColor: '#9cccdb',
+                                  borderColor: '#6aa3b7',
+                                  borderBottomWidth: '4px',
+                                  outlineColor: '#6aa3b7',
+                                  pointerEvents: 'none',
+                                }}
+                                aria-hidden
+                              >
+                                <span className="flex items-center gap-0.5 -translate-x-0.5">
+                                  <span
+                                    aria-hidden
+                                    className="w-4 h-4 shrink-0"
+                                    style={{
+                                      backgroundColor: '#3d7493',
+                                      maskImage: `url(${assetPath('/assets/icons/generic_buttons/icon_lock.png')})`,
+                                      maskSize: 'contain',
+                                      maskRepeat: 'no-repeat',
+                                      maskPosition: 'center',
+                                      WebkitMaskImage: `url(${assetPath('/assets/icons/generic_buttons/icon_lock.png')})`,
+                                      WebkitMaskSize: 'contain',
+                                      WebkitMaskRepeat: 'no-repeat',
+                                      WebkitMaskPosition: 'center',
+                                    }}
+                                  />
+                                  <span
+                                    className="font-black tracking-tighter"
+                                    style={{ color: '#3d7493', fontSize: 15.6 }}
+                                  >
+                                    Level 7
+                                  </span>
+                                </span>
+                              </div>
+                            </div>
+                            {/* Unlocked description (+ FTUE bonuses copy swap) */}
                             <div
                               id={COLLECTION_FTUE_PANEL_COPY_ID}
-                              className="w-full flex flex-col items-center"
+                              className="absolute inset-x-0 top-0 w-full"
+                              style={{
+                                ...(isPlantCollectionUiUnlocked
+                                  ? {}
+                                  : { display: 'none' as const }),
+                                opacity: collectionPanelChromeUnlocked ? 1 : 0,
+                                transition: `opacity ${COLLECTION_FTUE_PANEL_BOUNCE_MS}ms ease-out`,
+                              }}
+                              aria-hidden={!collectionPanelChromeUnlocked}
                             >
-                            <div className="relative w-full" style={{ minHeight: '2.75rem', marginBottom: 8 }}>
                               <p
                                 key={
                                   collectionFtueCopyFlash?.kind === 'intro'
                                     ? `intro-copy-${collectionFtueCopyFlash.gen}`
                                     : 'intro-copy'
                                 }
-                                className={`font-medium text-center leading-relaxed italic w-full absolute inset-x-0 top-0${
+                                className={`font-medium text-center italic w-full absolute inset-x-0 top-0${
                                   collectionFtueCopyFlash?.kind === 'intro'
                                     ? ' collection-ftue-copy-color-settle'
                                     : ''
@@ -11549,18 +13258,17 @@ export default function App() {
                                 style={{
                                   ...(collectionFtueCopyFlash?.kind === 'intro'
                                     ? {}
-                                    : { color: COLLECTION_PANEL_COPY_COLOR }),
+                                    : { color: SPECIAL_DELIVERY_DESC_COLOR }),
                                   fontFamily: 'Inter, sans-serif',
-                                  fontSize: '0.875rem',
+                                  fontSize: COLLECTION_SPECIAL_DELIVERY_DESC_FONT_PX,
+                                  lineHeight: COLLECTION_SPECIAL_DELIVERY_DESC_LINE_HEIGHT,
                                   paddingLeft: 4,
                                   paddingRight: 4,
                                   opacity: collectionFtueBonusesCopyActive ? 0 : 1,
                                   transition: `opacity ${COLLECTION_FTUE_PANEL_BOUNCE_MS}ms ease-out`,
-                                  pointerEvents: 'none',
                                 }}
                               >
-                                <span className="block">Upgrade plants shelf by shelf.</span>
-                                <span className="block">Finish a row to unlock Bonuses.</span>
+                                <SpecialDeliveryDescriptionCopy />
                               </p>
                               <p
                                 key={
@@ -11568,7 +13276,7 @@ export default function App() {
                                     ? `bonuses-copy-${collectionFtueCopyFlash.gen}`
                                     : 'bonuses-copy'
                                 }
-                                className={`font-medium text-center leading-relaxed italic w-full absolute inset-x-0 top-0${
+                                className={`font-medium text-center italic w-full absolute inset-x-0 top-0${
                                   collectionFtueCopyFlash?.kind === 'bonuses'
                                     ? ' collection-ftue-copy-color-settle'
                                     : ''
@@ -11578,18 +13286,46 @@ export default function App() {
                                     ? {}
                                     : { color: COLLECTION_PANEL_COPY_COLOR }),
                                   fontFamily: 'Inter, sans-serif',
-                                  fontSize: '0.875rem',
+                                  fontSize: COLLECTION_SPECIAL_DELIVERY_DESC_FONT_PX,
+                                  lineHeight: COLLECTION_SPECIAL_DELIVERY_DESC_LINE_HEIGHT,
                                   paddingLeft: 4,
                                   paddingRight: 4,
                                   opacity: collectionFtueBonusesCopyActive ? 1 : 0,
                                   transition: `opacity ${COLLECTION_FTUE_PANEL_BOUNCE_MS}ms ease-out`,
-                                  pointerEvents: 'none',
                                 }}
                               >
                                 {COLLECTION_FTUE_BONUSES_MESSAGE}
                               </p>
                             </div>
-                            <div className="relative w-full flex flex-col items-center" style={{ minHeight: 37 }}>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* CTA geometry is panel-local; shared barnScale resizes it with the shelves. */}
+                      <div
+                        className="relative w-full flex flex-col items-center"
+                        style={{ marginTop: COLLECTION_SPECIAL_DELIVERY_CTA_MARGIN_TOP_PX }}
+                      >
+                        {/* Unlocked FTUE CTAs (View Bonuses only during FTUE; normal play uses shelf bars) */}
+                        <div
+                          className="w-full flex flex-col items-center"
+                          style={{
+                            ...(isPlantCollectionUiUnlocked
+                              ? {}
+                              : { display: 'none' as const }),
+                            opacity: collectionPanelChromeUnlocked ? 1 : 0,
+                            transition: `opacity ${COLLECTION_FTUE_PANEL_BOUNCE_MS}ms ease-out`,
+                            pointerEvents: collectionPanelChromeUnlocked ? 'auto' : 'none',
+                            ...(collectionPanelChromeUnlocked
+                              ? {}
+                              : { position: 'absolute' as const, left: 0, right: 0, top: 0 }),
+                            ...(!showCollectionFtueViewBonusesMount && !showCollectionFtueCta
+                              ? { display: 'none' as const }
+                              : {}),
+                          }}
+                          aria-hidden={!collectionPanelChromeUnlocked}
+                        >
+                          <div className="relative w-full flex flex-col items-center" style={{ minHeight: 37 }}>
                             {showCollectionFtueViewBonusesMount && (
                             <button
                               id="collection-ftue-view-bonuses"
@@ -11644,8 +13380,8 @@ export default function App() {
                                 }}
                               >
                                 View Bonuses
-                                </span>
-                              </button>
+                              </span>
+                            </button>
                             )}
                             {showCollectionFtueCta && (
                               <button
@@ -11716,15 +13452,13 @@ export default function App() {
                                 </span>
                               </button>
                             )}
-                            </div>
-                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Shelves: active garden only */}
+                  {/* Shelves: all unlocked gardens (global collection) + teaser labels */}
                   <div
                     className="relative flex flex-col items-center"
                     style={{
@@ -11736,9 +13470,74 @@ export default function App() {
                     }}
                     data-barn-shelves
                   >
-                    {Array.from({ length: BARN_SHELVES_PER_GARDEN }, (_, shelfInGarden) =>
-                      renderCollectionShelf(getShelfIndexForGarden(activeGardenId, shelfInGarden)),
-                    )}
+                    {(() => {
+                      const startedSet = new Set(
+                        gardensStartedList.length > 0
+                          ? gardensStartedList
+                          : [DEFAULT_GARDEN_ID],
+                      );
+                      startedSet.add(DEFAULT_GARDEN_ID);
+                      const sections: React.ReactNode[] = [];
+                      let renderedStartedSection = false;
+
+                      for (const gardenId of COLLECTION_GARDEN_IDS) {
+                        const started = startedSet.has(gardenId);
+                        const labelMarginTop = renderedStartedSection
+                          ? collectionGardenLabelAfterShelvesMarginTopPx
+                          : 0;
+
+                        if (started) {
+                          sections.push(
+                            <React.Fragment key={`collection-garden-${gardenId}`}>
+                              <GardenLabel
+                                gardenId={gardenId}
+                                label={getCollectionGardenDisplayName(gardenId)}
+                                marginTop={labelMarginTop}
+                                marginBottom={COLLECTION_GARDEN_LABEL_MARGIN_BOTTOM_PX}
+                                scale={collectionGardenLabelScale}
+                              />
+                              {Array.from({ length: BARN_SHELVES_PER_GARDEN }, (_, shelfInGarden) =>
+                                renderCollectionShelf(
+                                  getShelfIndexForGarden(gardenId, shelfInGarden),
+                                ),
+                              )}
+                            </React.Fragment>,
+                          );
+                          renderedStartedSection = true;
+                          continue;
+                        }
+
+                        sections.push(
+                          <GardenLabel
+                            key={`collection-garden-locked-${gardenId}`}
+                            label={COLLECTION_UNDISCOVERED_GARDEN_LABEL}
+                            iconSrc={getCollectionGardenLockedIconPath()}
+                            marginTop={labelMarginTop}
+                            marginBottom={COLLECTION_GARDEN_LABEL_MARGIN_BOTTOM_PX}
+                            scale={collectionGardenLabelScale}
+                          />,
+                        );
+                        break;
+                      }
+
+                      const allShippedStarted = COLLECTION_GARDEN_IDS.every((id) =>
+                        startedSet.has(id),
+                      );
+                      if (allShippedStarted) {
+                        sections.push(
+                          <GardenLabel
+                            key="collection-coming-soon"
+                            label={COLLECTION_COMING_SOON_LABEL}
+                            iconSrc={getCollectionGardenLockedIconPath()}
+                            marginTop={collectionGardenLabelAfterShelvesMarginTopPx}
+                            marginBottom={COLLECTION_GARDEN_LABEL_MARGIN_BOTTOM_PX}
+                            scale={collectionGardenLabelScale}
+                          />,
+                        );
+                      }
+
+                      return sections;
+                    })()}
                   </div>
                   <div
                     data-barn-scroll-end
@@ -11762,7 +13561,8 @@ export default function App() {
                       walletIconRef={walletIconRef}
                       walletFlashActive={walletFlashActive}
                       walletBurstCount={walletBounceTrigger}
-                      goldenPotWallet={goldenPotWalletHeaderProps}
+                      walletTextBurstCount={walletTextBounceTrigger}
+                      keyWallet={keyWalletHeaderProps}
                       onWalletClick={() => {
                       playSfx(SFX_IDS.uiConfirmNormal);
                       setActiveScreen('STORE');
@@ -11788,6 +13588,50 @@ export default function App() {
                   </div>
                 </div>
               )}
+              {/* Other-garden SD claim: temporary garden FB above the match-3 black overlay. */}
+              {activeScreen === 'BARN' &&
+                collectionGardenHandoff &&
+                typeof document !== 'undefined' &&
+                document.getElementById('game-container') &&
+                createPortal(
+                  <FloatingButtonStack
+                    side="right"
+                    topPx={farmFloatingButtonStackTopPx}
+                    style={{ zIndex: COLLECTION_GARDEN_HANDOFF_FB_Z }}
+                  >
+                    {/* Spacer matches Daily Tasks slot so Gardens sits in its normal farm position. */}
+                    <div
+                      aria-hidden
+                      style={{
+                        width: FLOATING_BUTTON_ICON_SIZE_PX,
+                        height: FLOATING_BUTTON_ICON_SIZE_PX,
+                      }}
+                    />
+                    <div
+                      ref={collectionGardenHandoffFbRef}
+                      className={`inline-block pointer-events-none ${
+                        collectionGardenHandoff.phase === 'exiting'
+                          ? 'collection-garden-handoff-exit'
+                          : ''
+                      }`}
+                    >
+                      <FloatingButton
+                        title="Gardens"
+                        iconSrc={getGardenNumberedFloatingButtonIconSrc(
+                          collectionGardenHandoff.gardenId,
+                        )}
+                        gardenId={collectionGardenHandoff.gardenId}
+                        showNotificationDot={collectionGardenHandoff.showNotificationDot}
+                        readyBounceActive={
+                          collectionGardenHandoff.phase === 'entering' ||
+                          collectionGardenHandoffImpactBounce
+                        }
+                        style={{ pointerEvents: 'none' }}
+                      />
+                    </div>
+                  </FloatingButtonStack>,
+                  document.getElementById('game-container')!,
+                )}
             </div>
           </div>
         </div>
@@ -11804,13 +13648,30 @@ export default function App() {
             if (screen === 'BARN') {
               setBarnNotification(false);
             }
+            if (screen === 'FARM') {
+              setFarmNotification(false);
+            }
           }} 
           barnButtonRef={barnButtonRef}
+          farmButtonRef={farmButtonRef}
           notifications={{
+            FARM: farmNotification,
             BARN: barnNotification && isPlantCollectionUiUnlocked,
           }}
           collectionFtueGardenFinger={collectionFtuePhase === 'point_garden_nav' && !collectionFtueCompleted}
-          blockInput={tasksFtueActive || gardensFtueActive || newGardenGardensFbFtueActive}
+          blockInput={
+            tasksFtueActive ||
+            gardensFtueActive ||
+            newGardenGardensFbFtueActive ||
+            specialDeliveryFtuePhase === 'claim_tasks' ||
+            specialDeliveryFtuePhase === 'point_collection' ||
+            specialDeliveryFtuePhase === 'explain_panel' ||
+            isSpecialDeliveryDoorGuidePhase(specialDeliveryFtuePhase) ||
+            specialDeliveryFtuePhase === 'await_coins_land' ||
+            specialDeliveryFtuePhase === 'post_trophy'
+          }
+          specialDeliveryCollectionFtueHit={false}
+          onSpecialDeliveryCollectionFtueHit={undefined}
         />
 
         {/* Leaf burst: portal to body so never clipped; viewport coords */}
@@ -11829,18 +13690,18 @@ export default function App() {
                   fontWeight: 900,
                   fontSize: '20px',
                   letterSpacing: '-0.02em',
-                  color: '#ffffff',
+                  color: t.textColor ?? '#ffffff',
                   textShadow:
-                    `0 2px 0 rgba(0,0,0,0.25), ` +
-                    `1.5px 0 0 #1f5a2a, ` +
-                    `-1.5px 0 0 #1f5a2a, ` +
-                    `0 1.5px 0 #1f5a2a, ` +
-                    `0 -1.5px 0 #1f5a2a`,
+                    `0 3px 0 ${t.outlineColor ?? 'rgba(0,0,0,0.25)'}, ` +
+                    `1.5px 0 0 ${t.outlineColor ?? '#1f5a2a'}, ` +
+                    `-1.5px 0 0 ${t.outlineColor ?? '#1f5a2a'}, ` +
+                    `0 1.5px 0 ${t.outlineColor ?? '#1f5a2a'}, ` +
+                    `0 -1.5px 0 ${t.outlineColor ?? '#1f5a2a'}`,
                   whiteSpace: 'nowrap',
                   opacity: 1,
                 }}
               >
-                Max Plant Reached
+                {t.message ?? 'Max Plant Reached'}
               </div>
             ))}
             <FarmVfxLayer appScale={appScale} />
@@ -12226,7 +14087,7 @@ export default function App() {
                   isFadingOut={collectionFtueOverlayFadingOut}
                 />
               )}
-            {tasksFtueActive && (
+            {tasksFtueActive && !tasksFtueClaimStep && (
               <CollectionFtueOverlay
                 active
                 holeRect={tasksFtueHoleRect}
@@ -12235,6 +14096,111 @@ export default function App() {
                 holePaddingPx={8}
               />
             )}
+            {activeScreen === 'BARN' &&
+              specialDeliveryLockedFtueActive &&
+              !specialDeliveryLockedFtueLockGone && (
+              <CollectionFtueOverlay
+                key={`sd-locked-ftue-${specialDeliveryLockedFtueGen}`}
+                active
+                holeRects={
+                  specialDeliveryLockedFtueHoleRect
+                    ? [specialDeliveryLockedFtueHoleRect]
+                    : []
+                }
+                fingerStyle="point_up"
+                fingerHoleIndex={0}
+                blockerTint={COLLECTION_FTUE_BLOCKER_TINT}
+                holePaddingPx={10}
+              />
+            )}
+            {activeScreen === 'BARN' &&
+              isSpecialDeliveryDoorGuidePhase(specialDeliveryFtuePhase) &&
+              sdFtueDoorGuideBlockMode !== 'off' &&
+              (sdFtueDoorHoleRects.length > 0 || sdFtueDoorGuideBlockMode === 'full') && (
+              <CollectionFtueOverlay
+                key={`sd-door-guide-${specialDeliveryFtuePhase}`}
+                active
+                fullBlock={sdFtueDoorGuideBlockMode === 'full'}
+                holeRects={sdFtueDoorGuideBlockMode === 'full' ? null : sdFtueDoorHoleRects}
+                fingerRects={sdFtueDoorHoleRects.filter((_, i) =>
+                  sdFtueDoorFingerIndices.includes(i),
+                )}
+                fingerStyle="point_30"
+                fingerScale={0.525}
+                fingersFadingOut={sdFtueDoorFingersFadingOut}
+                blockerTint={COLLECTION_FTUE_BLOCKER_TINT}
+                holePaddingPx={6}
+              />
+            )}
+            {activeScreen === 'BARN' &&
+              coinPanelPortalRect &&
+              (specialDeliveryFtuePhase === 'post_trophy' || sdFtuePostTrophyFadingOut) && (
+              <SpecialDeliveryPostTrophyFtue
+                portalRect={coinPanelPortalRect}
+                isFadingOut={sdFtuePostTrophyFadingOut}
+                onConfirm={() => {
+                  if (sdFtuePostTrophyFadeTimeoutRef.current != null) return;
+                  setSdFtuePostTrophyFadingOut(true);
+                  sdFtuePostTrophyFadeTimeoutRef.current = window.setTimeout(() => {
+                    sdFtuePostTrophyFadeTimeoutRef.current = null;
+                    setSdFtuePostTrophyFadingOut(false);
+                    setSpecialDeliveryFtueCompleted(true);
+                    specialDeliveryFtueCompletedRef.current = true;
+                    setSpecialDeliveryFtuePhase(null);
+                    specialDeliveryFtuePhaseRef.current = null;
+                    setSdFtuePickSequence(null);
+                    setSdFtueDoorFingerIndices([]);
+                    setSdFtueDoorHoleRects([]);
+                    setSdFtueDoorGuideBlockMode('holes');
+                    setSdFtueDoorFingersFadingOut(false);
+                    sdFtueDoorTapCountRef.current = 0;
+                  }, 220);
+                }}
+              />
+            )}
+            {typeof document !== 'undefined' &&
+              document.getElementById('game-container') &&
+              (specialDeliveryLockedFtueFlyingUnlock || specialDeliveryLockedFtueLeafBurst) &&
+              createPortal(
+                <>
+                  {specialDeliveryLockedFtueFlyingUnlock && (
+                    <SpecialDeliveryUnlockKnockoff
+                      key={specialDeliveryLockedFtueFlyingUnlock.id}
+                      id={specialDeliveryLockedFtueFlyingUnlock.id}
+                      x={specialDeliveryLockedFtueFlyingUnlock.x}
+                      y={specialDeliveryLockedFtueFlyingUnlock.y}
+                      sizePx={specialDeliveryLockedFtueFlyingUnlock.sizePx}
+                      iconSrc={SPECIAL_DELIVERY_LARGE_UNLOCK_SRC}
+                      onComplete={() => {
+                        setSpecialDeliveryLockedFtueFlyingUnlock(null);
+                        if (specialDeliveryFtuePhaseRef.current === 'vine_lock') {
+                          setSpecialDeliveryLockedFtueActive(false);
+                          setSpecialDeliveryFtuePhase('explain_panel');
+                          specialDeliveryFtuePhaseRef.current = 'explain_panel';
+                        }
+                      }}
+                    />
+                  )}
+                  {specialDeliveryLockedFtueLeafBurst && (
+                    <LeafBurst
+                      key={specialDeliveryLockedFtueLeafBurst.id}
+                      x={specialDeliveryLockedFtueLeafBurst.x}
+                      y={specialDeliveryLockedFtueLeafBurst.y}
+                      startTime={specialDeliveryLockedFtueLeafBurst.startTime}
+                      spriteVariant="default"
+                      particleCount={Math.max(1, Math.round(LEAF_BURST_BASELINE_COUNT * 0.5))}
+                      useCircle
+                      burstScale={1.15}
+                      appScale={1}
+                      zIndex={222}
+                      anchorPosition="absolute"
+                      spawnOffsetUpPx={0}
+                      onComplete={() => setSpecialDeliveryLockedFtueLeafBurst(null)}
+                    />
+                  )}
+                </>,
+                document.getElementById('game-container')!,
+              )}
             {gardensFtueActive && (
               <CollectionFtueOverlay
                 active
@@ -12250,6 +14216,80 @@ export default function App() {
           </div>,
           document.body
         )}
+        {/* Above Daily Tasks (z 100): same design-space scale as other FTUE overlays. */}
+        {specialDeliveryFtuePhase === 'point_collection' &&
+          coinPanelPortalRect &&
+          createPortal(
+            <div
+              className="fixed pointer-events-none"
+              style={{
+                left: coinPanelPortalRect.left,
+                top: coinPanelPortalRect.top,
+                width: coinPanelPortalRect.width,
+                height: coinPanelPortalRect.height,
+                transform: `scale(${coinPanelPortalRect.scale})`,
+                transformOrigin: 'top left',
+                zIndex: 250,
+              }}
+            >
+              <CollectionFtueOverlay
+                active
+                holeRect={specialDeliveryCollectionNavHoleRect}
+                fingerStyle="point_down"
+                blockerTint={COLLECTION_FTUE_BLOCKER_TINT}
+                holePaddingPx={8}
+                zIndex={1}
+                isFadingOut={specialDeliveryCollectionFtueFadingOut}
+              />
+              {specialDeliveryCollectionNavHoleRect ? (
+                <button
+                  id={SPECIAL_DELIVERY_FTUE_COLLECTION_NAV_HIT_ID}
+                  type="button"
+                  aria-label="Open Collection"
+                  className="absolute border-0 bg-transparent p-0 pointer-events-auto"
+                  style={{
+                    left: specialDeliveryCollectionNavHoleRect.left,
+                    top: specialDeliveryCollectionNavHoleRect.top,
+                    width: specialDeliveryCollectionNavHoleRect.width,
+                    height: specialDeliveryCollectionNavHoleRect.height,
+                    zIndex: 2,
+                  }}
+                  onClick={() => {
+                    if (specialDeliveryFtuePhaseRef.current !== 'point_collection') return;
+                    if (specialDeliveryCollectionFtueFadeTimeoutRef.current != null) return;
+                    playSfx(SFX_IDS.uiConfirmNormal);
+                    setSpecialDeliveryCollectionFtueFadingOut(true);
+                    specialDeliveryCollectionFtueFadeTimeoutRef.current = window.setTimeout(() => {
+                      specialDeliveryCollectionFtueFadeTimeoutRef.current = null;
+                      setSpecialDeliveryCollectionFtueFadingOut(false);
+                      setSpecialDeliveryCollectionNavHoleRect(null);
+                      setDailyTasksPopupOpen(false);
+                      setDailyTaskClaimBounceIds([]);
+                      barnScrollYByGardenRef.current[activeGardenIdRef.current] = 0;
+                      barnScrollYRef.current = 0;
+                      setBarnScrollY(0);
+                      setActiveScreen('BARN');
+                      setSpecialDeliveryFtuePhase('vine_lock');
+                      specialDeliveryFtuePhaseRef.current = 'vine_lock';
+                      preloadSpecialDeliveryVineLeafBurst();
+                      setSpecialDeliveryLockedFtueActive(true);
+                      setSpecialDeliveryLockedFtueGen((gen) => gen + 1);
+                      setSpecialDeliveryLockedFtueLockGone(false);
+                      setSpecialDeliveryLockedFtuePanelReveal(false);
+                      setSpecialDeliveryLockedFtueFlyingUnlock(null);
+                      setSpecialDeliveryLockedFtueLeafBurst(null);
+                      setSpecialDeliveryLockedFtueVineBurstId(null);
+                      sdFtueFingerTaskIdsRef.current = [];
+                      setSdFtueFingerTaskIds([]);
+                      setSdFtueClaimFadingOut(false);
+                      setDailyTaskCollectionIconOverlayVisible(false);
+                    }, 200);
+                  }}
+                />
+              ) : null}
+            </div>,
+            document.body,
+          )}
         {activeFtueStage != null && ftueSettingsButtonRect && createPortal(
           <div
             className="fixed pointer-events-none"
@@ -12298,20 +14338,6 @@ export default function App() {
         {/* Modals (level up, discovery, offers, pause): above surplus coin panels */}
         {createPortal(
           <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 220 }}>
-            {dailyTaskLeafBursts.map((b) => (
-              <PopupRectLeafBurst
-                key={b.id}
-                centerX={b.x}
-                centerY={b.y}
-                rectWidth={b.rectWidth}
-                rectHeight={b.rectHeight}
-                spriteVariant={b.spriteVariant}
-                leafCount={b.leafCount}
-                leafSizeScale={b.leafSizeScale}
-                zIndex={221}
-                onComplete={() => setDailyTaskLeafBursts((prev) => prev.filter((x) => x.id !== b.id))}
-              />
-            ))}
             {/* Level Up Popup */}
             {levelUpPopup && (() => {
               const unlockInfo = getLevelUnlockInfo(levelUpPopup.level, activeGardenId);
@@ -12374,6 +14400,7 @@ export default function App() {
                         gardenId: activeGardenId,
                         collectionFtueCompleted,
                         tasksFtueCompleted,
+                        specialDeliveryFtueCompleted,
                         gardensFtueCompleted,
                       })
                     ) {
@@ -12436,6 +14463,7 @@ export default function App() {
                 revealTierPotCount={goldenPotBonusRevealTier}
                 scrollToTierPotCount={goldenPotBonusScrollTierPotCount}
                 inProgressTierPotCounts={inProgressBonusTierPotCounts}
+                inProgressTierTrophyCounts={inProgressBonusTierTrophyCounts}
                 onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
                 onClose={() => {
                   const hadUnlockReveal = goldenPotBonusRevealTier != null;
@@ -12450,7 +14478,10 @@ export default function App() {
                     scheduleAutoMergeRecheckRef.current(0);
                   });
                   if (hadUnlockReveal) {
-                    tryShowAdBreak('collection_bonus_close');
+                    // Never interrupt Collection / shed with an interstitial.
+                    if (activeScreenRef.current !== 'BARN') {
+                      tryShowAdBreak('collection_bonus_close');
+                    }
                   }
                 }}
               />
@@ -12680,7 +14711,8 @@ export default function App() {
                 plantName={getPlantData(plantInfoPopup.level, plantInfoPopup.gardenId).name}
                 plantDescription={getPlantData(plantInfoPopup.level, plantInfoPopup.gardenId).description}
                 isUnlocked={plantInfoPopup.level <= plantInfoPopupGardenSnap.highestPlantEver}
-                masteryPotUnlocked={plantInfoPopupGardenSnap.unlockedLevels.includes(plantInfoPopup.level)}
+                // Only won trophies open this popup, and a trophy always sits on a gold pot.
+                masteryPotUnlocked
                 appScale={appScale}
               />
             )}
@@ -12717,7 +14749,7 @@ export default function App() {
                 imageLevel={limitedOfferPopup.imageLevel}
                 imageMastered={
                   typeof limitedOfferPopup.imageLevel === 'number' &&
-                  plantMastery.unlockedLevels.includes(limitedOfferPopup.imageLevel)
+                  goldenPotPlantLevels.includes(limitedOfferPopup.imageLevel)
                 }
                 subtitle={limitedOfferPopup.subtitle}
                 description={limitedOfferPopup.description}
@@ -12905,7 +14937,11 @@ export default function App() {
                   });
                 }
               }}
-              closeOnBackdropClick
+              closeOnBackdropClick={
+                !tasksFtueClaimStep &&
+                specialDeliveryFtuePhase !== 'claim_tasks' &&
+                specialDeliveryFtuePhase !== 'point_collection'
+              }
               appScale={appScale}
               tasks={dailyTaskRows}
               claimBounceTaskIds={dailyTaskClaimBounceIds}
@@ -12913,6 +14949,37 @@ export default function App() {
               onClaim2xTask={handleDailyTaskClaim2x}
               tasksUnlocked={playerLevel >= TASKS_FLOATING_BUTTON_UNLOCK_LEVEL}
               countdownRefreshKey={dailyTasksCountdownRefreshKey}
+              ftueClaimTaskId={
+                specialDeliveryFtuePhase === 'claim_tasks'
+                  ? null
+                  : tasksFtueClaimStep && !tasksFtueCompleted
+                    ? dailyTaskRows.find((t) => t.state === 'complete')?.id ?? 'daily-slot-1'
+                    : null
+              }
+              ftueClaimTaskIds={
+                specialDeliveryFtuePhase === 'claim_tasks'
+                  ? sdFtueFingerTaskIds[0]
+                    ? [sdFtueFingerTaskIds[0]]
+                    : []
+                  : null
+              }
+              ftueFingerTaskIds={
+                specialDeliveryFtuePhase === 'claim_tasks'
+                  ? sdFtueFingerTaskIds[0]
+                    ? [sdFtueFingerTaskIds[0]]
+                    : []
+                  : null
+              }
+              forceStayOpen={
+                (tasksFtueClaimStep && !tasksFtueCompleted) ||
+                specialDeliveryFtuePhase === 'claim_tasks' ||
+                specialDeliveryFtuePhase === 'point_collection'
+              }
+              claimFtueFadingOut={
+                specialDeliveryFtuePhase === 'claim_tasks'
+                  ? sdFtueClaimFadingOut
+                  : tasksFtueClaimFadingOut
+              }
             />
 
             <LockedFloatingFeaturePopup
@@ -13270,13 +15337,163 @@ export default function App() {
                 appScale={appScale}
               />
             ) : null}
+          </div>,
+          document.body
+        )}
 
-            {/* Discovery reward coin VFX: viewport space (appScale 1) so spawn aligns with reward icon in modal */}
+        {/* Reward coin / leaf FX above special-delivery overlay + popups */}
+        {createPortal(
+          <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 600 }}>
+            <CollectionKeyBadge
+              targetRef={barnButtonRef}
+              activeParticleCount={activeDailyTaskKeyParticles.length}
+              impactVersion={dailyTaskKeyImpactVersion}
+              keyCount={keyCount}
+              goalTotal={
+                isGarden1IntroDailyTasksDay() ||
+                specialDeliveryFtuePhase === 'claim_tasks' ||
+                specialDeliveryFtuePhase === 'point_collection'
+                  ? GARDEN_1_INTRO_DAILY_TASKS_KEY_GOAL
+                  : null
+              }
+            />
+            {dailyTaskCollectionIconOverlay ? (
+              <img
+                src={assetPath('/assets/icons/generic_buttons/icon_barn.png')}
+                alt=""
+                aria-hidden
+                className="fixed object-contain pointer-events-none"
+                style={{
+                  left: dailyTaskCollectionIconOverlay.left,
+                  top: dailyTaskCollectionIconOverlay.top,
+                  width: dailyTaskCollectionIconOverlay.width,
+                  height: dailyTaskCollectionIconOverlay.height,
+                  filter: dailyTaskCollectionIconOverlay.filter,
+                  opacity: dailyTaskCollectionIconOverlayVisible ? 1 : 0,
+                  transition: 'opacity 180ms ease-out',
+                  zIndex: 603,
+                }}
+              />
+            ) : null}
+            {dailyTaskLeafBursts.map((b) => (
+              <PopupRectLeafBurst
+                key={b.id}
+                centerX={b.x}
+                centerY={b.y}
+                rectWidth={b.rectWidth}
+                rectHeight={b.rectHeight}
+                spriteVariant={b.spriteVariant}
+                leafCount={b.leafCount}
+                leafSizeScale={b.leafSizeScale}
+                zIndex={601}
+                onComplete={() => setDailyTaskLeafBursts((prev) => prev.filter((x) => x.id !== b.id))}
+              />
+            ))}
             <div
               ref={discoveryRewardFxLayerRef}
               className="pointer-events-none overflow-visible"
-              style={{ position: 'fixed', inset: 0, zIndex: 230 }}
+              style={{ position: 'absolute', inset: 0, zIndex: 602 }}
             >
+              {specialDeliveryFlyRewards.map((fly) => (
+                <SpecialDeliveryRewardFly
+                  key={fly.id}
+                  data={fly}
+                  containerRef={discoveryRewardFxLayerRef}
+                  targetRef={
+                    fly.targetKind === 'collectionGardenFb'
+                      ? collectionGardenHandoffFbRef
+                      : farmButtonRef
+                  }
+                  onImpact={() => {
+                    playSfx(SFX_IDS.coinImpact);
+                    const targetEl =
+                      fly.targetKind === 'collectionGardenFb'
+                        ? collectionGardenHandoffFbRef.current
+                        : farmButtonRef.current;
+                    if (fly.targetKind === 'farmNav') {
+                      setFarmNotification(true);
+                    }
+                    if (!getPerformanceMode() && targetEl) {
+                      const r = targetEl.getBoundingClientRect();
+                      const leafRect = 88 * appScaleRef.current * 0.75;
+                      setDailyTaskLeafBursts((prev) => [
+                        ...prev,
+                        {
+                          id: `sd-fly-impact-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                          x: r.left + r.width / 2,
+                          y: r.top + r.height / 2,
+                          rectWidth: leafRect,
+                          rectHeight: leafRect,
+                          spriteVariant: 'green',
+                          leafCount: 18,
+                          leafSizeScale: 1.3 * 0.75,
+                        },
+                      ]);
+                    }
+                    if (fly.targetKind === 'collectionGardenFb') {
+                      noteCollectionGardenHandoffImpact();
+                    }
+                  }}
+                  onComplete={() =>
+                    setSpecialDeliveryFlyRewards((prev) => prev.filter((x) => x.id !== fly.id))
+                  }
+                />
+              ))}
+              {/* Claimed trophies: reveal center → their collection shelf slot */}
+              {trophyFlyRewards.map((fly) => (
+                <SpecialDeliveryRewardFly
+                  key={fly.id}
+                  data={fly}
+                  containerRef={discoveryRewardFxLayerRef}
+                  onImpact={() => {
+                    playSfx(SFX_IDS.uiUnlockUpgrade);
+                    grantTrophyForLevel(fly.gardenId, fly.plantLevel);
+                    triggerTrophyRevealOnShelf(fly.plantLevel, fly.gardenId);
+                    if (specialDeliveryFtuePhaseRef.current === 'guide_doors_trophy') {
+                      setSdFtueDoorFingerIndices([]);
+                      setSdFtuePickSequence(null);
+                      setSpecialDeliveryFtuePhase('post_trophy');
+                      specialDeliveryFtuePhaseRef.current = 'post_trophy';
+                    }
+                  }}
+                  onComplete={() =>
+                    setTrophyFlyRewards((prev) => prev.filter((x) => x.id !== fly.id))
+                  }
+                />
+              ))}
+              {/* Special Delivery boosters: fly from Garden nav tab up to the boost bar */}
+              {boostParticles
+                .filter((p) => p.sourceScreen === 'gardenNav')
+                .map((particle) => (
+                  <BoostParticle
+                    key={particle.id}
+                    data={particle}
+                    containerRef={discoveryRewardFxLayerRef}
+                    boostAreaRef={activeBoostAreaRef}
+                    onImpact={(data) => {
+                      if (data.targetX != null && data.targetY != null) {
+                        const layer = discoveryRewardFxLayerRef.current;
+                        if (layer) {
+                          const lr = layer.getBoundingClientRect();
+                          const scale = lr.width / Math.max(1, layer.offsetWidth);
+                          setBoostBursts((prev) => [
+                            ...prev,
+                            {
+                              id: `boost-impact-${Date.now()}`,
+                              x: lr.left + data.targetX! * scale,
+                              y: lr.top + data.targetY! * scale,
+                              startTime: Date.now(),
+                            },
+                          ]);
+                        }
+                      }
+                      playSfx(SFX_IDS.coinImpact);
+                      setActiveBoosts((prev) => applyBoostParticleImpact(prev, data));
+                      recordDailyTaskBoostUsed();
+                    }}
+                    onComplete={() => setBoostParticles((prev) => prev.filter((p) => p.id !== particle.id))}
+                  />
+                ))}
               {activeDiscoveryCoinParticles.map((p) => (
                 <GoalCoinParticle
                   key={p.id}
@@ -13299,6 +15516,46 @@ export default function App() {
                     walletFlashTimeoutRef.current = setTimeout(() => setWalletFlashActive(false), 120);
                   }}
                   onComplete={() => setActiveDiscoveryCoinParticles((prev) => prev.filter((x) => x.id !== p.id))}
+                />
+              ))}
+              {activeDailyTaskKeyParticles.map((p) => (
+                <GoalCoinParticle
+                  key={p.id}
+                  data={p}
+                  containerRef={discoveryRewardFxLayerRef}
+                  walletRef={activeScreen === 'BARN' ? goldenPotWalletRef : barnButtonRef}
+                  walletIconRef={
+                    activeScreen === 'BARN' ? goldenPotWalletIconRef : undefined
+                  }
+                  appScale={1}
+                  variant="popupReward"
+                  popupVisualScale={appScale}
+                  activeCount={activeDailyTaskKeyParticles.length}
+                  onImpact={(value, meta) => {
+                    setKeyCount((count) => count + value);
+                    if (activeScreenRef.current === 'BARN') {
+                      setGoldenPotWalletFlashActive(true);
+                      setGoldenPotWalletBounceTrigger((t) => t + 1);
+                      if (goldenPotWalletFlashTimeoutRef.current) {
+                        clearTimeout(goldenPotWalletFlashTimeoutRef.current);
+                      }
+                      goldenPotWalletFlashTimeoutRef.current = setTimeout(
+                        () => setGoldenPotWalletFlashActive(false),
+                        120,
+                      );
+                    } else {
+                      setDailyTaskKeyImpactVersion((version) => version + 1);
+                      setBarnNotification(true);
+                    }
+                    if (meta?.playSfx !== false) {
+                      playSfx(SFX_IDS.coinImpact, 1, meta?.pitch ?? 1);
+                    }
+                  }}
+                  onComplete={() =>
+                    setActiveDailyTaskKeyParticles((prev) =>
+                      prev.filter((particle) => particle.id !== p.id),
+                    )
+                  }
                 />
               ))}
               {activeGoldenPotProgressParticles.map((p) => (
@@ -13447,7 +15704,12 @@ export default function App() {
                           recordDailyTaskMergeCoins(getDailyTasksCtx(), value),
                         );
                       }
-                      playSfx(SFX_IDS.coinImpact);
+                      // On Collection, surplus seed/harvest still credits the wallet quietly —
+                      // text bounce only, no icon bounce / flash / sfx.
+                      const quietWalletFx = activeScreenRef.current === 'BARN';
+                      if (!quietWalletFx) {
+                        playSfx(SFX_IDS.coinImpact);
+                      }
                       pendingCoinImpactRef.current.total += value;
                         if (!pendingCoinImpactRef.current.scheduled) {
                           pendingCoinImpactRef.current.scheduled = true;
@@ -13456,10 +15718,14 @@ export default function App() {
                             pendingCoinImpactRef.current = { total: 0, scheduled: false };
                             walletImpactFlushRafRef.current = 0;
                             setMoney((prev) => prev + total);
-                            setWalletBounceTrigger((t) => t + 1);
-                            setWalletFlashActive(true);
-                            if (walletFlashTimeoutRef.current) clearTimeout(walletFlashTimeoutRef.current);
-                            walletFlashTimeoutRef.current = setTimeout(() => setWalletFlashActive(false), 120);
+                            if (quietWalletFx) {
+                              setWalletTextBounceTrigger((t) => t + 1);
+                            } else {
+                              setWalletBounceTrigger((t) => t + 1);
+                              setWalletFlashActive(true);
+                              if (walletFlashTimeoutRef.current) clearTimeout(walletFlashTimeoutRef.current);
+                              walletFlashTimeoutRef.current = setTimeout(() => setWalletFlashActive(false), 120);
+                            }
                           });
                         }
                       }}
@@ -13557,10 +15823,8 @@ export default function App() {
 
                 if (orderFulfilled && goalSlotIdx !== 4) {
                   const taskCtx = getDailyTasksCtx();
-                  const sources = goalOrderHarvestSourcesRef.current[goalSlotIdx] ?? { manual: 0, merge: 0 };
-                  const mergeOnlyOrder = sources.merge > 0 && sources.manual === 0;
                   delete goalOrderHarvestSourcesRef.current[goalSlotIdx];
-                  applyDailyTaskRowsUpdate(recordDailyTaskOrderComplete(taskCtx, { mergeOnly: mergeOnlyOrder }));
+                  applyDailyTaskRowsUpdate(recordDailyTaskOrderComplete(taskCtx));
                 }
 
                 window.setTimeout(() => {
@@ -13712,10 +15976,10 @@ export default function App() {
           {/* Boost particles: farm → Farm header; store → Store header (so particle flies to visible boost area) */}
           {activeScreen === 'FARM' &&
             headerLeftWrapperRef.current &&
-            boostParticles.filter((p) => p.sourceScreen !== 'store').length > 0 &&
+            boostParticles.filter((p) => p.sourceScreen !== 'store' && p.sourceScreen !== 'gardenNav').length > 0 &&
             createPortal(
               boostParticles
-                .filter((p) => p.sourceScreen !== 'store')
+                .filter((p) => p.sourceScreen !== 'store' && p.sourceScreen !== 'gardenNav')
                 .map((particle) => (
                   <BoostParticle
                     key={particle.id}

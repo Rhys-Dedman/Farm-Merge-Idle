@@ -1,7 +1,7 @@
 /**
  * Daily Tasks popup — discovery-style green card, slightly wider than standard popups.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { assetPath } from '../utils/assetPath';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight, POPUP_ENTER_MS, popupEnterInteractionPointerEvents, isPopupEnterInteractionLocked } from '../hooks/usePopupPreflightEnter';
 import { PopupVectorBackground } from './PopupVectorBackground';
@@ -22,6 +22,14 @@ import { PopupRectLeafBurst } from './PopupRectLeafBurst';
 import { DailyTaskRow, type DailyTaskClaimFx, type DailyTaskDefinition } from './DailyTaskRow';
 import { DailyTasksTimerPanel } from './DailyTasksTimerPanel';
 import { shouldPlayPopupLeafBurst } from '../utils/performanceMode';
+import { CollectionFtueOverlay, type GameRect } from './CollectionFtueOverlay';
+import { COLLECTION_FTUE_BLOCKER_TINT } from '../constants/collectionFtue';
+import {
+  getTasksFtueClaim2xButtonId,
+  getTasksFtueClaimButtonId,
+  TASKS_FTUE_CLAIM_2X_BUTTON_ID,
+  TASKS_FTUE_CLAIM_BUTTON_ID,
+} from '../constants/tasksFtue';
 
 const POPUP_CLOSE_MS = 200;
 
@@ -65,6 +73,16 @@ export interface DailyTasksPopupProps {
   /** When true, 24h reset timer runs (starts once at tasks unlock). */
   tasksUnlocked?: boolean;
   countdownRefreshKey?: number;
+  /** Task id whose claim buttons are measured for the claim FTUE (L6 single-target). */
+  ftueClaimTaskId?: string | null;
+  /** Multi-row claim FTUE targets (L7 Special Delivery). Overrides `ftueClaimTaskId` when set. */
+  ftueClaimTaskIds?: string[] | null;
+  /** Subset of claim targets that still show a finger (others stay hole-only). */
+  ftueFingerTaskIds?: string[] | null;
+  /** Block dismiss (backdrop + close) during claim FTUE. */
+  forceStayOpen?: boolean;
+  /** Fade claim FTUE finger/blocker after a claim tap. */
+  claimFtueFadingOut?: boolean;
 }
 
 export const DailyTasksPopup: React.FC<DailyTasksPopupProps> = ({
@@ -80,12 +98,32 @@ export const DailyTasksPopup: React.FC<DailyTasksPopupProps> = ({
   onClaim2xTask,
   tasksUnlocked = false,
   countdownRefreshKey = 0,
+  ftueClaimTaskId = null,
+  ftueClaimTaskIds = null,
+  ftueFingerTaskIds = null,
+  forceStayOpen = false,
+  claimFtueFadingOut = false,
 }) => {
   const [animState, setAnimState] = useState<PopupAnimWithPreflight>('hidden');
   const [assetsReady, setAssetsReady] = useState(false);
   const [leafBurstKey, setLeafBurstKey] = useState(0);
   const [showLeafBurst, setShowLeafBurst] = useState(false);
+  const [claimFtueHoles, setClaimFtueHoles] = useState<GameRect[] | null>(null);
+  const [claimFtueFingerRects, setClaimFtueFingerRects] = useState<GameRect[] | null>(null);
   const popupCardLayoutRef = useRef<HTMLDivElement>(null);
+  const overlayRootRef = useRef<HTMLDivElement>(null);
+
+  const resolvedClaimTaskIds =
+    ftueClaimTaskIds != null && ftueClaimTaskIds.length > 0
+      ? ftueClaimTaskIds
+      : ftueClaimTaskId != null
+        ? [ftueClaimTaskId]
+        : [];
+  const resolvedFingerTaskIds =
+    ftueFingerTaskIds != null
+      ? ftueFingerTaskIds.filter((id) => resolvedClaimTaskIds.includes(id))
+      : resolvedClaimTaskIds;
+  const claimTargetIdSet = new Set(resolvedClaimTaskIds);
 
   useEffect(() => {
     if (!isVisible) setAssetsReady(false);
@@ -118,7 +156,85 @@ export const DailyTasksPopup: React.FC<DailyTasksPopupProps> = ({
     if (isVisible) setAssetsReady(true);
   }, [isVisible]);
 
+  const claimFtueActive =
+    forceStayOpen &&
+    resolvedClaimTaskIds.length > 0 &&
+    (animState === 'visible' || animState === 'entering' || claimFtueFadingOut);
+
+  useLayoutEffect(() => {
+    if (!claimFtueActive) {
+      setClaimFtueHoles(null);
+      setClaimFtueFingerRects(null);
+      return;
+    }
+    // Keep last hole positions while fading so the finger can animate out.
+    if (claimFtueFadingOut) return;
+    const measure = () => {
+      const root = overlayRootRef.current;
+      if (!root) {
+        setClaimFtueHoles(null);
+        setClaimFtueFingerRects(null);
+        return;
+      }
+      // Overlay is design-space (pre-appScale); convert viewport rects like other FTUEs.
+      const rootRect = root.getBoundingClientRect();
+      const scale = appScale > 0 ? appScale : 1;
+      const toLocal = (el: Element): GameRect => {
+        const r = el.getBoundingClientRect();
+        return {
+          left: (r.left - rootRect.left) / scale,
+          top: (r.top - rootRect.top) / scale,
+          width: r.width / scale,
+          height: r.height / scale,
+        };
+      };
+      const holes: GameRect[] = [];
+      const fingers: GameRect[] = [];
+      for (const taskId of resolvedClaimTaskIds) {
+        const claim2x =
+          document.getElementById(getTasksFtueClaim2xButtonId(taskId)) ??
+          (resolvedClaimTaskIds.length === 1
+            ? document.getElementById(TASKS_FTUE_CLAIM_2X_BUTTON_ID)
+            : null);
+        const claim =
+          document.getElementById(getTasksFtueClaimButtonId(taskId)) ??
+          (resolvedClaimTaskIds.length === 1
+            ? document.getElementById(TASKS_FTUE_CLAIM_BUTTON_ID)
+            : null);
+        if (!claim2x || !claim) continue;
+        holes.push(toLocal(claim2x), toLocal(claim));
+        if (resolvedFingerTaskIds.includes(taskId)) {
+          fingers.push(toLocal(claim));
+        }
+      }
+      setClaimFtueHoles(holes.length > 0 ? holes : null);
+      setClaimFtueFingerRects(fingers.length > 0 ? fingers : null);
+    };
+    measure();
+    const t1 = window.setTimeout(measure, 50);
+    const t2 = window.setTimeout(measure, 200);
+    const t3 = window.setTimeout(measure, 450);
+    const t4 = window.setTimeout(measure, 700);
+    window.addEventListener('resize', measure);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.clearTimeout(t3);
+      window.clearTimeout(t4);
+      window.removeEventListener('resize', measure);
+    };
+  }, [
+    claimFtueActive,
+    claimFtueFadingOut,
+    resolvedClaimTaskIds.join('|'),
+    resolvedFingerTaskIds.join('|'),
+    animState,
+    tasks,
+    appScale,
+  ]);
+
   const dismiss = () => {
+    if (forceStayOpen) return;
     if (animState === 'leaving' || animState === 'hidden' || isPopupEnterInteractionLocked(animState)) return;
     onUserDismiss?.();
     setAnimState('leaving');
@@ -133,6 +249,8 @@ export const DailyTasksPopup: React.FC<DailyTasksPopupProps> = ({
   const isPreflight = animState === 'preflight';
   const isEntering = animState === 'entering';
   const isLeaving = animState === 'leaving';
+  const showClaimFtueOverlay =
+    claimFtueActive && (claimFtueHoles?.length ?? 0) >= 2;
 
   return (
     <div
@@ -149,7 +267,7 @@ export const DailyTasksPopup: React.FC<DailyTasksPopupProps> = ({
           backgroundColor: 'rgba(0, 0, 0, 0.7)',
           opacity: isLeaving || isPreflight ? 0 : 1,
         }}
-        onClick={closeOnBackdropClick ? dismiss : undefined}
+        onClick={closeOnBackdropClick && !forceStayOpen ? dismiss : undefined}
       />
 
       <div
@@ -268,6 +386,20 @@ export const DailyTasksPopup: React.FC<DailyTasksPopupProps> = ({
                   />
                 </div>
 
+                <p
+                  className="font-medium text-center italic"
+                  style={{
+                    color: '#c2b280',
+                    fontFamily: 'Inter, sans-serif',
+                    fontSize: '2rem',
+                    lineHeight: 1.2,
+                    marginTop: '-4px',
+                    marginBottom: '18px',
+                  }}
+                >
+                  Complete task to earn Keys
+                </p>
+
                 <DailyTasksTimerPanel
                   tasksUnlocked={tasksUnlocked}
                   countdownRefreshKey={countdownRefreshKey}
@@ -279,7 +411,7 @@ export const DailyTasksPopup: React.FC<DailyTasksPopupProps> = ({
                     minHeight: '320px',
                     paddingLeft: '8px',
                     paddingRight: '8px',
-                    gap: '26px',
+                    gap: '12px',
                   }}
                   aria-label="Daily tasks list"
                 >
@@ -289,6 +421,7 @@ export const DailyTasksPopup: React.FC<DailyTasksPopupProps> = ({
                         key={task.id}
                         {...task}
                         claimBounceActive={claimBounceTaskIds.includes(task.id)}
+                        ftueClaimTarget={claimTargetIdSet.has(task.id)}
                         onClaim={(fx) => onClaimTask?.(task.id, fx)}
                         onClaim2x={(fx) => onClaim2xTask?.(task.id, fx)}
                       />
@@ -298,6 +431,7 @@ export const DailyTasksPopup: React.FC<DailyTasksPopupProps> = ({
             </div>
           </PopupPrescaleFrame>
 
+          {!forceStayOpen && (
           <button
             type="button"
             onClick={dismiss}
@@ -317,6 +451,41 @@ export const DailyTasksPopup: React.FC<DailyTasksPopupProps> = ({
               <path d="M2 2L12 12M12 2L2 12" />
             </svg>
           </button>
+          )}
+        </div>
+      </div>
+
+      {/* Claim FTUE: design-space layer scaled by appScale (same rate as the popup card / other FTUEs). */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 200 }}>
+        <div
+          ref={overlayRootRef}
+          className="absolute left-0 top-0 pointer-events-none"
+          style={{
+            width: appScale > 0 ? `${100 / appScale}%` : '100%',
+            height: appScale > 0 ? `${100 / appScale}%` : '100%',
+            transform: `scale(${appScale})`,
+            transformOrigin: 'top left',
+          }}
+        >
+          {claimFtueActive && !showClaimFtueOverlay && (
+            <div
+              className="absolute inset-0 pointer-events-auto"
+              style={{ backgroundColor: COLLECTION_FTUE_BLOCKER_TINT }}
+              aria-hidden
+            />
+          )}
+          {showClaimFtueOverlay && (
+            <CollectionFtueOverlay
+              active
+              holeRects={claimFtueHoles}
+              fingerRects={claimFtueFingerRects}
+              fingerStyle="point_45"
+              blockerTint={COLLECTION_FTUE_BLOCKER_TINT}
+              holePaddingPx={6}
+              zIndex={1}
+              isFadingOut={claimFtueFadingOut}
+            />
+          )}
         </div>
       </div>
     </div>

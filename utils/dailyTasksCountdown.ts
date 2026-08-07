@@ -49,7 +49,7 @@ export function startDailyTasksCountdown(atTimeMs = Date.now()): number {
   return endMs;
 }
 
-/** Starts the 24h window once when daily tasks unlock (level 5+). */
+/** Starts the 24h window once when daily tasks unlock (level 6+). */
 export function markDailyTasksUnlocked(): void {
   try {
     localStorage.setItem(DAILY_TASKS_UNLOCKED_KEY, '1');

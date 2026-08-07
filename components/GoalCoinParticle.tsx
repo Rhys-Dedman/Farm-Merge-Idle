@@ -7,6 +7,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { getGardenCoinIconPath } from '../utils/gardenAssets';
 import { getPerformanceMode } from '../utils/performanceMode';
+import { assetPath } from '../utils/assetPath';
 
 const MOVE_DURATION_MS = 350;
 /** Shorter trail = fewer SVG elements when many coins fly at once (e.g. 5+ goals). */
@@ -59,7 +60,7 @@ interface Point {
   y: number;
 }
 
-export type GoalCoinBurstSuckPath = 'popup' | 'goal';
+export type GoalCoinBurstSuckPath = 'popup' | 'goal' | 'collection';
 
 export interface GoalCoinBurstMotion {
   endX: number;
@@ -73,6 +74,7 @@ export interface GoalCoinBurstMotion {
    * Flight path into the wallet after explode.
    * `popup` = left-then-up (discovery / offline / tasks).
    * `goal` = trough down-then-up (coin order).
+   * `collection` = right-then-down into the Collection nav tab.
    */
   suckPath?: GoalCoinBurstSuckPath;
 }
@@ -92,6 +94,10 @@ export interface GoalCoinParticleData {
   burstImpactSfx?: boolean;
   /** Playback rate for wallet impact SFX (1 = normal). Used for burst pitch steps. */
   burstImpactPitch?: number;
+  /** Optional non-coin particle sprite (daily tasks use the full-size key). */
+  iconSrc?: string;
+  /** Optional trail color paired with `iconSrc`. */
+  trailColor?: string;
 }
 
 interface GoalCoinParticleProps {
@@ -176,7 +182,9 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
   useEffect(() => {
     startTimeRef.current = Date.now();
     phaseStartRef.current = Date.now();
-    trailRef.current = [{ p: { x: data.startX, y: data.startY }, color: TRAIL_COLOR, t: 0 }];
+    trailRef.current = [
+      { p: { x: data.startX, y: data.startY }, color: data.trailColor ?? TRAIL_COLOR, t: 0 },
+    ];
     phaseRef.current = data.burst ? 'explode' : 'moving';
     suckStartPosRef.current = { x: data.startX, y: data.startY };
     driftPosRef.current = { x: data.startX, y: data.startY };
@@ -241,7 +249,10 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
 
     const pushTrail = (x: number, y: number, t: number) => {
       if (!useTrail) return;
-      trailRef.current = [{ p: { x, y }, color: TRAIL_COLOR, t }, ...trailRef.current].slice(
+      trailRef.current = [
+        { p: { x, y }, color: data.trailColor ?? TRAIL_COLOR, t },
+        ...trailRef.current,
+      ].slice(
         0,
         MAX_TRAIL_POINTS,
       );
@@ -252,8 +263,13 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
       const dy = target.y - start.y;
       let cp1: Point;
       let cp2: Point;
+      const useCollectionPath = isBurst && burst?.suckPath === 'collection';
       const useGoalTrough = isBurst ? burst?.suckPath === 'goal' : !isPopupReward;
-      if (!useGoalTrough) {
+      if (useCollectionPath) {
+        // Head right first, then bend down into Collection.
+        cp1 = { x: start.x + dx * 0.55, y: start.y };
+        cp2 = { x: target.x, y: start.y + dy * 0.55 };
+      } else if (!useGoalTrough) {
         // Left-ish then up into the wallet.
         cp1 = { x: start.x + dx * 0.45, y: start.y };
         cp2 = { x: target.x - dx * 0.05, y: start.y + dy * 0.55 };
@@ -380,7 +396,11 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
         }
         suckStartPosRef.current = { ...driftPosRef.current };
         trailRef.current = [
-          { p: { ...suckStartPosRef.current }, color: TRAIL_COLOR, t: 0 },
+          {
+            p: { ...suckStartPosRef.current },
+            color: data.trailColor ?? TRAIL_COLOR,
+            t: 0,
+          },
           ...trailRef.current,
         ].slice(0, MAX_TRAIL_POINTS);
         startTimeRef.current = now;
@@ -545,7 +565,7 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
           }}
         >
           <img
-            src={getGardenCoinIconPath()}
+            src={data.iconSrc ? assetPath(data.iconSrc) : getGardenCoinIconPath()}
             alt=""
             className="w-full h-full object-contain"
             aria-hidden

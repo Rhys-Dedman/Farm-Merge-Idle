@@ -4,6 +4,7 @@ export type { AdBreakBlockerContext, AdBreakRuntimeState } from './evaluateAdBre
 export {
   applyAdBreakReturnPolicy,
   areAdBreakBlockersClear,
+  bumpAdBreakGrace,
   bumpAdBreakReturnGrace,
   canShowAdBreakNow,
   getAdBreakBlockers,

@@ -10,6 +10,8 @@ export type GardenCollectionSnapshot = {
   highestPlantEver: number;
   unlockedLevels: readonly number[];
   money: number;
+  /** Plant tiers whose Special Delivery trophy has been won (drives shelves + bonus tiers). */
+  trophyLevels: readonly number[];
 };
 
 export function getCollectionPlantKey(gardenId: GardenId, plantLevel: number): string {
@@ -28,6 +30,7 @@ export function getGardenCollectionSnapshot(
     highestPlantEver: g?.highestPlantEver ?? 0,
     unlockedLevels: g?.plantMasteryUnlockedLevels ?? [],
     money: g?.money ?? 0,
+    trophyLevels: g?.trophyLevels ?? [],
   };
 }
 
@@ -35,7 +38,7 @@ export function ensureGardenStartedInSave(v2: GameSaveV2, gardenId: GardenId): G
   if (v2.gardens[gardenId]) return v2;
   const activeId = v2.activeGardenId;
   const globalGoldenPotCount = getGlobalGoldenPotCount(
-    v2.gardens[activeId]?.plantMasteryUnlockedLevels ?? [],
+    v2.gardens[activeId]?.trophyLevels ?? [],
     v2.gardens,
     activeId,
   );
@@ -94,7 +97,8 @@ export function findNextDevUnlockPlantTarget(
   return null;
 }
 
-export function findNextDevGoldenPotTarget(
+/** Dev cheat target: lowest discovered plant in a garden that has no trophy yet. */
+export function findNextDevTrophyTarget(
   activeGardenId: GardenId,
   active: GardenCollectionSnapshot,
   gardens: Partial<Record<GardenId, GardenState>> | undefined,
@@ -108,7 +112,7 @@ export function findNextDevGoldenPotTarget(
   )) {
     const nextLevel = getGoldenPotUpgradeableLevels(
       snapshot.highestPlantEver,
-      snapshot.unlockedLevels,
+      snapshot.trophyLevels,
     )[0];
     if (nextLevel != null) return { gardenId, level: nextLevel };
   }

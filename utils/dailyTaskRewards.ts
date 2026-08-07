@@ -1,9 +1,19 @@
 import { TASKS_FLOATING_BUTTON_UNLOCK_LEVEL } from '../constants/playerLevelUnlocks';
 import {
-  GOLDEN_POT_BONUS_DAILY_TASKS_2X_AT,
   type GoldenPotUnlockInput,
   hasGoldenPotDailyTasks2x,
 } from '../constants/goldenPotBonuses';
+
+/** Fixed key payout by daily-task slot. These never scale with level or day. */
+const DAILY_TASK_SLOT_REWARD_KEYS: readonly [number, number, number] = [5, 10, 15];
+
+export function getDailyTaskSlotRewardKeys(slot: 1 | 2 | 3): number {
+  return DAILY_TASK_SLOT_REWARD_KEYS[slot - 1];
+}
+
+/** Garden-1 intro trio (slots 1+2+3) total keys shown on the Collection nav badge as `n/30`. */
+export const GARDEN_1_INTRO_DAILY_TASKS_KEY_GOAL =
+  DAILY_TASK_SLOT_REWARD_KEYS[0] + DAILY_TASK_SLOT_REWARD_KEYS[1] + DAILY_TASK_SLOT_REWARD_KEYS[2];
 
 /** Base coin rewards per slot at tasks unlock level. */
 const DAILY_TASK_SLOT_REWARD_BASE: readonly [number, number, number] = [250, 500, 1000];

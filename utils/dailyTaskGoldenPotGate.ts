@@ -1,14 +1,10 @@
-import {
-  isPlantCollectionUiUnlockedGlobally,
-  PLANT_COLLECTION_UI_UNLOCK_LEVEL,
-} from '../constants/playerLevelUnlocks';
-
+/**
+ * Golden pots are no longer bought on the collection screen — they come from Special Delivery
+ * trophies — so the `collection_upgrade` daily task can never be completed and never rolls.
+ */
 export function canRollGoldenPotDailyTask(
-  garden1PlayerLevel: number,
-  goldenPotUpgradeableCount: number,
+  _garden1PlayerLevel: number,
+  _goldenPotUpgradeableCount: number,
 ): boolean {
-  return (
-    isPlantCollectionUiUnlockedGlobally(garden1PlayerLevel) &&
-    goldenPotUpgradeableCount > 0
-  );
+  return false;
 }

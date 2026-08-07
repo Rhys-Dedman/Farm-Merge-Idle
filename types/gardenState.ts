@@ -26,6 +26,11 @@ export interface GardenState {
   plantMasteryUnlockPending: number[];
   plantMasteryUnlockedLevels: number[];
   plantMasteryIntroBarComplete?: boolean;
+  /**
+   * Plant tiers whose collection trophy has been won from Special Deliveries.
+   * Drives the collection shelves and the golden-pot bonus tiers. Missing on old saves → [].
+   */
+  trophyLevels?: number[];
   goalSlots: ('empty' | 'loading' | 'green' | 'completed')[];
   goalPlantTypes: number[];
   goalLoadingSeconds: number;
@@ -42,6 +47,11 @@ export interface GardenState {
   lastMergeDiscoveryLevel: number;
   lastSpawnedGoalLevels: [number, number];
   pendingUnlockUpgradeId: string | null;
+  /**
+   * Special Delivery free upgrade credits per upgrade id (stackable).
+   * Each credit lets the player buy that upgrade once at FREE; level still advances.
+   */
+  freeUpgradeCounts?: Record<string, number>;
   levelUpPopupQueue: number[];
   wildGrowthAccumulatorMs?: number;
   barnShelvesUnlocked: boolean[];

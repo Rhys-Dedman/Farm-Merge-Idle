@@ -64,6 +64,7 @@ export const FarmVfxLayer: React.FC<FarmVfxLayerProps> = ({ appScale }) => {
           startTime={b.startTime}
           scale={1.35}
           particleCount={26}
+          spriteVariant={b.spriteVariant}
           onComplete={() => removeMasteryConeBurst(b.id)}
         />
       ))}

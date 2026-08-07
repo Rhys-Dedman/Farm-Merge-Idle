@@ -2,11 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { ScreenType } from '../types';
 import { assetPath } from '../utils/assetPath';
 import { CollectionGardenNavFinger } from './CollectionGardenNavFinger';
+import { SPECIAL_DELIVERY_FTUE_COLLECTION_NAV_HIT_ID } from '../constants/specialDeliveryFtue';
 
 interface NavbarProps {
   activeScreen: ScreenType;
   onScreenChange: (screen: ScreenType) => void;
   barnButtonRef?: React.RefObject<HTMLButtonElement | null>;
+  /** Garden (FARM) tab — special-delivery upgrade/booster claim fly target. */
+  farmButtonRef?: React.RefObject<HTMLButtonElement | null>;
   notifications?: {
     STORE?: boolean;
     FARM?: boolean;
@@ -16,15 +19,24 @@ interface NavbarProps {
   collectionFtueGardenFinger?: boolean;
   /** Block nav taps (e.g. daily tasks FTUE on farm). */
   blockInput?: boolean;
+  /**
+   * Special Delivery FTUE: invisible Collection-tab hit target above the block layer
+   * so the player can continue while Daily Tasks dimming covers the navbar.
+   */
+  specialDeliveryCollectionFtueHit?: boolean;
+  onSpecialDeliveryCollectionFtueHit?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   activeScreen,
   onScreenChange,
   barnButtonRef,
+  farmButtonRef,
   notifications = {},
   collectionFtueGardenFinger = false,
   blockInput = false,
+  specialDeliveryCollectionFtueHit = false,
+  onSpecialDeliveryCollectionFtueHit,
 }) => {
   // Track viewport width for responsive scaling
   const [viewportWidth, setViewportWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 420);
@@ -52,6 +64,22 @@ export const Navbar: React.FC<NavbarProps> = ({
     <div id="navbar-root" className="relative shrink-0 overflow-visible z-50" style={{ height: '60px' }}>
       {blockInput ? (
         <div className="absolute inset-0 z-[200] pointer-events-auto" aria-hidden />
+      ) : null}
+      {specialDeliveryCollectionFtueHit ? (
+        <button
+          id={SPECIAL_DELIVERY_FTUE_COLLECTION_NAV_HIT_ID}
+          type="button"
+          aria-label="Open Collection"
+          className="absolute border-0 bg-transparent p-0 z-[220] pointer-events-auto"
+          style={{
+            // Right third ≈ Collection tab (STORE | GARDEN | COLLECTION).
+            left: '66.66%',
+            right: 0,
+            top: 0,
+            bottom: 0,
+          }}
+          onClick={() => onSpecialDeliveryCollectionFtueHit?.()}
+        />
       ) : null}
       <nav 
         className="absolute inset-0 flex items-start justify-center overflow-visible"
@@ -212,7 +240,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
             
             <button 
-              ref={item.id === 'BARN' ? barnButtonRef : undefined}
+              ref={
+                item.id === 'BARN'
+                  ? barnButtonRef
+                  : item.id === 'FARM'
+                    ? farmButtonRef
+                    : undefined
+              }
               onClick={() => onScreenChange(item.id)} 
               className="relative flex flex-col items-center z-10"
               style={{

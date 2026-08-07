@@ -369,9 +369,11 @@ img {
   }
 }
 
+/* Trophy reveal on the collection shelf. Pivots near the base of the slot so the trophy grows
+   upward off the shelf instead of sinking into it — resting position is unchanged. */
 .mastery-unlock-purchase-bounce {
   animation: mastery-unlock-purchase-bounce 500ms ease-in-out forwards;
-  transform-origin: 50% 50%;
+  transform-origin: 50% 90%;
 }
 
 @keyframes daily-task-claim-bounce {
@@ -429,6 +431,188 @@ img {
   transform-origin: 50% 40%;
 }
 
+/** Special delivery: closed door squash before swap to opening (open). */
+@keyframes special-delivery-door-closed-squash-open {
+  0% {
+    transform: scaleX(1);
+  }
+  100% {
+    transform: scaleX(0.9);
+  }
+}
+
+.special-delivery-door-closed-squash-open {
+  animation: special-delivery-door-closed-squash-open 50ms linear forwards;
+}
+
+/** Special delivery: opening frame compress (open). */
+@keyframes special-delivery-door-opening-squash-open {
+  0% {
+    transform: scaleX(1);
+  }
+  100% {
+    transform: scaleX(0.8);
+  }
+}
+
+.special-delivery-door-opening-squash-open {
+  animation: special-delivery-door-opening-squash-open 25ms linear forwards;
+}
+
+/** Special delivery: opening frame expand (close) 0.5 → 1. */
+@keyframes special-delivery-door-opening-squash-close {
+  0% {
+    transform: scaleX(0.5);
+  }
+  100% {
+    transform: scaleX(1);
+  }
+}
+
+.special-delivery-door-opening-squash-close {
+  animation: special-delivery-door-opening-squash-close 50ms linear forwards;
+}
+
+/** Special delivery: opened door horizontal settle (scaleX only). */
+@keyframes special-delivery-door-opened-scale-x {
+  0% {
+    transform: scaleX(1);
+  }
+  20% {
+    transform: scaleX(1.4);
+  }
+  40% {
+    transform: scaleX(0.8);
+  }
+  60% {
+    transform: scaleX(1.1);
+  }
+  80% {
+    transform: scaleX(0.95);
+  }
+  100% {
+    transform: scaleX(1);
+  }
+}
+
+.special-delivery-door-opened-scale-x {
+  animation: special-delivery-door-opened-scale-x 500ms ease-out forwards;
+}
+
+/** Special delivery: opened close punch (1 → 1.4 → 1.1), then mid/closed frames. */
+@keyframes special-delivery-door-opened-scale-x-close {
+  0% {
+    transform: scaleX(1);
+  }
+  50% {
+    transform: scaleX(1.4);
+  }
+  100% {
+    transform: scaleX(1.1);
+  }
+}
+
+.special-delivery-door-opened-scale-x-close {
+  animation: special-delivery-door-opened-scale-x-close 200ms ease-out forwards;
+}
+
+/**
+ * Special delivery lock swing / lock shake (rotation settle).
+ * Keyframes: 0 → -20 → 10 → -5 → 2 → -1 → 0 deg — reuse for other lock FX later.
+ */
+@keyframes special-delivery-lock-swing {
+  0% {
+    transform: rotate(0deg);
+  }
+  16.666% {
+    transform: rotate(-20deg);
+  }
+  33.333% {
+    transform: rotate(10deg);
+  }
+  50% {
+    transform: rotate(-5deg);
+  }
+  66.666% {
+    transform: rotate(2deg);
+  }
+  83.333% {
+    transform: rotate(-1deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+/** Alias class name: lock swing === lock shake. */
+.special-delivery-lock-swing,
+.special-delivery-lock-shake {
+  animation: special-delivery-lock-swing 500ms ease-out forwards;
+}
+
+/**
+ * Unlock knock-off: pop up-up-left, then fall off-screen.
+ * Pivot 50% 50%; scale 1 → 0.5; fade out.
+ */
+@keyframes special-delivery-unlock-knockoff {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  18% {
+    transform: translate(calc(-50% - 18px), calc(-50% - 36px)) rotate(-28deg) scale(0.98);
+    opacity: 1;
+  }
+  32% {
+    transform: translate(calc(-50% - 34px), calc(-50% - 58px)) rotate(12deg) scale(0.9);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(calc(-50% - 20px), calc(-50% + 110vh)) rotate(200deg) scale(0.5);
+    opacity: 0;
+  }
+}
+
+.special-delivery-unlock-knockoff {
+  animation: special-delivery-unlock-knockoff 700ms ease-in forwards;
+  transform-origin: 50% 50%;
+  will-change: transform, opacity;
+}
+
+/** Reward icon punch when a door opens (1 → 1.5 → 1), pivot 50% / 80%. */
+@keyframes special-delivery-reward-punch {
+  0% {
+    transform: translate(-50%, -80%) scale(1);
+  }
+  40% {
+    transform: translate(-50%, -80%) scale(1.5);
+  }
+  100% {
+    transform: translate(-50%, -80%) scale(1);
+  }
+}
+
+.special-delivery-reward-punch {
+  animation: special-delivery-reward-punch 300ms ease-out forwards;
+  transform-origin: 50% 80%;
+  will-change: transform;
+}
+
+/** White flash on non-match open punch (100% → 0). */
+@keyframes special-delivery-reward-punch-white {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.special-delivery-reward-punch-white {
+  animation: special-delivery-reward-punch-white 300ms ease-out forwards;
+  will-change: opacity;
+}
+
 /** Collection FTUE: shelf FREE upgrade pill pop (1 → 1.2 → 1). */
 @keyframes collection-ftue-free-button-bounce {
   0% {
@@ -475,7 +659,7 @@ img {
     color: #587e26;
   }
   100% {
-    color: #c2b280;
+    color: #c5a171;
   }
 }
 
@@ -498,6 +682,23 @@ img {
 .floating-button-ready-bounce {
   animation: floating-button-ready-bounce 200ms ease-in-out forwards;
   transform-origin: 50% 50%;
+}
+
+@keyframes collection-garden-handoff-exit {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+}
+
+.collection-garden-handoff-exit {
+  animation: collection-garden-handoff-exit 180ms ease-in forwards;
+  transform-origin: 50% 50%;
+  pointer-events: none;
 }
 
 @keyframes mastery-unlock-white-flash {
@@ -699,4 +900,105 @@ img {
 .hex-cell-img:not([src]) {
   opacity: 0;
   pointer-events: none;
+}
+
+/* Special Delivery / reward reveal — looping gold VFX behind claimed icon */
+@keyframes reward-reveal-sunburst-spin {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+.reward-reveal-sunburst {
+  animation: reward-reveal-sunburst-spin 28s linear infinite;
+  will-change: transform;
+}
+.reward-reveal-sunburst-slow {
+  animation: reward-reveal-sunburst-spin 56s linear infinite;
+  will-change: transform;
+}
+
+@keyframes reward-reveal-glow-pulse {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.12);
+  }
+}
+.reward-reveal-glow {
+  animation: reward-reveal-glow-pulse 2.6s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes reward-reveal-sparkle {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.15);
+  }
+  16% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.2);
+  }
+  45% {
+    opacity: 0.95;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(
+        calc(-50% + var(--rr-ox, 0%)),
+        calc(-50% + var(--rr-oy, 0%))
+      )
+      scale(0.2);
+  }
+}
+.reward-reveal-sparkle {
+  animation-name: reward-reveal-sparkle;
+  animation-timing-function: ease-out;
+  animation-iteration-count: infinite;
+  /* Keep 0% (hidden) through delay — otherwise delayed sparkles show fully
+     opaque during the parent FX fade-in, then snap to opacity 0 when the
+     cycle starts (reads as “disappearing immediately”). */
+  animation-fill-mode: backwards;
+  will-change: transform, opacity;
+}
+
+@keyframes reward-reveal-icon-blink {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.15;
+  }
+}
+.reward-reveal-icon-blink {
+  animation: reward-reveal-icon-blink 5000ms ease-in-out infinite;
+}
+
+@keyframes reward-reveal-copy-fade {
+  0% {
+    opacity: 0;
+    transform: scaleX(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleX(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+.reward-reveal-copy-fade {
+  opacity: 0;
+  transform: scaleX(0.9);
+  transform-origin: 50% 50%;
+  animation: reward-reveal-copy-fade 300ms ease-out forwards;
 }

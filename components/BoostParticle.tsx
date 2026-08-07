@@ -25,12 +25,18 @@ export interface BoostParticleData {
   startY: number;
   /** Slot index where the new boost will appear; particle targets this slot's center */
   targetSlotIndex?: number;
+  /**
+   * Explicit target in container-local px (e.g. garden-nav → boost bar on a fullscreen layer).
+   * When set, overrides boostAreaRef slot math.
+   */
+  targetX?: number;
+  targetY?: number;
   /** When particle impacts, add boost with this offer (duration + icon) */
   offerId?: string;
   durationMs?: number;
   icon?: string;
-  /** When 'store', particle renders in Store's header; when 'farm' or absent, Farm's header */
-  sourceScreen?: 'farm' | 'store';
+  /** When 'store', particle renders in Store's header; 'gardenNav' = fullscreen from Garden tab; else Farm header */
+  sourceScreen?: 'farm' | 'store' | 'gardenNav';
 }
 
 interface BoostParticleProps {
@@ -88,12 +94,16 @@ export const BoostParticle: React.FC<BoostParticleProps> = ({
     if (getPerformanceMode()) return;
     const container = containerRef.current;
     const boostArea = boostAreaRef.current;
-    if (!container || !boostArea) return;
+    const hasExplicitTarget = data.targetX != null && data.targetY != null;
+    if (!container || (!hasExplicitTarget && !boostArea)) return;
 
     const getTargetPos = (): Point => {
+      if (data.targetX != null && data.targetY != null) {
+        return { x: data.targetX, y: data.targetY };
+      }
       const slotIndex = data.targetSlotIndex ?? 0;
-      const targetX = boostArea.offsetLeft + slotIndex * BOOST_SLOT_WIDTH + BOOST_CENTER_OFFSET;
-      const targetY = boostArea.offsetTop + BOOST_AREA_HALF_HEIGHT;
+      const targetX = boostArea!.offsetLeft + slotIndex * BOOST_SLOT_WIDTH + BOOST_CENTER_OFFSET;
+      const targetY = boostArea!.offsetTop + BOOST_AREA_HALF_HEIGHT;
       return { x: targetX, y: targetY };
     };
 

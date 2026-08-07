@@ -149,18 +149,18 @@ export function getDailyAllowanceCoinAmount(playerLevel: number): number {
   return getDailyTaskSlotRewardCoins(1, playerLevel);
 }
 
-/** Account-wide golden pot count (sum across all shipped gardens). */
+/** Account-wide golden pot count: trophies won across all shipped gardens. */
 export function getGlobalGoldenPotCount(
-  activeGardenUnlockedLevels: readonly number[],
+  activeGardenTrophyLevels: readonly number[],
   gardens: Partial<Record<GardenId, GardenState>> | undefined,
   activeGardenId: GardenId = DEFAULT_GARDEN_ID,
 ): number {
   let total = 0;
   for (const id of SHIPPED_GARDEN_IDS) {
     if (id === activeGardenId) {
-      total += activeGardenUnlockedLevels.length;
+      total += activeGardenTrophyLevels.length;
     } else {
-      total += gardens?.[id]?.plantMasteryUnlockedLevels?.length ?? 0;
+      total += gardens?.[id]?.trophyLevels?.length ?? 0;
     }
   }
   return total;
@@ -169,10 +169,10 @@ export function getGlobalGoldenPotCount(
 /** @deprecated Alias for `getGlobalGoldenPotCount` (same sum semantics). */
 export function getTotalGoldenPotCountAcrossGardens(
   activeGardenId: GardenId,
-  activeGardenUnlockedLevels: readonly number[],
+  activeGardenTrophyLevels: readonly number[],
   gardens: Partial<Record<GardenId, GardenState>> | undefined,
 ): number {
-  return getGlobalGoldenPotCount(activeGardenUnlockedLevels, gardens, activeGardenId);
+  return getGlobalGoldenPotCount(activeGardenTrophyLevels, gardens, activeGardenId);
 }
 
 /** Whether the player may switch to this garden (started gardens only; purchase via picker). */

@@ -67,6 +67,8 @@ interface LeafBurstProps {
   burstScale?: number;
   /** Multiplier for individual leaf sprite size only (default: 1). Does not affect burst radius. */
   particleSizeScale?: number;
+  /** Multiplier for launch speed (default: 1). Higher = particles push outward harder. */
+  speedScale?: number;
   /** Stacking order for burst root (default: 70) */
   zIndex?: number;
   /** Positioning mode for burst root (default: fixed viewport coords). */
@@ -75,12 +77,17 @@ interface LeafBurstProps {
   spawnOffsetUpPx?: number;
 }
 
-function createLeaves(count: number, sprites: string[] = LEAF_SPRITES): LeafParticle[] {
+function createLeaves(
+  count: number,
+  sprites: string[] = LEAF_SPRITES,
+  speedScale = 1,
+): LeafParticle[] {
+  const speedMul = Math.max(0.1, speedScale);
   return Array.from({ length: count }, (_, i) => ({
     id: i,
     sprite: sprites[i % sprites.length],
     angle: (Math.PI * 2 * i) / count + Math.random() * 0.8,
-    initialSpeed: 25 + Math.random() * 475,
+    initialSpeed: (25 + Math.random() * 475) * speedMul,
     initialRotationRad: Math.random() * Math.PI * 2,
     phase1RotationDeg: 90 + Math.random() * 90,
     phase2RotationDeg: 25 + Math.random() * 20,
@@ -100,12 +107,13 @@ export const LeafBurst: React.FC<LeafBurstProps> = ({
   spriteVariant = 'default',
   burstScale = 1,
   particleSizeScale = 1,
+  speedScale = 1,
   zIndex = 70,
   anchorPosition = 'fixed',
   spawnOffsetUpPx = SPAWN_OFFSET_UP_PX,
 }) => {
   const sprites = spriteVariant === 'gold' ? LEAF_SPRITES_GOLD : LEAF_SPRITES;
-  const [leaves] = useState<LeafParticle[]>(() => createLeaves(particleCount, sprites));
+  const [leaves] = useState<LeafParticle[]>(() => createLeaves(particleCount, sprites, speedScale));
   const [positions, setPositions] = useState<{ x: number; y: number; opacity: number; rotation: number; scale: number }[]>(
     () => leaves.map(() => ({ x: 0, y: 0, opacity: 1, rotation: 0, scale: 1 }))
   );

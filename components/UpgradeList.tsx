@@ -224,6 +224,15 @@ interface UpgradeListProps {
   gardenId?: GardenId;
   /** When set, scroll to this upgrade and flash it blue (from level-up Unlock Now) */
   pendingUnlockUpgradeId?: string | null;
+  /**
+   * Special Delivery free credits: scroll to this upgrade and flash it green once
+   * (then afford-style half-blink continues while freeUpgradeCounts remain).
+   */
+  pendingFreeUpgradeHighlightId?: string | null;
+  /** Stackable free purchase credits per upgrade id (Special Delivery). */
+  freeUpgradeCounts?: Record<string, number>;
+  /** Called when a free credit is spent on purchase. */
+  onConsumeFreeUpgrade?: (upgradeId: string) => void;
   /** When set (e.g. after declining limited offer), scroll to this offer and flash yellow, then return to light yellow */
   pendingOfferHighlightId?: string | null;
   /** When true, panel is expanded (use stronger ease-out for opening) */
@@ -276,7 +285,7 @@ const SEEDS_UPGRADES: UpgradeDef[] = [
 
 const SEEDS_UNLOCK_LEVELS: Record<string, number> = {
   seed_production: 1,
-  double_seeds: 6,
+  double_seeds: 5,
   bonus_seeds: 9,
 };
 
@@ -463,16 +472,16 @@ function getLevelUnlockMilestoneRows(gardenId: GardenId = DEFAULT_GARDEN_ID): Le
   return [
     { level: 2, upgradeId: 'plot_expansion', tab: 'CROPS', name: 'Garden Expansion', description: 'Unlock additional plots in the garden', icon: 'icon_plotexpansion.png', popupDescription: 'You can now unlock additional plots in the garden' },
     { level: 3, upgradeId: 'market_value', tab: 'HARVEST', name: 'Market Value', description: 'Increase the coins earned when completing orders', icon: 'icon_marketvalue.png', popupDescription: 'You can now increase the coins earned when completing orders' },
+    { level: 5, upgradeId: 'double_seeds', tab: 'SEEDS', name: 'Double Seeds', description: 'Increase chance to spawn 2 seeds at a time', icon: 'icon_seedquality.png', popupDescription: 'Increase chance to spawn 2 seeds at a time' },
     {
-      level: 5,
+      level: 6,
       upgradeId: '',
       tab: 'SEEDS',
       name: 'Daily Tasks',
       description: 'Complete daily tasks for rewards.',
-      icon: 'icon_fb_tasks_normal.png',
+      icon: 'icon_tasks.png',
       popupDescription: 'Daily Tasks are now available.',
     },
-    { level: 6, upgradeId: 'double_seeds', tab: 'SEEDS', name: 'Double Seeds', description: 'Increase chance to spawn 2 seeds at a time', icon: 'icon_seedquality.png', popupDescription: 'Increase chance to spawn 2 seeds at a time' },
     {
       level: 7,
       upgradeId: '',
@@ -862,7 +871,7 @@ const AFFORD_BLINK_DESC = '#9eb643';
 const AFFORD_BLINK_TITLE = '#62863b';
 const AFFORD_BLINK_LINE = '#9eb643';
 
-export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange, money, setMoney, seedsState: propsSeedsState, setSeedsState: propsSetSeedsState, harvestState: propsHarvestState, setHarvestState: propsSetHarvestState, cropsState: propsCropsState, setCropsState: propsSetCropsState, lockedCellCount = 0, fertilizableCellCount = 0, onFertilizeCell, highestPlantEver = 1, masteredPlantLevels = [], rewardedOffers = [], onRewardedOfferPanelClick, onRewardedOfferClick, playerLevel = 1, gardenId = DEFAULT_GARDEN_ID, pendingUnlockUpgradeId = null, pendingOfferHighlightId = null, isExpanded = false, protectedOfferId = null, ftue10GreenFlashUpgradeId = null, ftue10PurchaseButtonRef, ftue10LockScroll = false, ftue10DisableSeedProductionPurchase = false, onUpgradePurchase, goldenPotCount = 0 }) => {
+export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange, money, setMoney, seedsState: propsSeedsState, setSeedsState: propsSetSeedsState, harvestState: propsHarvestState, setHarvestState: propsSetHarvestState, cropsState: propsCropsState, setCropsState: propsSetCropsState, lockedCellCount = 0, fertilizableCellCount = 0, onFertilizeCell, highestPlantEver = 1, masteredPlantLevels = [], rewardedOffers = [], onRewardedOfferPanelClick, onRewardedOfferClick, playerLevel = 1, gardenId = DEFAULT_GARDEN_ID, pendingUnlockUpgradeId = null, pendingFreeUpgradeHighlightId = null, freeUpgradeCounts = {}, onConsumeFreeUpgrade, pendingOfferHighlightId = null, isExpanded = false, protectedOfferId = null, ftue10GreenFlashUpgradeId = null, ftue10PurchaseButtonRef, ftue10LockScroll = false, ftue10DisableSeedProductionPurchase = false, onUpgradePurchase, goldenPotCount = 0 }) => {
   const [internalSeedsState, setInternalSeedsState] = useState<Record<string, UpgradeState>>(createInitialSeedsState);
   const seedsState = propsSeedsState ?? internalSeedsState;
   const setSeedsState = propsSetSeedsState ?? setInternalSeedsState;
@@ -876,6 +885,13 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
   const [pressedId, setPressedId] = useState<string | null>(null);
   const [unlockFlashIds, setUnlockFlashIds] = useState<Set<string>>(new Set());
   const [completedUnlockFlashIds, setCompletedUnlockFlashIds] = useState<Set<string>>(new Set());
+  /** One-shot green intro flash for Special Delivery free upgrades (after scroll). */
+  const [freeIntroFlashIds, setFreeIntroFlashIds] = useState<Set<string>>(new Set());
+  /**
+   * FREE label sticky reveal: once shown mid fade-in, stays FREE even when the green
+   * hold ends (avoids cost flicker while pending highlight is still set).
+   */
+  const [freeLabelRevealedIds, setFreeLabelRevealedIds] = useState<Set<string>>(new Set());
   const upgradeRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const offerRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
   /** Temporary yellow flash for offer card when scroll lands (then returns to light yellow) */
@@ -883,6 +899,8 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
 
   /** Affordability blink: toggled each second so eligible cards fade green in (1s) then out (1s) on loop. */
   const [affordBlinkPhase, setAffordBlinkPhase] = useState(false);
+  /** Same pulse as afford blink — used for pending free Special Delivery upgrades (any level). */
+  const [freeBlinkPhase, setFreeBlinkPhase] = useState(false);
   /** Per-upgrade cooldown expiry (ms epoch) after a purchase — blink stays off until then. */
   const [affordBlinkCooldownUntil, setAffordBlinkCooldownUntil] = useState<Record<string, number>>({});
 
@@ -916,6 +934,19 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
     const id = setInterval(() => setAffordBlinkPhase(p => !p), 1000);
     return () => clearInterval(id);
   }, [playerLevel]);
+
+  // Free-upgrade half-blink: same 1s in/out pulse while any Special Delivery free credits remain.
+  const hasAnyFreeUpgrade = Object.values(freeUpgradeCounts).some(
+    (c): c is number => typeof c === 'number' && c > 0,
+  );
+  useEffect(() => {
+    if (!hasAnyFreeUpgrade) {
+      setFreeBlinkPhase(false);
+      return;
+    }
+    const id = setInterval(() => setFreeBlinkPhase((p) => !p), 1000);
+    return () => clearInterval(id);
+  }, [hasAnyFreeUpgrade]);
 
   useEffect(() => {
     if (pendingUnlockUpgradeId) {
@@ -1015,10 +1046,117 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
     };
   }, [pendingUnlockUpgradeId, activeTab, isExpanded]);
 
+  // Special Delivery free upgrade: same scroll timing as unlock, but flash green once.
+  useEffect(() => {
+    if (!pendingFreeUpgradeHighlightId) return;
+    // New intro cycle — hide FREE until mid fade-in again.
+    const freeId = pendingFreeUpgradeHighlightId;
+    setFreeLabelRevealedIds((prev) => {
+      if (!prev.has(freeId)) return prev;
+      const n = new Set(prev);
+      n.delete(freeId);
+      return n;
+    });
+    if (!isExpanded) {
+      setFreeIntroFlashIds((prev) => {
+        const n = new Set(prev);
+        n.delete(freeId);
+        return n;
+      });
+      return;
+    }
+
+    const TAB_SLIDE_MS = 700;
+    const SCROLL_DURATION_MS = 800;
+    const FLASH_DURATION_MS = 400; // 1.5× faster than unlock blue flash (600ms)
+    /** Matches free-intro `duration-200` fade-in; reveal FREE at halfway. */
+    const FREE_LABEL_REVEAL_MS = 100;
+    let scrollRafId: number | null = null;
+    let freeLabelRevealT: number | null = null;
+
+    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+    const startGreenFreeFlash = () => {
+      playSfx(SFX_IDS.uiUnlockUpgrade);
+      setFreeIntroFlashIds((prev) => new Set(prev).add(freeId));
+      freeLabelRevealT = window.setTimeout(() => {
+        freeLabelRevealT = null;
+        setFreeLabelRevealedIds((prev) => new Set(prev).add(freeId));
+      }, FREE_LABEL_REVEAL_MS);
+    };
+
+    const scrollT = setTimeout(() => {
+      const el = upgradeRowRefs.current[freeId];
+      const scrollContainer = (scrollRefs as Record<string, React.RefObject<HTMLDivElement | null>>)[activeTab]?.current;
+      if (el && scrollContainer) {
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const elRect = el.getBoundingClientRect();
+        const elTopInContent = elRect.top - containerRect.top + scrollContainer.scrollTop;
+        const elBottomInContent = elTopInContent + elRect.height;
+        const containerHeight = scrollContainer.clientHeight;
+        const maxScroll = scrollContainer.scrollHeight - containerHeight;
+        const scrollTop = scrollContainer.scrollTop;
+        const padTop = 12;
+        const padBottom = 12;
+        let scrollTarget = scrollTop;
+        if (elTopInContent < scrollTop + padTop) {
+          scrollTarget = elTopInContent - padTop;
+        } else if (elBottomInContent > scrollTop + containerHeight - padBottom) {
+          scrollTarget = elBottomInContent - containerHeight + padBottom;
+        }
+        scrollTarget = Math.max(0, Math.min(maxScroll, scrollTarget));
+        const startTop = scrollContainer.scrollTop;
+        const distance = scrollTarget - startTop;
+        const startTime = Date.now();
+
+        const animate = () => {
+          const elapsed = Date.now() - startTime;
+          const progress = Math.min(1, elapsed / SCROLL_DURATION_MS);
+          const eased = easeOutCubic(progress);
+          scrollContainer.scrollTop = startTop + distance * eased;
+          if (progress < 1) {
+            scrollRafId = requestAnimationFrame(animate);
+          } else {
+            startGreenFreeFlash();
+          }
+        };
+        if (Math.abs(distance) > 2) {
+          scrollRafId = requestAnimationFrame(animate);
+        } else {
+          startGreenFreeFlash();
+        }
+      } else {
+        startGreenFreeFlash();
+      }
+    }, TAB_SLIDE_MS);
+
+    const clearT = setTimeout(() => {
+      setFreeIntroFlashIds((prev) => {
+        const next = new Set(prev);
+        next.delete(freeId);
+        return next;
+      });
+    }, TAB_SLIDE_MS + SCROLL_DURATION_MS + FLASH_DURATION_MS);
+
+    return () => {
+      clearTimeout(scrollT);
+      clearTimeout(clearT);
+      if (freeLabelRevealT != null) clearTimeout(freeLabelRevealT);
+      if (scrollRafId) cancelAnimationFrame(scrollRafId);
+      setFreeIntroFlashIds((prev) => {
+        const next = new Set(prev);
+        next.delete(freeId);
+        return next;
+      });
+    };
+  }, [pendingFreeUpgradeHighlightId, activeTab, isExpanded]);
+
   // Scroll to offered card when user closed limited offer (X) - same timing as unlock; flash yellow when scroll lands, then return to light yellow
   const OFFER_FLASH_DURATION_MS = 600;
   useEffect(() => {
     if (!pendingOfferHighlightId || !isExpanded) return;
+    // Free-upgrade green flash owns the scroll — don't fight it with offer navigation.
+    if (pendingFreeUpgradeHighlightId) return;
 
     const TAB_SLIDE_MS = 700;
     const SCROLL_DURATION_MS = 800;
@@ -1090,7 +1228,7 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
       if (flashTimeoutId) clearTimeout(flashTimeoutId);
       if (scrollRafId) cancelAnimationFrame(scrollRafId);
     };
-  }, [pendingOfferHighlightId, activeTab, isExpanded]);
+  }, [pendingOfferHighlightId, pendingFreeUpgradeHighlightId, activeTab, isExpanded]);
 
   useEffect(() => {
     const cleanups: (() => void)[] = [];
@@ -1213,9 +1351,17 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
   }, []);
 
   const handleUpgrade = (id: string, category: TabType, currentLevel: number, sourceButton?: HTMLElement | null) => {
-    const cost = getUpgradeCostValue(id, currentLevel, gardenId);
-    if (money < cost) return;
-    setMoney(prev => prev - cost);
+    const freeCredits = freeUpgradeCounts[id] ?? 0;
+    const awaitingFreeIntro =
+      pendingFreeUpgradeHighlightId === id && !freeLabelRevealedIds.has(id);
+    const usingFree = freeCredits > 0 && !awaitingFreeIntro;
+    if (!usingFree) {
+      const cost = getUpgradeCostValue(id, currentLevel, gardenId);
+      if (money < cost) return;
+      setMoney(prev => prev - cost);
+    } else {
+      onConsumeFreeUpgrade?.(id);
+    }
 
     // Buying an affordability-blink upgrade snaps its blink off and starts an individual cooldown.
     if (AFFORD_BLINK_UPGRADE_IDS.has(id)) {
@@ -1382,10 +1528,21 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
             : stateMap[upgrade.id] ?? { level: 0, progress: 0 };
         const currentCost = getUpgradeCostValue(upgrade.id, state.level, gardenId);
         const currentCostDisplay = getUpgradeCost(upgrade.id, state.level, gardenId);
+        const hasFreeCredit = (freeUpgradeCounts[upgrade.id] ?? 0) > 0;
         const canAfford = money >= currentCost;
+        // Hold FREE until halfway through the green intro fade-in; then sticky (no cost flicker on fade-out).
+        const isAwaitingFreeIntro =
+          pendingFreeUpgradeHighlightId === upgrade.id && !freeLabelRevealedIds.has(upgrade.id);
+        const canUseFreeCredit =
+          hasFreeCredit && !isAwaitingFreeIntro;
         const effectiveCanAfford =
-          canAfford && !(ftue10DisableSeedProductionPurchase && upgrade.id === 'seed_production');
-        const isFlashing = flashingIds.has(upgrade.id) || ftue10GreenFlashUpgradeId === upgrade.id;
+          (canUseFreeCredit || canAfford) &&
+          !(ftue10DisableSeedProductionPurchase && upgrade.id === 'seed_production');
+        const isFreeIntroFlashing = freeIntroFlashIds.has(upgrade.id);
+        const isFlashing =
+          flashingIds.has(upgrade.id) ||
+          ftue10GreenFlashUpgradeId === upgrade.id ||
+          isFreeIntroFlashing;
         const isUnlockFlashing = unlockFlashIds.has(upgrade.id);
         const isPressed = pressedId === upgrade.id;
 
@@ -1410,6 +1567,8 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
           (upgrade.id === 'customer_speed' && isCustomerSpeedMaxed(stateMap, goldenPotCount)) ||
           (upgrade.id === 'market_value' && isMarketValueMaxed(stateMap)) ||
           (upgrade.id === 'happy_customer' && isHappyCustomerMaxed(stateMap));
+
+        const showFreeButton = canUseFreeCredit && !isLocked && !isMaxed;
         
         const descTextColor = '#c2b180';
         // Locked (Seeds): blue theme
@@ -1445,23 +1604,31 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
         
         const UNLOCK_FLASH_BLUE = '#89c8e1';
 
+        // Free-upgrade half-blink (Special Delivery) — same colors as early-game afford blink.
+        const freeBlinkActive =
+          showFreeButton && !isUnlockFlashing && !isFlashing;
         // Affordability blink: pulse green while this engine upgrade is affordable (early game only).
         const isAffordBlinkUpgrade = AFFORD_BLINK_UPGRADE_IDS.has(upgrade.id);
         const affordBlinkActive =
+          !freeBlinkActive &&
           isAffordBlinkUpgrade &&
           playerLevel <= AFFORD_BLINK_MAX_GARDEN_LEVEL &&
           !isLocked && !isMaxed && effectiveCanAfford &&
           !isUnlockFlashing && !isFlashing &&
           Date.now() >= (affordBlinkCooldownUntil[upgrade.id] ?? 0);
-        const affordBlinkOn = affordBlinkActive && affordBlinkPhase;
+        const pulseBlinkActive = freeBlinkActive || affordBlinkActive;
+        const pulseBlinkOn =
+          (freeBlinkActive && freeBlinkPhase) || (affordBlinkActive && affordBlinkPhase);
         // 1s eased fade while pulsing; instant (0s) snap to normal when the blink turns off.
-        const affordBlinkColorTransition = affordBlinkActive ? '1s ease-in-out' : '0s';
+        const pulseBlinkColorTransition = pulseBlinkActive ? '1s ease-in-out' : '0s';
 
         return (
           <div 
             key={upgrade.id}
             ref={(el) => { upgradeRowRefs.current[upgrade.id] = el; }}
-            className={`relative flex flex-col transition-all duration-300 border-2 ${
+            className={`relative flex flex-col transition-all border-2 ${
+              isFreeIntroFlashing ? 'duration-200' : 'duration-300'
+            } ${
               isUnlockFlashing
                 ? 'scale-[1.02] shadow-lg z-10 border-[#66a4c6] rounded-[11px]'
                 : isFlashing 
@@ -1470,10 +1637,10 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
             }`}
             style={{
               ...(isUnlockFlashing ? { backgroundColor: UNLOCK_FLASH_BLUE } : {}),
-              ...(isAffordBlinkUpgrade && !isUnlockFlashing && !isFlashing
+              ...(pulseBlinkActive && !isUnlockFlashing && !isFlashing
                 ? {
-                    transition: `background-color ${affordBlinkColorTransition}, border-color ${affordBlinkColorTransition}`,
-                    ...(affordBlinkOn ? { backgroundColor: AFFORD_BLINK_BG, borderColor: AFFORD_BLINK_STROKE } : {}),
+                    transition: `background-color ${pulseBlinkColorTransition}, border-color ${pulseBlinkColorTransition}`,
+                    ...(pulseBlinkOn ? { backgroundColor: AFFORD_BLINK_BG, borderColor: AFFORD_BLINK_STROKE } : {}),
                   }
                 : {}),
             }}
@@ -1495,8 +1662,8 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
                   <h3
                     className="text-[14px] font-black tracking-tight uppercase leading-none"
                     style={{
-                      color: isUnlockFlashing ? '#507493' : isFlashing ? '#386641' : (affordBlinkOn ? AFFORD_BLINK_TITLE : '#583c1f'),
-                      ...(isAffordBlinkUpgrade ? { transition: `color ${affordBlinkColorTransition}` } : {}),
+                      color: isUnlockFlashing ? '#507493' : isFlashing ? '#386641' : (pulseBlinkOn ? AFFORD_BLINK_TITLE : '#583c1f'),
+                      ...(pulseBlinkActive ? { transition: `color ${pulseBlinkColorTransition}` } : {}),
                     }}
                   >
                     {upgrade.name}
@@ -1516,8 +1683,8 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
                 <div
                   className={`text-[14px] font-semibold mt-0.5 tracking-tight leading-[1.1] ${upgrade.description ? '' : 'uppercase'} ${isFlashing && !isUnlockFlashing ? 'text-[#386641]/50' : ''}`}
                   style={{
-                    color: isUnlockFlashing ? '#7497b0' : isFlashing ? undefined : (affordBlinkOn ? AFFORD_BLINK_DESC : descTextColor),
-                    ...(isAffordBlinkUpgrade ? { transition: `color ${affordBlinkColorTransition}` } : {}),
+                    color: isUnlockFlashing ? '#7497b0' : isFlashing ? undefined : (pulseBlinkOn ? AFFORD_BLINK_DESC : descTextColor),
+                    ...(pulseBlinkActive ? { transition: `color ${pulseBlinkColorTransition}` } : {}),
                   }}
                 >
                   {upgrade.description ?? `YIELD: +${(state.level * 30).toFixed(0)}%`}
@@ -1579,6 +1746,15 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
                       >
                         MAX
                       </span>
+                    ) : showFreeButton ? (
+                      <span
+                        className="text-[14px] font-black tracking-tighter"
+                        style={{
+                          color: isPressed ? buttonActiveFontColor : buttonFontColor,
+                        }}
+                      >
+                        FREE
+                      </span>
                     ) : (
                       <span className="flex items-center gap-1.5 -translate-x-1 relative shrink-0">
                         <img
@@ -1608,8 +1784,8 @@ export const UpgradeList: React.FC<UpgradeListProps> = ({ activeTab, onTabChange
                 className="w-full h-[6px] bg-[#9d8a57]/20 rounded-full overflow-hidden relative"
                 style={{
                   minHeight: '6px',
-                  ...(isAffordBlinkUpgrade ? { transition: `background-color ${affordBlinkColorTransition}` } : {}),
-                  ...(affordBlinkOn ? { backgroundColor: AFFORD_BLINK_LINE } : {}),
+                  ...(pulseBlinkActive ? { transition: `background-color ${pulseBlinkColorTransition}` } : {}),
+                  ...(pulseBlinkOn ? { backgroundColor: AFFORD_BLINK_LINE } : {}),
                 }}
               >
                 <div 

@@ -18,7 +18,8 @@ import {
 } from '../constants/popupPointerEvents';
 import { PopupVectorBackground } from './PopupVectorBackground';
 import { PopupPrescaleFrame } from './PopupPrescaleFrame';
-import { getCollectionBonusesIconPath, getCollectionBonusIconPath } from '../utils/gardenAssets';
+import { getCollectionBonusIconPath } from '../utils/gardenAssets';
+import { getTrophyDoorIconSrc } from '../constants/trophies';
 import {
   getGoldenPotBonusIconSlugForPotCount,
   getGoldenPotBonusTiersForDisplay,
@@ -77,6 +78,11 @@ export interface GoldenPotBonusesPopupProps {
   scrollToTierPotCount?: number | null;
   /** Tier rows for shelves that currently show the upgrade button (per started garden). */
   inProgressTierPotCounts?: readonly number[];
+  /**
+   * Trophies owned on each in-progress tier's own shelf, keyed by tier pot threshold.
+   * Needed because a shelf can be filled out of order (owning only slot 4 is still 1/4).
+   */
+  inProgressTierTrophyCounts?: Readonly<Record<number, number>>;
 }
 
 const POPUP_LEAF_COUNT = 40;
@@ -217,15 +223,20 @@ const BONUS_LOCKED_SUBTITLE_COLOR = '#c6b280';
 const BONUS_ROW_PROGRESS_RIGHT_PX = 34;
 const BONUS_ROW_PROGRESS_FONT_REM = 1.45;
 
-/** Pots completed toward an in-progress bonus tier (segment is always 4). */
+/**
+ * Pots completed toward an in-progress bonus tier (segment is always 4). Prefers the shelf's own
+ * trophy count so out-of-order shelves read correctly; falls back to the account-wide tally.
+ */
 function getInProgressTierFraction(
   tierPotCount: number,
   goldenPotCount: number,
+  shelfTrophyCount?: number,
 ): { numerator: number; denominator: number } {
   const idx = GOLDEN_POT_BONUS_TIERS.findIndex((t) => t.potCount === tierPotCount);
   const segmentStart = idx <= 0 ? 0 : GOLDEN_POT_BONUS_TIERS[idx - 1]!.potCount;
   const denominator = Math.max(1, tierPotCount - segmentStart);
-  const numerator = Math.min(denominator, Math.max(0, goldenPotCount - segmentStart));
+  const rawNumerator = shelfTrophyCount ?? goldenPotCount - segmentStart;
+  const numerator = Math.min(denominator, Math.max(0, rawNumerator));
   return { numerator, denominator };
 }
 
@@ -315,6 +326,7 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
   revealTierPotCount = null,
   scrollToTierPotCount = null,
   inProgressTierPotCounts = [],
+  inProgressTierTrophyCounts = {},
 }) => {
   const unlockedTiersSet = useMemo(() => {
     if (unlockedTierPotCounts) return new Set(unlockedTierPotCounts);
@@ -698,7 +710,7 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
               }}
             >
               <img
-                src={getCollectionBonusesIconPath()}
+                src={getTrophyDoorIconSrc('garden_1') ?? ''}
                 alt=""
                 className="h-full w-full object-contain"
                 draggable={false}
@@ -731,7 +743,7 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
                     maxWidth: '100%',
                   }}
                 >
-                  Collection Bonuses
+                  Trophy Rewards
                 </h2>
 
                 <div className="w-full flex items-center justify-center" style={{ marginTop: '8px', marginBottom: '24px' }}>
@@ -753,7 +765,7 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
                     fontSize: '2rem',
                   }}
                 >
-                  Upgrading a whole shelf will unlock its bonus reward
+                  Collecting a whole shelf of trophies unlocks a reward
                 </p>
 
                 <div
@@ -910,6 +922,7 @@ export const GoldenPotBonusesPopup: React.FC<GoldenPotBonusesPopupProps> = ({
                           const { numerator, denominator } = getInProgressTierFraction(
                             tier.potCount,
                             goldenPotCount,
+                            inProgressTierTrophyCounts[tier.potCount],
                           );
                           return (
                             <div

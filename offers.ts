@@ -48,6 +48,12 @@ export function isDoubleCoinsRewardLine(offerLineText: string): boolean {
 /** Store IAP no-ads row — stacks on boost bar (timer only; ad removal is game feature TBD). */
 export const REMOVE_ADS_OFFER_ID = 'remove_ads';
 export const REMOVE_ADS_HEADER_ICON = '/assets/icons/store/icon_noads.png';
+/** Timed limited-offer / store boost icons (not upgrade-row art). */
+export const RAPID_SEEDS_HEADER_ICON = '/assets/icons/upgrades/icon_rapidseeds.png';
+export const DOUBLE_HARVEST_HEADER_ICON = '/assets/icons/upgrades/icon_doubleharvest.png';
+export const RAPID_HARVEST_HEADER_ICON = '/assets/icons/upgrades/icon_rapidharvest.png';
+export const RUSH_ORDERS_HEADER_ICON = '/assets/icons/upgrades/icon_rushorders.png';
+export const HAPPIEST_CUSTOMERS_HEADER_ICON = '/assets/icons/upgrades/icon_happiestcustomers.png';
 /** Store small-row id for Remove Ads IAP — also used by **`IapOfferPopup`** (“Remove Ads popup”). */
 export const STORE_IAP_OFFER_REMOVE_ADS_ID = 'store_no_ads' as const;
 /** Bundle row id for Starter Pack — also used by **`IapOfferPopup`** (“Starter Pack popup”). */
@@ -89,7 +95,7 @@ export const LIMITED_OFFERS: LimitedOfferConfig[] = [
     id: 'rapid_seeds',
     title: 'Rapid Seeds',
     description: 'Super fast seed production speed',
-    headerIcon: '/assets/icons/upgrades/icon_seedproduction.png',
+    headerIcon: RAPID_SEEDS_HEADER_ICON,
     durationMinutes: null,
     durationSeconds: 90,
     upgradeTab: 'SEEDS',
@@ -99,7 +105,7 @@ export const LIMITED_OFFERS: LimitedOfferConfig[] = [
     id: 'double_harvest',
     title: 'Double Harvest',
     description: 'Get 2x the crops every harvest',
-    headerIcon: '/assets/icons/upgrades/icon_cropvalue.png',
+    headerIcon: DOUBLE_HARVEST_HEADER_ICON,
     durationMinutes: null,
     durationSeconds: 120,
     upgradeTab: 'CROPS',
@@ -119,7 +125,7 @@ export const LIMITED_OFFERS: LimitedOfferConfig[] = [
     id: 'rapid_harvest',
     title: 'Rapid Harvest',
     description: 'Super fast harvest cycle speed',
-    headerIcon: '/assets/icons/upgrades/icon_harvestspeed.png',
+    headerIcon: RAPID_HARVEST_HEADER_ICON,
     durationMinutes: null,
     durationSeconds: 60,
     upgradeTab: 'CROPS',
@@ -129,7 +135,7 @@ export const LIMITED_OFFERS: LimitedOfferConfig[] = [
     id: 'rush_orders',
     title: 'Rush Orders',
     description: 'Instantly generate new orders',
-    headerIcon: '/assets/icons/upgrades/icon_customerspeed.png',
+    headerIcon: RUSH_ORDERS_HEADER_ICON,
     durationMinutes: null,
     durationSeconds: 90,
     upgradeTab: 'HARVEST',
@@ -139,7 +145,7 @@ export const LIMITED_OFFERS: LimitedOfferConfig[] = [
     id: 'happiest_customers',
     title: 'Happiest Customers',
     description: 'All orders will now give 2x coins',
-    headerIcon: '/assets/icons/upgrades/icon_happycustomer.png',
+    headerIcon: HAPPIEST_CUSTOMERS_HEADER_ICON,
     durationMinutes: null,
     durationSeconds: 120,
     upgradeTab: 'HARVEST',
@@ -469,7 +475,7 @@ export function getStorePurchaseBoostGrants(config: StoreCoinOfferConfig): { off
       {
         offerId: 'rapid_harvest',
         durationMs: cfg.starter_pack_rapid_harvest ?? bundle.iapBoostGrants[2].durationMs,
-        icon: '/assets/icons/upgrades/icon_harvestspeed.png',
+        icon: RAPID_HARVEST_HEADER_ICON,
       },
     ];
   }
@@ -480,7 +486,7 @@ export function getStorePurchaseBoostGrants(config: StoreCoinOfferConfig): { off
       {
         offerId: 'rapid_harvest',
         durationMs: cfg.field_pack_rapid_harvest ?? bundle.iapBoostGrants[2].durationMs,
-        icon: '/assets/icons/upgrades/icon_harvestspeed.png',
+        icon: RAPID_HARVEST_HEADER_ICON,
       },
     ];
   }
@@ -491,7 +497,7 @@ export function getStorePurchaseBoostGrants(config: StoreCoinOfferConfig): { off
       {
         offerId: 'rapid_seeds',
         durationMs: cfg.farmers_pack_rapid_seeds ?? bundle.iapBoostGrants[2].durationMs,
-        icon: '/assets/icons/upgrades/icon_seedproduction.png',
+        icon: RAPID_SEEDS_HEADER_ICON,
       },
     ];
   }
@@ -535,7 +541,7 @@ export const STORE_BUNDLE_OFFERS: StoreBundleOfferConfig[] = [
       {
         offerLineText: 'Rapid Harvest',
         durationText: '30m',
-        coinIconPath: '/assets/icons/upgrades/icon_harvestspeed.png',
+        coinIconPath: RAPID_HARVEST_HEADER_ICON,
         coinIconScale: 0.95,
       },
     ],
@@ -545,7 +551,7 @@ export const STORE_BUNDLE_OFFERS: StoreBundleOfferConfig[] = [
       {
         offerId: 'rapid_harvest',
         durationMs: 30 * 60 * 1000,
-        icon: '/assets/icons/upgrades/icon_harvestspeed.png',
+        icon: RAPID_HARVEST_HEADER_ICON,
       },
     ],
     priceLabel: '$9.99',
@@ -569,7 +575,7 @@ export const STORE_BUNDLE_OFFERS: StoreBundleOfferConfig[] = [
       {
         offerLineText: 'Rapid Harvest',
         durationText: '30m',
-        coinIconPath: '/assets/icons/upgrades/icon_harvestspeed.png',
+        coinIconPath: RAPID_HARVEST_HEADER_ICON,
         coinIconScale: 0.95,
       },
     ],
@@ -579,7 +585,7 @@ export const STORE_BUNDLE_OFFERS: StoreBundleOfferConfig[] = [
       {
         offerId: 'rapid_harvest',
         durationMs: 30 * 60 * 1000,
-        icon: '/assets/icons/upgrades/icon_harvestspeed.png',
+        icon: RAPID_HARVEST_HEADER_ICON,
       },
     ],
     priceLabel: '$9.99',
@@ -602,7 +608,7 @@ export const STORE_BUNDLE_OFFERS: StoreBundleOfferConfig[] = [
       {
         offerLineText: 'Rapid Seeds',
         durationText: '2hr',
-        coinIconPath: '/assets/icons/upgrades/icon_seedproduction.png',
+        coinIconPath: RAPID_SEEDS_HEADER_ICON,
         coinIconScale: 0.95,
       },
     ],
@@ -612,7 +618,7 @@ export const STORE_BUNDLE_OFFERS: StoreBundleOfferConfig[] = [
       {
         offerId: 'rapid_seeds',
         durationMs: 2 * 60 * 60 * 1000,
-        icon: '/assets/icons/upgrades/icon_seedproduction.png',
+        icon: RAPID_SEEDS_HEADER_ICON,
       },
     ],
     priceLabel: '$29.99',

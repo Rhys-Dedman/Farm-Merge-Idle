@@ -27,7 +27,7 @@ export function shouldShowFarmFloatingButtons(gardenId: GardenId, playerLevel: n
 }
 
 /** Farm floating button: Tasks (no popup yet). */
-export const TASKS_FLOATING_BUTTON_UNLOCK_LEVEL = 5;
+export const TASKS_FLOATING_BUTTON_UNLOCK_LEVEL = 6;
 
 /** Farm floating button: Gardens (garden 1 player level). */
 export const GARDENS_FLOATING_BUTTON_UNLOCK_LEVEL = 10;

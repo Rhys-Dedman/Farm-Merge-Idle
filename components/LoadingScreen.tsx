@@ -62,6 +62,12 @@ const ASSETS_TO_PRELOAD = [
   '/assets/icons/upgrades/icon_surplussales.png',
   '/assets/icons/upgrades/icon_happycustomer.png',
   '/assets/icons/upgrades/icon_premiumorders.png',
+  // Timed limited-offer / store boost icons
+  '/assets/icons/upgrades/icon_rapidseeds.png',
+  '/assets/icons/upgrades/icon_doubleharvest.png',
+  '/assets/icons/upgrades/icon_rapidharvest.png',
+  '/assets/icons/upgrades/icon_rushorders.png',
+  '/assets/icons/upgrades/icon_happiestcustomers.png',
   // Backgrounds
   '/assets/collection/background_collection.webp',
   '/assets/background/background_loading.webp',
@@ -96,6 +102,8 @@ const ASSETS_TO_PRELOAD = [
   '/assets/vfx/particle_leaf_red_2.png',
   '/assets/vfx/particle_leaf_purple_1.png',
   '/assets/vfx/particle_leaf_purple_2.png',
+  '/assets/vfx/particle_leaf_specialdeliveries_1.png',
+  '/assets/vfx/particle_leaf_specialdeliveries_2.png',
 ];
 
 export const LoadingScreen: React.FC<LoadingScreenProps> = ({

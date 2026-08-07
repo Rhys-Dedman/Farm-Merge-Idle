@@ -74,7 +74,7 @@ export const DAILY_TASK_CATALOG: DailyTaskCatalogEntry[] = [
 
     title: 'Plant Seeds',
 
-    description: 'Produce seeds into the garden.',
+    description: 'Plant seeds in your garden.',
 
   },
 
@@ -86,7 +86,7 @@ export const DAILY_TASK_CATALOG: DailyTaskCatalogEntry[] = [
 
     title: 'Fill Garden',
 
-    description: 'Plant seeds until every plot you have unlocked has a plant.',
+    description: 'Fill every unlocked garden plot.',
 
     notes: 'target = unlocked garden cell count at roll time (not a fixed {n})',
 
@@ -100,7 +100,7 @@ export const DAILY_TASK_CATALOG: DailyTaskCatalogEntry[] = [
 
     title: 'Seed Rush',
 
-    description: 'Plant {n} seeds within 5 seconds.',
+    description: 'Plant seeds within {s} seconds.',
 
   },
 
@@ -126,7 +126,7 @@ export const DAILY_TASK_CATALOG: DailyTaskCatalogEntry[] = [
 
     title: 'Plant Merge',
 
-    description: 'Merge a specific plant {n} times.',
+    description: 'Merge {p} together.',
 
     notes: 'gate — eligible plant picked at roll; goal icon shown',
 
@@ -140,7 +140,7 @@ export const DAILY_TASK_CATALOG: DailyTaskCatalogEntry[] = [
 
     title: 'Merge Coins',
 
-    description: 'Earn {n} coins from merging plants.',
+    description: 'Earn coins from merging plants.',
 
     notes: 'coin target by slot: 150 / 300 / 750',
 
@@ -158,7 +158,7 @@ export const DAILY_TASK_CATALOG: DailyTaskCatalogEntry[] = [
 
     title: 'Grow Plants',
 
-    description: 'Produce {n} unique {x} plants.',
+    description: 'Produce unique {x} plants.',
 
     notes: 'targets 2/3/5; plant seed+1…highest−1; never same plant twice in a row; skip roll if no alternative',
 
@@ -176,7 +176,7 @@ export const DAILY_TASK_CATALOG: DailyTaskCatalogEntry[] = [
 
     title: 'Harvest Crops',
 
-    description: 'Harvest {n} crops from your garden.',
+    description: 'Harvest crops from your garden.',
 
     notes: 'base 10 / 20 / 40 × Crop Yield per harvest at roll',
 
@@ -190,7 +190,7 @@ export const DAILY_TASK_CATALOG: DailyTaskCatalogEntry[] = [
 
     title: 'Merge Harvest',
 
-    description: 'Harvest {n} crops from merging.',
+    description: 'Harvest crops from merging.',
 
     notes: 'slot targets 5 / 10 / 15; 1 crop per merge-harvest proc',
 
@@ -204,7 +204,7 @@ export const DAILY_TASK_CATALOG: DailyTaskCatalogEntry[] = [
 
     title: 'Multi Harvest',
 
-    description: 'Harvest from 3 different garden cells at once.',
+    description: 'Harvest 3 garden cells at once.',
 
   },
 
@@ -230,23 +230,9 @@ export const DAILY_TASK_CATALOG: DailyTaskCatalogEntry[] = [
 
     title: 'Order Rush',
 
-    description: 'Complete 3 orders in under 30 seconds.',
+    description: 'Complete orders in under {s} seconds.',
 
     notes: 'slot 2 only; fixed 3-in-30s target',
-
-  },
-
-  {
-
-    id: 'merge_only_order',
-
-    category: 'orders',
-
-    title: 'Merge Order',
-
-    description: 'Complete orders using only merged plants.',
-
-    notes: 'target = slot (1/2/3 orders); merge-sourced crops only',
 
   },
 
@@ -290,7 +276,7 @@ export const DAILY_TASK_CATALOG: DailyTaskCatalogEntry[] = [
 
     title: 'Buy Upgrade',
 
-    description: 'Purchase {n} upgrades from any upgrade tab.',
+    description: 'Buy upgrades from any tab.',
 
     notes: 'gate — enough unpurchased upgrades remain for slot target',
 
@@ -350,7 +336,7 @@ export const DAILY_TASK_CATALOG: DailyTaskCatalogEntry[] = [
 
     title: 'Level Up',
 
-    description: 'Level up your garden level.',
+    description: 'Level up your garden.',
 
     notes: 'slot by progress at roll: <35% slot 3, 35–70% slot 2, 70%+ slot 1',
 
@@ -364,7 +350,7 @@ export const DAILY_TASK_CATALOG: DailyTaskCatalogEntry[] = [
 
     title: 'Play Today',
 
-    description: 'Play for {n} minutes today.',
+    description: 'Play in your garden today.',
 
   },
 
@@ -376,7 +362,7 @@ export const DAILY_TASK_CATALOG: DailyTaskCatalogEntry[] = [
 
     title: 'Golden Pot',
 
-    description: 'Upgrade {n} plant in the collection screen to unlock a golden pot.',
+    description: 'Unlock a golden pot in the collection.',
 
     notes: 'gate — slot 3 only; collection unlocked; golden pot purchase available',
 
@@ -390,7 +376,7 @@ export const DAILY_TASK_CATALOG: DailyTaskCatalogEntry[] = [
 
     title: 'Discover Plant',
 
-    description: 'Discover a new plant in your garden.',
+    description: 'Discover a new plant.',
 
     notes: 'gate — slot 2 only; undiscovered plants remain',
 
@@ -434,9 +420,9 @@ export const DAILY_TASK_CATALOG: DailyTaskCatalogEntry[] = [
 
     category: 'gameplay',
 
-    title: 'Task Complete',
+    title: 'Daily Tasks',
 
-    description: 'Open up the daily task menu.',
+    description: 'Complete a daily task',
 
     notes: 'Garden 1 Daily Tasks unlock intro only — not rolled randomly',
 
@@ -481,8 +467,6 @@ export const DAILY_TASK_DISCOVERY_POOL_IDS = ['discover_plant'] as const;
 export const DAILY_TASK_ORDERS_EXTRA_POOL_IDS = [
 
   'order_rush',
-
-  'merge_only_order',
 
   'coin_order',
 

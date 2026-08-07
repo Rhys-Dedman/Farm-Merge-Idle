@@ -8,6 +8,7 @@ import { scheduleNextFrame } from '../utils/raf60';
 import { getPerformanceMode } from '../utils/performanceMode';
 
 const LEAF_SPRITES = [assetPath('/assets/vfx/particle_leaf_green_1.png'), assetPath('/assets/vfx/particle_leaf_green_2.png')];
+const LEAF_SPRITES_GOLD = [assetPath('/assets/vfx/particle_leaf_yellow_1.png'), assetPath('/assets/vfx/particle_leaf_yellow_2.png')];
 
 /** Full cone aperture in degrees */
 const CONE_DEG = 45;
@@ -38,9 +39,11 @@ interface ShelfUnlockConeBurstProps {
   scale?: number;
   /** Number of cone particles (default 13). */
   particleCount?: number;
+  /** Yellow leaves (`gold`) for trophy reveals; green otherwise. */
+  spriteVariant?: 'default' | 'gold';
 }
 
-function createParticles(particleCount: number): Particle[] {
+function createParticles(particleCount: number, sprites: readonly string[]): Particle[] {
   return Array.from({ length: particleCount }, (_, i) => {
     const angle = (Math.random() - 0.5) * 2 * CONE_HALF_RAD;
     const speedMult = 0.35 + Math.random() * 1.3;
@@ -50,7 +53,7 @@ function createParticles(particleCount: number): Particle[] {
     const fadeStartRatio = 0.28 + Math.random() * 0.52;
     return {
       id: i,
-      sprite: LEAF_SPRITES[i % LEAF_SPRITES.length],
+      sprite: sprites[i % sprites.length]!,
       vx: Math.sin(angle) * speed,
       vy: -Math.cos(angle) * speed,
       size: 14 + Math.random() * 12,
@@ -69,10 +72,14 @@ export const ShelfUnlockConeBurst: React.FC<ShelfUnlockConeBurstProps> = ({
   onComplete,
   scale = 1,
   particleCount = PARTICLE_COUNT,
+  spriteVariant = 'default',
 }) => {
+  const sprites = spriteVariant === 'gold' ? LEAF_SPRITES_GOLD : LEAF_SPRITES;
+  const spritesRef = useRef(sprites);
+  spritesRef.current = sprites;
   const particlesRef = useRef<Particle[] | null>(null);
   if (particlesRef.current === null) {
-    particlesRef.current = createParticles(particleCount);
+    particlesRef.current = createParticles(particleCount, sprites);
   }
 
   const posRef = useRef<{ px: number; py: number; opacity: number; rotation: number }[]>(
@@ -93,7 +100,7 @@ export const ShelfUnlockConeBurst: React.FC<ShelfUnlockConeBurstProps> = ({
     }
     completedRef.current = false;
     frameRef.current = 0;
-    const fresh = createParticles(particleCount);
+    const fresh = createParticles(particleCount, spritesRef.current);
     particlesRef.current = fresh;
     const maxLife = fresh.reduce((m, p) => Math.max(m, p.lifetimeMs), 0) + 120;
     posRef.current = fresh.map((p) => ({ px: 0, py: 0, opacity: 1, rotation: p.rot }));

@@ -88,5 +88,18 @@ export function getPlantDisplayName(
   return getPlantData(level, gardenId).name;
 }
 
+/**
+ * Daily-task copy only: drop the leading descriptor ("Spring Daffodil" → "Daffodil").
+ * Single-word names are unchanged.
+ */
+export function getPlantShortDisplayName(
+  level: number,
+  gardenId: GardenId = getActiveGardenAssetContext(),
+): string {
+  const name = getPlantDisplayName(level, gardenId).trim();
+  const parts = name.split(/\s+/);
+  return parts.length > 1 ? parts[parts.length - 1]! : name;
+}
+
 /** All garden ids that have plant copy tables (for tooling / future editors). */
 export const GARDEN_PLANT_DATA_IDS: readonly GardenId[] = GARDEN_IDS;

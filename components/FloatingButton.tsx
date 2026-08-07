@@ -37,6 +37,11 @@ export interface FloatingButtonProps {
   onClick?: () => void;
   /** 200ms 1→1.1→1 bounce on the button (e.g. tasks ready to claim). */
   readyBounceActive?: boolean;
+  /**
+   * Optional alert badge overlaid on the icon (Gardens: next garden affordable).
+   * Asset already places the dot in the top-right of a transparent square.
+   */
+  showNotificationDot?: boolean;
   /** Active garden — pill gradient/outline swap per garden palette. */
   gardenId?: GardenId;
   className?: string;
@@ -53,6 +58,7 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
   unlockLevel,
   onClick,
   readyBounceActive = false,
+  showNotificationDot = false,
   gardenId,
   className = '',
   style,
@@ -91,6 +97,14 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
           draggable={false}
           className="h-full w-full object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.35)]"
         />
+        {showNotificationDot ? (
+          <img
+            src={assetPath('/assets/icons/floating_buttons/icon_fb_notificationdot.png')}
+            alt=""
+            draggable={false}
+            className="pointer-events-none absolute inset-0 h-full w-full object-contain"
+          />
+        ) : null}
       </span>
       <span
         className={`absolute bottom-0 left-1/2 z-10 flex -translate-x-1/2 translate-y-1/2 items-center justify-center rounded-full font-black leading-none tracking-normal shadow-md${pillUppercase ? ' uppercase' : ''}`}
