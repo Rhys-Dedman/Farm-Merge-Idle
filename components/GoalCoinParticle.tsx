@@ -98,6 +98,8 @@ export interface GoalCoinParticleData {
   iconSrc?: string;
   /** Optional trail color paired with `iconSrc`. */
   trailColor?: string;
+  /** When true, impact is visual/SFX only — wallet was already credited. */
+  skipWalletCredit?: boolean;
 }
 
 interface GoalCoinParticleProps {
@@ -105,7 +107,10 @@ interface GoalCoinParticleProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
   walletRef: React.RefObject<HTMLElement | null>;
   walletIconRef?: React.RefObject<HTMLElement | null>;
-  onImpact: (value: number, meta?: { playSfx: boolean; pitch?: number }) => void;
+  onImpact: (
+    value: number,
+    meta?: { playSfx: boolean; pitch?: number; skipWalletCredit?: boolean },
+  ) => void;
   onComplete: () => void;
   appScale?: number;
   /** When > SKIP_TRAIL_WHEN_ACTIVE_ABOVE, trail is disabled to reduce cost (e.g. 5+ coins at once). */
@@ -207,9 +212,10 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
     onImpactRef.current(data.value, {
       playSfx: data.burstImpactSfx !== false,
       pitch: data.burstImpactPitch,
+      skipWalletCredit: data.skipWalletCredit === true,
     });
     onCompleteRef.current();
-  }, [data.id, data.value, data.burstImpactSfx, data.burstImpactPitch]);
+  }, [data.id, data.value, data.burstImpactSfx, data.burstImpactPitch, data.skipWalletCredit]);
 
   useEffect(() => {
     if (getPerformanceMode()) return;
@@ -317,6 +323,7 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
       onImpactRef.current(data.value, {
         playSfx: data.burstImpactSfx !== false,
         pitch: data.burstImpactPitch,
+        skipWalletCredit: data.skipWalletCredit === true,
       });
     };
 
@@ -501,6 +508,7 @@ export const GoalCoinParticle: React.FC<GoalCoinParticleProps> = ({
         onImpactRef.current(data.value, {
           playSfx: data.burstImpactSfx !== false,
           pitch: data.burstImpactPitch,
+          skipWalletCredit: data.skipWalletCredit === true,
         });
       }
       if (!completeScheduledRef.current) {

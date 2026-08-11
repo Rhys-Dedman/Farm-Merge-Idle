@@ -1,7 +1,7 @@
 import { SHIPPED_GARDEN_IDS, type GardenId } from '../constants/gardens';
 import { getGlobalGoldenPotCount } from '../constants/goldenPotBonuses';
-import { getGoldenPotUpgradeableLevels } from '../constants/plantMastery';
 import { MAX_PLANT_TIER } from '../constants/plants';
+import { gardenHasTrophyArt } from '../constants/trophies';
 import type { GardenState } from '../types/gardenState';
 import type { GameSaveV2 } from './gardenSave';
 import { createFreshGardenState } from './gardenSave';
@@ -97,7 +97,10 @@ export function findNextDevUnlockPlantTarget(
   return null;
 }
 
-/** Dev cheat target: lowest discovered plant in a garden that has no trophy yet. */
+/**
+ * Dev cheat target: next empty trophy slot in shelf order (plant 1 → 20), then the next
+ * garden with trophy art. Fills gaps before advancing; ignores discovery (caller may unlock).
+ */
 export function findNextDevTrophyTarget(
   activeGardenId: GardenId,
   active: GardenCollectionSnapshot,
@@ -110,11 +113,11 @@ export function findNextDevTrophyTarget(
     gardens,
     allowedGardenIds,
   )) {
-    const nextLevel = getGoldenPotUpgradeableLevels(
-      snapshot.highestPlantEver,
-      snapshot.trophyLevels,
-    )[0];
-    if (nextLevel != null) return { gardenId, level: nextLevel };
+    if (!gardenHasTrophyArt(gardenId)) continue;
+    const owned = new Set(snapshot.trophyLevels);
+    for (let level = 1; level <= MAX_PLANT_TIER; level++) {
+      if (!owned.has(level)) return { gardenId, level };
+    }
   }
   return null;
 }

@@ -34,6 +34,12 @@ export const SCREEN_NAV_AD_BREAK_DELAY_MS = SCREEN_NAV_TRANSITION_MS / 2;
  */
 export const SPECIAL_DELIVERY_REWARD_AD_GRACE_MS = 15000;
 
+/**
+ * After finishing the Special Delivery intro FTUE, give a quiet return to gameplay
+ * before interstitial ads can fire (leave_collection / fallback / etc.).
+ */
+export const SPECIAL_DELIVERY_FTUE_AD_GRACE_MS = 60_000;
+
 /** Leaf burst particle count when the ad-break icon appears. */
 export const AD_BREAK_ICON_LEAF_BURST_COUNT = 10;
 

@@ -71,11 +71,25 @@ export const SPECIAL_DELIVERY_LOCK_PIVOT_X = 0.5;
 export const SPECIAL_DELIVERY_LOCK_PIVOT_Y = 0.2;
 /** Lock swing / lock shake settle (reusable). Starts at 0°. */
 export const SPECIAL_DELIVERY_LOCK_SWING_MS = 500;
-/** Large lock placed over the crossed vines on the locked Special Deliveries panel. */
+/** Large lock placed over the boarded locked Special Deliveries panel. */
 export const SPECIAL_DELIVERY_LARGE_LOCK_ART_SIZE_PX = 256;
-export const SPECIAL_DELIVERY_LARGE_LOCK_CENTER_ART_PX = [550, 800] as const;
+export const SPECIAL_DELIVERY_LARGE_LOCK_CENTER_ART_PX = [550, 880] as const;
 /** Panel-local nudge; inherited Collection barnScale keeps it aligned on phones. */
 export const SPECIAL_DELIVERY_LARGE_LOCK_NUDGE_DOWN_PX = 10;
+
+/**
+ * Boarded planks on the locked panel (top → bottom). Native art size; rotation is baked in.
+ * Vertical centers match the three door-row centers in panel art space.
+ */
+export const SPECIAL_DELIVERY_PLANK_ART_WIDTH_PX = 1024;
+export const SPECIAL_DELIVERY_PLANK_ART_HEIGHT_PX = 256;
+export const SPECIAL_DELIVERY_LOCKED_PLANK_SRCS = [
+  '/assets/collection/specialdelivery_plank_1.png',
+  '/assets/collection/specialdelivery_plank_2.png',
+  '/assets/collection/specialdelivery_plank_3.png',
+] as const;
+/** Center Y of plank_1 / plank_2 / plank_3 in panel art px (matched to boarded reference). */
+export const SPECIAL_DELIVERY_LOCKED_PLANK_CENTER_Y_ART_PX = [631, 862, 1091] as const;
 
 export const SPECIAL_DELIVERY_DOOR_CLOSED_SRC = '/assets/collection/specialdelivery_door_closed.png';
 export const SPECIAL_DELIVERY_DOOR_OPENING_SRC = '/assets/collection/specialdelivery_door_opening.png';
@@ -107,6 +121,13 @@ export const SPECIAL_DELIVERY_UNLOCK_KNOCKOFF_MS = 933;
 export const SPECIAL_DELIVERY_UNLOCK_KNOCKOFF_VX = -210;
 export const SPECIAL_DELIVERY_UNLOCK_KNOCKOFF_VY0 = -630;
 export const SPECIAL_DELIVERY_UNLOCK_KNOCKOFF_GRAVITY = 3263;
+/**
+ * Boarded planks on FTUE unlock: start at rest, fall with gravity only.
+ * Rotations are total degrees over the lifetime (CSS+: clockwise, −: counter-clockwise).
+ */
+export const SPECIAL_DELIVERY_PLANK_FALL_MS = SPECIAL_DELIVERY_UNLOCK_KNOCKOFF_MS;
+export const SPECIAL_DELIVERY_PLANK_FALL_GRAVITY = SPECIAL_DELIVERY_UNLOCK_KNOCKOFF_GRAVITY;
+export const SPECIAL_DELIVERY_PLANK_FALL_ROTATIONS_DEG = [-90, 60, -30] as const;
 /** Hit point sits this many design-px below lock center (key sweeps underneath). */
 export const SPECIAL_DELIVERY_KEY_HIT_BELOW_LOCK_CENTER_PX = 6;
 

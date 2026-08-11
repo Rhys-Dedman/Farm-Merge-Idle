@@ -55,7 +55,11 @@ export interface BuildCoinBurstParticlesArgs {
   particleExtras?: Partial<
     Pick<
       GoalCoinParticleData,
-      'skipHappyCustomerRoll' | 'skipDoubleCoinsMultiplier' | 'iconSrc' | 'trailColor'
+      | 'skipHappyCustomerRoll'
+      | 'skipDoubleCoinsMultiplier'
+      | 'iconSrc'
+      | 'trailColor'
+      | 'skipWalletCredit'
     >
   >;
 }

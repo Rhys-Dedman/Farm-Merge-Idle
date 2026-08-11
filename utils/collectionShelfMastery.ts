@@ -30,6 +30,69 @@ export function getShelfPlantLevels(shelfIndex: number): number[] {
   return [0, 1, 2, 3].map((offset) => startPlant + offset);
 }
 
+/**
+ * Session-only pending trophy reveals (`gardenId:plantLevel`) — strip them from collection
+ * snapshots for UI (shelf bars / bonus popup). Save ownership stays intact for crash safety.
+ */
+export function excludePendingTrophyReveals(
+  activeGardenId: GardenId,
+  activeSnapshot: GardenCollectionSnapshot,
+  gardens: Partial<Record<GardenId, GardenState>> | undefined,
+  pendingKeys: readonly string[],
+): {
+  activeSnapshot: GardenCollectionSnapshot;
+  gardens: Partial<Record<GardenId, GardenState>> | undefined;
+} {
+  if (pendingKeys.length === 0) {
+    return { activeSnapshot, gardens };
+  }
+
+  const pendingByGarden = new Map<GardenId, Set<number>>();
+  for (const key of pendingKeys) {
+    const colon = key.indexOf(':');
+    if (colon <= 0) continue;
+    const gardenId = key.slice(0, colon) as GardenId;
+    const level = Number(key.slice(colon + 1));
+    if (!Number.isFinite(level)) continue;
+    let set = pendingByGarden.get(gardenId);
+    if (!set) {
+      set = new Set();
+      pendingByGarden.set(gardenId, set);
+    }
+    set.add(level);
+  }
+  if (pendingByGarden.size === 0) {
+    return { activeSnapshot, gardens };
+  }
+
+  const filterLevels = (gardenId: GardenId, levels: readonly number[]): number[] => {
+    const pending = pendingByGarden.get(gardenId);
+    if (!pending) return [...levels];
+    return levels.filter((level) => !pending.has(level));
+  };
+
+  const nextActive: GardenCollectionSnapshot = {
+    ...activeSnapshot,
+    trophyLevels: filterLevels(activeGardenId, activeSnapshot.trophyLevels),
+  };
+
+  if (!gardens) {
+    return { activeSnapshot: nextActive, gardens };
+  }
+
+  const nextGardens: Partial<Record<GardenId, GardenState>> = { ...gardens };
+  for (const gardenId of pendingByGarden.keys()) {
+    if (gardenId === activeGardenId) continue;
+    const snap = gardens[gardenId];
+    if (!snap) continue;
+    nextGardens[gardenId] = {
+      ...snap,
+      trophyLevels: filterLevels(gardenId, snap.trophyLevels ?? []),
+    };
+  }
+  return { activeSnapshot: nextActive, gardens: nextGardens };
+}
+
 /** Trophies won on this shelf (0–4). Order is irrelevant — only the count matters. */
 export function getShelfTrophyCount(
   snapshot: GardenCollectionSnapshot,

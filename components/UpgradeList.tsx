@@ -482,18 +482,23 @@ function getLevelUnlockMilestoneRows(gardenId: GardenId = DEFAULT_GARDEN_ID): Le
       icon: 'icon_tasks.png',
       popupDescription: 'Daily Tasks are now available.',
     },
-    {
-      level: 7,
-      upgradeId: '',
-      tab: 'CROPS',
-      name: getCollectionPanelTitle(gardenId),
-      description: 'Upgrade your discovered plants to unlock powerful bonuses!',
-      icon: 'icon_collection_goldenpot.png',
-      popupDescription: 'Upgrade your discovered plants to unlock powerful bonuses!',
-      plantCollectionHeader: true,
-      navigateToBarnOnUnlock: true,
-      buttonText: 'View Collection',
-    },
+    // Collection is account-global after garden 1 unlocks it — don't re-teach on later gardens.
+    ...(isGarden1
+      ? [
+          {
+            level: 7,
+            upgradeId: '',
+            tab: 'CROPS' as TabType,
+            name: getCollectionPanelTitle(gardenId),
+            description: 'Upgrade your discovered plants to unlock powerful bonuses!',
+            icon: 'icon_collection_goldenpot.png',
+            popupDescription: 'Upgrade your discovered plants to unlock powerful bonuses!',
+            plantCollectionHeader: true,
+            navigateToBarnOnUnlock: true,
+            buttonText: 'View Collection',
+          },
+        ]
+      : []),
     { level: 8, upgradeId: 'wild_growth', tab: 'CROPS', name: 'Wild Growth', description: 'Plants automatically duplicate over time', icon: 'icon_luckymerge.png', popupDescription: 'Plants in your garden will now automatically duplicate over time' },
     { level: 9, upgradeId: 'bonus_seeds', tab: 'SEEDS', name: 'Lucky Seed', description: 'Increase chance to produce a bonus higher level seed', icon: 'icon_luckyseed.png', popupDescription: 'Seeds now have a chance to produce an extra higher level plant' },
     ...(isGarden1

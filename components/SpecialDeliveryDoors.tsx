@@ -41,6 +41,7 @@ import { DEFAULT_GARDEN_ID } from '../constants/gardens';
 import {
   dealSpecialDeliveryRewards,
   createSpecialDeliveryFtuePlaceholderDeal,
+  specialDeliveryRewardKey,
   specialDeliveryRewardOverlayIconSrc,
   specialDeliveryRewardRevealIconSrc,
   specialDeliveryRewardsEqual,
@@ -66,6 +67,7 @@ import {
   readSpecialDeliveryBoard,
   writeSpecialDeliveryBoard,
 } from '../utils/specialDeliveryBoardSave';
+import { playSfx, SFX_IDS } from '../utils/sfx';
 
 const DOOR_COUNT = SPECIAL_DELIVERY_DOOR_CELL_CENTERS_ART_PX.length;
 
@@ -148,6 +150,11 @@ interface SpecialDeliveryDoorsProps {
     startPoint: { x: number; y: number },
     meta?: { sizePx: number },
   ) => SpecialDeliveryClaimPresentation | void;
+  /**
+   * Persist the match prize as soon as the 3rd matching door opens (before claim UI).
+   * Crash/reload keeps the reward even if the reveal never finishes.
+   */
+  onMatchRewardWon?: (reward: SpecialDeliveryReward) => void;
   /**
    * FTUE pick-order rewards (open ordinal → reward). When set, each successful door tap
    * assigns the next entry regardless of door position. Board save is skipped.
@@ -275,11 +282,14 @@ export function SpecialDeliveryDoors({
   onRefundKey,
   onOutOfKeys,
   onClaimReward,
+  onMatchRewardWon,
   ftuePickSequence = null,
   onFtueDoorTap,
   onMatch3ClaimReady,
   suppressBoardSave = false,
 }: SpecialDeliveryDoorsProps) {
+  const onMatchRewardWonRef = useRef(onMatchRewardWon);
+  onMatchRewardWonRef.current = onMatchRewardWon;
   const gardenIdRef = useRef(gardenId);
   gardenIdRef.current = gardenId;
   const playerLevelRef = useRef(playerLevel);
@@ -432,29 +442,56 @@ export function SpecialDeliveryDoors({
 
   /** Entering / switching FTUE pick rounds: fresh closed board + placeholder rewards. */
   useEffect(() => {
-    if (ftuePickSequence == null) return;
-    ftuePickIndexRef.current = 0;
-    // Empty sequence = mid-FTUE await (e.g. coins landing) — don't wipe the closing board.
-    if (ftuePickSequence.length === 0) return;
+    if (ftuePickSequence != null) {
+      ftuePickIndexRef.current = 0;
+      // Empty sequence = mid-FTUE await (e.g. coins landing) — don't wipe the closing board.
+      if (ftuePickSequence.length === 0) return;
+      clearSpecialDeliveryBoard(gardenId);
+      const placeholders = createSpecialDeliveryFtuePlaceholderDeal(gardenId);
+      rewardDealRef.current = placeholders;
+      setRewardDeal(placeholders);
+      const closed = createInitialDoors();
+      doorsRef.current = closed;
+      setDoors(closed);
+      setBoardLocked(false);
+      boardLockedRef.current = false;
+      setBoardResetClosing(false);
+      pendingBoardResetRef.current = false;
+      match3GatherStartedRef.current = false;
+      pendingMatchRewardRef.current = null;
+      setMatch3Flight(null);
+      setMatchHideDoors(new Set());
+      setKeyParticle(null);
+      setFlyingUnlock(null);
+      keyImpactHandledRef.current.clear();
+      openDoorBurstSpawnedRef.current.clear();
+      return;
+    }
+
+    // Left FTUE pick-mode. If we're stuck on unique placeholders (no 3-of-a-kind), redeal.
+    if (boardLockedRef.current || pendingBoardResetRef.current || match3GatherStartedRef.current) {
+      return;
+    }
+    const counts = new Map<string, number>();
+    for (const reward of rewardDealRef.current) {
+      const key = specialDeliveryRewardKey(reward);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    const hasMatchSet = [...counts.values()].some((n) => n >= 3);
+    if (hasMatchSet) return;
+
     clearSpecialDeliveryBoard(gardenId);
-    const placeholders = createSpecialDeliveryFtuePlaceholderDeal(gardenId);
-    rewardDealRef.current = placeholders;
-    setRewardDeal(placeholders);
+    const fresh = dealSpecialDeliveryRewards(gardenIdRef.current, playerLevelRef.current, {
+      winnableTrophies: winnableTrophiesRef.current,
+      winnableTrophyLevels: winnableTrophyLevelsRef.current,
+      gardenContexts: gardenContextsRef.current,
+      upgradeGateCtx: upgradeGateCtxRef.current,
+    });
+    rewardDealRef.current = fresh;
+    setRewardDeal(fresh);
     const closed = createInitialDoors();
     doorsRef.current = closed;
     setDoors(closed);
-    setBoardLocked(false);
-    boardLockedRef.current = false;
-    setBoardResetClosing(false);
-    pendingBoardResetRef.current = false;
-    match3GatherStartedRef.current = false;
-    pendingMatchRewardRef.current = null;
-    setMatch3Flight(null);
-    setMatchHideDoors(new Set());
-    setKeyParticle(null);
-    setFlyingUnlock(null);
-    keyImpactHandledRef.current.clear();
-    openDoorBurstSpawnedRef.current.clear();
     // Intentionally keyed on sequence identity from the parent (new array per FTUE round).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ftuePickSequence]);
@@ -570,6 +607,16 @@ export function SpecialDeliveryDoors({
 
   /** Close every open / opening door with the normal close sequence. */
   const beginCloseAllOpenDoors = useCallback(() => {
+    const willClose = doorsRef.current.some(
+      (d) =>
+        d.motion !== 'closing' &&
+        (d.phase === 'opened' ||
+          d.phase === 'opening' ||
+          d.motion === 'opening'),
+    );
+    if (willClose) {
+      playSfx(SFX_IDS.specialDeliveryDoorClose);
+    }
     setDoors((prev) =>
       prev.map((d) => {
         if (d.motion === 'unlocking') {
@@ -690,6 +737,9 @@ export function SpecialDeliveryDoors({
     (matchIndices: number[], reward: SpecialDeliveryReward) => {
       if (match3GatherStartedRef.current) return;
       match3GatherStartedRef.current = true;
+      // Prize is the player's the moment the match locks in (claim UI is presentation only).
+      onMatchRewardWonRef.current?.(reward);
+      playSfx(SFX_IDS.specialDeliveryRewardReveal);
       const panel = containerRef.current;
       const gameEl = document.getElementById('game-container');
       const coordRoot = gameEl ?? panel;
@@ -982,6 +1032,14 @@ export function SpecialDeliveryDoors({
             ftuePickIndexRef.current += 1;
           }
         }
+
+        // Door-open SFX on successful spend (trophy doors use the special cue).
+        const openedReward = rewardDealRef.current[doorIndex];
+        playSfx(
+          openedReward?.kind === 'trophy'
+            ? SFX_IDS.specialDeliveryDoorOpenSpecial
+            : SFX_IDS.specialDeliveryDoorOpen,
+        );
 
         // Know the reward under this door immediately — lock on 3rd match tap
         // so spam-tapping can't spend keys on other doors while it opens.

@@ -23,9 +23,6 @@ export const SPECIAL_DELIVERY_FTUE_DOOR_HIT_ID_PREFIX = 'special-delivery-door-h
 export const SPECIAL_DELIVERY_FTUE_SOUNDS_GREAT_BUTTON_ID =
   'special-delivery-ftue-sounds-great';
 
-export const SPECIAL_DELIVERY_FTUE_OOO_SHINY_BUTTON_ID =
-  'special-delivery-ftue-ooo-shiny';
-
 export const SPECIAL_DELIVERY_FTUE_UNLOCK_LEVEL = PLANT_COLLECTION_UI_UNLOCK_LEVEL;
 
 /** Forced plant-1 / garden-1 trophy for the second FTUE match. */

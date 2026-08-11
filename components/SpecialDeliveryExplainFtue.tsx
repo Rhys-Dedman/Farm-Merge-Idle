@@ -16,7 +16,9 @@ import {
 import { CollectionFtueOverlay, type GameRect } from './CollectionFtueOverlay';
 import { playSfx, SFX_IDS } from '../utils/sfx';
 
-const FADE_IN_MS = 450;
+/** Keep in sync with App.tsx explain chrome hold (key bar → copy swap). */
+export const SPECIAL_DELIVERY_EXPLAIN_FTUE_FADE_IN_MS = 450;
+const FADE_IN_MS = SPECIAL_DELIVERY_EXPLAIN_FTUE_FADE_IN_MS;
 const FADE_OUT_MS = 220;
 
 export interface SpecialDeliveryExplainFtueProps {
