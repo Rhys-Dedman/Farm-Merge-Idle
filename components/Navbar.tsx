@@ -25,6 +25,11 @@ interface NavbarProps {
    */
   specialDeliveryCollectionFtueHit?: boolean;
   onSpecialDeliveryCollectionFtueHit?: () => void;
+  /**
+   * When true (default), nav chrome extends 20px below the 60px layout box into the
+   * home-indicator zone. Set false when a banner sits under the nav so it doesn’t overlap.
+   */
+  extendIntoHomeIndicator?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -37,6 +42,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   blockInput = false,
   specialDeliveryCollectionFtueHit = false,
   onSpecialDeliveryCollectionFtueHit,
+  extendIntoHomeIndicator = true,
 }) => {
   // Track viewport width for responsive scaling
   const [viewportWidth, setViewportWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 420);
@@ -87,10 +93,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           backgroundColor: '#282020',
           marginLeft: '-4px',
           marginRight: '-4px',
-          marginBottom: '-20px',
+          marginBottom: extendIntoHomeIndicator ? '-20px' : 0,
           paddingLeft: '4px',
           paddingRight: '4px',
-          paddingBottom: '20px',
+          paddingBottom: extendIntoHomeIndicator ? '20px' : 0,
         }}
       >
       

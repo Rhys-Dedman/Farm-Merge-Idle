@@ -79,7 +79,7 @@ Bullet summary of intentional deltas / rules we did **not** follow as written. F
 ### Ads / timing
 - Interstitial unlock: **level ≥ 5 OR ≥ 8 min** play — not template’s aggressive early cadence / 60s-min style.
 - Cadence: **3 min** between interstitials (**2 min** after rewarded); **6 min** overdue fallback; **60s** return grace.
-- **Banner** not reserved in layout yet (parked).
+- **Banner / interstitial / rewarded** = placeholders (no real SDK creatives). **When to show is fully wired** — Genesis only fills bridges / banner mount (§3b).
 
 ### IAPs (also in catalog §§)
 - **Timed Remove Ads** (7d standalone; 24h in packs) — Notion §11 wants no time-based IAP; we ship timed **boosts**, not subscriptions. See **§13**.
@@ -107,14 +107,14 @@ Measured in-session by: first plant discoveries + player level progress on garde
 
 ## 1 · Monetisation model
 
-**Model:** Freemium — hybrid ads (interstitial + rewarded; banner reserved later) + one-off / pack IAPs (prototype billing is local grant).
+**Model:** Freemium — hybrid ads (interstitial + rewarded + bottom banner reserve) + one-off / pack IAPs (prototype billing is local grant).
 
 **Primary revenue driver (prototype intent):** Rewarded ads throughout early/mid session; IAP packs at emotional peaks (level 4 Starter / Field; Remove Ads CTA always available on farm).
 
 **IAP intent (prototype):** Ads-led early; packs + Remove Ads as conversion hooks. Exact revenue split TBD after live ads/IAP.
 
 > Template suggested rating-before-first-interstitial and banner-from-minute-0.  
-> **We keep our timings** (see **Things different from Notion’s checklist** + §§4–5). Banner layout is parked until end of checklist.
+> **We keep our timings** (see **Things different from Notion’s checklist** + §§4–5). Banner layout reserve is live under the navbar (placeholder).
 
 ---
 
@@ -135,20 +135,37 @@ Measured in-session by: first plant discoveries + player level progress on garde
 
 ## 3 · Ad placements
 
+### Status — placeholders vs game wiring (read this first)
+
+**All three ad surfaces are placeholders today — no real AdMob / AppLovin MAX / mediation creative yet.**
+
+| Surface | Player sees now | Game wiring |
+|---|---|---|
+| **Banner** | Magenta “Banner Ad” strip under navbar | Show/hide + height reclaim done (`showBannerAdSlot`, Remove Ads, `ads.enabled`) |
+| **Interstitial** | Fade → loading plate → “Return To Game” escape (`FakeAdPopup` ad-break variant) | Triggers, cadence, blockers, intro/outro fully live |
+| **Rewarded** | Fade → loading plate → claim path (`FakeAdPopup` rewarded variant) | Placements + reward grant path fully live |
+
+**What is already “as ready as possible” before Genesis:** when to show, when to block, Remove Ads mute for forced ads (banner + interstitial), loading-plate timing contract, and plug-in bridge slots. **What Genesis still does:** native SDK + app/ad-unit IDs + fill the bridge stubs (and swap banner placeholder for a real banner view).
+
+Do **not** re-time ads in App when wiring SDK — only fill the bridges / banner mount (see **§3b Genesis ad wiring**).
+
 ### Banner
-**Status:** Not reserved in layout yet (checklist item parked).  
-**Plan when added:** Bottom of farm / main gameplay; hidden during full-screen modals, IAP, FTUE, network gate, fake ads.
+**Status:** Layout reserve live under the **Navbar** (bottom-most chrome in `#game-container`). Magenta “Banner Ad” placeholder until real SDK. Height `BANNER_AD_RESERVE_HEIGHT_PX` = 50.  
+**Placement:** Flex child **below** Navbar — always on screen across Store / Garden / Collection (same persistence as nav). Z ~90 (above nav tabs; below FTUE 100 / popups 220).  
+**Hidden / height reclaimed when:** Remove Ads boost active, `ads.enabled` false, or loading.  
+**FTUE-safe:** Slot stays mounted through FTUEs so layout / hole targets don’t jump; FTUE portals cover the strip.  
+**Also covered by:** full-screen network gate, fake ads, modals (z above banner).
 
 ### Interstitials
 **Fires at natural breaks** (never mid-drag / mid-FTUE). Triggers: `discovery_add`, `level_up_continue`, `leave_store`, `leave_collection`, `switch_garden`, `collection_bonus_close`, `fallback_idle`.
 
 **First interstitial gate (ours):** player level ≥ **5** **OR** active playtime ≥ **8 minutes**, then cadence rules.  
-**Pauses gameplay:** yes (fake ad / future MAX).
+**Pauses gameplay:** yes (fake loading plate today / real SDK later via bridge).
 
 Skipped on specific level-up Continues that start FTUE (Tasks L6, Collection/SD L7, Gardens L10).
 
 ### Rewarded ads
-Reward grants only after completion (prototype FakeAd / future MAX).
+Reward grants only after completion (prototype FakeAd claim path / real SDK later via bridge). Remove Ads does **not** mute rewarded (forced ads only).
 
 | Placement | Where | Reward | Cap / notes |
 |---|---|---|---|
@@ -158,6 +175,38 @@ Reward grants only after completion (prototype FakeAd / future MAX).
 | Offline earnings | Offline popup Double Coins | 2× offline bank | Once per open |
 | Daily Tasks claim 2× | Daily Tasks | 2× claim | Per claim flow |
 | Upgrade list ads | Shed/upgrade rows | Offer-specific | |
+
+---
+
+## 3b · Genesis ad wiring (where to put real ads)
+
+**Goal:** drop in SDK without redesigning when ads fire. App already owns timing; bridges own creatives.
+
+### Do not change (unless product asks)
+- `utils/adBreak/evaluateAdBreak.ts` — blockers / cadence  
+- `constants/remoteConfigDefaults.ts` → `ads.*` — live numbers  
+- `App.tsx` open paths (`openAdBreakFakeAd`, `openRewardedFakeAd`, trigger call sites)  
+- Banner visibility rule: `showBannerAdSlot` in `App.tsx` (Remove Ads / `areAdsEnabled` / loading)
+
+### Wire here
+
+| Ad type | Mount / UI slot (leave in place) | **Replace stub implementation** |
+|---|---|---|
+| Interstitial | `components/InterstitialAdLayer.tsx` (called after fade-to-black; loading plate underneath) | `utils/adBreak/interstitialAdBridge.ts` → `show` / `cancel` |
+| Rewarded | `components/RewardedAdLayer.tsx` (same timing contract) | `utils/adBreak/rewardedAdBridge.ts` → `show` / `cancel` |
+| Banner | `#banner-ad-slot` / `components/BannerAdPlaceholder.tsx` under Navbar in `App.tsx` | Swap placeholder for native/web banner view; keep `BANNER_AD_RESERVE_HEIGHT_PX` (or match SDK height) |
+
+### Bridge contract (interstitial + rewarded)
+1. App fades to black → shows loading plate → activates layer → calls `bridge.show({ onOpened, onClosed })`.  
+2. When creative is on-screen: `onOpened()`.  
+3. When finished / failed / skipped / no-fill: `onClosed(result)` — App tears down plate + fades gameplay (and grants reward only on rewarded success path).  
+4. Player escape on plate calls `bridge.cancel()` — App owns UI teardown; do not double-close.  
+5. Stub today intentionally never opens/closes so the FakeAd plate remains the prototype UX.
+
+### Also needed from Genesis / store consoles
+- AdMob / AppLovin app IDs + **banner / interstitial / rewarded** ad-unit IDs  
+- Native SDK in Android (and later iOS)  
+- Respect existing `ads.enabled` kill switch and Remove Ads for **forced** ads (interstitial + banner); leave rewarded opt-in unless product changes
 
 ---
 
@@ -244,7 +293,7 @@ Approximate; FTUE length varies.
 6. **Level ≥ 5 or ~8 min play** — interstitials eligible; then ≥3 min cadence (2 min after rewarded).  
 7. Ongoing — Remove Ads FB, store IAPs, rewarded placements.
 
-Banner not in this timeline until layout reserve ships.
+Banner reserve sits under the Navbar on all screens; hidden when Remove Ads is active.
 
 ---
 
@@ -335,7 +384,7 @@ Banner not in this timeline until layout reserve ships.
 
 ## 12 · Open questions / notes
 
-- Banner reserve still parked (layout risk).  
+- Banner / interstitial / rewarded = **placeholders** (timing + bridges ready; real SDK = Genesis — see **§3** / **§3b**).  
 - Bundle ID / IAP uniformization applied (`pocketgarden`); analytics/Facebook keys still empty placeholders.  
 - Remote config Firebase fetch not wired — local defaults only until Genesis.  
 - Rate Us vs interstitial policy: intentional — see **Things different from Notion’s checklist**.  

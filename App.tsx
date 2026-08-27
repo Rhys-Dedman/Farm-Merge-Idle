@@ -32,6 +32,7 @@ import { getFloatingButtonStackTopPx } from './constants/floatingButtonLayout';
 import { FAKE_SAFE_AREA_TOP_PX } from './constants/debugSafeArea';
 import { FakeNotchOverlay } from './components/FakeNotchOverlay';
 import { Navbar } from './components/Navbar';
+import { BannerAdPlaceholder } from './components/BannerAdPlaceholder';
 import { StoreScreen } from './components/StoreScreen';
 import { SideAction } from './components/SideAction';
 import { FloatingButton, FLOATING_BUTTON_ICON_SIZE_PX } from './components/FloatingButton';
@@ -5185,6 +5186,13 @@ export default function App() {
   const ftueHideHarvestButton = isLoading || activeFtueStage === 'welcome' || activeFtueStage === 'seed_tap' || activeFtueStage === 'merge_drag' || activeFtueStage === 'first_goal';
   /** FTUE: hide goals area during welcome/seed_tap/merge_drag (empty during FTUE 1–3) */
   const ftueHideGoals = activeFtueStage === 'welcome' || activeFtueStage === 'seed_tap' || activeFtueStage === 'merge_drag';
+  /**
+   * Bottom banner slot: always under the navbar (all screens), while forced ads are allowed.
+   * Keep the reserve through FTUE so hole targets / layout stay stable; FTUE portals cover it.
+   * Remove Ads (and ads kill switch) unmount the slot so the game reclaims height.
+   */
+  const showBannerAdSlot =
+    !isLoading && areAdsEnabled() && !hasActiveRemoveAdsBoost(activeBoosts);
   /**
    * Seeds button in "free" mode – 0% progress, badge "FREE".
    * - Stay green-free through FTUE 1–10 (including FTUE 10 close), and only switch to normal when FTUE 11 textbox shows.
@@ -14115,7 +14123,10 @@ export default function App() {
           }
           specialDeliveryCollectionFtueHit={false}
           onSpecialDeliveryCollectionFtueHit={undefined}
+          extendIntoHomeIndicator={!showBannerAdSlot}
         />
+
+        {showBannerAdSlot ? <BannerAdPlaceholder /> : null}
 
         {/* Leaf burst: portal to body so never clipped; viewport coords */}
         {(activeScreen === 'FARM' || activeScreen === 'BARN') && createPortal(
