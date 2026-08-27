@@ -2,8 +2,10 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { assetPath } from '../utils/assetPath';
 import { getGardenPreloadAssetPaths, getCollectionBonusIconPreloadPaths, getCollectionGardenSectionIconPreloadPaths, getGardenPickerIconPreloadPaths } from '../utils/gardenAssets';
 import { preloadSfxAssets, SFX_PRELOAD_STEP_COUNT, applySavedAudioSettingsEarly } from '../utils/sfx';
+import { applySavedHapticsSettingsEarly, hapticTap } from '../utils/haptics';
 
 applySavedAudioSettingsEarly();
+applySavedHapticsSettingsEarly();
 
 interface LoadingScreenProps {
   onLoadComplete: () => void;
@@ -326,6 +328,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
   const handleTap = () => {
     if (variant === 'quick') return;
     if (phase === 'ready') {
+      hapticTap();
       setPhase('fadeOut');
     }
   };

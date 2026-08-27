@@ -39,6 +39,8 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Soft device vibration feedback (Settings → Haptics). -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Local return reminders (Android 13+ runtime prompt via Capacitor plugin). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Allow scheduled “come back” notifications at the intended time. -->

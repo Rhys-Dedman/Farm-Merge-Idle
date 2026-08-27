@@ -185,6 +185,7 @@ import { getTickCount60, TARGET_FRAME_MS, scheduleNextFrame } from './utils/raf6
 import { getPerformanceMode, setPerformanceMode, shouldPlayPopupLeafBurst } from './utils/performanceMode';
 import { getAutoMergeMode, setAutoMergeMode } from './utils/autoMergeMode';
 import { playMusicLoop, playSfx, setAudioSettings, setAdAudioSuspended, SFX_IDS, applySavedAudioSettingsEarly } from './utils/sfx';
+import { applySavedHapticsSettingsEarly, setHapticsEnabled } from './utils/haptics';
 import { loadUserPrefs, persistUserPrefs, resetUserPrefsTogglesToDefaults } from './utils/userPrefs';
 import { openRateUsStore } from './constants/rateUsStore';
 import {
@@ -452,6 +453,7 @@ import { getGoalIconForPlantLevel } from './utils/plantGoalIcons';
 
 const _earlyUserPrefs = loadUserPrefs();
 const _earlyAudio = applySavedAudioSettingsEarly();
+const _earlyHapticsEnabled = applySavedHapticsSettingsEarly();
 
 /** Coin per plant level (economy). */
 export function getCoinValueForLevel(level: number): number {
@@ -1943,6 +1945,7 @@ export default function App() {
   );
   const [musicEnabled, setMusicEnabled] = useState(_earlyAudio.musicEnabled);
   const [sfxEnabled, setSfxEnabled] = useState(_earlyAudio.sfxEnabled);
+  const [hapticsEnabled, setHapticsEnabledState] = useState(_earlyHapticsEnabled);
   const [returnRemindersEnabled, setReturnRemindersEnabled] = useState(
     () => _earlyUserPrefs.returnRemindersEnabled,
   );
@@ -2017,6 +2020,11 @@ export default function App() {
     setAudioSettings({ musicEnabled, sfxEnabled });
     persistUserPrefs({ musicEnabled, sfxEnabled });
   }, [musicEnabled, sfxEnabled]);
+
+  useEffect(() => {
+    setHapticsEnabled(hapticsEnabled);
+    persistUserPrefs({ hapticsEnabled });
+  }, [hapticsEnabled]);
 
   useEffect(() => {
     persistUserPrefs({ returnRemindersEnabled });
@@ -10522,6 +10530,8 @@ export default function App() {
     const userPrefs = loadUserPrefs();
     setMusicEnabled(userPrefs.musicEnabled);
     setSfxEnabled(userPrefs.sfxEnabled);
+    setHapticsEnabledState(userPrefs.hapticsEnabled);
+    setHapticsEnabled(userPrefs.hapticsEnabled);
     setReturnRemindersEnabled(userPrefs.returnRemindersEnabled);
     setFakeNotchPreviewEnabled(userPrefs.fakeNotchPreviewEnabled);
     setPendingUnlockUpgradeId(
@@ -15447,6 +15457,8 @@ export default function App() {
               sfxEnabled={sfxEnabled}
               onMusicEnabledChange={setMusicEnabled}
               onSfxEnabledChange={setSfxEnabled}
+              hapticsEnabled={hapticsEnabled}
+              onHapticsEnabledChange={setHapticsEnabledState}
               notificationsEnabled={returnRemindersEnabled}
               onNotificationsEnabledChange={(enabled) => {
                 setReturnRemindersEnabled(enabled);

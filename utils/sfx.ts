@@ -1,5 +1,6 @@
 import { assetPath } from './assetPath';
 import { loadUserPrefs } from './userPrefs';
+import { haptic, type HapticKind } from './haptics';
 
 export const SFX_IDS = {
   music: 'sfx_music',
@@ -256,7 +257,53 @@ export function preloadSfxAssets(onStepDone?: () => void): Promise<void> {
   return preloadPromise;
 }
 
+/** Subtle haptics paired with SFX (own toggle; still fires when SFX is muted). */
+const SFX_HAPTIC_SKIP = new Set<SfxId>([
+  SFX_IDS.music,
+  SFX_IDS.coinImpact,
+  SFX_IDS.keyImpact,
+  SFX_IDS.goalImpact,
+]);
+
+const SFX_HAPTIC_KIND: Partial<Record<SfxId, HapticKind>> = {
+  [SFX_IDS.uiConfirmNormal]: 'tap',
+  [SFX_IDS.uiConfirmReward]: 'success',
+  [SFX_IDS.uiDecline]: 'tap',
+  [SFX_IDS.uiUnlockUpgrade]: 'soft',
+  [SFX_IDS.popupLevelUp]: 'success',
+  [SFX_IDS.popupPlantDiscovery]: 'success',
+  [SFX_IDS.popupNormal]: 'tap',
+  [SFX_IDS.keyBurst]: 'soft',
+  [SFX_IDS.specialDeliveryUnlock]: 'soft',
+  [SFX_IDS.specialDeliveryDoorOpen]: 'soft',
+  [SFX_IDS.specialDeliveryDoorOpenSpecial]: 'success',
+  [SFX_IDS.specialDeliveryNoKeys]: 'tap',
+  [SFX_IDS.specialDeliveryDoorClose]: 'tap',
+  [SFX_IDS.specialDeliveryRewardReveal]: 'soft',
+  [SFX_IDS.specialDeliveryRewardClaimNormal]: 'success',
+  [SFX_IDS.specialDeliveryRewardClaimTrophy]: 'success',
+  [SFX_IDS.gameplaySeed]: 'tap',
+  [SFX_IDS.gameplayNoCharges]: 'tap',
+  [SFX_IDS.gameplayMergeCoins]: 'soft',
+  [SFX_IDS.gameplayMergeCrops]: 'soft',
+  [SFX_IDS.gameplayHarvest]: 'tap',
+  [SFX_IDS.gameplayPlantSpawn]: 'tap',
+  [SFX_IDS.gameplayMovePlant]: 'tap',
+  [SFX_IDS.gameplayDeletePlant]: 'tap',
+  [SFX_IDS.goalImpactComplete]: 'soft',
+  [SFX_IDS.goalClaim]: 'success',
+  [SFX_IDS.goalSpawnNormal]: 'tap',
+  [SFX_IDS.goalSpawnUndiscovered]: 'soft',
+};
+
+function hapticForSfx(id: SfxId): void {
+  if (SFX_HAPTIC_SKIP.has(id)) return;
+  const kind = SFX_HAPTIC_KIND[id];
+  if (kind) haptic(kind);
+}
+
 export function playSfx(id: SfxId, volume = 1, pitch = 1): void {
+  hapticForSfx(id);
   if (isAppAudioSuspended()) return;
   if (id !== SFX_IDS.music && !sfxEnabled) return;
   tryResumeAudioContext();

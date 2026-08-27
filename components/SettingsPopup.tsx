@@ -22,6 +22,7 @@ import { getPerformanceMode, setPerformanceMode } from '../utils/performanceMode
 import { APP_VERSION } from '../constants/appVersion';
 import { openSupportContact } from '../constants/supportContact';
 import { readRateUsPermanentlyDismissed } from '../utils/rateUsDismiss';
+import { hapticTap } from '../utils/haptics';
 
 interface SettingsPopupProps {
   isVisible: boolean;
@@ -38,6 +39,9 @@ interface SettingsPopupProps {
   sfxEnabled: boolean;
   onMusicEnabledChange: (enabled: boolean) => void;
   onSfxEnabledChange: (enabled: boolean) => void;
+  /** Soft device vibration (default ON). */
+  hapticsEnabled: boolean;
+  onHapticsEnabledChange: (enabled: boolean) => void;
   /** Local “come back” notifications (default ON). */
   notificationsEnabled: boolean;
   onNotificationsEnabledChange: (enabled: boolean) => void;
@@ -113,6 +117,8 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
   sfxEnabled,
   onMusicEnabledChange,
   onSfxEnabledChange,
+  hapticsEnabled,
+  onHapticsEnabledChange,
   notificationsEnabled,
   onNotificationsEnabledChange,
   onRateUs,
@@ -271,6 +277,18 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
       onToggle: () => {
         onAnyButtonClick?.();
         onSfxEnabledChange(!sfxEnabled);
+      },
+    },
+    {
+      key: 'haptics',
+      label: 'Haptics',
+      enabled: hapticsEnabled,
+      onToggle: () => {
+        onAnyButtonClick?.();
+        const next = !hapticsEnabled;
+        onHapticsEnabledChange(next);
+        // Preview feel when turning ON (after enable so the tap is felt).
+        if (next) hapticTap();
       },
     },
     {

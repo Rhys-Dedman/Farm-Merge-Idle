@@ -28,6 +28,7 @@ import {
   SPECIAL_DELIVERY_REWARD_PIVOT_Y,
 } from '../constants/specialDeliveries';
 import { GARDEN_1_ACTION_BUTTON_CHROME } from '../constants/gardenActionButtonTheme';
+import { hapticSoft, hapticSuccess } from '../utils/haptics';
 import { assetPath } from '../utils/assetPath';
 import {
   getSpecialDeliveryRewardCopy,
@@ -427,6 +428,7 @@ export function SpecialDeliveryMatch3({
 
       if (!impactFiredRef.current) {
         impactFiredRef.current = true;
+        hapticSoft();
         setPhase('reveal');
         setOverlayOpacity(SPECIAL_DELIVERY_MATCH3_OVERLAY_OPACITY);
         if (!getPerformanceMode()) {
@@ -491,6 +493,8 @@ export function SpecialDeliveryMatch3({
     if (phaseRef.current !== 'hold') return;
     phaseRef.current = 'dismiss';
     setPhase('dismiss');
+    // Immediate claim feel (trophy SFX is deferred until flight starts).
+    hapticSuccess();
 
     const iconEl = revealIconRef.current;
     let startPoint = { x: window.innerWidth / 2, y: window.innerHeight / 2 };

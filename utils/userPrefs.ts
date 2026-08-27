@@ -10,6 +10,8 @@ export const USER_PREFS_STORAGE_KEY = 'pocket-garden-user-prefs-v1';
 export type UserPrefs = {
   musicEnabled: boolean;
   sfxEnabled: boolean;
+  /** Soft device vibration feedback (default ON). */
+  hapticsEnabled: boolean;
   fakeNotchPreviewEnabled: boolean;
   /** Player wants OS return reminders (local notifications). */
   returnRemindersEnabled: boolean;
@@ -28,6 +30,7 @@ export type UserPrefs = {
 const DEFAULT_USER_PREFS: UserPrefs = {
   musicEnabled: true,
   sfxEnabled: true,
+  hapticsEnabled: true,
   fakeNotchPreviewEnabled: false,
   returnRemindersEnabled: true,
   returnRemindersPermissionAsked: false,
@@ -55,6 +58,8 @@ function normalizeUserPrefs(raw: unknown): UserPrefs {
   return {
     musicEnabled: typeof o.musicEnabled === 'boolean' ? o.musicEnabled : DEFAULT_USER_PREFS.musicEnabled,
     sfxEnabled: typeof o.sfxEnabled === 'boolean' ? o.sfxEnabled : DEFAULT_USER_PREFS.sfxEnabled,
+    hapticsEnabled:
+      typeof o.hapticsEnabled === 'boolean' ? o.hapticsEnabled : DEFAULT_USER_PREFS.hapticsEnabled,
     fakeNotchPreviewEnabled:
       typeof o.fakeNotchPreviewEnabled === 'boolean'
         ? o.fakeNotchPreviewEnabled
@@ -129,6 +134,7 @@ export function resetUserPrefsTogglesToDefaults(): void {
   persistUserPrefs({
     musicEnabled: DEFAULT_USER_PREFS.musicEnabled,
     sfxEnabled: DEFAULT_USER_PREFS.sfxEnabled,
+    hapticsEnabled: DEFAULT_USER_PREFS.hapticsEnabled,
     returnRemindersEnabled: DEFAULT_USER_PREFS.returnRemindersEnabled,
   });
 }

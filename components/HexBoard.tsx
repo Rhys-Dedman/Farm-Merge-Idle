@@ -6,6 +6,7 @@ import { type GardenId } from '../constants/gardens';
 import { getHexCellAssetPath, type HexCellSpriteName } from '../utils/gardenAssets';
 import { PlantWithPot } from './PlantWithPot';
 import { MAX_PLANT_TIER } from '../constants/plants';
+import { hapticTap } from '../utils/haptics';
 
 /** Set to false to disable swapping plants (drop on non-match just returns to original cell) */
 const ENABLE_SWAP = false;
@@ -210,6 +211,7 @@ export const HexBoard = memo(forwardRef<HexBoardHandle, HexBoardProps>(function 
     const origin = getHexCenterInContainer(cellIdx);
     const pointerX = (clientX - contRect.left) / appScale;
     const pointerY = (clientY - contRect.top) / appScale;
+    hapticTap();
     setDragState({
       phase: 'holding',
       cellIdx,

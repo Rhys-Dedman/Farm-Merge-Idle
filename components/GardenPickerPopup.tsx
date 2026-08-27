@@ -18,6 +18,7 @@ import {
   GARDEN_PICKER_PURCHASE_COIN_PRICE,
   getGardenPickerPurchaseCoinPrice,
 } from '../constants/gardenPicker';
+import { hapticTap } from '../utils/haptics';
 import { popupCardSurfaceStyle, usePopupPreflightEnter, type PopupAnimWithPreflight, POPUP_ENTER_MS, popupEnterInteractionPointerEvents, isPopupEnterInteractionLocked } from '../hooks/usePopupPreflightEnter';
 import {
   POPUP_CLOSE_HIT_TARGET,
@@ -219,7 +220,10 @@ export const GardenPickerPopup: React.FC<GardenPickerPopupProps> = ({
 
   const handlePurchase = useCallback(
     (rowKey: string, gardenId: GardenId, fx: GardenPickerPurchaseFx) => {
-      if (playerMoney < getGardenPickerPurchaseCoinPrice()) return;
+      if (playerMoney < getGardenPickerPurchaseCoinPrice()) {
+        hapticTap();
+        return;
+      }
       onPurchaseSound?.();
       triggerPurchasePresentation(rowKey, fx);
       window.setTimeout(() => {

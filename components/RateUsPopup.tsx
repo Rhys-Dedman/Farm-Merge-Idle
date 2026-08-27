@@ -20,6 +20,7 @@ import { LeafBurst, LEAF_BURST_SMALL_COUNT } from './LeafBurst';
 import { PopupVectorBackground } from './PopupVectorBackground';
 import { PopupPrescaleFrame } from './PopupPrescaleFrame';
 import { shouldPlayPopupLeafBurst } from '../utils/performanceMode';
+import { hapticTap } from '../utils/haptics';
 
 const LEAF_SPRITES = [
   assetPath('/assets/vfx/particle_leaf_yellow_1.png'),
@@ -195,6 +196,7 @@ export const RateUsPopup: React.FC<RateUsPopupProps> = ({
 
   const handleStarClick = useCallback(
     (index: number) => {
+      hapticTap();
       if (index === STAR_COUNT - 1) {
         clearRevealTimers();
         onFifthStarChosen?.();
