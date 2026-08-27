@@ -2963,21 +2963,23 @@ export default function App() {
       const cy = r.top + r.height / 2;
       const startTime = Date.now();
       spawnMasteryConeBurst({ id: `trophy-win-cone-${level}-${startTime}-${Math.random().toString(36).slice(2)}`, x: cx, y: cy, startTime, spriteVariant: 'gold' });
-      setCellHighlightBeams((prev) => [
-        ...prev,
-        {
-          id: `trophy-win-beam-${level}-${startTime}-${Math.random().toString(36).slice(2)}`,
-          x: cx,
-          y: cy,
-          cellWidth: r.width,
-          cellHeight: r.height,
-          startTime,
-          showHexSprite: false,
-          sparkleCount: 20,
-          sparkleSizeScale: 2,
-          sparkleHeightScale: 1.9,
-        },
-      ]);
+      if (!getPerformanceMode()) {
+        setCellHighlightBeams((prev) => [
+          ...prev,
+          {
+            id: `trophy-win-beam-${level}-${startTime}-${Math.random().toString(36).slice(2)}`,
+            x: cx,
+            y: cy,
+            cellWidth: r.width,
+            cellHeight: r.height,
+            startTime,
+            showHexSprite: false,
+            sparkleCount: 20,
+            sparkleSizeScale: 2,
+            sparkleHeightScale: 1.9,
+          },
+        ]);
+      }
     }
     setMasteryPurchaseRevealLevels((prev) => (prev.includes(plantKey) ? prev : [...prev, plantKey]));
     masteryPurchaseRevealTimeoutRef.current = window.setTimeout(() => {
@@ -8440,7 +8442,7 @@ export default function App() {
             });
           }
         });
-        if (beams.length > 0) setCellHighlightBeams((b) => [...b, ...beams]);
+        if (beams.length > 0 && !getPerformanceMode()) setCellHighlightBeams((b) => [...b, ...beams]);
       });
       const newGrid = prevGrid.map((cell, idx) => {
         if (cell.item && cell.item.level < newSeedLevel) {
@@ -8812,18 +8814,18 @@ export default function App() {
             y: r.top + r.height / 2,
             startTime: Date.now(),
           });
+        setCellHighlightBeams((prev) => [
+          ...prev,
+          {
+            id: `wild-growth-beam-${targetIdx}-${Date.now()}`,
+            x: r.left + r.width / 2,
+            y: r.top + r.height / 2,
+            cellWidth: r.width,
+            cellHeight: r.height,
+            startTime: Date.now(),
+          },
+        ]);
       }
-      setCellHighlightBeams((prev) => [
-        ...prev,
-        {
-          id: `wild-growth-beam-${targetIdx}-${Date.now()}`,
-          x: r.left + r.width / 2,
-          y: r.top + r.height / 2,
-          cellWidth: r.width,
-          cellHeight: r.height,
-          startTime: Date.now(),
-        },
-      ]);
     });
   }, [spawnCropAt]);
 
@@ -8872,7 +8874,7 @@ export default function App() {
     setUnlockingCellIndices((prev) => (prev.includes(cellIdx) ? prev : [...prev, cellIdx]));
 
     const hexEl = document.getElementById(`hex-${cellIdx}`);
-    if (hexEl) {
+    if (hexEl && !getPerformanceMode()) {
       const rect = hexEl.getBoundingClientRect();
       spawnUnlockBurst({
           id: `unlock-${cellIdx}-${Date.now()}`,
@@ -8906,6 +8908,7 @@ export default function App() {
 
   /** Wild Growth upgrade preview: glow only (no spawn). */
   const showWildGrowthPreviewGlow = useCallback((targetIdx: number) => {
+    if (getPerformanceMode()) return;
     requestAnimationFrame(() => {
       const hexEl = document.getElementById(`hex-${targetIdx}`);
       if (!hexEl) return;
@@ -8951,7 +8954,7 @@ export default function App() {
     
     // Spawn yellow highlight beam VFX at the cell
     const hexEl = document.getElementById(`hex-${randomIdx}`);
-    if (hexEl) {
+    if (hexEl && !getPerformanceMode()) {
       const rect = hexEl.getBoundingClientRect();
       setCellHighlightBeams(prev => [
         ...prev,
@@ -9617,7 +9620,7 @@ export default function App() {
     if (mergeBursts.length > 0 && !getPerformanceMode()) {
       spawnLeafBurstsSmallMany(mergeBursts);
     }
-    if (mergeBeams.length > 0) {
+    if (mergeBeams.length > 0 && !getPerformanceMode()) {
       setCellHighlightBeams((prev) => [...prev, ...mergeBeams]);
     }
 
@@ -15943,6 +15946,8 @@ export default function App() {
               key={p.id}
               data={p}
               appScale={appScale}
+              // Trails are the main cost when seed-spamming; drop them above a few concurrent flies.
+              useTrail={activeProjectiles.length <= 3}
               onImpact={(targetIdx) => {
                 // FTUE 8 starts only from FTUE 7 overlay onFadeOutComplete (no seed-land trigger) so 7→8 transition is instant
                 if (p.isSpecialDelivery) {
@@ -15963,11 +15968,9 @@ export default function App() {
                     scheduleAutoMergeRecheck(AUTO_MERGE_POST_SETTLE_MS);
                   }
                   const hexEl = document.getElementById(`hex-${targetIdx}`);
-                  if (hexEl) {
+                  if (hexEl && !getPerformanceMode()) {
                     const r = hexEl.getBoundingClientRect();
-                    if (!getPerformanceMode()) {
-                      spawnLeafBurstSmall({ id: `sd-burst-${targetIdx}-${Date.now()}`, x: r.left + r.width / 2, y: r.top + r.height / 2, startTime: Date.now() });
-                    }
+                    spawnLeafBurstSmall({ id: `sd-burst-${targetIdx}-${Date.now()}`, x: r.left + r.width / 2, y: r.top + r.height / 2, startTime: Date.now() });
                     setCellHighlightBeams((prev) => [...prev, { id: `special-delivery-${targetIdx}-${Date.now()}`, x: r.left + r.width / 2, y: r.top + r.height / 2, cellWidth: r.width, cellHeight: r.height, startTime: Date.now() }]);
                   }
                   return;
@@ -15975,16 +15978,14 @@ export default function App() {
                 // Normal seed: spawn plant and optional seed-quality beam
                 queueSpawnCropFromProjectile(targetIdx, p.plantLevel);
                 const hexEl = document.getElementById(`hex-${targetIdx}`);
-                if (hexEl) {
+                if (hexEl && !getPerformanceMode()) {
                   const r = hexEl.getBoundingClientRect();
-                  if (!getPerformanceMode()) {
-                    spawnLeafBurstSmall({
-                        id: Math.random().toString(36).slice(2),
-                        x: r.left + r.width / 2,
-                        y: r.top + r.height / 2,
-                        startTime: Date.now(),
-                      });
-                  }
+                  spawnLeafBurstSmall({
+                      id: Math.random().toString(36).slice(2),
+                      x: r.left + r.width / 2,
+                      y: r.top + r.height / 2,
+                      startTime: Date.now(),
+                    });
                   
                   if (p.plantLevel > seedLevel) {
                     setCellHighlightBeams((prev) => [

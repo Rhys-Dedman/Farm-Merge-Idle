@@ -12,6 +12,7 @@ import {
   SPECIAL_DELIVERY_UNLOCK_SRC,
 } from '../constants/specialDeliveries';
 import { assetPath } from '../utils/assetPath';
+import { getPerformanceMode } from '../utils/performanceMode';
 
 interface SpecialDeliveryUnlockKnockoffProps {
   id: string;
@@ -43,6 +44,11 @@ export function SpecialDeliveryUnlockKnockoff({
   onCompleteRef.current = onComplete;
 
   useEffect(() => {
+    // Performance mode: skip knockoff VFX; still complete so FTUE / unlock flow continues.
+    if (getPerformanceMode()) {
+      onCompleteRef.current();
+      return;
+    }
     const start = Date.now();
     // Immediate launch — speeds scaled so the arc matches the 1400ms path at 1.5× travel rate.
     const vx = SPECIAL_DELIVERY_UNLOCK_KNOCKOFF_VX;
@@ -76,6 +82,8 @@ export function SpecialDeliveryUnlockKnockoff({
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
   }, [id, x, y]);
+
+  if (getPerformanceMode()) return null;
 
   return (
     <div

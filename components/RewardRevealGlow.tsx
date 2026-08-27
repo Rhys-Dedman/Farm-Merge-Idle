@@ -4,6 +4,7 @@
  */
 import React, { useMemo } from 'react';
 import { assetPath } from '../utils/assetPath';
+import { getPerformanceMode } from '../utils/performanceMode';
 
 const GLOW_SRC = '/assets/vfx/reward_reveal_glow.png';
 const SUNBURST_SRC = '/assets/vfx/reward_reveal_sunburst.png';
@@ -54,6 +55,9 @@ interface RewardRevealGlowProps {
 
 export function RewardRevealGlow({ opacity = 1, layer = 'behind' }: RewardRevealGlowProps) {
   const sparkles = useMemo(() => buildSparkles(SPARKLE_COUNT), []);
+
+  // Cosmetic sunburst / sparkles only — skip in performance mode (claim UI still works).
+  if (getPerformanceMode()) return null;
 
   if (layer === 'sparkles') {
     return (

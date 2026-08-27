@@ -2,8 +2,8 @@
  * Performance mode: when ON, caps FPS at 30 and disables cosmetic particles/VFX for low-end devices.
  * Default is OFF. Persisted in localStorage when user toggles in settings.
  *
- * Gameplay (money, goals, unlocks, boosts) must still apply — particle components
- * short-circuit to onImpact/onComplete immediately when VFX is off.
+ * Gameplay (money, goals, unlocks, boosts, seed planting, reward grants) must still apply —
+ * particle / projectile / fly components short-circuit to onImpact/onComplete immediately when VFX is off.
  */
 
 const STORAGE_KEY = 'farm-merge-performance-mode';

@@ -2,12 +2,19 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { ProjectileData } from '../App';
 import { assetPath } from '../utils/assetPath';
+import { getPerformanceMode } from '../utils/performanceMode';
+import { scheduleNextFrame } from '../utils/raf60';
 
 interface ProjectileProps {
   data: ProjectileData;
   onImpact: (targetIdx: number) => void;
   onComplete: () => void;
   appScale?: number;
+  /**
+   * When many seeds fly at once (spam / seed storm), skip SVG trails to protect FPS.
+   * Default true; parent should pass false above a concurrency threshold.
+   */
+  useTrail?: boolean;
 }
 
 interface Point {
@@ -21,9 +28,19 @@ const LUCKY_GROWTH_HEAD_BG = '#fff54d';
 const LUCKY_GROWTH_HEAD_BORDER = '#ffa200';
 const LUCKY_GROWTH_HEAD_GLOW = 'rgba(253, 252, 46, 0.75)';
 
-export const Projectile: React.FC<ProjectileProps> = ({ data, onImpact, onComplete, appScale = 1 }) => {
+export const Projectile: React.FC<ProjectileProps> = ({
+  data,
+  onImpact,
+  onComplete,
+  appScale = 1,
+  useTrail: useTrailProp = true,
+}) => {
   const isLucky = data.isLuckyGrowth === true;
   const airTrailStroke = isLucky ? LUCKY_GROWTH_TRAIL_COLOR : '#fcf0c6';
+  // Performance mode: no projectile VFX (instant plant). Also honor parent trail gate.
+  const perfMode = getPerformanceMode();
+  const useTrail = !perfMode && useTrailProp;
+
   const [frame, setFrame] = useState<{
     airPos: Point;
     shadowPos: Point;
@@ -47,13 +64,25 @@ export const Projectile: React.FC<ProjectileProps> = ({ data, onImpact, onComple
   const isImpactedRef = useRef(false);
   const [targetCoords, setTargetCoords] = useState<Point | null>(null);
   const [containerHeight, setContainerHeight] = useState(800);
+  const onImpactRef = useRef(onImpact);
+  const onCompleteRef = useRef(onComplete);
+  onImpactRef.current = onImpact;
+  onCompleteRef.current = onComplete;
 
   const particleDiameter = 21;
   /** Shorter trails = fewer SVG elements per projectile; helps when many seeds fly (e.g. seed storm). */
   const maxTrailPoints = 12;
   const maxShadowTrailPoints = Math.floor(maxTrailPoints * 1.5);
 
+  // Performance mode: skip all VFX — plant immediately, no RAF / SVG cost.
   useEffect(() => {
+    if (!getPerformanceMode()) return;
+    onImpactRef.current(data.targetIdx);
+    onCompleteRef.current();
+  }, [data.id, data.targetIdx]);
+
+  useEffect(() => {
+    if (getPerformanceMode()) return;
     const el = document.getElementById(`hex-${data.targetIdx}`);
     const container = document.getElementById('game-container');
     if (el && container) {
@@ -68,25 +97,26 @@ export const Projectile: React.FC<ProjectileProps> = ({ data, onImpact, onComple
   }, [data.targetIdx, appScale]);
 
   useEffect(() => {
+    if (getPerformanceMode()) return;
     if (!targetCoords) return;
 
     // Adjusted duration: 610ms
-    const DURATION = 610; 
+    const DURATION = 610;
     const dx = targetCoords.x - data.startX;
     const dy = targetCoords.y - data.startY;
-    
+
     const safetyMargin = containerHeight * 0.12;
     const peakY = Math.max(safetyMargin, 50);
 
     const leanFactor = 0.45;
     const airCp1: Point = {
       x: data.startX + (dx * leanFactor),
-      y: peakY 
+      y: peakY
     };
 
     const airCp2: Point = {
       x: targetCoords.x - (dx * 0.1),
-      y: peakY 
+      y: peakY
     };
 
     const shadowCp1: Point = {
@@ -136,16 +166,26 @@ export const Projectile: React.FC<ProjectileProps> = ({ data, onImpact, onComple
 
         newAirPos = { x: ax, y: ayReal };
         newShadowPos = { x: sx, y: sy };
-        nextAirTrail = [newAirPos, ...airTrailRef.current].slice(0, maxTrailPoints);
-        nextShadowTrail = [newShadowPos, ...shadowTrailRef.current].slice(0, maxShadowTrailPoints);
+        if (useTrail) {
+          nextAirTrail = [newAirPos, ...airTrailRef.current].slice(0, maxTrailPoints);
+          nextShadowTrail = [newShadowPos, ...shadowTrailRef.current].slice(0, maxShadowTrailPoints);
+        } else {
+          nextAirTrail = [];
+          nextShadowTrail = [];
+        }
       } else if (!isImpactedRef.current) {
         isImpactedRef.current = true;
-        onImpact(data.targetIdx);
+        onImpactRef.current(data.targetIdx);
       }
 
       if (t >= 1) {
-        nextAirTrail = nextAirTrail.slice(0, Math.max(0, nextAirTrail.length - 3));
-        nextShadowTrail = nextShadowTrail.slice(0, Math.max(0, nextShadowTrail.length - 3));
+        if (useTrail) {
+          nextAirTrail = nextAirTrail.slice(0, Math.max(0, nextAirTrail.length - 3));
+          nextShadowTrail = nextShadowTrail.slice(0, Math.max(0, nextShadowTrail.length - 3));
+        } else {
+          nextAirTrail = [];
+          nextShadowTrail = [];
+        }
       }
 
       airTrailRef.current = nextAirTrail;
@@ -163,100 +203,106 @@ export const Projectile: React.FC<ProjectileProps> = ({ data, onImpact, onComple
       });
 
       if (t >= 1 && nextAirTrail.length === 0 && nextShadowTrail.length === 0) {
-        onComplete();
+        onCompleteRef.current();
       } else {
-        frameRef.current = requestAnimationFrame(animate);
+        frameRef.current = scheduleNextFrame(animate);
       }
     };
 
-    frameRef.current = requestAnimationFrame(animate);
+    frameRef.current = scheduleNextFrame(animate);
     return () => cancelAnimationFrame(frameRef.current);
-  }, [targetCoords, data.startX, data.startY, data.targetIdx, containerHeight, onImpact, onComplete]);
+  }, [targetCoords, data.startX, data.startY, data.targetIdx, containerHeight, useTrail]);
+
+  if (perfMode) return null;
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden">
-      <svg className="absolute inset-0 w-full h-full overflow-visible">
-        {/* Shadow trail: no blur to reduce cost when many seeds fly */}
-        <g style={{ opacity: 0.2 }}>
-          {frame.shadowTrail.map((p, i) => {
-            if (i === 0) return null;
-            const prev = frame.shadowTrail[i-1];
-            const taperProgress = i / maxShadowTrailPoints;
-            const widthScale = 1.0 - (taperProgress * 0.5); // 100% to 50%
-            const fadeScale = 1.0 - taperProgress;
-            return (
-              <line
-                key={`shadow-trail-${i}`}
-                x1={prev.x}
-                y1={prev.y}
-                x2={p.x}
-                y2={p.y}
-                stroke="#000000"
-                strokeWidth={particleDiameter * widthScale}
-                strokeLinecap="round"
-                strokeOpacity={fadeScale}
-              />
-            );
-          })}
-        </g>
+      {useTrail && (
+        <svg className="absolute inset-0 w-full h-full overflow-visible">
+          {/* Shadow trail: no blur to reduce cost when many seeds fly */}
+          <g style={{ opacity: 0.2 }}>
+            {frame.shadowTrail.map((p, i) => {
+              if (i === 0) return null;
+              const prev = frame.shadowTrail[i-1];
+              const taperProgress = i / maxShadowTrailPoints;
+              const widthScale = 1.0 - (taperProgress * 0.5); // 100% to 50%
+              const fadeScale = 1.0 - taperProgress;
+              return (
+                <line
+                  key={`shadow-trail-${i}`}
+                  x1={prev.x}
+                  y1={prev.y}
+                  x2={p.x}
+                  y2={p.y}
+                  stroke="#000000"
+                  strokeWidth={particleDiameter * widthScale}
+                  strokeLinecap="round"
+                  strokeOpacity={fadeScale}
+                />
+              );
+            })}
+          </g>
 
-        {/* Air trail: no blur to reduce cost when many seeds fly */}
-        <g>
-          {frame.airTrail.map((p, i) => {
-            if (i === 0) return null;
-            const prev = frame.airTrail[i-1];
-            const taperProgress = i / maxTrailPoints;
-            const widthScale = 1.0 - (taperProgress * 0.5); // 100% to 50%
-            const opacityScale = (1.0 - taperProgress) * 0.75;
-            return (
-              <line
-                key={`air-trail-${i}`}
-                x1={prev.x}
-                y1={prev.y}
-                x2={p.x}
-                y2={p.y}
-                stroke={airTrailStroke}
-                strokeWidth={particleDiameter * widthScale}
-                strokeLinecap="round"
-                strokeOpacity={opacityScale}
-              />
-            );
-          })}
-        </g>
-      </svg>
+          {/* Air trail: no blur to reduce cost when many seeds fly */}
+          <g>
+            {frame.airTrail.map((p, i) => {
+              if (i === 0) return null;
+              const prev = frame.airTrail[i-1];
+              const taperProgress = i / maxTrailPoints;
+              const widthScale = 1.0 - (taperProgress * 0.5); // 100% to 50%
+              const opacityScale = (1.0 - taperProgress) * 0.75;
+              return (
+                <line
+                  key={`air-trail-${i}`}
+                  x1={prev.x}
+                  y1={prev.y}
+                  x2={p.x}
+                  y2={p.y}
+                  stroke={airTrailStroke}
+                  strokeWidth={particleDiameter * widthScale}
+                  strokeLinecap="round"
+                  strokeOpacity={opacityScale}
+                />
+              );
+            })}
+          </g>
+        </svg>
+      )}
 
       {!frame.isImpacted && (
         <>
-          {/* Shadow Head: black, 20% opacity */}
-          <div 
-            className="absolute z-[9]" 
-            style={{ 
-              left: frame.shadowPos.x, 
-              top: frame.shadowPos.y, 
-              opacity: 0.2,
-              transform: 'translate(-50%, -50%)' 
-            }}
-          >
-            <div 
-              className="rounded-full"
+          {/* Shadow Head: black, 20% opacity — skip when trails are off to cut DOM further */}
+          {useTrail && (
+            <div
+              className="absolute z-[9]"
               style={{
-                width: `${particleDiameter}px`,
-                height: `${particleDiameter}px`,
-                background: '#000000'
+                left: frame.shadowPos.x,
+                top: frame.shadowPos.y,
+                opacity: 0.2,
+                transform: 'translate(-50%, -50%)'
               }}
-            />
-          </div>
+            >
+              <div
+                className="rounded-full"
+                style={{
+                  width: `${particleDiameter}px`,
+                  height: `${particleDiameter}px`,
+                  background: '#000000'
+                }}
+              />
+            </div>
+          )}
 
           {/* Air Head */}
-          <div 
-            className="absolute z-10" 
-            style={{ 
-              left: frame.airPos.x, 
-              top: frame.airPos.y, 
-              transform: 'translate(-50%, -50%)' 
+          <div
+            className="absolute z-10"
+            style={{
+              left: frame.airPos.x,
+              top: frame.airPos.y,
+              transform: 'translate(-50%, -50%)'
             }}
           >
-            <div 
+            <div
               className={`rounded-full flex items-center justify-center border-2 ${
                 isLucky ? '' : 'shadow-[0_0_30px_rgba(252,240,198,0.7)] border-white/60'
               }`}

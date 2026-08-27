@@ -167,7 +167,15 @@ export function SpecialDeliveryRewardFly({
   onCompleteRef.current = onComplete;
   scalesRef.current = scales;
 
+  // Performance mode: skip flight VFX; still fire impact/complete so rewards/UI continue.
   useEffect(() => {
+    if (!getPerformanceMode()) return;
+    onImpactRef.current?.();
+    onCompleteRef.current();
+  }, [data.id]);
+
+  useEffect(() => {
+    if (getPerformanceMode()) return;
     phaseRef.current = 'flying';
     const startScale = scalesRef.current[0] ?? 3;
     trailRef.current = [{ x: data.startX, y: data.startY, scale: startScale }];
@@ -282,6 +290,8 @@ export function SpecialDeliveryRewardFly({
     targetRef,
     useTrail,
   ]);
+
+  if (getPerformanceMode()) return null;
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-visible" style={{ zIndex: 10 }}>

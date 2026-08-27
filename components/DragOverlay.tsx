@@ -1,5 +1,6 @@
 import React from 'react';
 import { DragState } from '../types';
+import { getPerformanceMode } from '../utils/performanceMode';
 
 interface DragOverlayProps {
   dragState: DragState;
@@ -7,16 +8,17 @@ interface DragOverlayProps {
 
 /** Renders only the drag trail. The plant is rendered by HexBoard and moved via transform. */
 export function DragOverlay({ dragState }: DragOverlayProps) {
+  // Cosmetic merge/fly trail — skip entirely in performance mode.
+  if (getPerformanceMode()) return null;
+
   const filterId = React.useId().replace(/:/g, '-');
   const isFlying = dragState.phase === 'flyingBack';
   const isImpact = dragState.phase === 'impact';
-  const flyProgress = dragState.flyProgress ?? 0;
   const idleDefaultY = 5.5;
-  const liftDuringFly = idleDefaultY + (20 - idleDefaultY) * (1 - flyProgress);
+  // Optional trail points (legacy / fly-back path); absent → nothing to draw.
+  const rawTrail = (dragState as DragState & { trail?: { x: number; y: number }[] }).trail;
   const trail =
-    (isFlying || isImpact) && dragState.trail && dragState.trail.length > 1
-      ? dragState.trail
-      : [];
+    (isFlying || isImpact) && rawTrail && rawTrail.length > 1 ? rawTrail : [];
   const trailStroke = 48;
 
   if (trail.length < 2) return null;

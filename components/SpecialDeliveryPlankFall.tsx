@@ -7,6 +7,7 @@ import {
   SPECIAL_DELIVERY_PLANK_FALL_MS,
 } from '../constants/specialDeliveries';
 import { assetPath } from '../utils/assetPath';
+import { getPerformanceMode } from '../utils/performanceMode';
 
 export type SpecialDeliveryFallingPlank = {
   src: string;
@@ -46,6 +47,10 @@ export function SpecialDeliveryPlankFall({
   planksRef.current = planks;
 
   useEffect(() => {
+    if (getPerformanceMode()) {
+      onCompleteRef.current?.();
+      return;
+    }
     const start = Date.now();
     const gravity = SPECIAL_DELIVERY_PLANK_FALL_GRAVITY;
     const startPlanks = planksRef.current;
@@ -80,6 +85,8 @@ export function SpecialDeliveryPlankFall({
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
   }, [id]);
+
+  if (getPerformanceMode()) return null;
 
   return (
     <>

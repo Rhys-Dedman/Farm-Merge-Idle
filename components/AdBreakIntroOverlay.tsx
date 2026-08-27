@@ -14,6 +14,7 @@ import {
   POPUP_BACKDROP_RGBA,
 } from '../constants/adPresentation';
 import { LeafBurst, LEAF_BURST_CIRCLE_RADIUS_PX } from './LeafBurst';
+import { getPerformanceMode } from '../utils/performanceMode';
 
 interface AdBreakIntroOverlayProps {
   active: boolean;
@@ -125,6 +126,8 @@ export const AdBreakIntroOverlay: React.FC<AdBreakIntroOverlayProps> = ({
 
   useEffect(() => {
     if (phase !== 'icon') return;
+    // LeafBurst already no-ops under perf mode; skip mounting state too.
+    if (getPerformanceMode()) return;
 
     let cancelled = false;
     let r1 = 0;
