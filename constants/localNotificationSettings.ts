@@ -3,14 +3,15 @@
  * Fires only on Capacitor native (Android / iOS); no-op on web.
  *
  * Rules:
- * - Soft ping ~4h after leave (pushed out of quiet hours if needed)
- * - Follow-up at next morning (09:00) or evening (19:00) local slot
+ * - Day 0 soft ping ~4h after leave (pushed out of quiet hours if needed)
+ * - Days 1–15 weighted drip (more early, lighter later) at morning/evening slots
  * - Quiet hours: 22:00–08:00 local (no fires)
  * - Max 2 delivered notifications per local calendar day
- * - Copy pools: never same category twice in a row; morning/evening lines only in those slots
+ * - Channel is silent / low importance (Notion)
+ * - Copy pools: never same category twice in a row; morning/evening lines preferred in those slots
  */
 
-/** Delay before the first soft “come back” reminder. */
+/** Delay before the day-0 soft “come back” reminder. */
 export const RETURN_REMINDER_FIRST_DELAY_MS = 4 * 60 * 60 * 1000;
 
 /** Local hour when quiet hours begin (inclusive), 24h clock. */
@@ -25,14 +26,59 @@ export const MORNING_SLOT_HOUR = 9;
 /** Preferred evening engagement hour (local). */
 export const EVENING_SLOT_HOUR = 19;
 
-/** Hard cap on delivered return reminders per local calendar day. */
+/** Hard cap on delivered / scheduled return reminders per local calendar day. */
 export const MAX_RETURN_REMINDERS_PER_DAY = 2;
 
 /** How many recent bodies to remember (avoid repeats). */
 export const RETURN_REMINDER_RECENT_BODY_LIMIT = 12;
 
-/** Stable Capacitor notification ids (cancel/schedule). */
-export const RETURN_REMINDER_NOTIFICATION_IDS = [41001, 41002] as const;
+/**
+ * Weighted drip: calendar day offset from leave day (0 = leave day).
+ * Slots: `soft` = ~4h after leave; `morning` / `evening` = fixed local hours.
+ * Heavier early (days 1–5), taper through day 15.
+ */
+export type ReminderPlanSlot = 'soft' | 'morning' | 'evening';
+
+export const RETURN_REMINDER_DRIP_PLAN: readonly {
+  day: number;
+  slots: readonly ReminderPlanSlot[];
+}[] = [
+  { day: 0, slots: ['soft'] },
+  { day: 1, slots: ['morning', 'evening'] },
+  { day: 2, slots: ['morning', 'evening'] },
+  { day: 3, slots: ['morning', 'evening'] },
+  { day: 4, slots: ['morning', 'evening'] },
+  { day: 5, slots: ['morning'] },
+  { day: 6, slots: ['morning', 'evening'] },
+  { day: 7, slots: ['evening'] },
+  { day: 8, slots: ['morning'] },
+  { day: 9, slots: ['morning'] },
+  { day: 10, slots: ['evening'] },
+  { day: 11, slots: ['morning'] },
+  { day: 12, slots: ['morning'] },
+  { day: 13, slots: ['evening'] },
+  { day: 14, slots: ['morning'] },
+  { day: 15, slots: ['morning'] },
+];
+
+/** Stable Capacitor notification id base (cancel/schedule range). */
+export const RETURN_REMINDER_NOTIFICATION_ID_BASE = 41001;
+
+/** Max concurrent scheduled return reminders (must cover full drip). */
+export const RETURN_REMINDER_MAX_SCHEDULED = 28;
+
+/** All ids used for cancel / delivery tracking. */
+export const RETURN_REMINDER_NOTIFICATION_IDS: readonly number[] = Array.from(
+  { length: RETURN_REMINDER_MAX_SCHEDULED },
+  (_, i) => RETURN_REMINDER_NOTIFICATION_ID_BASE + i,
+);
+
+export function isReturnReminderNotificationId(id: number): boolean {
+  return (
+    id >= RETURN_REMINDER_NOTIFICATION_ID_BASE &&
+    id < RETURN_REMINDER_NOTIFICATION_ID_BASE + RETURN_REMINDER_MAX_SCHEDULED
+  );
+}
 
 export const RETURN_REMINDER_TITLE = 'Pocket Garden';
 
@@ -98,11 +144,16 @@ export const REMINDER_COPY_POOLS: Record<ReminderCopyCategory, readonly string[]
   ],
 };
 
-/** Android notification channel (created once). */
+/**
+ * Android notification channel (silent / low importance — Notion).
+ * New channel id so existing installs pick up silence (Android won’t downgrade an old HIGH channel).
+ */
 export const LOCAL_NOTIFICATION_CHANNEL = {
-  id: 'pocket_garden_return',
+  id: 'pocket_garden_return_v2_silent',
   name: 'Garden reminders',
-  description: 'Reminders to come back to your garden',
-  importance: 4, // IMPORTANCE_HIGH
+  description: 'Quiet reminders to come back to your garden',
+  /** IMPORTANCE_LOW — shows in shade, no sound */
+  importance: 2,
   visibility: 1, // PUBLIC
+  vibration: false,
 } as const;

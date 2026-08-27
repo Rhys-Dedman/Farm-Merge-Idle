@@ -1,8 +1,9 @@
 import type { CapacitorConfig } from '@capacitor/cli';
+import { APP_NAME, BUNDLE_ID } from './constants/appIdentity';
 
 const config: CapacitorConfig = {
-  appId: 'com.infinitygames.pocketgarden',
-  appName: 'Pocket Garden',
+  appId: BUNDLE_ID,
+  appName: APP_NAME,
   webDir: 'dist',
   android: {
     allowMixedContent: false,

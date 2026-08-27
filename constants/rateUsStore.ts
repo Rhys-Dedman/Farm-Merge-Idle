@@ -1,9 +1,10 @@
 /**
- * Rate Us opens the Play Store listing (package matches Capacitor appId).
+ * Rate Us opens the Play Store listing (package matches Capacitor appId / BUNDLE_ID).
  * Listing may 404 until published — correct destination for Genesis / store setup.
  */
-export const RATE_US_STORE_URL =
-  'https://play.google.com/store/apps/details?id=com.infinitygames.pocketgarden';
+import { RATE_US_PLAY_STORE_URL } from './appIdentity';
+
+export const RATE_US_STORE_URL = RATE_US_PLAY_STORE_URL;
 
 export function openRateUsStore(): void {
   try {

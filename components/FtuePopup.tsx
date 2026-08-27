@@ -101,8 +101,15 @@ export interface FtuePopupProps {
   showDivider?: boolean;
   /** Description text (shown when descriptionVisibility is 'shown') */
   description?: string;
-  /** Primary button; clicking closes popup */
+  /** Primary button; clicking closes popup unless `onPrimaryAction` is set. */
   button?: { text: string };
+  /**
+   * When set, the primary button calls this instead of closing.
+   * Parent should drive `isVisible` (e.g. reconnect checks).
+   */
+  onPrimaryAction?: () => void;
+  /** Dimmer opacity (default 0.7). */
+  backdropOpacity?: number;
   /** Leaf burst is sized to this rect so it matches the popup */
   burstWidth?: number;
   burstHeight?: number;
@@ -133,6 +140,8 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
   showDivider = false,
   description,
   button,
+  onPrimaryAction,
+  backdropOpacity = 0.7,
   burstWidth = DEFAULT_BURST_WIDTH,
   burstHeight = DEFAULT_BURST_HEIGHT,
   appScale = 1,
@@ -253,6 +262,11 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
   };
 
   const handleButtonClick = () => {
+    if (isPopupEnterInteractionLocked(animState) || animState === 'leaving') return;
+    if (onPrimaryAction) {
+      onPrimaryAction();
+      return;
+    }
     dismissWithAnimation();
   };
 
@@ -276,7 +290,7 @@ export const FtuePopup: React.FC<FtuePopupProps> = ({
           left: '-10px',
           right: '-10px',
           bottom: '-10px',
-          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          backgroundColor: `rgba(0, 0, 0, ${backdropOpacity})`,
           opacity: isLeaving || isPreflight ? 0 : 1,
         }}
         onClick={blockBackdropClick ? undefined : dismissWithAnimation}

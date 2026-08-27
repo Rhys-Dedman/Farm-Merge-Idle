@@ -57,6 +57,8 @@ export type DebugHandlers = {
   // Ads
   toggleInterstitialBypass: () => void;
   getInterstitialBypass: () => boolean;
+  toggleNetworkGateBypass: () => void;
+  getNetworkGateBypass: () => boolean;
   testAdBreak: () => void;
   openRewardedOffer: () => void;
   resetAdCooldowns: () => void;
@@ -143,6 +145,7 @@ export const DEBUG_ACTION_CATALOG: DebugActionDef[] = [
 
   // Ads
   { id: 'bypass', tab: 'ads', label: 'Toggle interstitial bypass', mode: 'force', run: 'toggleInterstitialBypass' },
+  { id: 'netbypass', tab: 'diagnostics', label: 'Toggle network gate bypass', mode: 'force', run: 'toggleNetworkGateBypass', keywords: 'offline vpn' },
   { id: 'adbreak', tab: 'ads', label: 'Force interstitial now', mode: 'force', run: 'testAdBreak' },
   { id: 'rewarded', tab: 'ads', label: 'Open rewarded offer', mode: 'normal', run: 'openRewardedOffer' },
   { id: 'adcd', tab: 'ads', label: 'Reset ad cooldowns', mode: 'force', run: 'resetAdCooldowns' },

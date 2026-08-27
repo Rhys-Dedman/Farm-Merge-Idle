@@ -1,7 +1,11 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
+    <!-- Identity must match constants/appIdentity.ts (APP_NAME / BUNDLE_ID). -->
     <string name="app_name">Pocket Garden</string>
     <string name="title_activity_main">Pocket Garden</string>
     <string name="package_name">com.infinitygames.pocketgarden</string>
     <string name="custom_url_scheme">com.infinitygames.pocketgarden</string>
+    <!-- Facebook keys: fill when Arena/Genesis issues them (see ANALYTICS_KEYS in appIdentity.ts). -->
+    <string name="facebook_app_id" translatable="false"></string>
+    <string name="facebook_client_token" translatable="false"></string>
 </resources>

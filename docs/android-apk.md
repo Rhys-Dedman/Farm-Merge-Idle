@@ -83,13 +83,12 @@ npx cap build android --androidreleasetype APK
 
 - Uses `@capacitor/local-notifications` (Android now; same code path for iOS when `ios/` is added).
 - **Does not fire in `npm run dev` / browser** — test on a device or emulator APK after `npm run cap:sync`.
-- Permission is requested once after main FTUE completes (Settings → **Reminders** can toggle off/on).
+- Permission is requested once after main FTUE completes (Settings → **Notifications** can toggle off/on).
 - Timing / copy in `constants/localNotificationSettings.ts`:
-  - Soft ping **~4h** after leave (pushed out of quiet hours if needed)
-  - Follow-up at next **09:00** or **19:00** local
+  - Day **0–15 weighted drip** (`RETURN_REMINDER_DRIP_PLAN`) — soft **~4h** on day 0, then morning/evening slots tapering through day 15
   - Quiet hours **22:00–08:00** local
-  - Max **2** delivered reminders per local calendar day
+  - Max **2** reminders per local calendar day
+  - Channel `pocket_garden_return_v2_silent` — importance **LOW**, silent (no sound/vibration)
   - Copy pools: offline / daily tasks / anytime / morning / evening
-  - Morning prefers daily tasks; daily-task lines are morning-only (reset timing)
-  - Morning/evening-only lines stay in their slots
+  - Morning prefers daily tasks; daily-task lines are morning-preferred
   - Never the same copy category twice in a row

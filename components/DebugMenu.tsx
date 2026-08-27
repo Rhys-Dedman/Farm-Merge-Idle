@@ -161,6 +161,7 @@ export const DebugMenu: React.FC<Props> = ({
   if (!isVisible) return null;
 
   const bypassOn = handlers.getInterstitialBypass();
+  const netBypassOn = handlers.getNetworkGateBypass();
   const hapOn = handlers.getHapticsEnabled();
   const perfOn = handlers.getPerformanceMode();
   const notchOn = handlers.getFakeNotch();
@@ -170,7 +171,7 @@ export const DebugMenu: React.FC<Props> = ({
     <div
       className="fixed inset-0 flex flex-col"
       style={{
-        zIndex: 200,
+        zIndex: 10001,
         background: '#1a1510',
         color: '#f5ecd8',
         fontFamily: 'Inter, sans-serif',
@@ -404,6 +405,7 @@ export const DebugMenu: React.FC<Props> = ({
         {tab === 'ads' ? (
           <div className="mb-3 text-xs space-y-1" style={{ color: '#a89878' }}>
             <div>Interstitial bypass: {bypassOn ? 'ON (ads disabled)' : 'OFF'}</div>
+            <div>Network gate bypass: {netBypassOn ? 'ON' : 'OFF'}</div>
             <div>
               Gap {Math.round(rc.ads.interstitialCooldownMs / 1000)}s · after rewarded{' '}
               {Math.round(rc.ads.interstitialCooldownAfterRewardedMs / 1000)}s · max interval{' '}

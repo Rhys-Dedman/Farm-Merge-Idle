@@ -8,9 +8,11 @@ import {
   STORE_DAILY_ALLOWANCE_OFFER_ID,
   STORE_FREE_OFFER_HEADER_ICON_PX,
   STORE_IAP_OFFER_FIELD_PACK_ID,
+  STORE_IAP_OFFER_REMOVE_ADS_ID,
   STORE_IAP_OFFER_STARTER_PACK_ID,
   getVisibleStoreBundleOffers,
   getVisibleStoreCoinOffers,
+  hasActiveRemoveAdsBoost,
 } from '../offers';
 import { useFieldPackCountdown, useStarterPackCountdown } from '../hooks/useStarterPackCountdown';
 import { StoreBundleOffer } from './StoreBundleOffer';
@@ -475,7 +477,7 @@ interface StoreScreenProps {
   onStoreCoinPurchase?: (offerId: string) => void;
   /** Increment to animate scroll to the coin IAP section (e.g. Coin Boost floating button). */
   scrollToCoinSectionRequest?: number;
-  /** When true, starter pack bundle row is hidden (purchased only). */
+  /** When true, starter pack CTA shows Owned (row stays visible). */
   starterPackPurchased?: boolean;
   /** After level-4 unlock popup; enables the 24h countdown in store + farm FB. */
   starterPackUnlocked?: boolean;
@@ -525,16 +527,17 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
     fieldPackUnlocked,
     fieldPackCountdownRefreshKey,
   );
+  const removeAdsOwned = hasActiveRemoveAdsBoost(activeBoosts);
   const visibleBundleOffers = React.useMemo(
     () =>
       getVisibleStoreBundleOffers().filter((o) => {
-        // Extra purchase/countdown gates (kill switch already applied in getVisibleStoreBundleOffers).
+        // Extra unlock/countdown gates (kill switch + purchased→Owned already in getVisibleStoreBundleOffers).
         if (o.id === STORE_IAP_OFFER_STARTER_PACK_ID) {
-          if (starterPackPurchased) return false;
+          if (starterPackPurchased) return true;
           return starterPackUnlocked && starterPackRemainingMs > 0;
         }
         if (o.id === STORE_IAP_OFFER_FIELD_PACK_ID) {
-          if (fieldPackPurchased) return false;
+          if (fieldPackPurchased) return true;
           return fieldPackUnlocked && fieldPackRemainingMs > 0;
         }
         return true;
@@ -876,11 +879,15 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
                   key={config.id}
                   config={config}
                   onPurchase={onStoreCoinPurchase}
+                  owned={
+                    (config.id === STORE_IAP_OFFER_STARTER_PACK_ID && starterPackPurchased) ||
+                    (config.id === STORE_IAP_OFFER_FIELD_PACK_ID && fieldPackPurchased)
+                  }
                   limitedOfferCountdownEnabled={
                     config.id === STORE_IAP_OFFER_STARTER_PACK_ID
-                      ? starterPackUnlocked
+                      ? starterPackUnlocked && !starterPackPurchased
                       : config.id === STORE_IAP_OFFER_FIELD_PACK_ID
-                        ? fieldPackUnlocked
+                        ? fieldPackUnlocked && !fieldPackPurchased
                         : true
                   }
                   limitedOfferCountdownRefreshKey={
@@ -904,7 +911,12 @@ export const StoreScreen: React.FC<StoreScreenProps> = ({
             {/* Coin IAP rows — filtered by remote-config IAP kill switches. */}
             <div ref={storeCoinSectionRef} className="flex flex-col items-center gap-0 w-full mt-0">
               {visibleCoinOffers.map((config) => (
-                <StoreCoinOffer key={config.id} config={config} onPurchase={onStoreCoinPurchase} />
+                <StoreCoinOffer
+                  key={config.id}
+                  config={config}
+                  onPurchase={onStoreCoinPurchase}
+                  owned={config.id === STORE_IAP_OFFER_REMOVE_ADS_ID && removeAdsOwned}
+                />
               ))}
             </div>
           </div>

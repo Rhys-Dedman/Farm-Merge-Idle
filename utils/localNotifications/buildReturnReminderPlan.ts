@@ -1,5 +1,6 @@
 /**
  * Pure scheduling helpers for return reminders (local timezone).
+ * Day 0–15 weighted drip + quiet hours + max 2/day.
  */
 import {
   EVENING_SLOT_HOUR,
@@ -7,10 +8,13 @@ import {
   MORNING_SLOT_HOUR,
   QUIET_HOURS_END_HOUR,
   QUIET_HOURS_START_HOUR,
+  RETURN_REMINDER_DRIP_PLAN,
   RETURN_REMINDER_FIRST_DELAY_MS,
-  RETURN_REMINDER_NOTIFICATION_IDS,
+  RETURN_REMINDER_MAX_SCHEDULED,
+  RETURN_REMINDER_NOTIFICATION_ID_BASE,
   type ReminderCopyCategory,
   type ReminderCopySlot,
+  type ReminderPlanSlot,
 } from '../../constants/localNotificationSettings';
 import { pickReturnReminderCopy } from './pickReturnReminderCopy';
 
@@ -23,6 +27,8 @@ export interface PlannedReturnReminder {
   category: ReminderCopyCategory;
   title: string;
   body: string;
+  /** Calendar day offset from leave day (0–15). */
+  dayOffset: number;
 }
 
 export interface ReturnReminderCopyState {
@@ -84,11 +90,10 @@ export function bumpOutOfQuietHours(ms: number): number {
   return nextEngagementSlotAfter(ms);
 }
 
-function kindForTime(atMs: number, preferred: ReturnReminderKind): ReturnReminderKind {
-  const { hour } = localParts(atMs);
-  if (hour === MORNING_SLOT_HOUR) return 'morning';
-  if (hour === EVENING_SLOT_HOUR) return 'evening';
-  return preferred;
+function kindForPlanSlot(slot: ReminderPlanSlot): ReturnReminderKind {
+  if (slot === 'soft') return 'soft_4h';
+  if (slot === 'morning') return 'morning';
+  return 'evening';
 }
 
 function slotForKind(kind: ReturnReminderKind): ReminderCopySlot {
@@ -120,18 +125,26 @@ function placeWithDayCap(
   pendingAts: readonly number[],
 ): number | null {
   let t = atMs;
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 16; i++) {
     if (canPlaceOnDay(t, deliveryAts, pendingAts)) return t;
     t = nextEngagementSlotAfter(t);
   }
   return null;
 }
 
+function resolveSlotTime(now: number, dayOffset: number, slot: ReminderPlanSlot): number {
+  if (slot === 'soft') {
+    return bumpOutOfQuietHours(now + RETURN_REMINDER_FIRST_DELAY_MS);
+  }
+  if (slot === 'morning') {
+    return atLocalHourOnOffsetDay(now, dayOffset, MORNING_SLOT_HOUR);
+  }
+  return atLocalHourOnOffsetDay(now, dayOffset, EVENING_SLOT_HOUR);
+}
+
 /**
- * Build up to 2 return reminders from leave time `now`:
- * 1) ~4h soft (quiet-hours adjusted)
- * 2) next morning/evening slot after that
- * Respects max 2/day and avoids same copy category twice in a row.
+ * Build the day 0–15 weighted return-reminder drip from leave time `now`.
+ * Respects quiet hours, max 2/day, and avoids same copy category twice in a row.
  */
 export function buildReturnReminderPlan(
   now: number,
@@ -143,7 +156,12 @@ export function buildReturnReminderPlan(
   let lastCategory = copyState.lastCategory;
   const recentBodies = [...copyState.recentBodies];
 
-  const pushPlanned = (notificationId: number, atMs: number, kind: ReturnReminderKind) => {
+  const pushPlanned = (
+    notificationId: number,
+    atMs: number,
+    kind: ReturnReminderKind,
+    dayOffset: number,
+  ) => {
     const slot = slotForKind(kind);
     const picked = pickReturnReminderCopy({
       slot,
@@ -157,37 +175,45 @@ export function buildReturnReminderPlan(
       category: picked.category,
       title: picked.title,
       body: picked.body,
+      dayOffset,
     });
     lastCategory = picked.category;
     recentBodies.push(picked.body);
     pending.push(atMs);
   };
 
-  const firstRaw = bumpOutOfQuietHours(now + RETURN_REMINDER_FIRST_DELAY_MS);
-  const firstAt = placeWithDayCap(firstRaw, deliveryAts, pending);
-  if (firstAt != null) {
-    const kind = kindForTime(firstAt, 'soft_4h');
-    pushPlanned(RETURN_REMINDER_NOTIFICATION_IDS[0], firstAt, kind);
+  for (const row of RETURN_REMINDER_DRIP_PLAN) {
+    for (const slot of row.slots) {
+      if (plan.length >= RETURN_REMINDER_MAX_SCHEDULED) break;
+
+      let raw = resolveSlotTime(now, row.day, slot);
+      // Morning/evening on day 0 can already be past if leave is late — skip or bump.
+      if (raw <= now) {
+        if (slot === 'soft') {
+          raw = bumpOutOfQuietHours(now + Math.min(RETURN_REMINDER_FIRST_DELAY_MS, 60 * 60 * 1000));
+        } else {
+          continue;
+        }
+      }
+      if (raw <= now) continue;
+
+      const placed = placeWithDayCap(raw, deliveryAts, pending);
+      if (placed == null) continue;
+
+      const kind = kindForPlanSlot(slot);
+      const id = RETURN_REMINDER_NOTIFICATION_ID_BASE + plan.length;
+      pushPlanned(id, placed, kind, row.day);
+    }
   }
 
-  if (plan.length === 0) return plan;
-
-  const secondRaw = nextEngagementSlotAfter(plan[0]!.atMs);
-  const secondAt = placeWithDayCap(secondRaw, deliveryAts, pending);
-  if (secondAt != null) {
-    const kind = kindForTime(secondAt, 'evening');
-    const windowKind: ReturnReminderKind = kind === 'morning' ? 'morning' : 'evening';
-    pushPlanned(RETURN_REMINDER_NOTIFICATION_IDS[1], secondAt, windowKind);
-  }
-
-  return plan.slice(0, MAX_RETURN_REMINDERS_PER_DAY);
+  return plan;
 }
 
 /** Keep recent delivery timestamps (for per-day caps). */
 export function pruneReturnReminderDeliveries(
   deliveryAts: readonly number[],
   now: number,
-  retainMs: number = 3 * 24 * 60 * 60 * 1000,
+  retainMs: number = 16 * 24 * 60 * 60 * 1000,
 ): number[] {
   const cutoff = now - retainMs;
   return deliveryAts.filter((t) => t >= cutoff);

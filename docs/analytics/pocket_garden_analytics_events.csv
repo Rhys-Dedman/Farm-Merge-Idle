@@ -1,0 +1,17 @@
+event_name,params,when_fired,sdk_notes,priority
+session_start,app_version;platform,After splash / first hydrate each cold start,Firebase + AF + FB App Events,P0
+level_complete,level;milestone,Player level-up (single parameterized progress event; milestone=true at 5/7/10/15/20/25/30),Firebase + AF + FB; also map to AF level achievement if required,P0
+ftue_complete,kind,Main FTUE finished (kind=main); reserve kinds for tasks/collection/gardens mini-FTUEs,Firebase + AF + FB,P0
+ftue_step,step,Optional FTUE stage id when advancing (debug / funnel),Firebase,P1
+plant_discovered,plant_level;garden_id,New plant discovery claimed into collection,Firebase + FB,P0
+garden_unlocked,garden_id,Player unlocks / purchases a new garden,Firebase + AF,P1
+ad_interstitial_show,trigger,Forced interstitial begins (trigger ids from adBreakSettings),Firebase + AF ad impression API (NOT AF logEvent for revenue),P0
+ad_rewarded_show,source;offer_id,Rewarded flow starts (source=limitedOffer|storeFreeOffer|coinGoal|offlineEarnings|upgradeList|dailyTaskClaim2x),Firebase + AF ad impression API,P0
+ad_rewarded_complete,source;offer_id,Rewarded finished and reward granted,Firebase + AF ad revenue API when available,P0
+offer_shown,offer_id;surface,Limited offer / IAP popup shown (surface=auto|farm_fb|store|force_level4),Firebase,P1
+iap_click,offer_id,Player taps an IAP CTA (before billing),Firebase + FB,P0
+iap_grant_stub,offer_id,Prototype local grant only — replace with validated purchase when billing lands,Do NOT use AF logEvent for purchase revenue; use AF validateAndLogInAppPurchase / Play Billing,P0
+rate_us_shown,reason,Rate Us popup opens (auto after Daily Tasks FTUE / soft retry / Settings),Firebase,P1
+rate_us_result,result,rated | soft_dismiss | closed,Firebase + AF if rating funnel needed,P1
+notification_permission,status,OS permission result after FTUE prompt or Settings,Firebase,P1
+soft_currency_sink,sink;amount,Optional: upgrade purchase / garden unlock spend (wire later if funnel needed),Firebase,P2

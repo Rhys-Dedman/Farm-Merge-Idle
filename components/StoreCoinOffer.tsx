@@ -28,10 +28,17 @@ const STORE_COIN_ROW_BACKGROUND_DEFAULT = '/assets/ui/ui_store_small.png';
 export interface StoreCoinOfferProps {
   config: StoreCoinOfferConfig;
   onPurchase?: (id: string) => void;
+  /** When true, purchase CTA shows Owned and cannot be tapped again. */
+  owned?: boolean;
   className?: string;
 }
 
-export const StoreCoinOffer: React.FC<StoreCoinOfferProps> = ({ config, onPurchase, className = '' }) => {
+export const StoreCoinOffer: React.FC<StoreCoinOfferProps> = ({
+  config,
+  onPurchase,
+  owned = false,
+  className = '',
+}) => {
   const [pressed, setPressed] = useState(false);
   const {
     id,
@@ -120,37 +127,47 @@ export const StoreCoinOffer: React.FC<StoreCoinOfferProps> = ({ config, onPurcha
             >
               <button
                 type="button"
+                disabled={owned}
+                aria-disabled={owned}
                 className="pointer-events-auto flex items-center justify-center px-[8px] rounded-[9px] transition-all border outline outline-1"
                 style={{
                   height: 36,
-                  backgroundColor: pressed ? STORE_OFFER_CARD_PURCHASE_PRESSED_BG : STORE_OFFER_CARD_PURCHASE_BG,
-                  borderColor: STORE_OFFER_CARD_PURCHASE_BORDER,
-                  borderBottomWidth: pressed ? 0 : 4,
-                  marginBottom: pressed ? 4 : 0,
-                  outlineColor: STORE_OFFER_CARD_PURCHASE_BORDER,
+                  backgroundColor: owned
+                    ? '#c4b896'
+                    : pressed
+                      ? STORE_OFFER_CARD_PURCHASE_PRESSED_BG
+                      : STORE_OFFER_CARD_PURCHASE_BG,
+                  borderColor: owned ? '#a09070' : STORE_OFFER_CARD_PURCHASE_BORDER,
+                  borderBottomWidth: pressed && !owned ? 0 : 4,
+                  marginBottom: pressed && !owned ? 4 : 0,
+                  outlineColor: owned ? '#a09070' : STORE_OFFER_CARD_PURCHASE_BORDER,
                   minWidth: '86px',
-                  transform: pressed ? 'translateY(2px)' : 'translateY(0)',
-                  boxShadow: pressed
-                    ? 'inset 0 2px 4px rgba(0,0,0,0.15)'
-                    : 'inset 0 1px 1px rgba(255,255,255,0.4)',
-                  cursor: 'pointer',
+                  transform: pressed && !owned ? 'translateY(2px)' : 'translateY(0)',
+                  boxShadow:
+                    pressed && !owned
+                      ? 'inset 0 2px 4px rgba(0,0,0,0.15)'
+                      : 'inset 0 1px 1px rgba(255,255,255,0.4)',
+                  cursor: owned ? 'default' : 'pointer',
+                  opacity: owned ? 0.92 : 1,
                 }}
                 onPointerDown={(e) => {
                   e.stopPropagation();
+                  if (owned) return;
                   setPressed(true);
                 }}
                 onPointerUp={() => setPressed(false)}
                 onPointerLeave={() => setPressed(false)}
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (owned) return;
                   onPurchase?.(id);
                 }}
               >
                 <span
                   className="text-[15px] font-black tracking-tight leading-none"
-                  style={{ color: STORE_OFFER_CARD_PURCHASE_TEXT }}
+                  style={{ color: owned ? '#5c4a32' : STORE_OFFER_CARD_PURCHASE_TEXT }}
                 >
-                  {priceLabel}
+                  {owned ? 'Owned' : priceLabel}
                 </span>
               </button>
             </div>

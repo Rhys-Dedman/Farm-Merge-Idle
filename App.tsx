@@ -107,6 +107,23 @@ import { APP_VERSION } from './constants/appVersion';
 import { getInterstitialBypass, setInterstitialBypass } from './utils/debugAdsBypass';
 import { getDebugFpsCap, setDebugFpsCap } from './utils/debugFpsCap';
 import {
+  trackFtueComplete,
+  trackInterstitialShow,
+  trackIapClick,
+  trackIapGrantStub,
+  trackLevelComplete,
+  trackRewardedShow,
+  trackSessionStart,
+} from './utils/analytics';
+import { getStoreProductId } from './utils/iapProducts';
+import {
+  getNetworkGateBypass,
+  refreshNetworkGate,
+  setNetworkGateBypass,
+  startNetworkGateMonitor,
+  subscribeNetworkGate,
+} from './utils/networkGate';
+import {
   copyTextToClipboard,
   exportCurrentSaveJson,
   importSaveJsonAndReload,
@@ -189,6 +206,7 @@ import { ActiveBoostData, ACTIVE_BOOST_INDICATOR_SIZE_PX } from './components/Ac
 import { UpgradeTabsRef } from './components/UpgradeTabs';
 import { BarnParticle, BarnParticleData } from './components/BarnParticle';
 import { LoadingScreen } from './components/LoadingScreen';
+import { NetworkGateOverlay } from './components/NetworkGateOverlay';
 import { FtuePopup } from './components/FtuePopup';
 import { CorruptSavePopup } from './components/CorruptSavePopup';
 import { Ftue2Overlay } from './components/Ftue2Overlay';
@@ -1476,6 +1494,7 @@ function animateGardenSwitchOverlayOpacity(
 export default function App() {
   // Loading screen state
   const [isLoading, setIsLoading] = useState(true);
+  const [networkGateBlocked, setNetworkGateBlocked] = useState(false);
   const [gameOpacity, setGameOpacity] = useState(0);
   /** Skip splash when a valid save exists at first paint (quick black fade instead). */
   const [useQuickResumeLoad] = useState(getInitialQuickResumeLoad);
@@ -2051,6 +2070,14 @@ export default function App() {
     setHapticsEnabled(hapticsEnabled);
     persistUserPrefs({ hapticsEnabled });
   }, [hapticsEnabled]);
+
+  /** Arena §10 — block play when offline / VPN (native only; Vite desktop stays open). */
+  useEffect(() => {
+    void startNetworkGateMonitor();
+    return subscribeNetworkGate((snap) => {
+      setNetworkGateBlocked(snap.blocked);
+    });
+  }, []);
 
   useEffect(() => {
     persistUserPrefs({ returnRemindersEnabled });
@@ -3798,6 +3825,10 @@ export default function App() {
 
   const openRewardedFakeAd = useCallback(() => {
     if (!areAdsEnabled()) return;
+    trackRewardedShow(
+      pendingAdSourceRef.current ?? 'unknown',
+      pendingOfferIdRef.current ?? null,
+    );
     setFakeAdVariant('rewarded');
     setRewardedAdFadeOutActive(false);
     setRewardedAdBlackHoldActive(false);
@@ -4115,6 +4146,7 @@ export default function App() {
 
     const presentOrQueueLevel = (level: number) => {
       setPlayerLevel(level);
+      trackLevelComplete(level);
       pendingLevelUpBackupRef.current = {
         gardenId: activeGardenIdRef.current,
         level,
@@ -4861,6 +4893,7 @@ export default function App() {
         return false;
       }
       state.fallbackPending = false;
+      trackInterstitialShow(trigger);
       openAdBreakFakeAd(onComplete);
       return true;
     },
@@ -5093,6 +5126,7 @@ export default function App() {
       if (l < level) {
         recordDailyTaskPlayerLeveledUp();
         pendingLevelUpBackupRef.current = { gardenId, level: l + 1 };
+        trackLevelComplete(l + 1);
         return l + 1;
       }
       return l;
@@ -5863,6 +5897,17 @@ export default function App() {
 
   const completePremiumStorePurchase = useCallback((offerId: string) => {
     if (!isStoreIapEnabled(offerId)) return;
+    // Non-consumable / timed exclusives: block repurchase while Owned.
+    if (offerId === STORE_IAP_OFFER_STARTER_PACK_ID && readStarterPackPurchased()) return;
+    if (offerId === STORE_IAP_OFFER_FIELD_PACK_ID && readFieldPackPurchased()) return;
+    if (
+      offerId === STORE_IAP_OFFER_REMOVE_ADS_ID &&
+      hasActiveRemoveAdsBoost(activeBoostsRef.current)
+    ) {
+      return;
+    }
+    trackIapClick(offerId);
+    trackIapGrantStub(offerId, getStoreProductId(offerId));
     playSfx(SFX_IDS.uiConfirmReward);
     const config =
       STORE_COIN_OFFERS.find((c) => c.id === offerId) ??
@@ -5956,6 +6001,7 @@ export default function App() {
       if (l < targetLevel) {
         recordDailyTaskPlayerLeveledUp();
         pendingLevelUpBackupRef.current = { gardenId, level: targetLevel };
+        trackLevelComplete(targetLevel);
         return targetLevel;
       }
       return l;
@@ -11106,6 +11152,7 @@ export default function App() {
     if (pendingQuickLoadFinishRef.current) {
       pendingQuickLoadFinishRef.current = false;
       setIsLoading(false);
+      trackSessionStart({ resume: 'quick' });
       const fadeInDuration = 340;
       const startTime = Date.now();
       const animate = () => {
@@ -11181,6 +11228,7 @@ export default function App() {
     }
 
     setIsLoading(false);
+    trackSessionStart({ resume: 'splash' });
     const fadeInDuration = 500;
     const startTime = Date.now();
     const animate = () => {
@@ -11525,6 +11573,19 @@ export default function App() {
           onLoadComplete={handleLoadComplete}
         />
       )}
+      {!isLoading ? (
+        <NetworkGateOverlay
+          blocked={networkGateBlocked}
+          appScale={appScale}
+          onRetry={() => {
+            void refreshNetworkGate();
+          }}
+          onVersionUnlockDevTools={() => {
+            setDevToolsUnlocked(true);
+            setDevToolsOpen(true);
+          }}
+        />
+      ) : null}
       {gardenSwitchOverlayActive ? (
         <div
           className="fixed inset-0 pointer-events-auto"
@@ -14328,6 +14389,7 @@ export default function App() {
                   playSfx(SFX_IDS.uiConfirmNormal);
                   // FTUE 11 is fully closed: from now on we save progress + allow offline earnings.
                   ftue11PersistenceEnabledRef.current = true;
+                  trackFtueComplete('main');
                   // Soft helper: arm 5s harvest nudge (finger only if harvest unused).
                   setPostFtueHarvestNudgeDone(false);
                   postFtueHarvestNudgeDoneRef.current = false;
@@ -15606,6 +15668,7 @@ export default function App() {
                     `money=${money} keys=${keyCount}`,
                     `perf=${getPerformanceMode()} haptics=${getHapticsEnabled()}`,
                     `adsBypass=${getInterstitialBypass()}`,
+                    `netGateBypass=${getNetworkGateBypass()}`,
                     `playtimeMs=${adBreakRuntimeRef.current.activePlaytimeMs}`,
                   ].join('\n');
                   void copyTextToClipboard(summary);
@@ -15652,6 +15715,8 @@ export default function App() {
                 cycleGarden: () => cycleActiveGarden(),
                 toggleInterstitialBypass: () => setInterstitialBypass(!getInterstitialBypass()),
                 getInterstitialBypass: () => getInterstitialBypass(),
+                toggleNetworkGateBypass: () => setNetworkGateBypass(!getNetworkGateBypass()),
+                getNetworkGateBypass: () => getNetworkGateBypass(),
                 testAdBreak: () => {
                   closeDebug();
                   setPauseMenuOpen(false);

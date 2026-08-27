@@ -7,6 +7,7 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import {
   LOCAL_NOTIFICATION_CHANNEL,
   RETURN_REMINDER_NOTIFICATION_IDS,
+  isReturnReminderNotificationId,
 } from '../../constants/localNotificationSettings';
 import { loadUserPrefs, persistUserPrefs } from '../userPrefs';
 import {
@@ -66,6 +67,7 @@ export async function ensureLocalNotificationChannel(): Promise<void> {
       description: LOCAL_NOTIFICATION_CHANNEL.description,
       importance: LOCAL_NOTIFICATION_CHANNEL.importance,
       visibility: LOCAL_NOTIFICATION_CHANNEL.visibility,
+      vibration: LOCAL_NOTIFICATION_CHANNEL.vibration,
     });
     channelReady = true;
   } catch {
@@ -109,10 +111,7 @@ export async function ensureReturnReminderDeliveryListener(): Promise<void> {
   try {
     await LocalNotifications.addListener('localNotificationReceived', (notification) => {
       const id = notification.id;
-      if (
-        id === RETURN_REMINDER_NOTIFICATION_IDS[0] ||
-        id === RETURN_REMINDER_NOTIFICATION_IDS[1]
-      ) {
+      if (isReturnReminderNotificationId(id)) {
         recordReturnReminderDelivery({
           id,
           body: notification.body,
@@ -136,8 +135,8 @@ export async function cancelReturnReminders(): Promise<void> {
 }
 
 /**
- * Cancel pending return reminders, then schedule up to 2 using:
- * 4h soft → next morning/evening slot, quiet hours, max 2/day, pooled copy.
+ * Cancel pending return reminders, then schedule the day 0–15 weighted drip
+ * (quiet hours, max 2/day, pooled copy, silent channel).
  */
 export async function scheduleReturnReminders(now: number = Date.now()): Promise<void> {
   if (!isLocalNotificationsSupported()) return;
@@ -181,6 +180,7 @@ export async function scheduleReturnReminders(now: number = Date.now()): Promise
           reminderKind: item.kind,
           category: item.category,
           body: item.body,
+          dayOffset: item.dayOffset,
         },
       })),
     });

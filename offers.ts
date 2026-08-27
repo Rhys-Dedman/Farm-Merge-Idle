@@ -718,9 +718,12 @@ export function getStarterPackCountdownRemainingMs(atTimeMs = Date.now()): numbe
   return Math.max(0, endMs - atTimeMs);
 }
 
-/** Starter pack row in the store (same window as the farm floating button). */
+/** Starter pack row in the store (countdown window, or Owned after purchase). */
 export function isStarterPackStoreRowVisible(atTimeMs = Date.now()): boolean {
-  return isStarterPackFloatingButtonVisible(atTimeMs);
+  if (!isStoreIapEnabled(STORE_IAP_OFFER_STARTER_PACK_ID)) return false;
+  if (readStarterPackPurchased()) return true;
+  if (!readStarterPackUnlocked()) return false;
+  return getStarterPackCountdownRemainingMs(atTimeMs) > 0;
 }
 
 /** Farm floating button: unlocked, not purchased, countdown still running. */
@@ -819,8 +822,12 @@ export function getFieldPackCountdownRemainingMs(atTimeMs = Date.now()): number 
   return Math.max(0, endMs - atTimeMs);
 }
 
+/** Field pack row in the store (countdown window, or Owned after purchase). */
 export function isFieldPackStoreRowVisible(atTimeMs = Date.now()): boolean {
-  return isFieldPackFloatingButtonVisible(atTimeMs);
+  if (!isStoreIapEnabled(STORE_IAP_OFFER_FIELD_PACK_ID)) return false;
+  if (readFieldPackPurchased()) return true;
+  if (!readFieldPackUnlocked()) return false;
+  return getFieldPackCountdownRemainingMs(atTimeMs) > 0;
 }
 
 /** Farm floating button: unlocked, not purchased, Field Pack countdown still running. */

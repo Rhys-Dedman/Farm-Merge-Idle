@@ -1,0 +1,41 @@
+---
+description: Keep docs/ARENA_HANDOFF.md in sync whenever monetisation, ads, notifications, analytics, identity/IAP SKUs, or north-star change — without waiting for the user to ask.
+alwaysApply: true
+---
+
+# Arena handoff sheet (auto-update)
+
+Source of truth for Arena handoff: `docs/ARENA_HANDOFF.md`
+
+Also keep linked artifacts aligned when they exist:
+
+- `docs/analytics/pocket_garden_analytics_events.csv`
+- `constants/analyticsEvents.ts` / `utils/analytics.ts`
+- `constants/appIdentity.ts` / `utils/iapProducts.ts`
+- Live numbers in `constants/remoteConfigDefaults.ts`, `offers.ts`, `constants/localNotificationSettings.ts`, `constants/adBreakSettings.ts`
+
+## When you MUST update the handoff (no user reminder needed)
+
+If you change any of the following in code or product behaviour, update `docs/ARENA_HANDOFF.md` in the **same turn** (same commit mindset as the feature):
+
+1. **North-star** first-session goal or how it’s measured  
+2. **Identity** — `GAME_KEY`, `APP_NAME`, `BUNDLE_ID`, `APP_ID`, IAP store SKU list, analytics/Facebook key placeholders  
+3. **Monetisation / ads** — interstitial/rewarded timing, gates, placements, Rate Us vs ads, IAP catalog/prices/durations, conversion plan, first-session timeline  
+4. **Banner** reserve or ad layout policy  
+5. **Notifications** — delays, quiet hours, caps, copy pools, channel importance, permission flow  
+6. **Remote config** — keys, defaults, Firebase wiring status (`remoteConfigDefaults` / `remoteConfig.ts`)  
+7. **Analytics** — event names, params, milestone rules, SDK routing notes (and update the CSV / stubs if events change)  
+8. **Open questions** — resolve, add, or reword Arena/policy flags (timed IAP, mixed packs, etc.)
+
+## How to update
+
+- Prefer editing the existing sections; keep the template structure.  
+- Document **our live settings**, not the Arena PDF template defaults, unless we intentionally adopt them.  
+- Call out deltas from Arena templates in short blockquotes (same style as the current doc).  
+- If a checklist item becomes tickable because of the change, you do **not** need to paste a full checklist unless the user asks — but the handoff sheet itself must stay accurate.
+
+## Do not
+
+- Wait for the user to say “update the handoff”.  
+- Leave stale timings/prices/event names/SKUs in the handoff after shipping code changes.  
+- Create a second competing handoff doc; extend this one.
