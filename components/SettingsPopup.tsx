@@ -21,6 +21,7 @@ import { PopupPrescaleFrame } from './PopupPrescaleFrame';
 import { getPerformanceMode, setPerformanceMode } from '../utils/performanceMode';
 import { APP_VERSION } from '../constants/appVersion';
 import { openSupportContact } from '../constants/supportContact';
+import { openPrivacyPolicy, openTermsOfService } from '../constants/legalLinks';
 import { readRateUsPermanentlyDismissed } from '../utils/rateUsDismiss';
 import { hapticTap } from '../utils/haptics';
 
@@ -606,6 +607,52 @@ export const SettingsPopup: React.FC<SettingsPopupProps> = ({
                     >
                       Contact Us
                     </span>
+                  </button>
+                </div>
+
+                <div
+                  className="w-full flex items-center justify-center"
+                  style={{ maxWidth: '520px', marginTop: '22px', gap: '28px' }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onAnyButtonClick?.();
+                      openPrivacyPolicy();
+                    }}
+                    className="font-semibold tracking-tight transition-opacity active:opacity-70"
+                    style={{
+                      color: DESCRIPTION_COLOR,
+                      fontFamily: 'Inter, sans-serif',
+                      fontSize: '1.45rem',
+                      background: 'transparent',
+                      border: 'none',
+                      padding: '4px 2px',
+                      textDecoration: 'underline',
+                      textUnderlineOffset: '4px',
+                    }}
+                  >
+                    Privacy Policy
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onAnyButtonClick?.();
+                      openTermsOfService();
+                    }}
+                    className="font-semibold tracking-tight transition-opacity active:opacity-70"
+                    style={{
+                      color: DESCRIPTION_COLOR,
+                      fontFamily: 'Inter, sans-serif',
+                      fontSize: '1.45rem',
+                      background: 'transparent',
+                      border: 'none',
+                      padding: '4px 2px',
+                      textDecoration: 'underline',
+                      textUnderlineOffset: '4px',
+                    }}
+                  >
+                    Terms of Service
                   </button>
                 </div>
 

@@ -1,15 +1,18 @@
 /**
- * Contact Us opens this URL in the browser.
- * Replace with your real support/contact page when ready.
+ * Support contact — Infinity Arena checklist: open the device email client.
+ * Format: support+{gamename}@infinitygames.io
  */
-export const SUPPORT_CONTACT_URL = 'https://example.com/pocket-garden-contact';
+export const SUPPORT_EMAIL = 'support+pocketgarden@infinitygames.io';
 
+const SUPPORT_MAILTO = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Pocket Garden Support')}`;
+
+/** Opens the OS email client (mailto). Falls back to location assign on WebView. */
 export function openSupportContact(): void {
   try {
-    window.open(SUPPORT_CONTACT_URL, '_blank', 'noopener,noreferrer');
+    window.location.href = SUPPORT_MAILTO;
   } catch {
     try {
-      window.location.href = SUPPORT_CONTACT_URL;
+      window.open(SUPPORT_MAILTO, '_blank', 'noopener,noreferrer');
     } catch {
       /* ignore */
     }

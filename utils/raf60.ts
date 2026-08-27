@@ -1,4 +1,5 @@
 import { getPerformanceMode } from './performanceMode';
+import { getDebugFpsCap } from './debugFpsCap';
 
 /**
  * 60fps cap for game loops. Use so we don't waste work on 90/120Hz displays.
@@ -65,15 +66,19 @@ export function shouldTick10(lastTickRef: { current: number }): boolean {
 
 /**
  * When Performance mode is ON, caps at 30fps; otherwise normal rAF.
+ * Debug Menu FPS slider overrides both when set.
  * Use in animation loops: rafRef.current = scheduleNextFrame(tick);
  */
-let lastFrame30 = 0;
+let lastFrameCapped = 0;
 export function scheduleNextFrame(callback: FrameRequestCallback): number {
-  if (!getPerformanceMode()) return requestAnimationFrame(callback);
+  const debugCap = getDebugFpsCap();
+  const useCap = debugCap != null || getPerformanceMode();
+  if (!useCap) return requestAnimationFrame(callback);
+  const frameMs = debugCap != null ? 1000 / debugCap : TARGET_FRAME_MS_30;
   return requestAnimationFrame(function frame(now: number) {
     const t = typeof now === 'number' ? now : performance.now();
-    if (t - lastFrame30 >= TARGET_FRAME_MS_30) {
-      lastFrame30 = t;
+    if (t - lastFrameCapped >= frameMs) {
+      lastFrameCapped = t;
       callback(t);
     } else {
       scheduleNextFrame(callback);

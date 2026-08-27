@@ -101,7 +101,32 @@ import {
   type InterstitialAdCloseResult,
   type RewardedAdCloseResult,
 } from './utils/adBreak';
-import { PauseMenuPopup } from './components/PauseMenuPopup';
+import { DebugMenu } from './components/DebugMenu';
+import type { DebugHandlers } from './utils/debugActions';
+import { APP_VERSION } from './constants/appVersion';
+import { getInterstitialBypass, setInterstitialBypass } from './utils/debugAdsBypass';
+import { getDebugFpsCap, setDebugFpsCap } from './utils/debugFpsCap';
+import {
+  copyTextToClipboard,
+  exportCurrentSaveJson,
+  importSaveJsonAndReload,
+} from './utils/debugProfiles';
+import {
+  areAdsEnabled,
+  getRemoteConfig,
+  isStoreIapEnabled,
+  resetRemoteConfigToDefaults,
+  fetchRemoteConfigFromBackend,
+} from './utils/remoteConfig';
+import {
+  hapticTap,
+  hapticSoft,
+  hapticSuccess,
+  getHapticsEnabled,
+  applySavedHapticsSettingsEarly,
+  setHapticsEnabled,
+} from './utils/haptics';
+import { LocalNotifications } from '@capacitor/local-notifications';
 import { SettingsPopup } from './components/SettingsPopup';
 import { GardenPickerPopup } from './components/GardenPickerPopup';
 import { RateUsPopup } from './components/RateUsPopup';
@@ -185,11 +210,11 @@ import { getTickCount60, TARGET_FRAME_MS, scheduleNextFrame } from './utils/raf6
 import { getPerformanceMode, setPerformanceMode, shouldPlayPopupLeafBurst } from './utils/performanceMode';
 import { getAutoMergeMode, setAutoMergeMode } from './utils/autoMergeMode';
 import { playMusicLoop, playSfx, setAudioSettings, setAdAudioSuspended, SFX_IDS, applySavedAudioSettingsEarly } from './utils/sfx';
-import { applySavedHapticsSettingsEarly, setHapticsEnabled } from './utils/haptics';
 import { loadUserPrefs, persistUserPrefs, resetUserPrefsTogglesToDefaults } from './utils/userPrefs';
 import { openRateUsStore } from './constants/rateUsStore';
 import {
   cancelReturnReminders,
+  ensureLocalNotificationChannel,
   ensureReturnReminderDeliveryListener,
   scheduleReturnReminders,
   tryRequestPermissionOnceAfterFtue,
@@ -205,6 +230,8 @@ import {
   STORE_IAP_OFFER_FIELD_PACK_ID,
   STORE_IAP_OFFER_REMOVE_ADS_ID,
   STORE_IAP_OFFER_STARTER_PACK_ID,
+  REMOVE_ADS_OFFER_ID,
+  REMOVE_ADS_HEADER_ICON,
   getOfferById,
   resolveStorePriceLabel,
   isLimitedStarterStyleBundleOfferId,
@@ -355,7 +382,6 @@ import {
 import { OfflineEarningsPopup } from './components/OfflineEarningsPopup';
 import { BARN_SHELF_COUNT, BARN_SHELVES_PER_GARDEN, COLLECTION_COMING_SOON_LABEL, COLLECTION_GARDEN_IDS, COLLECTION_GARDEN_LABEL_AFTER_SHELVES_MARGIN_TOP_PX, COLLECTION_GARDEN_LABEL_MARGIN_BOTTOM_PX, COLLECTION_PANEL_LOCKED_LEVEL_BUTTON_HEIGHT_PX, COLLECTION_PANEL_LOCKED_LEVEL_BUTTON_PADDING_X_PX, COLLECTION_PHONE_GARDEN_LABEL_AFTER_SHELVES_MARGIN_TOP_PX, COLLECTION_PHONE_GARDEN_LABEL_SCALE, COLLECTION_PHONE_PLANT_PANEL_TOP_PX, COLLECTION_PHONE_ROOF_LAYOUT_SCALE, COLLECTION_PHONE_ROOF_SCALE, COLLECTION_PHONE_SHELF_WIDTH_SCALE, COLLECTION_PHONE_SHELVES_EXTRA_MARGIN_TOP_UNLOCKED_PX, COLLECTION_PHONE_SHELVES_MARGIN_TOP_PX, COLLECTION_PLANT_COUNT, COLLECTION_PLANT_PANEL_TOP_PX, COLLECTION_PLANTS_PER_SHELF, COLLECTION_SCROLL_BOTTOM_PAD_PX, COLLECTION_SHELF_STACK_MARGIN_TOP_PX, COLLECTION_SHELVES_EXTRA_MARGIN_TOP_UNLOCKED_PX, COLLECTION_SHELVES_MARGIN_TOP_PX, COLLECTION_SPECIAL_DELIVERY_CTA_MARGIN_TOP_PX, COLLECTION_SPECIAL_DELIVERY_DESC_FONT_PX, COLLECTION_SPECIAL_DELIVERY_DESC_GAP_PX, COLLECTION_SPECIAL_DELIVERY_DESC_INSET_X_PX, COLLECTION_SPECIAL_DELIVERY_DESC_LINE_HEIGHT, COLLECTION_SPECIAL_DELIVERY_DIVIDER_NUDGE_UP_PX, COLLECTION_SPECIAL_DELIVERY_DIVIDER_WIDTH_PX, COLLECTION_SPECIAL_DELIVERY_PANEL_LAYOUT_WIDTH_PX, COLLECTION_SPECIAL_DELIVERY_PANEL_WIDTH_PX, COLLECTION_SPECIAL_DELIVERY_TITLE_BASE_TOP_PX, COLLECTION_SPECIAL_DELIVERY_TITLE_BOX_HEIGHT_PX, COLLECTION_SPECIAL_DELIVERY_TITLE_NUDGE_DOWN_PX, COLLECTION_UNDISCOVERED_GARDEN_LABEL, getCollectionShelfMeta, normalizeBarnShelvesUnlocked } from './constants/barnShelves';
 import { getGardenPickerPurchaseCoinPrice } from './constants/gardenPicker';
-import { areAdsEnabled, getRemoteConfig, isStoreIapEnabled } from './utils/remoteConfig';
 import {
   canAffordNextGardenPurchase,
   getGardenNumberedFloatingButtonIconSrc,
@@ -2085,6 +2111,7 @@ export default function App() {
     fallbackPending: false,
     graceUntil: 0,
   });
+  const hapticHeartbeatRef = useRef<number | null>(null);
   const pendingAdBreakCompleteRef = useRef<(() => void) | null>(null);
   const pendingSwitchGardenAdBreakRef = useRef(false);
   const prevActiveScreenForAdBreakRef = useRef<ScreenType>(activeScreen);
@@ -15496,46 +15523,23 @@ export default function App() {
               onClose={() => {
                 setPauseMenuOpen(false);
                 setSettingsOpenedFromFtue(false);
-                setDevToolsOpen(false);
+                // Dev Tools is independent — do not clear it here (Settings closes when opening Debug).
                 flushDeferredCheatPopups();
               }}
-              onOpenDevTools={() => setDevToolsOpen(true)}
+              onOpenDevTools={() => {
+                setDevToolsOpen(true);
+                setPauseMenuOpen(false);
+                setSettingsOpenedFromFtue(false);
+              }}
               showDevToolsButton={devToolsUnlocked}
               onUnlockDevTools={() => setDevToolsUnlocked(true)}
               closeOnBackdropClick
               appScale={appScale}
             />
 
-            <PauseMenuPopup
-              isVisible={devToolsOpen}
-              onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
-              onAnyButtonClick={() => playSfx(SFX_IDS.uiConfirmNormal)}
-              onClose={() => {
-                setDevToolsOpen(false);
-              }}
-              onDisableDevTools={() => {
-                setDevToolsUnlocked(false);
-                setDevToolsOpen(false);
-              }}
-              activeGardenLabel={getGardenDisplayLabel(activeGardenId)}
-              onCycleGardenClick={cycleActiveGarden}
-              onSkipTutorial={
-                settingsOpenedFromFtue
-                  ? () =>
-                      handlePostFtueCleanRestart(
-                        'Skip the tutorial and start from level 1 with a fresh farm?'
-                      )
-                  : undefined
-              }
-              onPreviewCorruptSavePopup={() => {
-                setDevToolsOpen(false);
-                setPauseMenuOpen(false);
-                setCorruptSavePopupOpen(true);
-              }}
-              onClearRating={() => {
-                clearRateUsPromptStorage();
-              }}
-              onClearBoosts={() => {
+            {(() => {
+              const closeDebug = () => setDevToolsOpen(false);
+              const clearBoostsAction = () => {
                 setBoostParticles([]);
                 setActiveBoosts([]);
                 setStoreFreeOfferSlots(pickInitialStoreFreeOfferSlots());
@@ -15568,15 +15572,8 @@ export default function App() {
                   setFieldPackUnlocked(true);
                   setFieldPackCountdownRefreshKey((k) => k + 1);
                 }
-              }}
-              onResetProgress={() => {
-                if (
-                  !window.confirm(
-                    'You will Reset your game & progress back to the start including all FTUE'
-                  )
-                ) {
-                  return;
-                }
+              };
+              const wipeFull = () => {
                 suppressGameSaveRef.current = true;
                 clearGameSave();
                 resetUserPrefsTogglesToDefaults();
@@ -15587,57 +15584,282 @@ export default function App() {
                   /* ignore */
                 }
                 window.location.reload();
-              }}
-              onRewardedAdClick={() => {
-                if (!canOpenLimitedOfferRewardPopup()) return;
-                if (LIMITED_OFFERS_AD_POOL.length === 0) return;
-                const offer = LIMITED_OFFERS_AD_POOL[nextRewardedAdOfferIndexRef.current % LIMITED_OFFERS_AD_POOL.length];
-                nextRewardedAdOfferIndexRef.current = (nextRewardedAdOfferIndexRef.current + 1) % LIMITED_OFFERS_AD_POOL.length;
-                const state = buildLimitedOfferPopupState(offer.id, { highestPlantEver });
-                if (state) setLimitedOfferPopup(state);
-              }}
-              onLevelUpClick={handleDevLevelUpClick}
-              canUnlockPlant={hasAnyDevUnlockPlantRemaining(
-                activeGardenId,
-                activeCollectionSnapshot,
-                collectionV2Gardens,
-                [activeGardenId],
-              )}
-              onUnlockPlantClick={handleDevUnlockPlantClick}
-              onGoldenPotClick={handleDevGoldenPotClick}
-              onTestAdBreakClick={() => {
-                setDevToolsOpen(false);
-                setPauseMenuOpen(false);
-                // Bypass cooldown/blockers — pause menu was blocking tryShowAdBreak.
-                queueMicrotask(() => openAdBreakFakeAd(undefined, { force: true }));
-              }}
-              fakeNotchPreviewEnabled={fakeNotchPreviewEnabled}
-              onFakeNotchToggle={() => {
-                setFakeNotchPreviewEnabled((on) => !on);
-              }}
-              onCompleteTaskClick={() => {
-                if (playerLevel >= TASKS_FLOATING_BUTTON_UNLOCK_LEVEL) {
-                  markDailyTasksUnlocked();
-                }
-                applyDailyTaskRowsUpdate(completeNextDailyTaskForDev(getDailyTasksCtx()));
-              }}
-              onResetTasksClick={() => {
-                if (playerLevel >= TASKS_FLOATING_BUTTON_UNLOCK_LEVEL) {
-                  markDailyTasksUnlocked();
-                }
-                applyDailyTaskRowsUpdate(resetDailyTasksForDev(getDailyTasksCtx()));
-                setDailyTaskClaimBounceIds([]);
-              }}
-              onAddMoney={() => handleDevAddMoneyClick()}
-              onClearCoins={() => handleDevClearCoinsClick()}
-              onClearProgress={() =>
-                handlePostFtueCleanRestart(
-                  'You will lose your progress and start from level 1 without the FTUE'
-                )
-              }
-              closeOnBackdropClick
-              appScale={appScale}
-            />
+              };
+              const debugHandlers: DebugHandlers = {
+                exitDebugMode: closeDebug,
+                disableDevTools: () => {
+                  setDevToolsUnlocked(false);
+                  closeDebug();
+                },
+                saveNamedProfile: () => {},
+                reloadFreshPostFtue: () =>
+                  handlePostFtueCleanRestart(
+                    'Reset to fresh post-FTUE (level 1, no tutorial replay)?',
+                  ),
+                copySaveJson: () => {
+                  void copyTextToClipboard(exportCurrentSaveJson());
+                },
+                copyReproSummary: () => {
+                  const summary = [
+                    `Pocket Garden v${APP_VERSION}`,
+                    `level=${playerLevel} garden=${activeGardenId}`,
+                    `money=${money} keys=${keyCount}`,
+                    `perf=${getPerformanceMode()} haptics=${getHapticsEnabled()}`,
+                    `adsBypass=${getInterstitialBypass()}`,
+                    `playtimeMs=${adBreakRuntimeRef.current.activePlaytimeMs}`,
+                  ].join('\n');
+                  void copyTextToClipboard(summary);
+                },
+                importSaveJsonPrompt: () => {
+                  const raw = window.prompt('Paste save JSON to import (reloads):');
+                  if (raw) importSaveJsonAndReload(raw);
+                },
+                addCoins: () => handleDevAddMoneyClick(),
+                clearCoins: () => handleDevClearCoinsClick(),
+                addKeys: () => handleDevAddKeysClick(),
+                clearKeys: () => {
+                  keyCountRef.current = 0;
+                  setKeyCount(0);
+                },
+                levelUp: () => handleDevLevelUpClick(),
+                unlockPlant: () => handleDevUnlockPlantClick(),
+                goldenPot: () => handleDevGoldenPotClick(),
+                skipTutorial: () =>
+                  handlePostFtueCleanRestart(
+                    'Skip the tutorial and start from level 1 with a fresh farm?',
+                  ),
+                completeFtueForce: () => {
+                  setActiveFtueStage(null);
+                  setSettingsOpenedFromFtue(false);
+                },
+                completeNextDaily: () => {
+                  if (playerLevel >= TASKS_FLOATING_BUTTON_UNLOCK_LEVEL) {
+                    markDailyTasksUnlocked();
+                  }
+                  applyDailyTaskRowsUpdate(completeNextDailyTaskForDev(getDailyTasksCtx()));
+                },
+                resetDailies: () => {
+                  if (playerLevel >= TASKS_FLOATING_BUTTON_UNLOCK_LEVEL) {
+                    markDailyTasksUnlocked();
+                  }
+                  applyDailyTaskRowsUpdate(resetDailyTasksForDev(getDailyTasksCtx()));
+                  setDailyTaskClaimBounceIds([]);
+                },
+                clearShed: () => {
+                  /* Collection wipe: use Clear Progress for a full clean slate. */
+                },
+                clearBoosts: clearBoostsAction,
+                cycleGarden: () => cycleActiveGarden(),
+                toggleInterstitialBypass: () => setInterstitialBypass(!getInterstitialBypass()),
+                getInterstitialBypass: () => getInterstitialBypass(),
+                testAdBreak: () => {
+                  closeDebug();
+                  setPauseMenuOpen(false);
+                  queueMicrotask(() => openAdBreakFakeAd(undefined, { force: true }));
+                },
+                openRewardedOffer: () => {
+                  if (!canOpenLimitedOfferRewardPopup()) return;
+                  if (LIMITED_OFFERS_AD_POOL.length === 0) return;
+                  const offer =
+                    LIMITED_OFFERS_AD_POOL[
+                      nextRewardedAdOfferIndexRef.current % LIMITED_OFFERS_AD_POOL.length
+                    ];
+                  nextRewardedAdOfferIndexRef.current =
+                    (nextRewardedAdOfferIndexRef.current + 1) % LIMITED_OFFERS_AD_POOL.length;
+                  const state = buildLimitedOfferPopupState(offer.id, { highestPlantEver });
+                  if (state) {
+                    closeDebug();
+                    setPauseMenuOpen(false);
+                    setLimitedOfferPopup(state);
+                  }
+                },
+                resetAdCooldowns: () => {
+                  adBreakRuntimeRef.current.lastAdBreakAt = 0;
+                  adBreakRuntimeRef.current.lastRewardedAdAt = 0;
+                  adBreakRuntimeRef.current.graceUntil = 0;
+                  adBreakRuntimeRef.current.fallbackPending = false;
+                  setStoreSlotCooldownEnds([0, 0]);
+                },
+                grantStarterPack: () => completePremiumStorePurchase(STORE_IAP_OFFER_STARTER_PACK_ID),
+                grantFieldPack: () => completePremiumStorePurchase(STORE_IAP_OFFER_FIELD_PACK_ID),
+                grantRemoveAds: () => {
+                  const durationMs = 7 * 24 * 60 * 60 * 1000;
+                  setActiveBoosts((prev) => [
+                    ...prev.filter((b) => b.offerId !== REMOVE_ADS_OFFER_ID),
+                    {
+                      id: `debug-noads-${Date.now()}`,
+                      offerId: REMOVE_ADS_OFFER_ID,
+                      icon: REMOVE_ADS_HEADER_ICON,
+                      endTime: Date.now() + durationMs,
+                      durationMs,
+                    },
+                  ]);
+                },
+                resetPurchasedIaps: () => {
+                  try {
+                    localStorage.removeItem(STORE_STARTER_PACK_PURCHASED_KEY);
+                    localStorage.removeItem(STORE_FIELD_PACK_PURCHASED_KEY);
+                  } catch {
+                    /* ignore */
+                  }
+                  setStarterPackPurchased(false);
+                  setFieldPackPurchased(false);
+                  clearBoostsAction();
+                },
+                previewCorruptSave: () => {
+                  closeDebug();
+                  setPauseMenuOpen(false);
+                  setCorruptSavePopupOpen(true);
+                },
+                clearRatingFlags: () => clearRateUsPromptStorage(),
+                openRateUs: () => {
+                  closeDebug();
+                  setPauseMenuOpen(false);
+                  setRateUsPopupOpen(true);
+                },
+                openDailyTasks: () => {
+                  closeDebug();
+                  setPauseMenuOpen(false);
+                  setDailyTasksPopupOpen(true);
+                },
+                openGardenPicker: () => {
+                  closeDebug();
+                  setPauseMenuOpen(false);
+                  setGardenPickerOpen(true);
+                },
+                openOfflineEarnings: () => {
+                  closeDebug();
+                  setPauseMenuOpen(false);
+                  const amount = Math.max(500, Math.floor(money * 0.05) || 1000);
+                  pendingOfflineEarningsRef.current = amount;
+                  setOfflineEarningsUi({
+                    open: true,
+                    amount,
+                    showDoubleButton: true,
+                    rewardBounceKey: 0,
+                  });
+                },
+                openStarterPackOffer: () => {
+                  closeDebug();
+                  setPauseMenuOpen(false);
+                  setIapOfferUi({ offerId: STORE_IAP_OFFER_STARTER_PACK_ID });
+                },
+                openFieldPackOffer: () => {
+                  closeDebug();
+                  setPauseMenuOpen(false);
+                  setIapOfferUi({ offerId: STORE_IAP_OFFER_FIELD_PACK_ID });
+                },
+                openNoAdsOffer: () => {
+                  closeDebug();
+                  setPauseMenuOpen(false);
+                  setIapOfferUi({ offerId: STORE_IAP_OFFER_REMOVE_ADS_ID });
+                },
+                openLevelUpPopup: () => {
+                  closeDebug();
+                  setPauseMenuOpen(false);
+                  showLevelUpForNextLevel(playerLevel + 1);
+                },
+                completeAllDailies: () => {
+                  if (playerLevel >= TASKS_FLOATING_BUTTON_UNLOCK_LEVEL) {
+                    markDailyTasksUnlocked();
+                  }
+                  for (let i = 0; i < 6; i++) {
+                    applyDailyTaskRowsUpdate(completeNextDailyTaskForDev(getDailyTasksCtx()));
+                  }
+                },
+                claimReadyDailies: () => {
+                  const rows = dailyTaskRowsRef.current;
+                  for (const task of rows) {
+                    if (task.state !== 'complete') continue;
+                    const fx: DailyTaskClaimFx = {
+                      rewardCenter: { x: window.innerWidth / 2, y: window.innerHeight / 2 },
+                      rowCenter: { x: window.innerWidth / 2, y: window.innerHeight / 2 },
+                      rowWidth: 200,
+                      rowHeight: 80,
+                    };
+                    performDailyTaskClaim(task.id, fx);
+                  }
+                },
+                forceReturnReminderIn2Min: () => {
+                  void (async () => {
+                    await ensureLocalNotificationChannel();
+                    await LocalNotifications.schedule({
+                      notifications: [
+                        {
+                          id: 990021,
+                          title: 'Pocket Garden',
+                          body: 'Debug: forced return reminder',
+                          schedule: { at: new Date(Date.now() + 2 * 60 * 1000) },
+                        },
+                      ],
+                    });
+                  })();
+                },
+                toggleHaptics: () => setHapticsEnabledState((v) => !v),
+                getHapticsEnabled: () => getHapticsEnabled(),
+                fireHapticTap: () => hapticTap(),
+                fireHapticSoft: () => hapticSoft(),
+                fireHapticSuccess: () => hapticSuccess(),
+                startHapticHeartbeat: () => {
+                  if (hapticHeartbeatRef.current != null) return;
+                  hapticHeartbeatRef.current = window.setInterval(() => hapticTap(), 900);
+                },
+                stopHapticHeartbeat: () => {
+                  if (hapticHeartbeatRef.current != null) {
+                    window.clearInterval(hapticHeartbeatRef.current);
+                    hapticHeartbeatRef.current = null;
+                  }
+                },
+                togglePerformanceMode: () => setPerformanceMode(!getPerformanceMode()),
+                getPerformanceMode: () => getPerformanceMode(),
+                setFpsCap: (fps) => setDebugFpsCap(fps),
+                getFpsCap: () => getDebugFpsCap(),
+                toggleFakeNotch: () => setFakeNotchPreviewEnabled((on) => !on),
+                getFakeNotch: () => fakeNotchPreviewEnabled,
+                resetRemoteConfig: () => resetRemoteConfigToDefaults(),
+                copyRemoteConfigJson: () => {
+                  void copyTextToClipboard(JSON.stringify(getRemoteConfig(), null, 2));
+                },
+                refetchRemoteConfig: () => {
+                  void fetchRemoteConfigFromBackend();
+                },
+                applyPresetFreshPostOnboarding: () =>
+                  handlePostFtueCleanRestart('Apply fresh post-onboarding preset?'),
+                applyPresetMidgame: () => {
+                  handleDevAddMoneyClick();
+                  handleDevAddKeysClick();
+                  handleDevAddKeysClick();
+                  handleDevAddKeysClick();
+                  for (let i = 0; i < 4; i++) handleDevLevelUpClick();
+                },
+                applyPresetAdLab: () => {
+                  setInterstitialBypass(false);
+                  adBreakRuntimeRef.current.lastAdBreakAt = 0;
+                  adBreakRuntimeRef.current.lastRewardedAdAt = 0;
+                  adBreakRuntimeRef.current.graceUntil = 0;
+                },
+                clearProgressKeepFtueDone: () =>
+                  handlePostFtueCleanRestart(
+                    'Clear progress to level 1 (FTUE stays completed)?',
+                  ),
+                wipeAllProgressFullFtue: wipeFull,
+              };
+              return (
+                <DebugMenu
+                  isVisible={devToolsOpen}
+                  onUserDismiss={() => playSfx(SFX_IDS.uiDecline)}
+                  onAnyButtonClick={() => playSfx(SFX_IDS.uiConfirmNormal)}
+                  onClose={closeDebug}
+                  handlers={debugHandlers}
+                  stats={{
+                    money,
+                    keys: keyCount,
+                    playerLevel,
+                    gardenLabel: getGardenDisplayLabel(activeGardenId),
+                  }}
+                />
+              );
+            })()}
 
             {offlineEarningsUi?.open ? (
               <OfflineEarningsPopup

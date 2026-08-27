@@ -2,6 +2,7 @@ import type { FtueStageId } from '../../ftue/ftueConfig';
 import { AD_BREAK_SETTINGS } from '../../constants/adBreakSettings';
 import type { AdBreakTriggerId } from '../../constants/adBreakSettings';
 import { areAdsEnabled, getRemoteConfig } from '../remoteConfig';
+import { getInterstitialBypass } from '../debugAdsBypass';
 
 export interface AdBreakRuntimeState {
   lastAdBreakAt: number;
@@ -172,6 +173,7 @@ export function canShowAdBreakNow(
   ctx: AdBreakBlockerContext,
   trigger: AdBreakTriggerId,
 ): boolean {
+  if (getInterstitialBypass()) return false;
   if (!areAdBreakBlockersClear(ctx, trigger)) return false;
   return isAdBreakCooldownReady(state, ctx.now);
 }
